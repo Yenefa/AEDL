@@ -1,0 +1,308 @@
+{
+ "RF_Module:ESP32-C3-WROOM-02": [
+  {
+   "n": "1",
+   "name": "3V3",
+   "type": "power_in"
+  },
+  {
+   "n": "2",
+   "name": "EN",
+   "type": "input"
+  },
+  {
+   "n": "3",
+   "name": "IO4",
+   "type": "bidirectional"
+  },
+  {
+   "n": "4",
+   "name": "IO5",
+   "type": "bidirectional"
+  },
+  {
+   "n": "5",
+   "name": "IO6",
+   "type": "bidirectional"
+  },
+  {
+   "n": "6",
+   "name": "IO7",
+   "type": "bidirectional"
+  },
+  {
+   "n": "7",
+   "name": "IO8",
+   "type": "bidirectional"
+  },
+  {
+   "n": "8",
+   "name": "IO9",
+   "type": "bidirectional"
+  },
+  {
+   "n": "9",
+   "name": "GND",
+   "type": "power_in"
+  },
+  {
+   "n": "10",
+   "name": "IO10",
+   "type": "bidirectional"
+  },
+  {
+   "n": "11",
+   "name": "IO20/RXD",
+   "type": "bidirectional"
+  },
+  {
+   "n": "12",
+   "name": "IO21/TXD",
+   "type": "bidirectional"
+  },
+  {
+   "n": "13",
+   "name": "IO18",
+   "type": "bidirectional"
+  },
+  {
+   "n": "14",
+   "name": "IO19",
+   "type": "bidirectional"
+  },
+  {
+   "n": "15",
+   "name": "IO3",
+   "type": "bidirectional"
+  },
+  {
+   "n": "16",
+   "name": "IO2",
+   "type": "bidirectional"
+  },
+  {
+   "n": "17",
+   "name": "IO1",
+   "type": "bidirectional"
+  },
+  {
+   "n": "18",
+   "name": "IO0",
+   "type": "bidirectional"
+  },
+  {
+   "n": "19",
+   "name": "GND",
+   "type": "passive"
+  }
+ ],
+ "Sensor_Humidity:SHT30-DIS": [
+  {
+   "n": "1",
+   "name": "SDA",
+   "type": "bidirectional"
+  },
+  {
+   "n": "2",
+   "name": "ADDR",
+   "type": "input"
+  },
+  {
+   "n": "3",
+   "name": "ALERT",
+   "type": "output"
+  },
+  {
+   "n": "4",
+   "name": "SCL",
+   "type": "input"
+  },
+  {
+   "n": "5",
+   "name": "VDD",
+   "type": "power_in"
+  },
+  {
+   "n": "6",
+   "name": "~{RESET}",
+   "type": "input"
+  },
+  {
+   "n": "7",
+   "name": "R",
+   "type": "passive"
+  },
+  {
+   "n": "8",
+   "name": "VSS",
+   "type": "power_in"
+  },
+  {
+   "n": "9",
+   "name": "VSS",
+   "type": "passive"
+  }
+ ],
+ "Regulator_Linear:ME6211C33M5": [
+  {
+   "n": "1",
+   "name": "V_{IN}",
+   "type": "power_in"
+  },
+  {
+   "n": "2",
+   "name": "V_{SS}",
+   "type": "power_in"
+  },
+  {
+   "n": "3",
+   "name": "CE",
+   "type": "input"
+  },
+  {
+   "n": "4",
+   "name": "NC",
+   "type": "no_connect"
+  },
+  {
+   "n": "5",
+   "name": "V_{OUT}",
+   "type": "power_out"
+  }
+ ],
+ "Connector:USB_C_Receptacle_USB2.0_16P": [
+  {
+   "n": "A1",
+   "name": "GND",
+   "type": "passive"
+  },
+  {
+   "n": "A4",
+   "name": "VBUS",
+   "type": "passive"
+  },
+  {
+   "n": "A5",
+   "name": "CC1",
+   "type": "bidirectional"
+  },
+  {
+   "n": "A6",
+   "name": "D+",
+   "type": "bidirectional"
+  },
+  {
+   "n": "A7",
+   "name": "D-",
+   "type": "bidirectional"
+  },
+  {
+   "n": "A8",
+   "name": "SBU1",
+   "type": "bidirectional"
+  },
+  {
+   "n": "A9",
+   "name": "VBUS",
+   "type": "passive"
+  },
+  {
+   "n": "A12",
+   "name": "GND",
+   "type": "passive"
+  },
+  {
+   "n": "B1",
+   "name": "GND",
+   "type": "passive"
+  },
+  {
+   "n": "B4",
+   "name": "VBUS",
+   "type": "passive"
+  },
+  {
+   "n": "B5",
+   "name": "CC2",
+   "type": "bidirectional"
+  },
+  {
+   "n": "B6",
+   "name": "D+",
+   "type": "bidirectional"
+  },
+  {
+   "n": "B7",
+   "name": "D-",
+   "type": "bidirectional"
+  },
+  {
+   "n": "B8",
+   "name": "SBU2",
+   "type": "bidirectional"
+  },
+  {
+   "n": "B9",
+   "name": "VBUS",
+   "type": "passive"
+  },
+  {
+   "n": "B12",
+   "name": "GND",
+   "type": "passive"
+  },
+  {
+   "n": "SH",
+   "name": "SHIELD",
+   "type": "passive"
+  }
+ ],
+ "Switch:SW_Push": [
+  {
+   "n": "1",
+   "name": "1",
+   "type": "passive"
+  },
+  {
+   "n": "2",
+   "name": "2",
+   "type": "passive"
+  }
+ ],
+ "Device:LED": [
+  {
+   "n": "1",
+   "name": "K",
+   "type": "passive"
+  },
+  {
+   "n": "2",
+   "name": "A",
+   "type": "passive"
+  }
+ ],
+ "Device:R": [
+  {
+   "n": "1",
+   "name": "",
+   "type": "passive"
+  },
+  {
+   "n": "2",
+   "name": "",
+   "type": "passive"
+  }
+ ],
+ "Device:C": [
+  {
+   "n": "1",
+   "name": "",
+   "type": "passive"
+  },
+  {
+   "n": "2",
+   "name": "",
+   "type": "passive"
+  }
+ ]
+}

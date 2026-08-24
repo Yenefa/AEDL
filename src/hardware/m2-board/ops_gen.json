@@ -1,0 +1,521 @@
+{
+  "protocol_version": 2,
+  "target_format": "kicad",
+  "_generator": "akcli ops from-intent",
+  "ops": [
+    {
+      "op": "place_component",
+      "lib_id": "Device:C",
+      "designator": "C1",
+      "x_mil": 1350,
+      "y_mil": 1450,
+      "value": "10uF",
+      "footprint": "Capacitor_SMD:C_0805_2012Metric"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "Device:C",
+      "designator": "C2",
+      "x_mil": 3550,
+      "y_mil": 1450,
+      "value": "10uF",
+      "footprint": "Capacitor_SMD:C_0805_2012Metric"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "Device:C",
+      "designator": "C3",
+      "x_mil": 5700,
+      "y_mil": 1450,
+      "value": "100nF",
+      "footprint": "Capacitor_SMD:C_0603_1608Metric"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "Device:C",
+      "designator": "C4",
+      "x_mil": 7850,
+      "y_mil": 1450,
+      "value": "100nF",
+      "footprint": "Capacitor_SMD:C_0603_1608Metric"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "Device:LED",
+      "designator": "D1",
+      "x_mil": 10150,
+      "y_mil": 1400,
+      "value": "KT-0603R",
+      "footprint": "LED_SMD:LED_0603_1608Metric"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "Connector:USB_C_Receptacle_USB2.0_16P",
+      "designator": "J1",
+      "x_mil": 1800,
+      "y_mil": 4850,
+      "value": "TYPE-C-31-M-12"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "Device:R",
+      "designator": "R1",
+      "x_mil": 3500,
+      "y_mil": 4200,
+      "value": "4.7k",
+      "footprint": "Resistor_SMD:R_0603_1608Metric"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "Device:R",
+      "designator": "R2",
+      "x_mil": 5650,
+      "y_mil": 4200,
+      "value": "4.7k",
+      "footprint": "Resistor_SMD:R_0603_1608Metric"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "Device:R",
+      "designator": "R3",
+      "x_mil": 7800,
+      "y_mil": 4200,
+      "value": "10k",
+      "footprint": "Resistor_SMD:R_0603_1608Metric"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "Device:R",
+      "designator": "R4",
+      "x_mil": 10100,
+      "y_mil": 4350,
+      "value": "1k",
+      "footprint": "Resistor_SMD:R_0603_1608Metric"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "Device:R",
+      "designator": "R5",
+      "x_mil": 1300,
+      "y_mil": 6950,
+      "value": "5.1k",
+      "footprint": "Resistor_SMD:R_0603_1608Metric"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "Device:R",
+      "designator": "R6",
+      "x_mil": 3450,
+      "y_mil": 6950,
+      "value": "5.1k",
+      "footprint": "Resistor_SMD:R_0603_1608Metric"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "Switch:SW_Push",
+      "designator": "SW1",
+      "x_mil": 5800,
+      "y_mil": 6900,
+      "value": "TS-1088R-02026"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "Switch:SW_Push",
+      "designator": "SW2",
+      "x_mil": 7950,
+      "y_mil": 6950,
+      "value": "TS-1088R-02026"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "RF_Module:ESP32-C3-WROOM-02",
+      "designator": "U1",
+      "x_mil": 10650,
+      "y_mil": 7850,
+      "value": "ESP32-C3-WROOM-02-N4"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "Sensor_Humidity:SHT30-DIS",
+      "designator": "U2",
+      "x_mil": 1700,
+      "y_mil": 9850,
+      "value": "SHT30-DIS-B10KS"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "Regulator_Linear:ME6211C33M5",
+      "designator": "U3",
+      "x_mil": 3750,
+      "y_mil": 9750,
+      "value": "ME6211C33M5G-N",
+      "footprint": "Package_TO_SOT_SMD:SOT-23-5"
+    },
+    {
+      "op": "add_net_label",
+      "name": "+3V3",
+      "at": "C2.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "+3V3",
+      "at": "C3.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "+3V3",
+      "at": "C4.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "+3V3",
+      "at": "R1.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "+3V3",
+      "at": "R2.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "+3V3",
+      "at": "R3.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "+3V3",
+      "at": "U1.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "+3V3",
+      "at": "U2.5"
+    },
+    {
+      "op": "add_net_label",
+      "name": "+3V3",
+      "at": "U2.6"
+    },
+    {
+      "op": "add_net_label",
+      "name": "+3V3",
+      "at": "U3.5"
+    },
+    {
+      "op": "add_net_label",
+      "name": "+5V",
+      "at": "C1.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "+5V",
+      "at": "J1.A4"
+    },
+    {
+      "op": "add_net_label",
+      "name": "+5V",
+      "at": "J1.A9"
+    },
+    {
+      "op": "add_net_label",
+      "name": "+5V",
+      "at": "J1.B4"
+    },
+    {
+      "op": "add_net_label",
+      "name": "+5V",
+      "at": "J1.B9"
+    },
+    {
+      "op": "add_net_label",
+      "name": "+5V",
+      "at": "U3.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "+5V",
+      "at": "U3.3"
+    },
+    {
+      "op": "add_net_label",
+      "name": "BOOT",
+      "at": "SW2.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "BOOT",
+      "at": "U1.8"
+    },
+    {
+      "op": "add_net_label",
+      "name": "CC1",
+      "at": "J1.A5"
+    },
+    {
+      "op": "add_net_label",
+      "name": "CC1",
+      "at": "R5.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "CC2",
+      "at": "J1.B5"
+    },
+    {
+      "op": "add_net_label",
+      "name": "CC2",
+      "at": "R6.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "EN",
+      "at": "R3.2"
+    },
+    {
+      "op": "add_net_label",
+      "name": "EN",
+      "at": "SW1.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "EN",
+      "at": "U1.2"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "C1.2"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "C2.2"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "C3.2"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "C4.2"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "D1.2"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "J1.A1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "J1.A12"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "J1.B1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "J1.B12"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "J1.SH"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "R5.2"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "R6.2"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "SW1.2"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "SW2.2"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "U1.9"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "U1.19"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "U2.7"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "U2.8"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "U2.9"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "U3.2"
+    },
+    {
+      "op": "add_net_label",
+      "name": "LED_A",
+      "at": "D1.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "LED_A",
+      "at": "R4.2"
+    },
+    {
+      "op": "add_net_label",
+      "name": "LED_DRV",
+      "at": "R4.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "LED_DRV",
+      "at": "U1.15"
+    },
+    {
+      "op": "add_net_label",
+      "name": "SCL",
+      "at": "R2.2"
+    },
+    {
+      "op": "add_net_label",
+      "name": "SCL",
+      "at": "U1.4"
+    },
+    {
+      "op": "add_net_label",
+      "name": "SCL",
+      "at": "U2.4"
+    },
+    {
+      "op": "add_net_label",
+      "name": "SDA",
+      "at": "R1.2"
+    },
+    {
+      "op": "add_net_label",
+      "name": "SDA",
+      "at": "U1.3"
+    },
+    {
+      "op": "add_net_label",
+      "name": "SDA",
+      "at": "U2.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "USB_DM",
+      "at": "J1.A7"
+    },
+    {
+      "op": "add_net_label",
+      "name": "USB_DM",
+      "at": "J1.B7"
+    },
+    {
+      "op": "add_net_label",
+      "name": "USB_DM",
+      "at": "U1.14"
+    },
+    {
+      "op": "add_net_label",
+      "name": "USB_DP",
+      "at": "J1.A6"
+    },
+    {
+      "op": "add_net_label",
+      "name": "USB_DP",
+      "at": "J1.B6"
+    },
+    {
+      "op": "add_net_label",
+      "name": "USB_DP",
+      "at": "U1.13"
+    },
+    {
+      "op": "add_no_connect",
+      "pin": "J1.A8"
+    },
+    {
+      "op": "add_no_connect",
+      "pin": "J1.B8"
+    },
+    {
+      "op": "add_no_connect",
+      "pin": "U1.5"
+    },
+    {
+      "op": "add_no_connect",
+      "pin": "U1.6"
+    },
+    {
+      "op": "add_no_connect",
+      "pin": "U1.7"
+    },
+    {
+      "op": "add_no_connect",
+      "pin": "U1.10"
+    },
+    {
+      "op": "add_no_connect",
+      "pin": "U1.11"
+    },
+    {
+      "op": "add_no_connect",
+      "pin": "U1.12"
+    },
+    {
+      "op": "add_no_connect",
+      "pin": "U1.16"
+    },
+    {
+      "op": "add_no_connect",
+      "pin": "U1.17"
+    },
+    {
+      "op": "add_no_connect",
+      "pin": "U1.18"
+    },
+    {
+      "op": "add_no_connect",
+      "pin": "U2.2"
+    },
+    {
+      "op": "add_no_connect",
+      "pin": "U2.3"
+    },
+    {
+      "op": "add_no_connect",
+      "pin": "U3.4"
+    }
+  ]
+}

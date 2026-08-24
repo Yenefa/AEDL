@@ -1,0 +1,165 @@
+{
+  "schema_version": "1",
+  "lib_id": "RF_Module:ESP32-C3-WROOM-02",
+  "at": [
+    0.0,
+    0.0
+  ],
+  "rotation": 0,
+  "mirror": "none",
+  "unit_count": 1,
+  "pins": [
+    {
+      "number": "1",
+      "name": "3V3",
+      "type": "power_in",
+      "unit": 1,
+      "x_mil": 0,
+      "y_mil": -900
+    },
+    {
+      "number": "2",
+      "name": "EN",
+      "type": "input",
+      "unit": 1,
+      "x_mil": -600,
+      "y_mil": -700
+    },
+    {
+      "number": "3",
+      "name": "IO4",
+      "type": "bidirectional",
+      "unit": 1,
+      "x_mil": -600,
+      "y_mil": -100
+    },
+    {
+      "number": "4",
+      "name": "IO5",
+      "type": "bidirectional",
+      "unit": 1,
+      "x_mil": -600,
+      "y_mil": 0
+    },
+    {
+      "number": "5",
+      "name": "IO6",
+      "type": "bidirectional",
+      "unit": 1,
+      "x_mil": -600,
+      "y_mil": 100
+    },
+    {
+      "number": "6",
+      "name": "IO7",
+      "type": "bidirectional",
+      "unit": 1,
+      "x_mil": -600,
+      "y_mil": 200
+    },
+    {
+      "number": "7",
+      "name": "IO8",
+      "type": "bidirectional",
+      "unit": 1,
+      "x_mil": -600,
+      "y_mil": 300
+    },
+    {
+      "number": "8",
+      "name": "IO9",
+      "type": "bidirectional",
+      "unit": 1,
+      "x_mil": -600,
+      "y_mil": 400
+    },
+    {
+      "number": "9",
+      "name": "GND",
+      "type": "power_in",
+      "unit": 1,
+      "x_mil": 0,
+      "y_mil": 900
+    },
+    {
+      "number": "10",
+      "name": "IO10",
+      "type": "bidirectional",
+      "unit": 1,
+      "x_mil": -600,
+      "y_mil": 500
+    },
+    {
+      "number": "11",
+      "name": "IO20/RXD",
+      "type": "bidirectional",
+      "unit": 1,
+      "x_mil": 600,
+      "y_mil": -700
+    },
+    {
+      "number": "12",
+      "name": "IO21/TXD",
+      "type": "bidirectional",
+      "unit": 1,
+      "x_mil": 600,
+      "y_mil": -600
+    },
+    {
+      "number": "13",
+      "name": "IO18",
+      "type": "bidirectional",
+      "unit": 1,
+      "x_mil": -600,
+      "y_mil": 600
+    },
+    {
+      "number": "14",
+      "name": "IO19",
+      "type": "bidirectional",
+      "unit": 1,
+      "x_mil": -600,
+      "y_mil": 700
+    },
+    {
+      "number": "15",
+      "name": "IO3",
+      "type": "bidirectional",
+      "unit": 1,
+      "x_mil": -600,
+      "y_mil": -200
+    },
+    {
+      "number": "16",
+      "name": "IO2",
+      "type": "bidirectional",
+      "unit": 1,
+      "x_mil": -600,
+      "y_mil": -300
+    },
+    {
+      "number": "17",
+      "name": "IO1",
+      "type": "bidirectional",
+      "unit": 1,
+      "x_mil": -600,
+      "y_mil": -400
+    },
+    {
+      "number": "18",
+      "name": "IO0",
+      "type": "bidirectional",
+      "unit": 1,
+      "x_mil": -600,
+      "y_mil": -500
+    },
+    {
+      "number": "19",
+      "name": "GND",
+      "type": "passive",
+      "unit": 1,
+      "x_mil": 0,
+      "y_mil": 900
+    }
+  ]
+}

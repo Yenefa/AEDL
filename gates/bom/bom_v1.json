@@ -1,0 +1,35 @@
+{
+  "_meta": {
+    "board": "ESP32-C3 温湿度记录仪 v0.1（USB-C 供电）",
+    "frozen_at": "2026-08-24",
+    "data_source": "jlcpcb.com 实时目录（gates/bom_query.py），库存口径=JLC 贴片装配",
+    "gate": "G1"
+  },
+  "items": [
+    {"ref": "U1", "value": "ESP32-C3-WROOM-02-N4", "lcsc": "C2934560", "jlc_lib": "expand", "stock": 2978,
+     "symbol": "RF_Module:ESP32-C3-WROOM-02", "note": "换型记录：原选 MINI-1(C2838502) 因 KiCad 标准库无符号，改用官方符号+封装齐备的 WROOM-02"},
+    {"ref": "U2", "value": "SHT30-DIS-B10KS", "lcsc": "C2687423", "jlc_lib": "expand", "stock": 30438,
+     "symbol": "Sensor_Humidity:SHT30-DIS"},
+    {"ref": "U3", "value": "ME6211C33M5G-N", "lcsc": "C82942", "jlc_lib": "expand", "stock": 5101,
+     "symbol": "Regulator_Linear:ME6211C33M5", "footprint": "Package_TO_SOT_SMD:SOT-23-5"},
+    {"ref": "J1", "value": "TYPE-C-31-M-12", "lcsc": "C165948", "jlc_lib": "expand", "stock": 395840,
+     "symbol": "Connector:USB_C_Receptacle_USB2.0_16P"},
+    {"ref": "SW1,SW2", "value": "TS-1088R-02026", "lcsc": "C455280", "jlc_lib": "expand", "stock": 211077,
+     "symbol": "Switch:SW_Push", "role": "SW1=EN复位 SW2=IO9 BOOT"},
+    {"ref": "D1", "value": "KT-0603R", "lcsc": "C2286", "jlc_lib": "base", "stock": 5577852,
+     "symbol": "Device:LED", "footprint": "LED_SMD:LED_0603_1608Metric"},
+    {"ref": "R1,R2", "value": "4.7kΩ ±1%", "lcsc": "C177609", "jlc_lib": "expand", "stock": 92990,
+     "symbol": "Device:R", "footprint": "Resistor_SMD:R_0603_1608Metric", "role": "I2C 上拉 SDA/SCL=GPIO8/9"},
+    {"ref": "R3", "value": "10kΩ", "lcsc": "C177644", "jlc_lib": "expand", "stock": 12586,
+     "role": "EN 上拉"},
+    {"ref": "R4", "value": "1kΩ ±1%", "lcsc": "C177649", "jlc_lib": "expand", "stock": 81521,
+     "role": "LED 限流 GPIO3"},
+    {"ref": "R5,R6", "value": "5.1kΩ", "lcsc": "TBD", "role": "CC1/CC2 下拉", "todo": "G1 复查补编号"},
+    {"ref": "C1", "value": "10µF/25V X5R 0805", "lcsc": "C15850", "jlc_lib": "base", "stock": 8697924,
+     "footprint": "Capacitor_SMD:C_0805_2012Metric", "role": "5V 输入"},
+    {"ref": "C2", "value": "10µF/25V X5R 0805", "lcsc": "C15850", "jlc_lib": "base", "stock": 8697924,
+     "role": "3V3 储能"},
+    {"ref": "C3,C4,C5", "value": "100nF/50V X7R 0603", "lcsc": "C1591", "jlc_lib": "expand", "stock": 9049007,
+     "footprint": "Capacitor_SMD:C_0603_1608Metric", "role": "模块/SHT30/3V3 去耦"}
+  ]
+}

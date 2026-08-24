@@ -1,5 +1,3 @@
-# 本仓库为硬件工程+机器生成证据库：md 文档(中文排版)与工具输出 JSON 不参与 prettier 门禁
+# 本仓库为硬件工程+机器生成证据库：md 文档与工具输出 JSON 不参与 prettier 门禁
 *.md
-notes/**/*.json
-src/**/*.json
-docs/*.json
+*.json
