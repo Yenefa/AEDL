@@ -1,0 +1,2 @@
+from-intent: 4 component(s), 3 net(s) -> 10 op(s) -> src\m1\ops_gen.json
+next: `akcli plan <target.kicad_sch> --ops src\m1\ops_gen.json` (then draw --apply; assert with `akcli check <target> --intent src\m1\intent_minimal.json`)

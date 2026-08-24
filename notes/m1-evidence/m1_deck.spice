@@ -1,0 +1,6 @@
+* akcli sim: src\m1\m1_minimal_v2.kicad_sch
+* unmodeled PWR1: PWR needs an explicit model; give it Sim.* fields, a spec.models entry, or fit a diode from the datasheet with akcli.sim.models.fit_diode (see docs/sim.md)
+* unmodeled PWR2: PWR needs an explicit model; give it Sim.* fields, a spec.models entry, or fit a diode from the datasheet with akcli.sim.models.fit_diode (see docs/sim.md)
+R1 _3V3 SENSE 10k
+R2 SENSE 0 10k
+.end

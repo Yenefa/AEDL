@@ -1,0 +1,424 @@
+(kicad_sch
+	(version 20231120)
+	(generator "eeschema")
+	(generator_version "8.0")
+	(uuid "44fc0f0d-6198-4325-a31b-9fdfb1f0a1c1")
+	(paper "A4")
+	(title_block
+		(title "M1 minimal divider v2")
+	)
+	(lib_symbols
+		(symbol "power:+3V3"
+		(power global)
+		(pin_numbers
+			(hide yes)
+		)
+		(pin_names
+			(offset 0)
+			(hide yes)
+		)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(duplicate_pin_numbers_are_jumpers no)
+		(property "Reference" "#PWR"
+			(at 0 -3.81 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+3V3"
+			(at 0 3.556 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"+3V3\""
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_keywords" "global power"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(symbol "+3V3_0_1"
+			(polyline
+				(pts
+					(xy -0.762 1.27) (xy 0 2.54)
+				)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 0 2.54) (xy 0.762 1.27)
+				)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 0 0) (xy 0 2.54)
+				)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+		)
+		(symbol "+3V3_1_1"
+			(pin power_in line
+				(at 0 0 90)
+				(length 0)
+				(name ""
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(embedded_fonts no)
+	)
+		(symbol "power:GND"
+		(power global)
+		(pin_numbers
+			(hide yes)
+		)
+		(pin_names
+			(offset 0)
+			(hide yes)
+		)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(duplicate_pin_numbers_are_jumpers no)
+		(property "Reference" "#PWR"
+			(at 0 -6.35 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 0 -3.81 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_keywords" "global power"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(symbol "GND_0_1"
+			(polyline
+				(pts
+					(xy 0 0) (xy 0 -1.27) (xy 1.27 -1.27) (xy 0 -2.54) (xy -1.27 -1.27) (xy 0 -1.27)
+				)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+		)
+		(symbol "GND_1_1"
+			(pin power_in line
+				(at 0 0 270)
+				(length 0)
+				(name ""
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(embedded_fonts no)
+	)
+		(symbol "Device:R"
+		(pin_numbers
+			(hide yes)
+		)
+		(pin_names
+			(offset 0)
+		)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(duplicate_pin_numbers_are_jumpers no)
+		(property "Reference" "R"
+			(at 2.032 0 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "R"
+			(at 0 0 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at -1.778 0 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_keywords" "R res resistor"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_fp_filters" "R_*"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(symbol "R_0_1"
+			(rectangle
+				(start -1.016 -2.54)
+				(end 1.016 2.54)
+				(stroke
+					(width 0.254)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+		)
+		(symbol "R_1_1"
+			(pin passive line
+				(at 0 3.81 270)
+				(length 1.27)
+				(name ""
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 0 -3.81 90)
+				(length 1.27)
+				(name ""
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(embedded_fonts no)
+	))
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+	(symbol (lib_id "power:+3V3") (at 34.29 35.56 0) (unit 1) (uuid "92ff1432-52ac-5b59-aec9-468569fba21c") (pin "1" (uuid "57e63c16-700f-5c31-a5e8-fc1ce5edcbba")) (property "Reference" "PWR1" (at 34.29 36.83 0) (effects (font (size 1.27 1.27)) (hide yes))) (instances (project "noname" (path "/44fc0f0d-6198-4325-a31b-9fdfb1f0a1c1" (reference "PWR1") (unit 1)))))
+	(symbol (lib_id "power:GND") (at 55.88 33.02 0) (unit 1) (uuid "6dde7037-0cbd-5728-9cfb-594ef31a36d3") (pin "1" (uuid "e1e52ead-0ff4-5ca2-a2a6-7731f4d5c4a7")) (property "Reference" "PWR2" (at 55.88 36.83 0) (effects (font (size 1.27 1.27)) (hide yes))) (instances (project "noname" (path "/44fc0f0d-6198-4325-a31b-9fdfb1f0a1c1" (reference "PWR2") (unit 1)))))
+	(symbol (lib_id "Device:R") (at 35.56 64.77 0) (unit 1) (uuid "cda4c76a-2230-5f09-821f-4e6910e3885c") (pin "1" (uuid "fb2f0844-21eb-59e9-bd4a-59ecd7f84b7b")) (pin "2" (uuid "a0f92953-b9eb-50c8-98ac-64e73be95c3a")) (property "Reference" "R1" (at 37.846 63.5 0) (effects (font (size 1.27 1.27)) (justify left))) (instances (project "noname" (path "/44fc0f0d-6198-4325-a31b-9fdfb1f0a1c1" (reference "R1") (unit 1))))
+	(property "Value" "10k" (at 37.846 66.04 0) (effects (font (size 1.27 1.27)) (justify left)))
+	(property "Footprint" "Resistor_SMD:R_0603_1608Metric" (at 35.56 64.77 0) (effects (font (size 1.27 1.27)) (hide yes))))
+	(symbol (lib_id "Device:R") (at 57.15 64.77 0) (unit 1) (uuid "dddf548a-15dc-5f9b-86cc-f57d458151da") (pin "1" (uuid "84294a9e-50a6-5690-99b0-aae8cfc8fe25")) (pin "2" (uuid "9af3a319-ee54-52b0-8ed0-caeb4ca81e69")) (property "Reference" "R2" (at 59.436 63.5 0) (effects (font (size 1.27 1.27)) (justify left))) (instances (project "noname" (path "/44fc0f0d-6198-4325-a31b-9fdfb1f0a1c1" (reference "R2") (unit 1))))
+	(property "Value" "10k" (at 59.436 66.04 0) (effects (font (size 1.27 1.27)) (justify left)))
+	(property "Footprint" "Resistor_SMD:R_0603_1608Metric" (at 57.15 64.77 0) (effects (font (size 1.27 1.27)) (hide yes))))
+	(label "+3V3" (at 34.29 35.56 270) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "a4f93bbb-41dd-545f-ab54-7f09f8c8a7e3"))
+	(label "+3V3" (at 35.56 60.96 90) (effects (font (size 1.27 1.27)) (justify left bottom)) (uuid "8738d308-b74c-596a-a50b-aefb14aef977"))
+	(label "GND" (at 55.88 33.02 90) (effects (font (size 1.27 1.27)) (justify left bottom)) (uuid "0a87e700-76bf-50a7-b42e-cfa30952f20b"))
+	(label "GND" (at 57.15 68.58 270) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "6989dbf4-c98c-57fd-acf4-ce2948862cc2"))
+	(label "SENSE" (at 35.56 68.58 270) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "7a23bea0-ed4a-5fb6-8540-7ee841e7791c"))
+	(label "SENSE" (at 57.15 60.96 90) (effects (font (size 1.27 1.27)) (justify left bottom)) (uuid "10703ab6-4b4b-57ee-8e4d-3caba9955fee"))
+)

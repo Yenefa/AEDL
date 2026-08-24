@@ -1,0 +1,187 @@
+{
+  "protocol_version": 2,
+  "ops": [
+    {
+      "name": "add_bus",
+      "required": ["vertices"],
+      "kicad": true,
+      "altium": false
+    },
+    {
+      "name": "add_bus_entry",
+      "required": ["at"],
+      "kicad": true,
+      "altium": false
+    },
+    {
+      "name": "add_junction",
+      "required": ["at"],
+      "kicad": true,
+      "altium": true
+    },
+    {
+      "name": "add_net_label",
+      "required": ["name", "at"],
+      "kicad": true,
+      "altium": true
+    },
+    {
+      "name": "add_no_connect",
+      "required": ["pin"],
+      "kicad": true,
+      "altium": true
+    },
+    {
+      "name": "add_rectangle",
+      "required": ["start", "end"],
+      "kicad": true,
+      "altium": false
+    },
+    {
+      "name": "add_sheet",
+      "required": ["name", "file", "at", "size"],
+      "kicad": true,
+      "altium": false
+    },
+    {
+      "name": "add_text",
+      "required": ["text", "at"],
+      "kicad": true,
+      "altium": true
+    },
+    {
+      "name": "add_text_box",
+      "required": ["text", "at", "size"],
+      "kicad": true,
+      "altium": false
+    },
+    {
+      "name": "add_wire",
+      "required": ["vertices"],
+      "kicad": true,
+      "altium": true
+    },
+    {
+      "name": "delete_component",
+      "required": ["designator"],
+      "kicad": true,
+      "altium": false
+    },
+    {
+      "name": "delete_object",
+      "required": [],
+      "kicad": true,
+      "altium": false
+    },
+    {
+      "name": "move_component",
+      "required": ["designator"],
+      "kicad": true,
+      "altium": false
+    },
+    {
+      "name": "place_component",
+      "required": ["lib_id", "designator"],
+      "kicad": true,
+      "altium": true
+    },
+    {
+      "name": "place_gnd",
+      "required": ["at"],
+      "kicad": true,
+      "altium": true
+    },
+    {
+      "name": "place_power_port",
+      "required": ["lib_id", "net_name", "at"],
+      "kicad": true,
+      "altium": true
+    },
+    {
+      "name": "place_vcc",
+      "required": ["at"],
+      "kicad": true,
+      "altium": true
+    },
+    {
+      "name": "rename_net",
+      "required": ["old_name", "new_name"],
+      "kicad": true,
+      "altium": false
+    },
+    {
+      "name": "route_net",
+      "required": ["from", "to"],
+      "kicad": true,
+      "altium": false
+    },
+    {
+      "name": "set_component_parameters",
+      "required": ["designator"],
+      "kicad": true,
+      "altium": true
+    },
+    {
+      "name": "set_component_transform",
+      "required": ["designator"],
+      "kicad": true,
+      "altium": true
+    },
+    {
+      "name": "set_title_block",
+      "required": [],
+      "kicad": true,
+      "altium": false
+    }
+  ],
+  "macros": [
+    {
+      "name": "connect_and_label",
+      "required": ["from", "to", "net"]
+    },
+    {
+      "name": "place_array",
+      "required": ["lib_id", "designator_prefix", "count", "x_mil", "y_mil"]
+    },
+    {
+      "name": "place_crystal",
+      "required": ["x_mil", "y_mil", "in_net", "out_net"]
+    },
+    {
+      "name": "place_decoupling",
+      "required": ["power_net"]
+    },
+    {
+      "name": "place_divider",
+      "required": ["x_mil", "y_mil", "top_net", "mid_net", "bottom_net"]
+    },
+    {
+      "name": "place_led_indicator",
+      "required": ["x_mil", "y_mil", "net"]
+    },
+    {
+      "name": "place_pullup",
+      "required": ["net", "rail_net"]
+    },
+    {
+      "name": "place_pwr_flag",
+      "required": ["at"]
+    },
+    {
+      "name": "place_rc_filter",
+      "required": ["x_mil", "y_mil", "in_net", "out_net"]
+    },
+    {
+      "name": "terminate_unused_unit",
+      "required": [
+        "designator",
+        "lib_id",
+        "unit",
+        "at",
+        "in_plus",
+        "in_minus",
+        "out"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,164 @@
+(kicad_sch
+	(version 20231120)
+	(generator "eeschema")
+	(generator_version "8.0")
+	(uuid "fd810e8e-0083-40d2-acb1-beba0c5a1455")
+	(paper "A4")
+	(title_block
+		(title "M1 minimal divider")
+	)
+	(lib_symbols
+		(symbol "Device:R"
+		(pin_numbers
+			(hide yes)
+		)
+		(pin_names
+			(offset 0)
+		)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(duplicate_pin_numbers_are_jumpers no)
+		(property "Reference" "R"
+			(at 2.032 0 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "R"
+			(at 0 0 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at -1.778 0 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_keywords" "R res resistor"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_fp_filters" "R_*"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(symbol "R_0_1"
+			(rectangle
+				(start -1.016 -2.54)
+				(end 1.016 2.54)
+				(stroke
+					(width 0.254)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+		)
+		(symbol "R_1_1"
+			(pin passive line
+				(at 0 3.81 270)
+				(length 1.27)
+				(name ""
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 0 -3.81 90)
+				(length 1.27)
+				(name ""
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(embedded_fonts no)
+	))
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+	(symbol (lib_id "Device:R") (at 10.16 7.62 0) (unit 1) (uuid "064b06f6-e1f4-5154-b049-e7dc5f7ea50c") (pin "1" (uuid "f06698ca-af26-5265-aeb7-083504f754f7")) (pin "2" (uuid "a37bd018-9bbe-5528-bf85-9fcebbe7ef49")) (property "Reference" "R1" (at 12.446 6.35 0) (effects (font (size 1.27 1.27)) (justify left))) (instances (project "noname" (path "/fd810e8e-0083-40d2-acb1-beba0c5a1455" (reference "R1") (unit 1))))
+	(property "Value" "10k" (at 12.446 8.89 0) (effects (font (size 1.27 1.27)) (justify left))))
+	(symbol (lib_id "Device:R") (at 10.16 17.78 0) (unit 1) (uuid "e55c8e1f-8346-5290-8684-c4ad0cee02e8") (pin "1" (uuid "7c16b7d0-c1c6-5cd7-8bf5-bf8048c7e005")) (pin "2" (uuid "317a2792-843c-52ce-8db2-abd20255d9bd")) (property "Reference" "R2" (at 12.446 16.51 0) (effects (font (size 1.27 1.27)) (justify left))) (instances (project "noname" (path "/fd810e8e-0083-40d2-acb1-beba0c5a1455" (reference "R2") (unit 1))))
+	(property "Value" "10k" (at 12.446 19.05 0) (effects (font (size 1.27 1.27)) (justify left))))
+	(label "+3V3" (at 10.16 3.81 90) (effects (font (size 1.27 1.27)) (justify left bottom)) (uuid "a6e5832e-4dba-57ef-aaaf-413e605529bb"))
+	(label "SENSE" (at 10.16 11.43 270) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "782d9686-bc02-5d32-968e-52fd64b89cba"))
+	(label "SENSE" (at 10.16 13.97 90) (effects (font (size 1.27 1.27)) (justify left bottom)) (uuid "26872f59-2713-52fc-a797-be01d50831ec"))
+	(label "GND" (at 10.16 21.59 270) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "d1ae638c-5e9b-5a53-81c3-2cedc7d0960e"))
+)

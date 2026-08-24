@@ -1,0 +1,17 @@
+{
+  "protocol_version": 2,
+  "target_format": "kicad",
+  "ops": [
+    {
+      "op": "place_divider",
+      "x_mil": 400,
+      "y_mil": 300,
+      "top_net": "+3V3",
+      "mid_net": "SENSE",
+      "bottom_net": "GND",
+      "designators": ["R1", "R2"],
+      "values": ["10k", "10k"],
+      "lib_id": "Device:R"
+    }
+  ]
+}

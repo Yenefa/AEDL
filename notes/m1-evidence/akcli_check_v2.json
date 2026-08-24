@@ -1,0 +1,169 @@
+{
+  "schema_version": "2.0",
+  "metadata": {
+    "passive_pin_ratio": 0.6666666666666666,
+    "no_erc_suppressed": 0,
+    "unnamed_net_count": 0,
+    "frac_present": false,
+    "config_waived": "0 (0 demoted)",
+    "component_count": 4,
+    "pin_count": 6,
+    "undesignated_count": 0
+  },
+  "findings": [
+    {
+      "code": "POWER_GROUND",
+      "severity": "info",
+      "message": "1 ground net(s): GND",
+      "refs": ["GND"]
+    },
+    {
+      "code": "POWER_RAIL",
+      "severity": "info",
+      "message": "rail '+3V3' @ ~3.3V (from name): 2 consumer(s): PWR1, R1",
+      "refs": ["+3V3"]
+    },
+    {
+      "code": "POWER_RAIL_NO_SOURCE",
+      "severity": "warning",
+      "message": "rail '+3V3' has 2 consumer(s) (PWR1, R1) but no source: nothing on it (or on the nets it reaches through series parts) is a power_out/output pin, a PWR_FLAG, or a connector/battery/test point — check that the supply is actually wired",
+      "refs": ["+3V3", "PWR1", "R1"]
+    },
+    {
+      "code": "BOM_MISSING_FOOTPRINT",
+      "severity": "warning",
+      "message": "component PWR1 has no footprint",
+      "refs": ["PWR1"],
+      "pos": [1350.0, 1400.0],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "PWR1",
+          "pos": [1350.0, 1400.0]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_VALUE",
+      "severity": "warning",
+      "message": "component PWR2 has no value",
+      "refs": ["PWR2"],
+      "pos": [2200.0, 1300.0],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "PWR2",
+          "pos": [2200.0, 1300.0]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_FOOTPRINT",
+      "severity": "warning",
+      "message": "component PWR2 has no footprint",
+      "refs": ["PWR2"],
+      "pos": [2200.0, 1300.0],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "PWR2",
+          "pos": [2200.0, 1300.0]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_PART_ID",
+      "severity": "note",
+      "message": "PWR1 (no value) has no LCSC/MPN parameter — not orderable as-is",
+      "refs": ["PWR1"],
+      "pos": [1350.0, 1400.0],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "PWR1",
+          "pos": [1350.0, 1400.0]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_PART_ID",
+      "severity": "note",
+      "message": "PWR2 (no value) has no LCSC/MPN parameter — not orderable as-is",
+      "refs": ["PWR2"],
+      "pos": [2200.0, 1300.0],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "PWR2",
+          "pos": [2200.0, 1300.0]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_PART_ID",
+      "severity": "note",
+      "message": "R1 (10k) has no LCSC/MPN parameter — not orderable as-is",
+      "refs": ["R1"],
+      "pos": [1400.0, 2550.0],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "R1",
+          "pos": [1400.0, 2550.0]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_PART_ID",
+      "severity": "note",
+      "message": "R2 (10k) has no LCSC/MPN parameter — not orderable as-is",
+      "refs": ["R2"],
+      "pos": [2250.0, 2550.0],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "R2",
+          "pos": [2250.0, 2550.0]
+        }
+      ]
+    },
+    {
+      "code": "LAYOUT_COINCIDENT_TEXT",
+      "severity": "warning",
+      "message": "2 texts share anchor (1350,1400): +3V3 [label], PWR1 — they render on top of each other",
+      "refs": ["+3V3 [label]", "PWR1"],
+      "pos": [1350.0, 1400.0],
+      "anchors": [
+        {
+          "kind": "label",
+          "id": "+3V3 [label]",
+          "pos": [1350.0, 1400.0]
+        },
+        {
+          "kind": "label",
+          "id": "PWR1",
+          "pos": [1350.0, 1400.0]
+        }
+      ]
+    },
+    {
+      "code": "LAYOUT_COINCIDENT_TEXT",
+      "severity": "warning",
+      "message": "2 texts share anchor (2200,1300): GND [label], PWR2 — they render on top of each other",
+      "refs": ["GND [label]", "PWR2"],
+      "pos": [2200.0, 1300.0],
+      "anchors": [
+        {
+          "kind": "label",
+          "id": "GND [label]",
+          "pos": [2200.0, 1300.0]
+        },
+        {
+          "kind": "label",
+          "id": "PWR2",
+          "pos": [2200.0, 1300.0]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,2977 @@
+{
+  "schema_version": "1.0",
+  "akcli_version": "0.21.0",
+  "protocol_version": 2,
+  "exit_codes": [
+    {
+      "code": 0,
+      "name": "OK",
+      "meaning": "success / no findings"
+    },
+    {
+      "code": 1,
+      "name": "FINDINGS",
+      "meaning": "check findings present (lint-style; tune with --fail-on)"
+    },
+    {
+      "code": 2,
+      "name": "USAGE",
+      "meaning": "usage / argument / config error"
+    },
+    {
+      "code": 3,
+      "name": "PARSE",
+      "meaning": "parse error (corrupt OLE2 or S-expression)"
+    },
+    {
+      "code": 4,
+      "name": "NOT_FOUND",
+      "meaning": "file not found"
+    },
+    {
+      "code": 5,
+      "name": "UNSUPPORTED_FORMAT",
+      "meaning": "unsupported format"
+    },
+    {
+      "code": 6,
+      "name": "OPLIST",
+      "meaning": "op-list or verify failure"
+    },
+    {
+      "code": 7,
+      "name": "TOOL_MISSING",
+      "meaning": "required external tool missing or network failure"
+    },
+    {
+      "code": 8,
+      "name": "QUERY_MISS",
+      "meaning": "named net/component does not exist in the (valid) file"
+    }
+  ],
+  "error_codes": [
+    {
+      "code": "ALTIUM_ALLOC_GUARD",
+      "exit": 3
+    },
+    {
+      "code": "ALTIUM_BAD_MAGIC",
+      "exit": 3
+    },
+    {
+      "code": "ALTIUM_BAD_SECTOR_SHIFT",
+      "exit": 3
+    },
+    {
+      "code": "ALTIUM_FAT_CYCLE",
+      "exit": 3
+    },
+    {
+      "code": "ALTIUM_MALFORMED",
+      "exit": 3
+    },
+    {
+      "code": "ALTIUM_OOB_SECTOR",
+      "exit": 3
+    },
+    {
+      "code": "ALTIUM_UNSUPPORTED",
+      "exit": 5
+    },
+    {
+      "code": "BAD_ANGLE",
+      "exit": 6
+    },
+    {
+      "code": "BAD_CONFIG",
+      "exit": 2
+    },
+    {
+      "code": "BINFETCH_CHECKSUM",
+      "exit": 7
+    },
+    {
+      "code": "BINFETCH_DOWNLOAD",
+      "exit": 7
+    },
+    {
+      "code": "BRIDGE_BUSY",
+      "exit": 6
+    },
+    {
+      "code": "BRIDGE_TIMEOUT",
+      "exit": 7
+    },
+    {
+      "code": "DESIGN_UNSUPPORTED",
+      "exit": 6
+    },
+    {
+      "code": "FILE_UNREADABLE",
+      "exit": 4
+    },
+    {
+      "code": "GROUP_NO_ORIGIN",
+      "exit": 6
+    },
+    {
+      "code": "GROUP_UNKNOWN",
+      "exit": 6
+    },
+    {
+      "code": "HIERARCHICAL_UNSUPPORTED",
+      "exit": 6
+    },
+    {
+      "code": "INSTANCE_REFS_REQUIRED",
+      "exit": 6
+    },
+    {
+      "code": "INTERNAL",
+      "exit": 3
+    },
+    {
+      "code": "KICAD_BAD_ENCODING",
+      "exit": 3
+    },
+    {
+      "code": "KICAD_CLI_MISSING",
+      "exit": 7
+    },
+    {
+      "code": "KICAD_CLI_TIMEOUT",
+      "exit": 7
+    },
+    {
+      "code": "KICAD_SEXPR_BAD_NUMBER",
+      "exit": 3
+    },
+    {
+      "code": "KICAD_SEXPR_DEPTH",
+      "exit": 3
+    },
+    {
+      "code": "KICAD_SEXPR_TOOBIG",
+      "exit": 3
+    },
+    {
+      "code": "KICAD_SEXPR_UNTERMINATED",
+      "exit": 3
+    },
+    {
+      "code": "NETWORK",
+      "exit": 7
+    },
+    {
+      "code": "NGSPICE_FAILED",
+      "exit": 7
+    },
+    {
+      "code": "NGSPICE_MISSING",
+      "exit": 7
+    },
+    {
+      "code": "NON_ORTHOGONAL_WIRE",
+      "exit": 6
+    },
+    {
+      "code": "OFF_GRID",
+      "exit": 6
+    },
+    {
+      "code": "OP_UNSUPPORTED",
+      "exit": 6
+    },
+    {
+      "code": "OVERLAP",
+      "exit": 6
+    },
+    {
+      "code": "PATH_OUTSIDE_ROOT",
+      "exit": 2
+    },
+    {
+      "code": "POWER_PORT_STACKED",
+      "exit": 6
+    },
+    {
+      "code": "PROJECT_ROOT_AMBIGUOUS",
+      "exit": 6
+    },
+    {
+      "code": "PROJECT_ROOT_MISMATCH",
+      "exit": 2
+    },
+    {
+      "code": "PROTOCOL_MISMATCH",
+      "exit": 6
+    },
+    {
+      "code": "SHEET_FILE_MISSING",
+      "exit": 6
+    },
+    {
+      "code": "SHEET_UNKNOWN",
+      "exit": 6
+    },
+    {
+      "code": "SIM_NODE_COLLISION",
+      "exit": 6
+    },
+    {
+      "code": "SIM_NODE_COUNT_MISMATCH",
+      "exit": 6
+    },
+    {
+      "code": "SIM_NO_GROUND",
+      "exit": 6
+    },
+    {
+      "code": "SIM_OP_ASSERT_UNSUPPORTED",
+      "exit": 2
+    },
+    {
+      "code": "SIM_VALUE_INVALID",
+      "exit": 6
+    },
+    {
+      "code": "SYMBOL_NOT_FOUND",
+      "exit": 6
+    },
+    {
+      "code": "TARGET_LOCKED",
+      "exit": 6
+    },
+    {
+      "code": "TXN_ROLLBACK_FAILED",
+      "exit": 6
+    },
+    {
+      "code": "VERIFY_FAILED",
+      "exit": 6
+    }
+  ],
+  "global_flags": [
+    {
+      "flags": ["-C", "--config"],
+      "help": "path to akcli.toml (overrides discovery)",
+      "metavar": "PATH",
+      "takes_value": true
+    },
+    {
+      "flags": ["-v", "--verbose"],
+      "help": "increase verbosity (-v, -vv)",
+      "takes_value": false
+    },
+    {
+      "flags": ["-q", "--quiet"],
+      "help": "suppress non-error logs",
+      "takes_value": false
+    },
+    {
+      "flags": ["--json"],
+      "help": "emit machine-readable JSON",
+      "takes_value": false
+    },
+    {
+      "flags": ["--no-color"],
+      "help": "disable ANSI color",
+      "takes_value": false
+    },
+    {
+      "flags": ["--debug"],
+      "help": "re-raise exceptions with a full traceback",
+      "takes_value": false
+    },
+    {
+      "flags": ["--version"],
+      "help": "print package + protocol version and exit",
+      "takes_value": false,
+      "default": false
+    }
+  ],
+  "commands": [
+    {
+      "name": "read",
+      "help": "read + normalize a file",
+      "positionals": [
+        {
+          "name": "path",
+          "required": false,
+          "help": "input file (.SchDoc/.SchLib/.PcbDoc/.PcbLib/.kicad_*)",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["--md"],
+          "help": "render a Markdown summary",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--strict"],
+          "help": "exit 1 when a non-empty source normalizes to nothing (EMPTY_IMPORT)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--summary"],
+          "help": "counts + metadata only, never the full object arrays (the context-budget escape hatch for big boards)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--match"],
+          "help": "only list objects (components/symbols/footprints) whose name matches this fnmatch glob (case-sensitive)",
+          "metavar": "GLOB",
+          "takes_value": true
+        },
+        {
+          "flags": ["--limit"],
+          "help": "list at most N objects (components/symbols/footprints) (JSON carries total/matched/returned/truncated)",
+          "metavar": "N",
+          "takes_value": true
+        }
+      ]
+    },
+    {
+      "name": "net",
+      "help": "query nets: by name, all, or pin-level (--at / --same / --why REF.PIN)",
+      "positionals": [
+        {
+          "name": "path",
+          "required": false,
+          "help": "input schematic",
+          "takes_value": true
+        },
+        {
+          "name": "name",
+          "required": false,
+          "help": "net name to query (omit to list all)",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["--at"],
+          "help": "reverse lookup: which net is this pin on",
+          "metavar": "REF.PIN",
+          "takes_value": true
+        },
+        {
+          "flags": ["--same"],
+          "help": "binary connectivity: are these two pins on one net",
+          "metavar": ["A.PIN", "B.PIN"],
+          "takes_value": true
+        },
+        {
+          "flags": ["--why"],
+          "help": "attachment diagnosis: why is this pin (not) connected — junction/wire-end status, nearest wire end/label/pin with mil distances, off-grid flag",
+          "metavar": "REF.PIN",
+          "takes_value": true
+        }
+      ]
+    },
+    {
+      "name": "nets",
+      "help": "print every net -> sorted members (+ --intent-snapshot for `check --intent`)",
+      "positionals": [
+        {
+          "name": "path",
+          "required": false,
+          "help": "input schematic",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["--intent-snapshot"],
+          "help": "also write the netlist as a design-intent JSON file ('-' = stdout) for `akcli check --intent`",
+          "metavar": "OUT.json",
+          "takes_value": true
+        },
+        {
+          "flags": ["--include-unnamed"],
+          "help": "intent snapshot: include unnamed nets (keyed by stable id)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--match"],
+          "help": "only list nets whose name matches this fnmatch glob (case-sensitive)",
+          "metavar": "GLOB",
+          "takes_value": true
+        },
+        {
+          "flags": ["--limit"],
+          "help": "list at most N nets (JSON carries total/matched/returned/truncated)",
+          "metavar": "N",
+          "takes_value": true
+        }
+      ]
+    },
+    {
+      "name": "component",
+      "help": "list components, or query one component's pin->net",
+      "positionals": [
+        {
+          "name": "path",
+          "required": false,
+          "help": "input schematic",
+          "takes_value": true
+        },
+        {
+          "name": "ref",
+          "required": false,
+          "help": "component designator (e.g. U3); omit to list all",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["--match"],
+          "help": "only list components whose name matches this fnmatch glob (case-sensitive)",
+          "metavar": "GLOB",
+          "takes_value": true
+        },
+        {
+          "flags": ["--limit"],
+          "help": "list at most N components (JSON carries total/matched/returned/truncated)",
+          "metavar": "N",
+          "takes_value": true
+        }
+      ]
+    },
+    {
+      "name": "pins",
+      "help": "print a symbol's pin world coords for a placement (op-list authoring)",
+      "positionals": [
+        {
+          "name": "lib_id",
+          "required": false,
+          "help": "symbol lib_id, e.g. Device:R or Timer:NE555P",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["--at"],
+          "help": "placement origin in mils (default: 0 0)",
+          "metavar": ["X", "Y"],
+          "takes_value": true
+        },
+        {
+          "flags": ["--rotation"],
+          "help": "placement rotation (default: 0)",
+          "choices": ["0", "90", "180", "270"],
+          "takes_value": true,
+          "default": 0
+        },
+        {
+          "flags": ["--mirror"],
+          "help": "placement mirror (default: none)",
+          "choices": ["none", "x", "y"],
+          "takes_value": true,
+          "default": "none"
+        },
+        {
+          "flags": ["--symbols"],
+          "help": "extra .kicad_sym / template .kicad_sch symbol source (repeatable)",
+          "metavar": "PATH",
+          "takes_value": true
+        }
+      ]
+    },
+    {
+      "name": "bbox",
+      "help": "print a symbol's world bounding boxes for a placement (spacing planning; sibling of `pins`)",
+      "positionals": [
+        {
+          "name": "lib_id",
+          "required": false,
+          "help": "symbol lib_id, e.g. Device:R or Timer:NE555P",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["--at"],
+          "help": "placement origin in mils (default: 0 0)",
+          "metavar": ["X", "Y"],
+          "takes_value": true
+        },
+        {
+          "flags": ["--rotation"],
+          "help": "placement rotation (default: 0)",
+          "choices": ["0", "90", "180", "270"],
+          "takes_value": true,
+          "default": 0
+        },
+        {
+          "flags": ["--mirror"],
+          "help": "placement mirror (default: none)",
+          "choices": ["none", "x", "y"],
+          "takes_value": true,
+          "default": "none"
+        },
+        {
+          "flags": ["--symbols"],
+          "help": "extra .kicad_sym / template .kicad_sch symbol source (repeatable)",
+          "metavar": "PATH",
+          "takes_value": true
+        }
+      ]
+    },
+    {
+      "name": "groups",
+      "help": "list a sheet's functional groups (from the Group property); --frame draws border+title per group",
+      "positionals": [
+        {
+          "name": "path",
+          "required": false,
+          "help": "input .kicad_sch",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["--frame"],
+          "help": "draw/refresh a border rectangle + title per group (dry-run unless --apply; keyed uuids replace stale frames in place)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--apply"],
+          "help": "with --frame: actually write (default is a dry-run)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--margin"],
+          "help": "frame padding around the group box (default 200)",
+          "metavar": "MIL",
+          "takes_value": true
+        },
+        {
+          "flags": ["--symbols"],
+          "help": "extra symbol source for the write pipeline",
+          "metavar": "PATH",
+          "takes_value": true
+        },
+        {
+          "flags": ["--allow-open"],
+          "help": "write even when a KiCad GUI lock file is present",
+          "takes_value": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "export",
+      "help": "emit a netlist",
+      "positionals": [
+        {
+          "name": "path",
+          "required": false,
+          "help": "input schematic",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["--format"],
+          "help": "netlist format (default: protel)",
+          "choices": ["protel", "kicad", "csv"],
+          "takes_value": true,
+          "default": "protel"
+        },
+        {
+          "flags": ["-o", "--output"],
+          "help": "write to FILE instead of stdout",
+          "metavar": "FILE",
+          "takes_value": true
+        }
+      ]
+    },
+    {
+      "name": "render",
+      "help": "render a schematic to SVG (no KiCad install; Altium too). WRITES <input>.svg by default — use `-o -` for stdout",
+      "positionals": [
+        {
+          "name": "path",
+          "required": false,
+          "help": "input .kicad_sch or .SchDoc",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["-o", "--output"],
+          "help": "output SVG path ('-' = stdout, nothing written; default: <input>.svg written next to the input)",
+          "metavar": "FILE",
+          "takes_value": true
+        },
+        {
+          "flags": ["--grid"],
+          "help": "overlay world-mil gridlines + coordinate captions + origin cross (read placement coordinates off the image; plan/draw --render previews include it)",
+          "takes_value": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "doc",
+      "help": "generate a Markdown pinout book (pin tables + power rails + BOM)",
+      "positionals": [
+        {
+          "name": "path",
+          "required": false,
+          "help": "schematic (.kicad_sch or .SchDoc)",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["-o", "--out"],
+          "help": "write the Markdown here instead of stdout",
+          "metavar": "FILE",
+          "takes_value": true
+        },
+        {
+          "flags": ["--refs"],
+          "help": "comma-separated refdes globs to table (default: U*,J*,CN*,P*)",
+          "metavar": "GLOBS",
+          "takes_value": true
+        }
+      ]
+    },
+    {
+      "name": "view",
+      "help": "local web dashboard: /calc (calculators) + /live (watch a .kicad_sch); bare `view` serves the hub",
+      "positionals": [
+        {
+          "name": "what",
+          "required": false,
+          "help": "`calc`, `live [sch]`, or directly a .kicad_sch to watch; omit to serve the hub with nothing watched",
+          "takes_value": true
+        },
+        {
+          "name": "path",
+          "required": false,
+          "help": "the .kicad_sch to watch (view live only; omitted -> the single .kicad_sch in the current directory)",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["--port"],
+          "help": "listen port (default 8765; auto-increments if busy; localhost only)",
+          "takes_value": true
+        },
+        {
+          "flags": ["--no-browser"],
+          "help": "do not open the browser automatically",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--state-dir"],
+          "help": "view live: persist the step timeline here (default: fresh temp dir per run)",
+          "metavar": "DIR",
+          "takes_value": true
+        },
+        {
+          "flags": ["--max-steps"],
+          "help": "keep at most N timeline steps, deleting the oldest SVGs (default 500; 0 = unlimited)",
+          "metavar": "N",
+          "takes_value": true,
+          "default": 500
+        }
+      ]
+    },
+    {
+      "name": "check",
+      "help": "run ERC/power/BOM/layout checks",
+      "positionals": [
+        {
+          "name": "path",
+          "required": false,
+          "help": "input schematic",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["--erc"],
+          "help": "run ERC checks",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--power"],
+          "help": "run power-rail checks",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--bom"],
+          "help": "run BOM-hygiene checks",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--layout"],
+          "help": "run geometric-overlap lint (.kicad_sch only)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--nets"],
+          "help": "run connectivity-hygiene checks (single-pin nets, off-grid pins, wire/pin/label attachment near-misses)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--integrity"],
+          "help": "run the write gate's document checks read-only (dangling endpoints, duplicate uuids/designators, unresolved lib_ids, instance paths, no-connect conflicts; .kicad_sch only)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--pairs"],
+          "help": "run differential-pair / bus-continuity checks (_P/_N, D+/D-, CAN_H/_L partners; D0..D7 index gaps)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--intent"],
+          "help": "assert a JSON design-intent file (see `akcli nets --intent-snapshot`) against the built netlist; bare --intent uses [paths] intent from akcli.toml",
+          "metavar": "FILE",
+          "takes_value": true
+        },
+        {
+          "flags": ["--contract"],
+          "help": "assert a TOML design-contract file (require/forbid pin-net, pin-pair topology, values, NC, approved exceptions with owner/expiry)",
+          "metavar": "FILE",
+          "takes_value": true
+        },
+        {
+          "flags": ["--libsync"],
+          "help": "check embedded lib_symbols freshness (pin-signature drift vs --symbols sources; old-format heuristic without them)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--symbols"],
+          "help": "symbol source dir or .kicad_sym for --libsync (repeatable)",
+          "metavar": "PATH",
+          "takes_value": true
+        },
+        {
+          "flags": ["--fail-on"],
+          "help": "minimum finding severity that exits non-zero (default: warning — findings gate by default; never always exits 0. `akcli review analyze` is the opposite: advisory unless --fail-on)",
+          "choices": ["info", "note", "warning", "error", "never"],
+          "takes_value": true
+        },
+        {
+          "flags": ["--exit-zero"],
+          "help": "always exit 0 (deprecated alias for --fail-on never)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--format"],
+          "help": "output format (sarif: GitHub code scanning; junit: CI test reporters)",
+          "choices": ["text", "json", "sarif", "junit"],
+          "takes_value": true
+        }
+      ]
+    },
+    {
+      "name": "diff",
+      "help": "net-level diff of two schematics",
+      "positionals": [
+        {
+          "name": "path",
+          "required": false,
+          "help": "schematic A",
+          "takes_value": true
+        },
+        {
+          "name": "other",
+          "required": false,
+          "help": "schematic B",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["--bom"],
+          "help": "also report the BOM line-level delta (added/removed lines, value/id edits, fitted<->dnp class flips; offline)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--fail-on"],
+          "help": "minimum finding severity that exits non-zero (default: warning — findings gate by default; never always exits 0. `akcli review analyze` is the opposite: advisory unless --fail-on)",
+          "choices": ["info", "note", "warning", "error", "never"],
+          "takes_value": true
+        },
+        {
+          "flags": ["--exit-zero"],
+          "help": "always exit 0 (deprecated alias for --fail-on never)",
+          "takes_value": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "verify",
+      "help": "net-equivalence proof: two schematics, or schematic vs .kicad_pcb (pad-net partition)",
+      "positionals": [
+        {
+          "name": "path",
+          "required": false,
+          "help": "schematic A (the reference)",
+          "takes_value": true
+        },
+        {
+          "name": "other",
+          "required": false,
+          "help": "schematic B (the candidate) or a .kicad_pcb board",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["--strict"],
+          "help": "also fail on component value/footprint differences (sch-pcb mode: include value mismatches)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--exit-zero"],
+          "help": "always exit 0",
+          "takes_value": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "pinmap",
+      "help": "MCU pin->net map + cross-check",
+      "positionals": [
+        {
+          "name": "path",
+          "required": false,
+          "help": "input schematic",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["--mcu"],
+          "help": "MCU designator (overrides config)",
+          "metavar": "REF",
+          "takes_value": true
+        },
+        {
+          "flags": ["--expected"],
+          "help": "expected pin->signal table (.csv or .json)",
+          "metavar": "FILE",
+          "takes_value": true
+        },
+        {
+          "flags": ["--fail-on"],
+          "help": "minimum finding severity that exits non-zero (default: warning — findings gate by default; never always exits 0. `akcli review analyze` is the opposite: advisory unless --fail-on)",
+          "choices": ["info", "note", "warning", "error", "never"],
+          "takes_value": true
+        },
+        {
+          "flags": ["--exit-zero"],
+          "help": "always exit 0 (deprecated alias for --fail-on never)",
+          "takes_value": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "expected",
+      "help": "extract an expected pin->signal table from .dts/.overlay or pinout .md (output is ALWAYS JSON — it feeds `pinmap --expected`; the global --json flag is a no-op here)",
+      "positionals": [
+        {
+          "name": "input",
+          "required": false,
+          "help": "input file (.dts, .dtsi, .overlay, .md)",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["-o", "--output"],
+          "help": "write JSON here instead of stdout (feed to pinmap --expected)",
+          "metavar": "FILE",
+          "takes_value": true
+        },
+        {
+          "flags": ["--key-header"],
+          "help": "markdown: explicit pin/GPIO column header",
+          "metavar": "NAME",
+          "takes_value": true
+        },
+        {
+          "flags": ["--value-header"],
+          "help": "markdown: explicit signal/net column header",
+          "metavar": "NAME",
+          "takes_value": true
+        }
+      ]
+    },
+    {
+      "name": "relink-symbols",
+      "help": "re-embed stale lib_symbols cache entries from fresh .kicad_sym libraries (dry-run unless --apply)",
+      "positionals": [
+        {
+          "name": "target",
+          "required": false,
+          "help": "the .kicad_sch to relink",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["--libs"],
+          "help": "symbol library dir or .kicad_sym file (repeatable); default: the KiCad.app SharedSupport symbols dir if it exists",
+          "metavar": "DIR",
+          "takes_value": true
+        },
+        {
+          "flags": ["--only"],
+          "help": "comma-separated library nicknames (or full lib_ids) to consider",
+          "metavar": "NICKS",
+          "takes_value": true
+        },
+        {
+          "flags": ["--apply"],
+          "help": "write the replacements (default: preview only; net-membership equivalence gated, leaves <name>.bak)",
+          "takes_value": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "review",
+      "help": "engineering design review: advisory findings with explicit confidence + evidence (analyze / report / explain)",
+      "subcommands": [
+        {
+          "name": "analyze",
+          "help": "run review detectors over a schematic (advisory; exit 0 unless --fail-on)",
+          "positionals": [
+            {
+              "name": "path",
+              "required": false,
+              "help": "schematic (.kicad_sch / .SchDoc)",
+              "takes_value": true
+            }
+          ],
+          "flags": [
+            {
+              "flags": ["--pcb"],
+              "help": "board .kicad_pcb (reserved for pcb/cross detectors)",
+              "metavar": "FILE",
+              "takes_value": true
+            },
+            {
+              "flags": ["--profile"],
+              "help": "detector families to run",
+              "choices": ["deep", "fast", "standard"],
+              "takes_value": true,
+              "default": "standard"
+            },
+            {
+              "flags": ["--detector"],
+              "help": "run only this detector (repeatable; overrides --profile)",
+              "metavar": "NAME",
+              "takes_value": true
+            },
+            {
+              "flags": ["-o", "--out"],
+              "help": "also write the findings JSON envelope here",
+              "metavar": "FILE",
+              "takes_value": true
+            },
+            {
+              "flags": ["--gerbers"],
+              "help": "fab output dir (gerber/drill) for the gerber package checks",
+              "metavar": "DIR",
+              "takes_value": true
+            },
+            {
+              "flags": ["--facts"],
+              "help": "datasheet facts dir (default: auto-discover <sch dir>/datasheets when it holds extracted/)",
+              "metavar": "DIR",
+              "takes_value": true
+            },
+            {
+              "flags": ["--fail-on"],
+              "help": "exit 1 when any finding is at/above this severity (default: never — review is advisory; note `akcli check` is the opposite: it gates at warning unless told otherwise)",
+              "choices": [
+                "info",
+                "note",
+                "warning",
+                "error",
+                "critical",
+                "never"
+              ],
+              "takes_value": true
+            }
+          ]
+        },
+        {
+          "name": "facts",
+          "help": "datasheet facts store: audited, PDF-pinned numbers that turn heuristic findings datasheet_backed",
+          "subcommands": [
+            {
+              "name": "add",
+              "help": "create/update one MPN's facts (binds the source PDF by sha256)",
+              "positionals": [
+                {
+                  "name": "mpn",
+                  "required": false,
+                  "help": "exact manufacturer part number",
+                  "takes_value": true
+                }
+              ],
+              "flags": [
+                {
+                  "flags": ["--pdf"],
+                  "help": "the source datasheet PDF (required)",
+                  "metavar": "FILE",
+                  "takes_value": true
+                },
+                {
+                  "flags": ["--dir"],
+                  "help": "facts store (default: ./datasheets — a committed team asset)",
+                  "metavar": "DIR",
+                  "takes_value": true
+                },
+                {
+                  "flags": ["--method"],
+                  "help": "how the numbers were extracted",
+                  "choices": ["manual", "pdftotext", "llm"],
+                  "takes_value": true,
+                  "default": "manual"
+                },
+                {
+                  "flags": ["--set"],
+                  "help": "record one fact, e.g. vref=0.6V@5 or load_capacitance=12pF@3 (repeatable)",
+                  "metavar": "KEY=VAL@pN",
+                  "takes_value": true
+                }
+              ]
+            },
+            {
+              "name": "verify",
+              "help": "audit the store: schema, PDF sha256 staleness, page bounds, quotes (via optional pdftotext)",
+              "positionals": [
+                {
+                  "name": "mpn",
+                  "required": false,
+                  "help": "verify one MPN (default: all)",
+                  "takes_value": true
+                }
+              ],
+              "flags": [
+                {
+                  "flags": ["--dir"],
+                  "help": "facts store (default: ./datasheets — a committed team asset)",
+                  "metavar": "DIR",
+                  "takes_value": true
+                },
+                {
+                  "flags": ["--exit-zero"],
+                  "help": "always exit 0 (report mode)",
+                  "takes_value": false,
+                  "default": false
+                }
+              ]
+            },
+            {
+              "name": "lookup",
+              "help": "print one MPN's audited facts",
+              "positionals": [
+                {
+                  "name": "mpn",
+                  "required": false,
+                  "help": "exact manufacturer part number",
+                  "takes_value": true
+                },
+                {
+                  "name": "key",
+                  "required": false,
+                  "help": "one fact key (default: all)",
+                  "takes_value": true
+                }
+              ],
+              "flags": [
+                {
+                  "flags": ["--dir"],
+                  "help": "facts store (default: ./datasheets — a committed team asset)",
+                  "metavar": "DIR",
+                  "takes_value": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "report",
+          "help": "re-render a findings JSON file (text/json/sarif/junit/markdown)",
+          "positionals": [
+            {
+              "name": "path",
+              "required": false,
+              "help": "findings .json (from analyze --out)",
+              "takes_value": true
+            }
+          ],
+          "flags": [
+            {
+              "flags": ["--format"],
+              "help": "output format (default: text, or json under --json)",
+              "choices": ["text", "json", "sarif", "junit", "markdown"],
+              "takes_value": true
+            }
+          ]
+        },
+        {
+          "name": "explain",
+          "help": "print one review rule: what it checks, formula, provenance",
+          "positionals": [
+            {
+              "name": "code",
+              "required": false,
+              "help": "rule code, e.g. REVIEW_XTAL_LOAD",
+              "takes_value": true
+            }
+          ]
+        },
+        {
+          "name": "propose",
+          "help": "turn findings into declarative candidate changes (op-list / contract / sim drafts; never touches design files)",
+          "positionals": [
+            {
+              "name": "path",
+              "required": false,
+              "help": "findings .json (from analyze --out)",
+              "takes_value": true
+            }
+          ],
+          "flags": [
+            {
+              "flags": ["-o", "--out"],
+              "help": "write proposals JSON here",
+              "metavar": "FILE",
+              "takes_value": true
+            }
+          ]
+        },
+        {
+          "name": "testbench",
+          "help": "auto-generate + run subcircuit SPICE testbenches from quantitative findings (RC corners, divider ratios)",
+          "positionals": [
+            {
+              "name": "path",
+              "required": false,
+              "help": "schematic (.kicad_sch / .SchDoc)",
+              "takes_value": true
+            }
+          ],
+          "flags": [
+            {
+              "flags": ["--findings"],
+              "help": "reuse a findings .json (default: run `review analyze` in-process, standard profile)",
+              "metavar": "FILE",
+              "takes_value": true
+            },
+            {
+              "flags": ["--deck-only"],
+              "help": "emit the decks without running ngspice (exit 0)",
+              "takes_value": false,
+              "default": false
+            },
+            {
+              "flags": ["-o", "--out"],
+              "help": "with --deck-only: write <fingerprint>_<kind>.deck files here",
+              "metavar": "DIR",
+              "takes_value": true
+            },
+            {
+              "flags": ["--timeout"],
+              "help": "per-bench engine timeout (default 60)",
+              "metavar": "S",
+              "takes_value": true
+            },
+            {
+              "flags": ["--exit-zero"],
+              "help": "always exit 0 (report mode)",
+              "takes_value": false,
+              "default": false
+            }
+          ]
+        },
+        {
+          "name": "diff",
+          "help": "compare two findings files (fingerprint-aligned drift; `drift` is an alias — this is findings-drift, NOT the net-level `akcli diff`)",
+          "positionals": [
+            {
+              "name": "old",
+              "required": false,
+              "help": "earlier findings .json",
+              "takes_value": true
+            },
+            {
+              "name": "new",
+              "required": false,
+              "help": "later findings .json",
+              "takes_value": true
+            }
+          ],
+          "flags": [
+            {
+              "flags": ["--fail-on-new"],
+              "help": "exit 1 when the later run adds findings",
+              "takes_value": false,
+              "default": false
+            }
+          ]
+        },
+        {
+          "name": "drift",
+          "positionals": [
+            {
+              "name": "old",
+              "required": false,
+              "help": "earlier findings .json",
+              "takes_value": true
+            },
+            {
+              "name": "new",
+              "required": false,
+              "help": "later findings .json",
+              "takes_value": true
+            }
+          ],
+          "flags": [
+            {
+              "flags": ["--fail-on-new"],
+              "help": "exit 1 when the later run adds findings",
+              "takes_value": false,
+              "default": false
+            }
+          ]
+        },
+        {
+          "name": "tree",
+          "help": "print the schematic's power tree (rails, regulators, consumers)",
+          "positionals": [
+            {
+              "name": "path",
+              "required": false,
+              "help": "schematic (.kicad_sch / .SchDoc)",
+              "takes_value": true
+            }
+          ]
+        },
+        {
+          "name": "validate",
+          "help": "gate LLM deep-review candidates: schema / anchors / datasheet evidence / masquerade — failures are quarantined with reasons",
+          "positionals": [
+            {
+              "name": "candidates",
+              "required": false,
+              "help": "candidates .json",
+              "takes_value": true
+            },
+            {
+              "name": "sch",
+              "required": false,
+              "help": "schematic (.kicad_sch / .SchDoc)",
+              "takes_value": true
+            }
+          ],
+          "flags": [
+            {
+              "flags": ["--facts"],
+              "help": "datasheet facts dir for evidence verification",
+              "metavar": "DIR",
+              "takes_value": true
+            },
+            {
+              "flags": ["-o", "--out"],
+              "help": "write the accepted-findings envelope here",
+              "metavar": "FILE",
+              "takes_value": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "arrange",
+      "help": "nudge free (unwired/unlabeled) components until no symbols overlap (dry-run unless --apply)",
+      "positionals": [
+        {
+          "name": "path",
+          "required": false,
+          "help": "the .kicad_sch to arrange",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["--apply"],
+          "help": "write the moves (default: preview only)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--groups"],
+          "help": "relocate functional blocks: a TOML/JSON map of group-name -> [refdes, ...] (net-preserving rigid moves). Bare --groups derives the map from the sheet's hidden Group properties",
+          "metavar": "FILE",
+          "takes_value": true
+        },
+        {
+          "flags": ["--frames"],
+          "help": "with --groups: redraw each group's border frame + title after packing (keyed uuids replace stale frames in place)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--group-gap"],
+          "help": "channel between group blocks, both axes with --page-width (default 1200; [arrange] group_gap)",
+          "metavar": "MIL",
+          "takes_value": true
+        },
+        {
+          "flags": ["--row-width"],
+          "help": "wrap a group's shelf past this width (default 4000)",
+          "metavar": "MIL",
+          "takes_value": true
+        },
+        {
+          "flags": ["--page-width"],
+          "help": "with --groups: pack group blocks side by side in 2D, wrapping past this width (default: single column; [arrange] page_width)",
+          "metavar": "MIL",
+          "takes_value": true
+        },
+        {
+          "flags": ["--allow-net-changes"],
+          "help": "with --groups --apply: write even when the rigid re-layout would change net membership (default: refuse — the re-layout must be net-preserving)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--propose-labels"],
+          "help": "with --groups: write a label-on-pin op-list draft covering every named net that spans groups, so the re-pack stops depending on cross-group wires (apply it via plan/draw, then re-run arrange)",
+          "metavar": "OUT.json",
+          "takes_value": true
+        },
+        {
+          "flags": ["--grid"],
+          "help": "nudge step in mils (default 100)",
+          "metavar": "MIL",
+          "takes_value": true
+        },
+        {
+          "flags": ["--margin"],
+          "help": "clearance between symbols/bundles in mils (default 50; 200 with --groups)",
+          "metavar": "MIL",
+          "takes_value": true
+        },
+        {
+          "flags": ["--symbols"],
+          "help": "extra symbol source for the write pipeline",
+          "metavar": "PATH",
+          "takes_value": true
+        },
+        {
+          "flags": ["--allow-open"],
+          "help": "write even when a KiCad GUI lock file is present (File>Revert in KiCad afterwards)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--note"],
+          "help": "free-form intent note recorded in the workspace journal (why this edit was made)",
+          "metavar": "TEXT",
+          "takes_value": true
+        }
+      ]
+    },
+    {
+      "name": "new",
+      "help": "bootstrap a minimal blank .kicad_sch that draw can immediately append to",
+      "positionals": [
+        {
+          "name": "path",
+          "required": false,
+          "help": "the .kicad_sch to create",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["--paper"],
+          "help": "paper size (A4|A3|... default A4)",
+          "metavar": "SIZE",
+          "takes_value": true,
+          "default": "A4"
+        },
+        {
+          "flags": ["--title"],
+          "help": "title_block title",
+          "metavar": "T",
+          "takes_value": true
+        },
+        {
+          "flags": ["--force"],
+          "help": "overwrite an existing file",
+          "takes_value": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "undo",
+      "help": "restore a .kicad_sch from its rotated draw backups (.akcli/backups/<name>.bak..bakN; undo twice = redo)",
+      "positionals": [
+        {
+          "name": "path",
+          "required": false,
+          "help": "the .kicad_sch to restore",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["--apply"],
+          "help": "actually swap (default is a dry-run preview)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--steps"],
+          "help": "walk back N snapshots (default 1; a single undo afterwards redoes the last step)",
+          "metavar": "N",
+          "takes_value": true
+        },
+        {
+          "flags": ["--list"],
+          "help": "show the backup stack (mtimes/sizes) and exit",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--run"],
+          "help": "restore ALL files of a multi-sheet draw transaction (all-or-nothing; same command again = redo) from .akcli/backups/runs/<RUN_ID>/",
+          "metavar": "RUN_ID",
+          "takes_value": true
+        },
+        {
+          "flags": ["--allow-open"],
+          "help": "swap even when a KiCad GUI lock file is present (File>Revert in KiCad afterwards)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--note"],
+          "help": "free-form intent note recorded in the workspace journal (why this edit was made)",
+          "metavar": "TEXT",
+          "takes_value": true
+        }
+      ]
+    },
+    {
+      "name": "ops",
+      "help": "op-list authoring kit (list ops, emit op templates)",
+      "subcommands": [
+        {
+          "name": "list",
+          "help": "list the op vocabulary with required fields"
+        },
+        {
+          "name": "template",
+          "help": "emit a fill-in JSON op-list skeleton for one op",
+          "positionals": [
+            {
+              "name": "opname",
+              "required": false,
+              "help": "op name, e.g. place_component",
+              "takes_value": true
+            }
+          ],
+          "flags": [
+            {
+              "flags": ["--required-only"],
+              "help": "omit optional fields from the skeleton",
+              "takes_value": false,
+              "default": false
+            }
+          ]
+        },
+        {
+          "name": "validate",
+          "help": "validate an op-list file structurally (no target needed; exit 6 on any problem)",
+          "positionals": [
+            {
+              "name": "opsfile",
+              "required": false,
+              "help": "op-list JSON file",
+              "takes_value": true
+            }
+          ]
+        },
+        {
+          "name": "from-intent",
+          "help": "generate a complete op-list from a design document (the check --intent pin->net table + components + layout hints)",
+          "positionals": [
+            {
+              "name": "design",
+              "required": false,
+              "help": "design JSON file (see schemas/design-intent.schema.json)",
+              "takes_value": true
+            }
+          ],
+          "flags": [
+            {
+              "flags": ["-o", "--out"],
+              "help": "write the op-list here (default: stdout)",
+              "metavar": "OUT.json",
+              "takes_value": true
+            },
+            {
+              "flags": ["--symbols"],
+              "help": "extra .kicad_sym / template .kicad_sch symbol source (repeatable)",
+              "metavar": "PATH",
+              "takes_value": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "plan",
+      "help": "validate + dry-run an op-list against a .kicad_sch (never writes)",
+      "positionals": [
+        {
+          "name": "target",
+          "required": false,
+          "help": "target .kicad_sch file",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["--ops"],
+          "help": "op-list JSON file",
+          "metavar": "FILE",
+          "takes_value": true
+        },
+        {
+          "flags": ["--symbols"],
+          "help": "extra .kicad_sym / template .kicad_sch symbol source (repeatable)",
+          "metavar": "PATH",
+          "takes_value": true
+        },
+        {
+          "flags": ["--no-net-diff"],
+          "help": "skip the before/after net connectivity diff",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--root"],
+          "help": "root .kicad_sch of the sheet tree to evaluate the net diff over (auto-discovered when exactly one root instantiates the target)",
+          "metavar": "FILE",
+          "takes_value": true
+        },
+        {
+          "flags": ["--flat"],
+          "help": "evaluate the target file alone, ignoring any parent sheet tree (the truncated single-file net view)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--render"],
+          "help": "render the WOULD-BE sheet (dry-applied to a temp copy) to an SVG preview — look before you --apply",
+          "metavar": "OUT.svg",
+          "takes_value": true
+        },
+        {
+          "flags": ["--note"],
+          "help": "free-form intent note recorded in the workspace journal (why this edit was made)",
+          "metavar": "TEXT",
+          "takes_value": true
+        }
+      ]
+    },
+    {
+      "name": "draw",
+      "help": "apply an op-list to a .kicad_sch (dry-run unless --apply)",
+      "positionals": [
+        {
+          "name": "target",
+          "required": false,
+          "help": "target .kicad_sch file",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["--ops"],
+          "help": "op-list JSON file",
+          "metavar": "FILE",
+          "takes_value": true
+        },
+        {
+          "flags": ["--apply"],
+          "help": "actually write (default is dry-run: verify only)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--dry-run"],
+          "help": "verify only, do not write (default)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--symbols"],
+          "help": "extra .kicad_sym / template .kicad_sch symbol source (repeatable)",
+          "metavar": "PATH",
+          "takes_value": true
+        },
+        {
+          "flags": ["--no-net-diff"],
+          "help": "skip the before/after net connectivity diff",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--root"],
+          "help": "root .kicad_sch of the sheet tree to evaluate the net diff over (auto-discovered when exactly one root instantiates the target)",
+          "metavar": "FILE",
+          "takes_value": true
+        },
+        {
+          "flags": ["--flat"],
+          "help": "evaluate the target file alone, ignoring any parent sheet tree (the truncated single-file net view)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--strict-nets"],
+          "help": "with --apply: refuse to write when the net diff shows a split/merge touching a named net",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--allow-open"],
+          "help": "write even when a KiCad GUI lock file (~<name>.lck) is present — you accept that a GUI save may overwrite the edit; File>Revert in KiCad after applying",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--no-erc"],
+          "help": "skip the advisory post-apply kicad-cli ERC run (akcli's own connectivity gate still runs)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--render"],
+          "help": "render the resulting sheet (dry-applied to a temp copy) to an SVG preview — look before you --apply",
+          "metavar": "OUT.svg",
+          "takes_value": true
+        },
+        {
+          "flags": ["--note"],
+          "help": "free-form intent note recorded in the workspace journal (why this edit was made)",
+          "metavar": "TEXT",
+          "takes_value": true
+        }
+      ]
+    },
+    {
+      "name": "calc",
+      "help": "engineering calculators (E-series, IPC-2221, via, SMPS, 555, I2C, ... — every result cites its source)",
+      "positionals": [
+        {
+          "name": "name",
+          "required": false,
+          "help": "calculator name, or `list` / `info <name>` / `batch <file>` (unknown names fail at parse time with the full list)",
+          "choices": [
+            "list",
+            "info",
+            "batch",
+            "adc",
+            "attenuator",
+            "awg",
+            "battery",
+            "battery-life",
+            "boost",
+            "buck",
+            "can-termination",
+            "clearance",
+            "coax",
+            "comparator-hysteresis",
+            "convert-copper",
+            "convert-length",
+            "convert-power",
+            "crystal-caps",
+            "diffpair",
+            "envelope-detector",
+            "eseries",
+            "flyback",
+            "fuse-derating",
+            "fusing",
+            "galvanic",
+            "gate-drive",
+            "hysteresis",
+            "hysteresis-design",
+            "i2c-pullup",
+            "inrush-ntc",
+            "lc",
+            "ldo",
+            "ldo-headroom",
+            "led",
+            "lmatch",
+            "microstrip",
+            "ne555-astable",
+            "ne555-mono",
+            "ohm",
+            "opamp-gain",
+            "pimatch",
+            "rc",
+            "rc-charge",
+            "rcombo",
+            "reactance",
+            "regulator",
+            "regulator-design",
+            "rescolor",
+            "rs485-bias",
+            "sallen-key",
+            "shunt",
+            "smdcode",
+            "stripline",
+            "thermal",
+            "trackcurrent",
+            "tracktemp",
+            "trackwidth",
+            "tvs",
+            "twinlead",
+            "vdivider",
+            "vdivider-design",
+            "via",
+            "wavelength"
+          ],
+          "metavar": "NAME",
+          "takes_value": true
+        },
+        {
+          "name": "params",
+          "required": false,
+          "help": "inputs, engineering notation ok (4k7, 100n, 35u)",
+          "metavar": "key=value",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["--md"],
+          "help": "render the result as a markdown table",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--ops"],
+          "help": "also emit a place_component op-list with the computed values ('-' = stdout; design-type calculators only)",
+          "metavar": "FILE",
+          "takes_value": true
+        }
+      ]
+    },
+    {
+      "name": "jlc",
+      "help": "search JLCPCB/LCSC parts via jlcsearch (needs network)",
+      "subcommands": [
+        {
+          "name": "search",
+          "help": "keyword search for parts (MPN, category, C-number)",
+          "positionals": [
+            {
+              "name": "query",
+              "required": false,
+              "help": "search keywords",
+              "takes_value": true
+            }
+          ],
+          "flags": [
+            {
+              "flags": ["--limit"],
+              "help": "max results (default: 20)",
+              "metavar": "N",
+              "takes_value": true,
+              "default": 20
+            },
+            {
+              "flags": ["--category"],
+              "help": "keep only results whose category equals NAME (case-insensitive exact match, e.g. Resistors, Capacitors) — a value/package query like '0402 47K' can otherwise mix in NTC thermistors from Sensors",
+              "metavar": "NAME",
+              "takes_value": true
+            }
+          ]
+        },
+        {
+          "name": "bom",
+          "help": "check a schematic's BOM against the JLCPCB catalog (stock/price via LCSC/MPN parameters; networked)",
+          "positionals": [
+            {
+              "name": "path",
+              "required": false,
+              "help": "input schematic(s) (.kicad_sch/.SchDoc); several boards merge into ONE cart (same C-number lines combine, tier pricing at the merged quantity, refs prefixed board:ref)",
+              "takes_value": true
+            }
+          ],
+          "flags": [
+            {
+              "flags": ["--qty"],
+              "help": "number of boards: stock and tier pricing are evaluated at N x per-line quantity (default: 1)",
+              "metavar": "N",
+              "takes_value": true,
+              "default": 1
+            },
+            {
+              "flags": ["--min-stock"],
+              "help": "flag lines with stock below N (default: 1, or akcli.toml [bom].min_stock)",
+              "metavar": "N",
+              "takes_value": true
+            },
+            {
+              "flags": ["--alternates"],
+              "help": "propose second sources for at-risk lines too (low-stock/out-of-stock/EOL), and note Basic swaps for Extended passives (advisory)",
+              "takes_value": false,
+              "default": false
+            },
+            {
+              "flags": ["--offline"],
+              "help": "answer from the HTTP cache only: cache misses degrade to 'unverified' lines instead of exit 7; the run is bannered as degraded",
+              "takes_value": false,
+              "default": false
+            },
+            {
+              "flags": ["--lock"],
+              "help": "freeze this check as a BOM lockfile (resolved C-numbers, prices, stock, Basic/Extended) for reproducible orders",
+              "metavar": "OUT.json",
+              "takes_value": true
+            },
+            {
+              "flags": ["--against-lock"],
+              "help": "diff this check against a lockfile: price drift, stock below need, vanished parts (EOL suspects), status/id changes",
+              "metavar": "LOCK.json",
+              "takes_value": true
+            },
+            {
+              "flags": ["--suggest"],
+              "help": "search the catalog for not-found / no-part-id lines (match by value + package) and print the best candidate",
+              "takes_value": false,
+              "default": false
+            },
+            {
+              "flags": ["--fix"],
+              "help": "write suggested C-numbers into the schematic's LCSC parameters (implies --suggest; .kicad_sch only; leaves a .bak — `akcli undo` reverts; high-confidence suggestions only)",
+              "takes_value": false,
+              "default": false
+            },
+            {
+              "flags": ["--fix-all"],
+              "help": "like --fix but also writes LOW-confidence suggestions (package matched, value not verified in the candidate description/MPN)",
+              "takes_value": false,
+              "default": false
+            },
+            {
+              "flags": ["--csv"],
+              "help": "also write a JLCPCB upload BOM CSV (Comment,Designator,Footprint,LCSC Part #); '-' writes to stdout",
+              "metavar": "OUT.csv",
+              "takes_value": true
+            },
+            {
+              "flags": ["--md"],
+              "help": "write a Markdown BOM report (classification summary + full table); '-' or bare = stdout",
+              "metavar": "OUT.md",
+              "takes_value": true
+            },
+            {
+              "flags": ["--exit-zero"],
+              "help": "always exit 0 (report mode)",
+              "takes_value": false,
+              "default": false
+            }
+          ]
+        },
+        {
+          "name": "datasheet",
+          "help": "resolve/download datasheet PDFs for a C-number, an MPN, or a schematic's whole BOM (via the EasyEDA record; networked)",
+          "positionals": [
+            {
+              "name": "target",
+              "required": false,
+              "help": "LCSC C-number (C2984661), an exact MPN, or a schematic path (.kicad_sch/.SchDoc)",
+              "takes_value": true
+            }
+          ],
+          "flags": [
+            {
+              "flags": ["--fetch"],
+              "help": "download the PDF(s); the %%PDF magic is verified so an HTML challenge page is never saved",
+              "takes_value": false,
+              "default": false
+            },
+            {
+              "flags": ["-o", "--out"],
+              "help": "download directory (default: AKCLI_DATASHEET_DIR or ~/.cache/akcli/datasheets)",
+              "metavar": "DIR",
+              "takes_value": true
+            },
+            {
+              "flags": ["--force"],
+              "help": "re-download even when the file already exists",
+              "takes_value": false,
+              "default": false
+            },
+            {
+              "flags": ["--resolve-mpn"],
+              "help": "for MPN-only BOM lines, exact-match the catalog (same policy as `jlc bom`) to pin a C-number before resolving (one search per distinct MPN)",
+              "takes_value": false,
+              "default": false
+            },
+            {
+              "flags": ["--exit-zero"],
+              "help": "always exit 0 (report mode)",
+              "takes_value": false,
+              "default": false
+            }
+          ]
+        },
+        {
+          "name": "show",
+          "help": "show one part by LCSC C-number (e.g. C7593)",
+          "positionals": [
+            {
+              "name": "lcsc",
+              "required": false,
+              "help": "LCSC part number, e.g. C7593",
+              "takes_value": true
+            }
+          ],
+          "flags": [
+            {
+              "flags": ["--easyeda"],
+              "help": "also query EasyEDA for metadata + 3D-model availability",
+              "takes_value": false,
+              "default": false
+            }
+          ]
+        },
+        {
+          "name": "add",
+          "help": "fetch an LCSC part and convert it into a KiCad library (networked)",
+          "positionals": [
+            {
+              "name": "lcsc",
+              "required": false,
+              "help": "LCSC part number, e.g. C2040",
+              "takes_value": true
+            }
+          ],
+          "flags": [
+            {
+              "flags": ["--3d"],
+              "help": "also download the 3D STEP model",
+              "takes_value": false,
+              "default": false
+            },
+            {
+              "flags": ["-o", "--out"],
+              "help": "output directory (default: <[paths].parts_dir or ./akcli-parts>/<C-number>/)",
+              "metavar": "DIR",
+              "takes_value": true
+            },
+            {
+              "flags": ["--lib-name"],
+              "help": "KiCad symbol library name (default: akcli)",
+              "metavar": "NAME",
+              "takes_value": true,
+              "default": "akcli"
+            },
+            {
+              "flags": ["--footprint-lib"],
+              "help": "fp-lib-table nickname written into the symbol's Footprint field AND used as the footprint output directory (default: footprint) — set it to the nickname your project registers or KiCad will not find the package",
+              "metavar": "NICKNAME",
+              "takes_value": true,
+              "default": "footprint"
+            },
+            {
+              "flags": ["--3d-path"],
+              "help": "how footprints reference the 3D model: 'relative' (default; portable, resolves only next to the library), 'absolute' (always resolves on this machine, not portable), or a '${VAR}' prefix (portable via a KiCad path variable)",
+              "metavar": "MODE",
+              "takes_value": true,
+              "default": "relative"
+            },
+            {
+              "flags": ["--force"],
+              "help": "overwrite existing artifacts",
+              "takes_value": false,
+              "default": false
+            },
+            {
+              "flags": ["--place"],
+              "help": "also emit a place_component op-list",
+              "takes_value": false,
+              "default": false
+            },
+            {
+              "flags": ["--designator"],
+              "help": "reference designator for --place (e.g. U1)",
+              "metavar": "REF",
+              "takes_value": true
+            },
+            {
+              "flags": ["--at"],
+              "help": "placement position in mils for --place",
+              "metavar": ["X", "Y"],
+              "takes_value": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "library",
+      "help": "project library workspace: audit + repair + author (sym/fp-lib-table, footprints, 3D, symbol generation)",
+      "subcommands": [
+        {
+          "name": "audit",
+          "help": "cross-check schematics <-> lib tables <-> libraries <-> 3D models",
+          "positionals": [
+            {
+              "name": "project",
+              "required": false,
+              "help": "project directory or .kicad_pro (default: .)",
+              "takes_value": true,
+              "default": "."
+            }
+          ],
+          "flags": [
+            {
+              "flags": ["--sch"],
+              "help": "audit this schematic instead of auto-discovery (repeatable)",
+              "metavar": "FILE",
+              "takes_value": true
+            },
+            {
+              "flags": ["--fail-on"],
+              "help": "minimum finding severity that exits non-zero (default: warning — findings gate by default; never always exits 0. `akcli review analyze` is the opposite: advisory unless --fail-on)",
+              "choices": ["info", "note", "warning", "error", "never"],
+              "takes_value": true
+            },
+            {
+              "flags": ["--exit-zero"],
+              "help": "always exit 0 (deprecated alias for --fail-on never)",
+              "takes_value": false,
+              "default": false
+            }
+          ]
+        },
+        {
+          "name": "repair",
+          "help": "plan/apply library fixes (dry-run by default)",
+          "positionals": [
+            {
+              "name": "project",
+              "required": false,
+              "help": "project directory or .kicad_pro (default: .)",
+              "takes_value": true,
+              "default": "."
+            }
+          ],
+          "flags": [
+            {
+              "flags": ["--rename-footprint-lib"],
+              "help": "rewrite Footprint fields 'OLD:*' -> 'NEW:*' in registered symbol libraries and project schematics (repeatable)",
+              "metavar": "OLD=NEW",
+              "takes_value": true
+            },
+            {
+              "flags": ["--3d-path"],
+              "help": "rewrite bare-relative 3D model paths in registered footprint libraries: 'absolute' or a '${VAR}' prefix",
+              "metavar": "MODE",
+              "takes_value": true
+            },
+            {
+              "flags": ["--apply"],
+              "help": "write the planned edits (atomic, with .bak)",
+              "takes_value": false,
+              "default": false
+            }
+          ]
+        },
+        {
+          "name": "import-altium",
+          "help": "convert an Altium .PcbLib into a .pretty library (pads verbatim; provenance.json records source hash + declared transformations)",
+          "positionals": [
+            {
+              "name": "path",
+              "required": false,
+              "help": "input .PcbLib",
+              "takes_value": true
+            }
+          ],
+          "flags": [
+            {
+              "flags": ["-o", "--out"],
+              "help": "output .pretty directory (default: <name>.pretty, under [paths].parts_dir when configured)",
+              "metavar": "DIR",
+              "takes_value": true
+            },
+            {
+              "flags": ["--courtyard"],
+              "help": "synthesize a pad-bbox courtyard with this clearance when the source has none (declared transformation)",
+              "metavar": "MM",
+              "takes_value": true
+            },
+            {
+              "flags": ["--apply"],
+              "help": "write the files (default: dry-run plan)",
+              "takes_value": false,
+              "default": false
+            }
+          ]
+        },
+        {
+          "name": "new-symbol",
+          "help": "generate a .kicad_sym from a pin-table JSON (coordinates are computed, never authored); dry-run unless --apply",
+          "positionals": [
+            {
+              "name": "spec",
+              "required": false,
+              "help": "input pin table (schemas/symbol-pins.schema.json)",
+              "takes_value": true
+            }
+          ],
+          "flags": [
+            {
+              "flags": ["-o", "--out"],
+              "help": "output .kicad_sym (default: <symbol name>.kicad_sym, under [paths].parts_dir when configured)",
+              "metavar": "FILE",
+              "takes_value": true
+            },
+            {
+              "flags": ["--name"],
+              "help": "override the spec's symbol name",
+              "metavar": "NAME",
+              "takes_value": true
+            },
+            {
+              "flags": ["--apply"],
+              "help": "write the library (default: dry-run plan). Refuses on any SYMLIB_PIN_COINCIDENT in its own output — two pins on one point is connectivity, not geometry",
+              "takes_value": false,
+              "default": false
+            }
+          ]
+        },
+        {
+          "name": "lint-symbols",
+          "help": "lint a .kicad_sym for coincident pins (an ERC-invisible mis-join), unset electrical types and off-grid pins",
+          "positionals": [
+            {
+              "name": "path",
+              "required": false,
+              "help": "the .kicad_sym to lint",
+              "takes_value": true
+            }
+          ],
+          "flags": [
+            {
+              "flags": ["--fail-on"],
+              "help": "minimum finding severity that exits non-zero (default: warning — findings gate by default; never always exits 0. `akcli review analyze` is the opposite: advisory unless --fail-on)",
+              "choices": ["info", "note", "warning", "error", "never"],
+              "takes_value": true
+            },
+            {
+              "flags": ["--exit-zero"],
+              "help": "always exit 0 (deprecated alias for --fail-on never)",
+              "takes_value": false,
+              "default": false
+            }
+          ]
+        },
+        {
+          "name": "check-lock",
+          "help": "report which KiCad files are open in the GUI (~<name>.lck); exit 6 if any are locked, so external flows can gate",
+          "positionals": [
+            {
+              "name": "project",
+              "required": false,
+              "help": "project directory or file (default: .)",
+              "takes_value": true,
+              "default": "."
+            }
+          ]
+        },
+        {
+          "name": "relink",
+          "help": "re-embed stale lib_symbols cache entries from fresh .kicad_sym libraries (alias of `relink-symbols`; dry-run unless --apply)",
+          "positionals": [
+            {
+              "name": "target",
+              "required": false,
+              "help": "the .kicad_sch to relink",
+              "takes_value": true
+            }
+          ],
+          "flags": [
+            {
+              "flags": ["--libs"],
+              "help": "symbol library dir or .kicad_sym file (repeatable); default: the KiCad.app SharedSupport symbols dir if it exists",
+              "metavar": "DIR",
+              "takes_value": true
+            },
+            {
+              "flags": ["--only"],
+              "help": "comma-separated library nicknames (or full lib_ids) to consider",
+              "metavar": "NICKS",
+              "takes_value": true
+            },
+            {
+              "flags": ["--apply"],
+              "help": "write the replacements (default: preview only; net-membership equivalence gated, leaves <name>.bak)",
+              "takes_value": false,
+              "default": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "fab",
+      "help": "manufacturing policy: check a board against a versioned fab profile",
+      "subcommands": [
+        {
+          "name": "check",
+          "help": "check a .kicad_pcb against a fab profile (+ optional order manifest)",
+          "positionals": [
+            {
+              "name": "path",
+              "required": false,
+              "help": "board .kicad_pcb",
+              "takes_value": true
+            }
+          ],
+          "flags": [
+            {
+              "flags": ["--profile"],
+              "help": "fab profile TOML (id/vendor/source/stackup/via/cost)",
+              "metavar": "FILE",
+              "takes_value": true
+            },
+            {
+              "flags": ["--order"],
+              "help": "order manifest TOML (declared purchase intent: delivery format, finish, via covering, ...)",
+              "metavar": "FILE",
+              "takes_value": true
+            },
+            {
+              "flags": ["--fail-on"],
+              "help": "minimum finding severity that exits non-zero (default: warning — findings gate by default; never always exits 0. `akcli review analyze` is the opposite: advisory unless --fail-on)",
+              "choices": ["info", "note", "warning", "error", "never"],
+              "takes_value": true
+            },
+            {
+              "flags": ["--exit-zero"],
+              "help": "always exit 0 (deprecated alias for --fail-on never)",
+              "takes_value": false,
+              "default": false
+            }
+          ]
+        },
+        {
+          "name": "explain",
+          "help": "explain a fab finding code: rule, fix direction, evidence",
+          "positionals": [
+            {
+              "name": "code",
+              "required": false,
+              "help": "finding code, e.g. FAB_VIA_IN_PAD",
+              "takes_value": true
+            }
+          ],
+          "flags": [
+            {
+              "flags": ["--profile"],
+              "help": "also cite this profile's sources",
+              "metavar": "FILE",
+              "takes_value": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "release",
+      "help": "release gating: run every gate, emit a traceable manifest",
+      "subcommands": [
+        {
+          "name": "preflight",
+          "help": "run all gates (check/intent/contract/library/sch-pcb/fab/order/sim/review/gerber/git) and write a release manifest",
+          "flags": [
+            {
+              "flags": ["--sch"],
+              "help": "schematic (.kicad_sch)",
+              "metavar": "FILE",
+              "takes_value": true
+            },
+            {
+              "flags": ["--pcb"],
+              "help": "board (.kicad_pcb)",
+              "metavar": "FILE",
+              "takes_value": true
+            },
+            {
+              "flags": ["--intent"],
+              "help": "design-intent JSON",
+              "metavar": "FILE",
+              "takes_value": true
+            },
+            {
+              "flags": ["--contract"],
+              "help": "design-contract TOML",
+              "metavar": "FILE",
+              "takes_value": true
+            },
+            {
+              "flags": ["--fab-profile"],
+              "help": "fab profile TOML",
+              "metavar": "FILE",
+              "takes_value": true
+            },
+            {
+              "flags": ["--order"],
+              "help": "order manifest TOML",
+              "metavar": "FILE",
+              "takes_value": true
+            },
+            {
+              "flags": ["--sim"],
+              "help": "sim.json assertion spec — runs the quantitative simulation gate on the bundled ngspice (a requested gate that cannot run FAILS, never skips)",
+              "metavar": "FILE",
+              "takes_value": true
+            },
+            {
+              "flags": ["--gerbers"],
+              "help": "fab output dir — gates on gerber package completeness/alignment/staleness",
+              "metavar": "DIR",
+              "takes_value": true
+            },
+            {
+              "flags": ["--review-policy"],
+              "help": "review gate policy TOML: [review] allow = [codes] (+ optional profile/fail threshold) — only explicitly allowlisted, calibrated rules may block",
+              "metavar": "FILE",
+              "takes_value": true
+            },
+            {
+              "flags": ["-o", "--out"],
+              "help": "write the release manifest JSON here",
+              "metavar": "FILE",
+              "takes_value": true
+            },
+            {
+              "flags": ["--allow-dirty"],
+              "help": "do not fail on a dirty worktree; record it instead",
+              "takes_value": false,
+              "default": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "gate",
+      "help": "iteration-weight four-check bundle (check + intent + sch-pcb + bom-lock), offline by default — for the every-edit GUI loop; see `release preflight` for the release-weight, manifest-producing gate run",
+      "positionals": [
+        {
+          "name": "path",
+          "required": false,
+          "help": "schematic (.kicad_sch/.SchDoc); falls back to [paths].schematic in akcli.toml",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["--pcb"],
+          "help": "board (.kicad_pcb) for the sch-pcb gate; falls back to [paths].pcb",
+          "metavar": "FILE",
+          "takes_value": true
+        },
+        {
+          "flags": ["--intent"],
+          "help": "design-intent JSON for the intent gate; falls back to [paths].intent (the same key `check --intent` falls back to)",
+          "metavar": "FILE",
+          "takes_value": true
+        },
+        {
+          "flags": ["--lock"],
+          "help": "BOM lockfile (`jlc bom --lock`) for the bom-lock gate; falls back to [paths].bom_lock",
+          "metavar": "FILE",
+          "takes_value": true
+        },
+        {
+          "flags": ["--live"],
+          "help": "let the bom-lock gate hit the network for a fresh catalog fetch (default: HTTP-cache-only, so a gate run never touches the network on its own)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--fail-on"],
+          "help": "minimum finding severity that exits non-zero (default: warning — findings gate by default; never always exits 0. `akcli review analyze` is the opposite: advisory unless --fail-on)",
+          "choices": ["info", "note", "warning", "error", "never"],
+          "takes_value": true
+        },
+        {
+          "flags": ["--exit-zero"],
+          "help": "always exit 0 (deprecated alias for --fail-on never)",
+          "takes_value": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "doctor",
+      "help": "environment report: python/kicad-cli/ngspice/symbols/config/network with remediation hints (--require gates CI)",
+      "flags": [
+        {
+          "flags": ["--network"],
+          "help": "also probe the jlc endpoint (doctor is offline by default)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--require"],
+          "help": "comma-separated capabilities that must be present (exit 1 otherwise): python, kicad-cli, ngspice, config, symbols, network",
+          "metavar": "CAPS",
+          "takes_value": true
+        }
+      ]
+    },
+    {
+      "name": "sim",
+      "help": "simulate a schematic with ngspice and assert on the results (or 'sim fit-diode' to fit a diode .model)",
+      "positionals": [
+        {
+          "name": "path",
+          "required": false,
+          "help": "input schematic, or the literal 'fit-diode'",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["--sim"],
+          "help": "sim assertion spec (sim.json: stimuli, analyses, asserts)",
+          "metavar": "FILE",
+          "takes_value": true
+        },
+        {
+          "flags": ["--deck-only"],
+          "help": "emit the SPICE deck and exit 0 (no simulation)",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["-o", "--out"],
+          "help": "write the deck here (--deck-only) instead of stdout",
+          "metavar": "PATH",
+          "takes_value": true
+        },
+        {
+          "flags": ["--gnd"],
+          "help": "net that becomes SPICE ground node 0 (default: GND)",
+          "metavar": "NET",
+          "takes_value": true,
+          "default": "GND"
+        },
+        {
+          "flags": ["--wave"],
+          "help": "write simulated waveforms to this tidy CSV (needs options.wave_vectors for named columns)",
+          "metavar": "OUT.csv",
+          "takes_value": true
+        },
+        {
+          "flags": ["--sweep"],
+          "help": "corner sweep: a component-value override (R21=2.2k,3.3k) or temp=0,25,60 — repeatable, ≤64 corners total",
+          "metavar": "NAME=v1,v2,...",
+          "takes_value": true
+        },
+        {
+          "flags": ["--timeout"],
+          "help": "kill the engine after S seconds (default: 60)",
+          "metavar": "S",
+          "takes_value": true,
+          "default": 60.0
+        },
+        {
+          "flags": ["--exit-zero"],
+          "help": "always exit 0 even when assertions/corners fail",
+          "takes_value": false,
+          "default": false
+        },
+        {
+          "flags": ["--point"],
+          "help": "fit-diode: a datasheet forward point (repeatable)",
+          "metavar": "V@I",
+          "takes_value": true
+        },
+        {
+          "flags": ["--n-prior"],
+          "help": "fit-diode: ideality prior for a single-point fit (default: 1.05)",
+          "metavar": "N",
+          "takes_value": true,
+          "default": 1.05
+        },
+        {
+          "flags": ["--rs-point"],
+          "help": "fit-diode: a high-current point to solve RS",
+          "metavar": "V@I",
+          "takes_value": true
+        },
+        {
+          "flags": ["--cjo"],
+          "help": "fit-diode: junction capacitance (e.g. 50p)",
+          "metavar": "F",
+          "takes_value": true
+        },
+        {
+          "flags": ["--name"],
+          "help": "fit-diode: .model name (default: DFIT)",
+          "metavar": "MODEL",
+          "takes_value": true,
+          "default": "DFIT"
+        },
+        {
+          "flags": ["--apply"],
+          "help": "fit-diode: schematic to write the fit onto (dry-run unless --write)",
+          "metavar": "SCH",
+          "takes_value": true
+        },
+        {
+          "flags": ["--designator"],
+          "help": "fit-diode: component to write (with --apply)",
+          "metavar": "REF",
+          "takes_value": true
+        },
+        {
+          "flags": ["--write"],
+          "help": "fit-diode: commit the --apply write (rotated .bak); default prints the op-list it would apply",
+          "takes_value": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "capabilities",
+      "help": "print the full machine-readable CLI surface manifest",
+      "flags": [
+        {
+          "flags": ["--section"],
+          "help": "print ONE manifest section (stamped JSON slice) instead of the whole document",
+          "choices": [
+            "exit_codes",
+            "error_codes",
+            "global_flags",
+            "commands",
+            "ops",
+            "calculators",
+            "schemas",
+            "conventions"
+          ],
+          "takes_value": true
+        },
+        {
+          "flags": ["--command"],
+          "help": "print one command's manifest entry (implies --section commands; unknown VERB exits 8)",
+          "metavar": "VERB",
+          "takes_value": true
+        }
+      ]
+    },
+    {
+      "name": "schema",
+      "help": "print a packaged JSON Schema (ops, findings, netlist, ...) byte-for-byte for client-side validation",
+      "positionals": [
+        {
+          "name": "name",
+          "required": true,
+          "help": "schema name — short form (`ops`, `findings`) or the full filename (`ops.schema.json`); unknown names fail at parse time with the full list",
+          "choices": [
+            "datasheet-facts",
+            "design-intent",
+            "diff",
+            "doc",
+            "draw-result",
+            "findings",
+            "netlist",
+            "ops",
+            "ops.capabilities",
+            "pinmap",
+            "proposals",
+            "schematic",
+            "sim",
+            "symbol-pins"
+          ],
+          "metavar": "NAME",
+          "takes_value": true
+        }
+      ]
+    },
+    {
+      "name": "log",
+      "help": "show the workspace write journal (what plan/draw/undo did here)",
+      "positionals": [
+        {
+          "name": "path",
+          "required": false,
+          "help": "workspace directory or an edited file (default: .)",
+          "takes_value": true
+        }
+      ],
+      "flags": [
+        {
+          "flags": ["--limit"],
+          "help": "show only the newest N entries",
+          "metavar": "N",
+          "takes_value": true
+        },
+        {
+          "flags": ["--cmd"],
+          "help": "filter by command (plan, draw, arrange, undo, ...)",
+          "metavar": "NAME",
+          "takes_value": true
+        }
+      ]
+    }
+  ],
+  "ops": {
+    "protocol_version": 2,
+    "core": [
+      "add_bus",
+      "add_bus_entry",
+      "add_junction",
+      "add_net_label",
+      "add_no_connect",
+      "add_rectangle",
+      "add_sheet",
+      "add_text",
+      "add_text_box",
+      "add_wire",
+      "delete_component",
+      "delete_object",
+      "move_component",
+      "place_component",
+      "place_power_port",
+      "rename_net",
+      "route_net",
+      "set_component_parameters",
+      "set_component_transform",
+      "set_title_block"
+    ],
+    "sugar": ["place_gnd", "place_vcc"],
+    "macros": [
+      "connect_and_label",
+      "place_array",
+      "place_crystal",
+      "place_decoupling",
+      "place_divider",
+      "place_led_indicator",
+      "place_pullup",
+      "place_pwr_flag",
+      "place_rc_filter",
+      "terminate_unused_unit"
+    ],
+    "capabilities": {
+      "place_component": {
+        "kicad": true,
+        "altium": true,
+        "notes": ""
+      },
+      "set_component_transform": {
+        "kicad": true,
+        "altium": true,
+        "notes": "rotate/mirror existing component"
+      },
+      "set_component_parameters": {
+        "kicad": true,
+        "altium": true,
+        "notes": "ref/value/footprint/params"
+      },
+      "add_wire": {
+        "kicad": true,
+        "altium": true,
+        "notes": "orthogonal; may emit many segments"
+      },
+      "route_net": {
+        "kicad": true,
+        "altium": false,
+        "notes": "deterministic L/Z auto-route, corner avoids pin tips; optional mid-wire label"
+      },
+      "add_junction": {
+        "kicad": true,
+        "altium": true,
+        "notes": ""
+      },
+      "add_no_connect": {
+        "kicad": true,
+        "altium": true,
+        "notes": ""
+      },
+      "add_net_label": {
+        "kicad": true,
+        "altium": true,
+        "notes": "scope local|global|hierarchical"
+      },
+      "place_power_port": {
+        "kicad": true,
+        "altium": true,
+        "notes": ""
+      },
+      "add_bus": {
+        "kicad": true,
+        "altium": false,
+        "notes": "OP_UNSUPPORTED on Altium live v1"
+      },
+      "add_bus_entry": {
+        "kicad": true,
+        "altium": false,
+        "notes": "OP_UNSUPPORTED on Altium live v1"
+      },
+      "add_text": {
+        "kicad": true,
+        "altium": true,
+        "notes": "free angle allowed"
+      },
+      "add_rectangle": {
+        "kicad": true,
+        "altium": false,
+        "notes": "top-level graphic (group frames); connectivity-neutral"
+      },
+      "add_text_box": {
+        "kicad": true,
+        "altium": false,
+        "notes": "bordered multi-line note box; connectivity-neutral"
+      },
+      "set_title_block": {
+        "kicad": true,
+        "altium": false,
+        "notes": "title/date/rev/company/comment1..9; >=1 field; connectivity-neutral"
+      },
+      "add_sheet": {
+        "kicad": true,
+        "altium": false,
+        "notes": "hierarchical (sheet ...) node + sheet pins; child file authored separately. OP_UNSUPPORTED on Altium live v1"
+      },
+      "place_gnd": {
+        "kicad": true,
+        "altium": true,
+        "notes": "sugar over place_power_port"
+      },
+      "place_vcc": {
+        "kicad": true,
+        "altium": true,
+        "notes": "sugar over place_power_port"
+      },
+      "delete_component": {
+        "kicad": true,
+        "altium": false
+      },
+      "delete_object": {
+        "kicad": true,
+        "altium": false
+      },
+      "move_component": {
+        "kicad": true,
+        "altium": false
+      },
+      "rename_net": {
+        "kicad": true,
+        "altium": false,
+        "notes": "rewrites label texts + power-port net Values; 0 matches = replay-safe note"
+      }
+    },
+    "constraints": {
+      "rotation_enum": [0, 90, 180, 270],
+      "wire_orthogonal_only": true,
+      "grid_mil": 50,
+      "hierarchy": "hierarchical_write_v2",
+      "sheet_reuse": true,
+      "hierarchy_note": "one op-list can edit SEVERAL files: the envelope's 'sheets' map + per-op 'sheet' tags route ops onto declared child .kicad_sch files in one atomic transaction (run backup + `undo --run`); a child .kicad_sch is also still a normal single-file draw target. A sheet instantiated more than once needs per-instance references (instance_designators — a scalar ref refuses INSTANCE_REFS_REQUIRED). An op naming a sub-sheet path directly still fails HIERARCHICAL_UNSUPPORTED: route by 'sheet' tag instead"
+    },
+    "altium_write_wired": false
+  },
+  "calculators": {
+    "count": 60,
+    "names": [
+      "adc",
+      "attenuator",
+      "awg",
+      "battery",
+      "battery-life",
+      "boost",
+      "buck",
+      "can-termination",
+      "clearance",
+      "coax",
+      "comparator-hysteresis",
+      "convert-copper",
+      "convert-length",
+      "convert-power",
+      "crystal-caps",
+      "diffpair",
+      "envelope-detector",
+      "eseries",
+      "flyback",
+      "fuse-derating",
+      "fusing",
+      "galvanic",
+      "gate-drive",
+      "hysteresis",
+      "hysteresis-design",
+      "i2c-pullup",
+      "inrush-ntc",
+      "lc",
+      "ldo",
+      "ldo-headroom",
+      "led",
+      "lmatch",
+      "microstrip",
+      "ne555-astable",
+      "ne555-mono",
+      "ohm",
+      "opamp-gain",
+      "pimatch",
+      "rc",
+      "rc-charge",
+      "rcombo",
+      "reactance",
+      "regulator",
+      "regulator-design",
+      "rescolor",
+      "rs485-bias",
+      "sallen-key",
+      "shunt",
+      "smdcode",
+      "stripline",
+      "thermal",
+      "trackcurrent",
+      "tracktemp",
+      "trackwidth",
+      "tvs",
+      "twinlead",
+      "vdivider",
+      "vdivider-design",
+      "via",
+      "wavelength"
+    ]
+  },
+  "schemas": [
+    {
+      "name": "datasheet-facts.schema.json",
+      "title": "akcli datasheet facts"
+    },
+    {
+      "name": "design-intent.schema.json",
+      "title": "AkcliDesignIntent"
+    },
+    {
+      "name": "diff.schema.json",
+      "title": "AkcliDiff",
+      "version_field": "schema_version",
+      "version": "additive (no const pin)"
+    },
+    {
+      "name": "doc.schema.json",
+      "title": "AkcliDoc",
+      "version_field": "schema_version",
+      "version": "1"
+    },
+    {
+      "name": "draw-result.schema.json",
+      "title": "AkcliDrawResult",
+      "version_field": "schema_version",
+      "version": "1.0"
+    },
+    {
+      "name": "findings.schema.json",
+      "title": "akcli findings report",
+      "version_field": "schema_version",
+      "version": "additive (no const pin)"
+    },
+    {
+      "name": "netlist.schema.json",
+      "title": "AkcliNetlist",
+      "version_field": "schema_version",
+      "version": "2.0"
+    },
+    {
+      "name": "ops.capabilities.json",
+      "title": "AkcliOpCapabilities",
+      "version_field": "protocol_version",
+      "version": 2
+    },
+    {
+      "name": "ops.schema.json",
+      "title": "AkcliOpList"
+    },
+    {
+      "name": "pinmap.schema.json",
+      "title": "AkcliPinmap",
+      "version_field": "schema_version",
+      "version": "additive (no const pin)"
+    },
+    {
+      "name": "proposals.schema.json",
+      "title": "akcli review proposals"
+    },
+    {
+      "name": "schematic.schema.json",
+      "title": "AkcliSchematic",
+      "version_field": "schema_version",
+      "version": "2.0"
+    },
+    {
+      "name": "sim.schema.json",
+      "title": "AkcliSimSpec"
+    },
+    {
+      "name": "symbol-pins.schema.json",
+      "title": "AkcliSymbolPins"
+    }
+  ],
+  "conventions": {
+    "stdout": "data",
+    "stderr": "logs",
+    "json_flag": "--json is accepted by every subcommand",
+    "dry_run": "plan never writes; draw writes only with --apply",
+    "version_stamps": "every JSON object payload carries schema_version or a family version field (protocol_version, journal_version); the documented exceptions are array payloads (jlc search, calc batch) and name-keyed tables (calc list, expected)",
+    "json_errors": "with --json, a failing command that would otherwise leave stdout empty emits {\"error\": {code, message, exit, remediation}} on stdout; that covers argparse usage failures (unknown command/flag/choice → code USAGE) and unexpected exceptions (code INTERNAL); plan/draw op-list errors emit the normal draw-result shape with status refused"
+  }
+}

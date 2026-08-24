@@ -1,0 +1,645 @@
+{
+  "$schema": "https://schemas.kicad.org/drc.v1.json",
+  "coordinate_units": "mm",
+  "date": "2026-08-24T20:21:03",
+  "ignored_checks": [
+    {
+      "description": "Track endpoint not centered on via",
+      "key": "track_not_centered_on_via"
+    },
+    {
+      "description": "Tuning profile track geometries",
+      "key": "tuning_profile_track_geometries"
+    },
+    {
+      "description": "Footprint doesn't match symbol's footprint filters",
+      "key": "footprint_filters_mismatch"
+    },
+    {
+      "description": "Silkscreen clipped by board edge",
+      "key": "silk_edge_clearance"
+    }
+  ],
+  "included_severities": ["error", "warning", "exclusion"],
+  "kicad_version": "10.0.5",
+  "schematic_parity": [],
+  "source": "pic_programmer.kicad_pcb",
+  "unconnected_items": [],
+  "violations": [
+    {
+      "description": "当前配置中不包含封装库 'Capacitor_THT'",
+      "items": [
+        {
+          "description": "封装 C1",
+          "pos": {
+            "x": 110.49,
+            "y": 78.867
+          },
+          "uuid": "00000000-0000-0000-0000-000054032b86"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Capacitor_THT'",
+      "items": [
+        {
+          "description": "封装 C2",
+          "pos": {
+            "x": 84.582,
+            "y": 90.17
+          },
+          "uuid": "00000000-0000-0000-0000-000054032b95"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'MountingHole'",
+      "items": [
+        {
+          "description": "封装 P101",
+          "pos": {
+            "x": 77.47,
+            "y": 135.89
+          },
+          "uuid": "00000000-0000-0000-0000-000054033012"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'MountingHole'",
+      "items": [
+        {
+          "description": "封装 P102",
+          "pos": {
+            "x": 158.75,
+            "y": 135.89
+          },
+          "uuid": "00000000-0000-0000-0000-000054033017"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'MountingHole'",
+      "items": [
+        {
+          "description": "封装 P103",
+          "pos": {
+            "x": 229.87,
+            "y": 135.89
+          },
+          "uuid": "00000000-0000-0000-0000-00005403301c"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'MountingHole'",
+      "items": [
+        {
+          "description": "封装 P104",
+          "pos": {
+            "x": 229.87,
+            "y": 44.45
+          },
+          "uuid": "00000000-0000-0000-0000-000054033021"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'MountingHole'",
+      "items": [
+        {
+          "description": "封装 P105",
+          "pos": {
+            "x": 158.75,
+            "y": 44.45
+          },
+          "uuid": "00000000-0000-0000-0000-000054033026"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'MountingHole'",
+      "items": [
+        {
+          "description": "封装 P106",
+          "pos": {
+            "x": 77.47,
+            "y": 44.45
+          },
+          "uuid": "00000000-0000-0000-0000-00005403302b"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Package_DIP'",
+      "items": [
+        {
+          "description": "封装 U6",
+          "pos": {
+            "x": 179.07,
+            "y": 120.65
+          },
+          "uuid": "00000000-0000-0000-0000-00005a212a0f"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Package_DIP'",
+      "items": [
+        {
+          "description": "封装 U1",
+          "pos": {
+            "x": 179.07,
+            "y": 109.22
+          },
+          "uuid": "00000000-0000-0000-0000-00005a212a32"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Package_DIP'",
+      "items": [
+        {
+          "description": "封装 U4",
+          "pos": {
+            "x": 110.49,
+            "y": 57.15
+          },
+          "uuid": "00000000-0000-0000-0000-00005a212a55"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Package_DIP'",
+      "items": [
+        {
+          "description": "封装 P2",
+          "pos": {
+            "x": 207.645,
+            "y": 50.8
+          },
+          "uuid": "00000000-0000-0000-0000-00005a212a70"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Package_DIP'",
+      "items": [
+        {
+          "description": "封装 U5",
+          "pos": {
+            "x": 207.899,
+            "y": 107.95
+          },
+          "uuid": "00000000-0000-0000-0000-00005a212aa7"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Package_DIP'",
+      "items": [
+        {
+          "description": "封装 U2",
+          "pos": {
+            "x": 115.57,
+            "y": 119.38
+          },
+          "uuid": "00000000-0000-0000-0000-00005a212ad4"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Resistor_THT'",
+      "items": [
+        {
+          "description": "封装 R18",
+          "pos": {
+            "x": 152.4,
+            "y": 68.58
+          },
+          "uuid": "00000000-0000-0000-0000-00005a22abe1"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Resistor_THT'",
+      "items": [
+        {
+          "description": "封装 R10",
+          "pos": {
+            "x": 114.3,
+            "y": 48.26
+          },
+          "uuid": "00000000-0000-0000-0000-00005a22abf7"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Resistor_THT'",
+      "items": [
+        {
+          "description": "封装 R9",
+          "pos": {
+            "x": 139.065,
+            "y": 77.47
+          },
+          "uuid": "00000000-0000-0000-0000-00005a22ac0d"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Resistor_THT'",
+      "items": [
+        {
+          "description": "封装 R1",
+          "pos": {
+            "x": 87.63,
+            "y": 118.11
+          },
+          "uuid": "00000000-0000-0000-0000-00005a22ac23"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Resistor_THT'",
+      "items": [
+        {
+          "description": "封装 R2",
+          "pos": {
+            "x": 87.63,
+            "y": 114.554
+          },
+          "uuid": "00000000-0000-0000-0000-00005a22ac39"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Resistor_THT'",
+      "items": [
+        {
+          "description": "封装 R3",
+          "pos": {
+            "x": 87.63,
+            "y": 111.125
+          },
+          "uuid": "00000000-0000-0000-0000-00005a22ac4f"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Resistor_THT'",
+      "items": [
+        {
+          "description": "封装 R4",
+          "pos": {
+            "x": 87.63,
+            "y": 107.823
+          },
+          "uuid": "00000000-0000-0000-0000-00005a22ac65"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Resistor_THT'",
+      "items": [
+        {
+          "description": "封装 R5",
+          "pos": {
+            "x": 87.757,
+            "y": 125.476
+          },
+          "uuid": "00000000-0000-0000-0000-00005a22ac7b"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Resistor_THT'",
+      "items": [
+        {
+          "description": "封装 R7",
+          "pos": {
+            "x": 139.7,
+            "y": 54.61
+          },
+          "uuid": "00000000-0000-0000-0000-00005a22ac91"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Resistor_THT'",
+      "items": [
+        {
+          "description": "封装 R6",
+          "pos": {
+            "x": 87.757,
+            "y": 121.92
+          },
+          "uuid": "00000000-0000-0000-0000-00005a22aca7"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Resistor_THT'",
+      "items": [
+        {
+          "description": "封装 R21",
+          "pos": {
+            "x": 158.115,
+            "y": 102.235
+          },
+          "uuid": "00000000-0000-0000-0000-00005a22acbd"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Resistor_THT'",
+      "items": [
+        {
+          "description": "封装 R20",
+          "pos": {
+            "x": 144.78,
+            "y": 102.235
+          },
+          "uuid": "00000000-0000-0000-0000-00005a22acd3"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Resistor_THT'",
+      "items": [
+        {
+          "description": "封装 R19",
+          "pos": {
+            "x": 149.225,
+            "y": 83.82
+          },
+          "uuid": "00000000-0000-0000-0000-00005a22ace9"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Resistor_THT'",
+      "items": [
+        {
+          "description": "封装 R17",
+          "pos": {
+            "x": 156.21,
+            "y": 68.58
+          },
+          "uuid": "00000000-0000-0000-0000-00005a22acff"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Resistor_THT'",
+      "items": [
+        {
+          "description": "封装 R16",
+          "pos": {
+            "x": 118.11,
+            "y": 75.184
+          },
+          "uuid": "00000000-0000-0000-0000-00005a22ad15"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Resistor_THT'",
+      "items": [
+        {
+          "description": "封装 R15",
+          "pos": {
+            "x": 118.11,
+            "y": 78.74
+          },
+          "uuid": "00000000-0000-0000-0000-00005a22ad2b"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Resistor_THT'",
+      "items": [
+        {
+          "description": "封装 R14",
+          "pos": {
+            "x": 139.065,
+            "y": 87.63
+          },
+          "uuid": "00000000-0000-0000-0000-00005a22ad41"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Resistor_THT'",
+      "items": [
+        {
+          "description": "封装 R13",
+          "pos": {
+            "x": 140.335,
+            "y": 111.76
+          },
+          "uuid": "00000000-0000-0000-0000-00005a22ad57"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Resistor_THT'",
+      "items": [
+        {
+          "description": "封装 R8",
+          "pos": {
+            "x": 139.065,
+            "y": 91.059
+          },
+          "uuid": "00000000-0000-0000-0000-00005a22ad6d"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Resistor_THT'",
+      "items": [
+        {
+          "description": "封装 R12",
+          "pos": {
+            "x": 135.255,
+            "y": 121.92
+          },
+          "uuid": "00000000-0000-0000-0000-00005a22ad83"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Capacitor_THT'",
+      "items": [
+        {
+          "description": "封装 C4",
+          "pos": {
+            "x": 114.3,
+            "y": 52.07
+          },
+          "uuid": "00000000-0000-0000-0000-00005a250be4"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Capacitor_THT'",
+      "items": [
+        {
+          "description": "封装 C5",
+          "pos": {
+            "x": 129.54,
+            "y": 49.53
+          },
+          "uuid": "00000000-0000-0000-0000-00005a250bf8"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Capacitor_THT'",
+      "items": [
+        {
+          "description": "封装 C7",
+          "pos": {
+            "x": 198.755,
+            "y": 71.12
+          },
+          "uuid": "00000000-0000-0000-0000-00005a250c20"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Capacitor_THT'",
+      "items": [
+        {
+          "description": "封装 C9",
+          "pos": {
+            "x": 143.002,
+            "y": 49.784
+          },
+          "uuid": "00000000-0000-0000-0000-00005a250c34"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Capacitor_THT'",
+      "items": [
+        {
+          "description": "封装 C6",
+          "pos": {
+            "x": 196.85,
+            "y": 112.395
+          },
+          "uuid": "00000000-0000-0000-0000-00005a250cc6"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Resistor_THT'",
+      "items": [
+        {
+          "description": "封装 R11",
+          "pos": {
+            "x": 140.081,
+            "y": 70.993
+          },
+          "uuid": "00000000-0000-0000-0000-00005a2a0231"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    },
+    {
+      "description": "当前配置中不包含封装库 'Capacitor_THT'",
+      "items": [
+        {
+          "description": "封装 C3",
+          "pos": {
+            "x": 134.112,
+            "y": 62.23
+          },
+          "uuid": "00000000-0000-0000-0000-00005a2a02a0"
+        }
+      ],
+      "severity": "warning",
+      "type": "lib_footprint_issues"
+    }
+  ]
+}

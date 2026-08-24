@@ -1,0 +1,212 @@
+{
+  "schema_version": "2.0",
+  "metadata": {
+    "passive_pin_ratio": 1.0,
+    "no_erc_suppressed": 0,
+    "unnamed_net_count": 0,
+    "frac_present": false,
+    "config_waived": "0 (0 demoted)",
+    "component_count": 2,
+    "pin_count": 4,
+    "undesignated_count": 0
+  },
+  "findings": [
+    {
+      "code": "ERC_DANGLING_NET",
+      "severity": "warning",
+      "message": "single-pin net +3V3: R1.1 is the only connection (likely dangling / unrouted)",
+      "refs": ["R1.1"],
+      "pos": [400.0, 150.0],
+      "anchors": [
+        {
+          "kind": "pin",
+          "id": "R1.1",
+          "pos": [400.0, 150.0]
+        },
+        {
+          "kind": "net",
+          "id": "+3V3"
+        }
+      ]
+    },
+    {
+      "code": "ERC_DANGLING_NET",
+      "severity": "warning",
+      "message": "single-pin net GND: R2.2 is the only connection (likely dangling / unrouted)",
+      "refs": ["R2.2"],
+      "pos": [400.0, 850.0],
+      "anchors": [
+        {
+          "kind": "pin",
+          "id": "R2.2",
+          "pos": [400.0, 850.0]
+        },
+        {
+          "kind": "net",
+          "id": "GND"
+        }
+      ]
+    },
+    {
+      "code": "POWER_GROUND",
+      "severity": "info",
+      "message": "1 ground net(s): GND",
+      "refs": ["GND"]
+    },
+    {
+      "code": "POWER_RAIL",
+      "severity": "info",
+      "message": "rail '+3V3' @ ~3.3V (from name): 1 consumer(s): R1",
+      "refs": ["+3V3"]
+    },
+    {
+      "code": "BOM_MISSING_FOOTPRINT",
+      "severity": "warning",
+      "message": "component R1 has no footprint",
+      "refs": ["R1"],
+      "pos": [400.0, 300.0],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "R1",
+          "pos": [400.0, 300.0]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_FOOTPRINT",
+      "severity": "warning",
+      "message": "component R2 has no footprint",
+      "refs": ["R2"],
+      "pos": [400.0, 700.0],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "R2",
+          "pos": [400.0, 700.0]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_PART_ID",
+      "severity": "note",
+      "message": "R1 (10k) has no LCSC/MPN parameter — not orderable as-is",
+      "refs": ["R1"],
+      "pos": [400.0, 300.0],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "R1",
+          "pos": [400.0, 300.0]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_PART_ID",
+      "severity": "note",
+      "message": "R2 (10k) has no LCSC/MPN parameter — not orderable as-is",
+      "refs": ["R2"],
+      "pos": [400.0, 700.0],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "R2",
+          "pos": [400.0, 700.0]
+        }
+      ]
+    },
+    {
+      "code": "NET_SINGLE_PIN",
+      "severity": "warning",
+      "message": "net '+3V3' has a single pin R1.1 — floating or missing connection",
+      "refs": ["R1.1"],
+      "pos": [400.0, 150.0],
+      "anchors": [
+        {
+          "kind": "pin",
+          "id": "R1.1",
+          "pos": [400.0, 150.0]
+        },
+        {
+          "kind": "net",
+          "id": "+3V3"
+        }
+      ]
+    },
+    {
+      "code": "NET_SINGLE_PIN",
+      "severity": "warning",
+      "message": "net 'GND' has a single pin R2.2 — floating or missing connection",
+      "refs": ["R2.2"],
+      "pos": [400.0, 850.0],
+      "anchors": [
+        {
+          "kind": "pin",
+          "id": "R2.2",
+          "pos": [400.0, 850.0]
+        },
+        {
+          "kind": "net",
+          "id": "GND"
+        }
+      ]
+    },
+    {
+      "code": "LAYOUT_LABEL_OVER_SYMBOL",
+      "severity": "warning",
+      "message": "label 'SENSE' at (400,450) runs over R2 (400,700) — reorient it away from the symbol (the writer auto-orients labels anchored on pins) or move it to a wire stub",
+      "refs": ["SENSE", "R2"],
+      "pos": [400.0, 450.0],
+      "anchors": [
+        {
+          "kind": "label",
+          "id": "SENSE",
+          "pos": [400.0, 450.0]
+        },
+        {
+          "kind": "component",
+          "id": "R2",
+          "pos": [400.0, 700.0]
+        }
+      ]
+    },
+    {
+      "code": "LAYOUT_LABEL_OVER_SYMBOL",
+      "severity": "warning",
+      "message": "label 'SENSE' at (400,550) runs over R1 (400,300) — reorient it away from the symbol (the writer auto-orients labels anchored on pins) or move it to a wire stub",
+      "refs": ["SENSE", "R1"],
+      "pos": [400.0, 550.0],
+      "anchors": [
+        {
+          "kind": "label",
+          "id": "SENSE",
+          "pos": [400.0, 550.0]
+        },
+        {
+          "kind": "component",
+          "id": "R1",
+          "pos": [400.0, 300.0]
+        }
+      ]
+    },
+    {
+      "code": "LAYOUT_LABEL_OVERLAP",
+      "severity": "warning",
+      "message": "labels 'SENSE' at (400,450) and 'SENSE' at (400,550) overlap — separate them or shorten the text",
+      "refs": ["SENSE", "SENSE"],
+      "pos": [400.0, 450.0],
+      "anchors": [
+        {
+          "kind": "label",
+          "id": "SENSE",
+          "pos": [400.0, 450.0]
+        },
+        {
+          "kind": "label",
+          "id": "SENSE",
+          "pos": [400.0, 550.0]
+        }
+      ]
+    }
+  ]
+}

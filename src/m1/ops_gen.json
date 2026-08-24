@@ -1,0 +1,69 @@
+{
+  "protocol_version": 2,
+  "target_format": "kicad",
+  "_generator": "akcli ops from-intent",
+  "ops": [
+    {
+      "op": "place_component",
+      "lib_id": "power:+3V3",
+      "designator": "PWR1",
+      "x_mil": 1350,
+      "y_mil": 1400
+    },
+    {
+      "op": "place_component",
+      "lib_id": "power:GND",
+      "designator": "PWR2",
+      "x_mil": 2200,
+      "y_mil": 1300
+    },
+    {
+      "op": "place_component",
+      "lib_id": "Device:R",
+      "designator": "R1",
+      "x_mil": 1400,
+      "y_mil": 2550,
+      "value": "10k",
+      "footprint": "Resistor_SMD:R_0603_1608Metric"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "Device:R",
+      "designator": "R2",
+      "x_mil": 2250,
+      "y_mil": 2550,
+      "value": "10k",
+      "footprint": "Resistor_SMD:R_0603_1608Metric"
+    },
+    {
+      "op": "add_net_label",
+      "name": "+3V3",
+      "at": "PWR1.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "+3V3",
+      "at": "R1.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "PWR2.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "R2.2"
+    },
+    {
+      "op": "add_net_label",
+      "name": "SENSE",
+      "at": "R1.2"
+    },
+    {
+      "op": "add_net_label",
+      "name": "SENSE",
+      "at": "R2.1"
+    }
+  ]
+}
