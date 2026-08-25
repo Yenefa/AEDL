@@ -1,0 +1,8 @@
+# G9 修复核心：控制台走 USB-Serial-JTAG，与 Wokwi C3 板的 serialInterface 属性对齐
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# 常规
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=4096
+
+# Wokwi C3 板 4MB flash：分区表与加载尺寸对齐
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y

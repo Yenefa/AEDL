@@ -10,7 +10,7 @@
 | ---- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | —    | 固件编译 G7 预演  | ✅ esp32c3(真机 CDC) + esp32c3_simstub(UART0+桩传感器) 双环境 SUCCESS                                                                                                     |
 | G8   | host 单测         | ✅ 4/4（数据手册 CRC 向量 / 好帧 / 坏 CRC 拒收 / RH 钳位），PIO native+Unity                                                                                              |
-| G9   | Wokwi 行为断言    | ⚠️ **阻塞**：C3 板串口路由已定位（需 attrs.serialInterface=USB_SERIAL_JTAG，boot 链路证据已留档）但 Arduino HWCDC app 日志捕获不通；UART0+$serialMonitor 也静音；SHT31 不在 CLI 注册表。详见日记 A 级条目 |
+| G9   | Wokwi 行为断言    | ✅ **已转绿（方案 A：Arduino→ESP-IDF 6.0.1 迁移）**。关键组合：sdkconfig CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y + diagram attrs.serialInterface=USB_SERIAL_JTAG + flasher_args 路径别名修正(tools/fix_flasher_args.py) + FLASHSIZE_4MB 对齐。串口日志含完整 boot 链+`{"seq":1,"t_c":25.10,"rh":51.0}` 断言命中，exit 0 |
 | G1   | BOM 冻结          | ✅ gates/bom/bom_v1.json：18 料位全命中实时库存（含 2 个 Basic 库料 C15850/C2286）；换型记录在案（MINI-1→WROOM-02 因 KiCad 无符号）                                        |
 | G2   | 原理图            | ✅ intent(17 元件/13 网络)→93 ops→落图→intent 比对 0 差异 + ERC JSON 0 违规；strapping 冲突(GPIO9=BOOT)设计阶段发现改版（I2C→IO4/IO5），固件已同步                        |
 | **G4** | **PCB 全链**    | ✅ **intent 建板(自动装箱布局+77 pad 多实例全挂网)→DSN→freerouting 无头路由→SES 回读→DRC JSON 0 违规 0 未连接**；工具链 tools/build_board.py + dsn_ses.py 可复用           |
@@ -52,7 +52,6 @@
 
 ## 五、下一步任务（含验收标准）
 
-1. **M2-7 PCB 链（主线下一步）**：给 intent 补全封装映射（SW1/SW2/J1/U1/U2 的 footprint 名需在 KiCad fp 库核实）→ 生成 netlist → pcbnew Python 建 board 放置 → 导出 DSN → freerouting 布线 → SES 回读 → `kicad-cli pcb drc --format json` 0 违规。验收 = G4 JSON 全绿 + 渲染图归档。
-2. **G9 攻关备选**：①试 ESP-IDF 框架替代 Arduino（Espressif CI 已验证 IDF+Wokwi+C3 可行）；②或放弃云仿真，固件行为断言降级为「host 单测(A) + 实机待验(C)」如实标注。
-3. **G10**：Gerber/钻孔/坐标导出 + BOM 装配库存终验 + 测试报告 docx（md2docx 管线复用）。
-4. 大统领动作项（保留）：JLCPCB 官方 API 申请（有订单史后）；Wokwi token 已配置 ✅。
+1. **打板**：delivery/jlc_gerber_upload.zip 上传嘉立创下单（BOM/坐标已配套）；回件后按报告第五章人工上电实测（C 级项闭环）。
+2. **M3 固化**：把 G1-G10 各环封装为一键技能包（skills/mcp 化），支持任意"一句话需求"输入；token 计量与迭代预算上线。
+3. 大统领动作项（保留）：JLCPCB 官方 API 申请（有订单史后）。
