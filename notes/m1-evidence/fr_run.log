@@ -1,0 +1,24 @@
+2026-08-25 13:31:49.482 INFO   Freerouting v2.3.0 (build-date: 2026-08-07)
+2026-08-25 13:31:49.819 WARN   Analytics tracking: first delivery failure in this window - /v1/analytics/identify - ConnectException: Connection refused: connect. Further failures will be aggregated and reported every 60 minutes. → Action: Connection refused or timed out. Check network/firewall rules between this host and the analytics endpoint, or verify that the server is running.
+2026-08-25 13:31:50.810 WARN   Failed to check for new version: java.net.ConnectException
+2026-08-25 13:31:51.201 INFO   Opening 'src\hardware\m2-board\m2_board.dsn'...
+2026-08-25 13:31:51.792 INFO   [184D69\B9B8EB] Loading board file 'm2_board.dsn'...
+2026-08-25 13:31:58.200 INFO   [184D69\B9B8EB] Starting routing of 'm2_board' on 1 thread...
+2026-08-25 13:31:58.258 INFO   [184D69\B9B8EB] Fanout stage started on board '46664afada7611573f430ff508a415ba' with 61 of 75 SMD pins needing fanout (0 already connected, 14 netless).
+2026-08-25 13:31:59.400 INFO   [184D69\B9B8EB] Fanout pass #1 on board '9286a59557442dcc9342174b214fa17c' completed in 1.12 seconds with 57 SMD pins fanouted, 0 not routed, 0 insert errors, +24 extra vias (0 SMD pins still to check in pass, ripup costs=100).
+2026-08-25 13:31:59.623 INFO   [184D69\B9B8EB] Fanout pass #2 on board '3cec9d55cf6e5a13de591f91ccf9eb5a' completed in 0.21 seconds with 7 SMD pins fanouted, 0 not routed, 0 insert errors, +7 extra vias (0 SMD pins still to check in pass, ripup costs=200).
+2026-08-25 13:31:59.682 INFO   [184D69\B9B8EB] Fanout pass #3 on board '3cec9d55cf6e5a13de591f91ccf9eb5a' completed in 0.04 seconds with 0 SMD pins fanouted, 0 not routed, 0 insert errors, +0 extra vias (0 SMD pins still to check in pass, ripup costs=300).
+2026-08-25 13:31:59.694 INFO   [184D69\B9B8EB] Fanout stage completed: started with 61 total SMD pins, completed in 1.43 seconds, escaped pins: 61/61 (100.0%), using 1.39 total CPU seconds, 3.44 GB total allocated, and 242.8 MB peak heap usage.
+2026-08-25 13:31:59.702 INFO   [184D69\B9B8EB] Auto-routing stage started on board '3cec9d55cf6e5a13de591f91ccf9eb5a' for 34 unrouted items.
+2026-08-25 13:32:01.579 INFO   [184D69\B9B8EB] Auto-routing pass #1 on board '3cec9d55cf6e5a13de591f91ccf9eb5a' was completed in 1.80 seconds with the score of 771.87 (5 unrouted and 48 violations), using 2.94 CPU seconds and the job allocated 9.99 GB of memory so far.
+2026-08-25 13:32:02.224 INFO   [184D69\B9B8EB] Auto-routing pass #2 on board 'b3d18cb40f36cba1aa9dbcdea466b0ea' was completed in 0.57 seconds with the score of 818.74 (2 unrouted and 48 violations), using 3.89 CPU seconds and the job allocated 14.71 GB of memory so far.
+2026-08-25 13:32:02.662 INFO   [184D69\B9B8EB] Auto-routing pass #3 on board '100917e2e11220960ba21b9814bef24b' was completed in 0.34 seconds with the score of 849.99 (0 unrouted and 48 violations), using 3.89 CPU seconds and the job allocated 14.71 GB of memory so far.
+2026-08-25 13:32:02.785 INFO   [184D69\B9B8EB] Auto-routing pass #4 on board 'ee0a1e662195b7b618fb6d6397d35115' was completed in 0.03 seconds with the score of 849.99 (0 unrouted and 48 violations), using 3.89 CPU seconds and the job allocated 14.71 GB of memory so far.
+2026-08-25 13:32:02.860 INFO   [184D69\B9B8EB] Auto-routing stage completed: started with 60 unrouted nets, completed in 4.66 seconds, final score: 849.99 (0 unrouted and 48 violations), using 3.89 total CPU seconds, 14.71 GB total allocated, and 175.2 MB peak heap usage.
+2026-08-25 13:32:02.963 INFO   [184D69\B9B8EB] Starting optimization on 1 thread...
+2026-08-25 13:32:03.000 INFO   [184D69\B9B8EB] Optimization stage started on board '1a9550a818cb11512060536ff654843d' with score 849.99 (0 unrouted and 48 violations).
+2026-08-25 13:32:24.151 INFO   [184D69\B9B8EB] Optimizer pass #1 on board 'fc2160199c775cfd7f32330c532da763' was completed in 21.04 seconds with the score of 849.99 (0 unrouted and 48 violations).
+2026-08-25 13:32:24.179 INFO   [184D69\B9B8EB] Stopping optimizer because the improvement in this pass (0.0001%) is below the threshold (1.00%).
+2026-08-25 13:32:24.211 INFO   [184D69\B9B8EB] Optimization stage completed: started with score 849.99 (0 unrouted and 48 violations), completed in 21.18 seconds, final score: 849.99 (0 unrouted and 48 violations), using 20.34 total CPU seconds, 154.30 GB total allocated, and 270.4 MB peak heap usage.
+2026-08-25 13:32:24.238 INFO   [184D69\B9B8EB] Optimization was completed in 21.27 seconds with the score of 849.99 (0 unrouted and 48 violations) and an improvement of +0.00%.
+2026-08-25 13:34:21.625 INFO   Saving 'src\hardware\m2-board\m2_board.ses'...

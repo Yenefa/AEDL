@@ -2,7 +2,19 @@
 
 ## 一、项目现状
 
-2026-08-24 立项。调研报告（docx）已交付并获大统领三项拍板放行（M1 安装授权/首板选题 ESP32-C3 温湿度记录仪/JLC 官方 API 待订单史后申请）。**M1 单点工具链实测已完成 6 项中的 5.5 项**，全部证据在 `notes/m1-evidence/`。
+2026-08-24 立项。调研报告（docx）已交付并获大统领三项拍板放行。**M1 完成（5.5/6）；M2 已打通固件链 + G1 选型冻结 + G2 原理图门禁**，git 提交 bd9d973。全部证据在 `notes/m1-evidence/`。
+
+### M2 记分板（进行中）
+
+| Gate | 项                | 结果                                                                                                                                                                      |
+| ---- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| —    | 固件编译 G7 预演  | ✅ esp32c3(真机 CDC) + esp32c3_simstub(UART0+桩传感器) 双环境 SUCCESS                                                                                                     |
+| G8   | host 单测         | ✅ 4/4（数据手册 CRC 向量 / 好帧 / 坏 CRC 拒收 / RH 钳位），PIO native+Unity                                                                                              |
+| G9   | Wokwi 行为断言    | ⚠️ **阻塞**：C3 板串口路由已定位（需 attrs.serialInterface=USB_SERIAL_JTAG，boot 链路证据已留档）但 Arduino HWCDC app 日志捕获不通；UART0+$serialMonitor 也静音；SHT31 不在 CLI 注册表。详见日记 A 级条目 |
+| G1   | BOM 冻结          | ✅ gates/bom/bom_v1.json：18 料位全命中实时库存（含 2 个 Basic 库料 C15850/C2286）；换型记录在案（MINI-1→WROOM-02 因 KiCad 无符号）                                        |
+| G2   | 原理图            | ✅ intent(17 元件/13 网络)→93 ops→落图→intent 比对 0 差异 + ERC JSON 0 违规；strapping 冲突(GPIO9=BOOT)设计阶段发现改版（I2C→IO4/IO5），固件已同步                        |
+| **G4** | **PCB 全链**    | ✅ **intent 建板(自动装箱布局+77 pad 多实例全挂网)→DSN→freerouting 无头路由→SES 回读→DRC JSON 0 违规 0 未连接**；工具链 tools/build_board.py + dsn_ses.py 可复用           |
+| **G10** | **交付打包**   | ✅ delivery/：jlc_gerber_upload.zip(26 文件)+bom.csv(17 料位与板一致)+pos.csv(坐标表)；正式测试报告 docs/M2板级测试报告.docx                                                |
 
 ### M1 验收记分板
 
@@ -40,6 +52,7 @@
 
 ## 五、下一步任务（含验收标准）
 
-1. **大统领动作项**：wokwi.com 免费注册 → CI Dashboard 拿 token → 设 `WOKWI_CLI_TOKEN` 环境变量（或明确放弃 Wokwi 线，全走 Renode）。
-2. M2 准备：搭 ESP32-C3 温湿度记录仪仓库骨架（ESP-IDF 或 PlatformIO 二选一，M2 首日定）；安装 arm-none-eabi 工具链补 STM32G0 ELF 行为测试。
-3. M2 主验收：该板端到端全自动一次跑通——需求→BOM(G1)→原理图(G2 ERC 0 违规 JSON)→PCB freerouting(G4 DRC 0 违规)→固件编译(G7 exit0+Werror)→Wokwi/Renode 行为断言(G9)→Gerber/BOM/坐标包(G10)；全程失败轮次独立存档。
+1. **M2-7 PCB 链（主线下一步）**：给 intent 补全封装映射（SW1/SW2/J1/U1/U2 的 footprint 名需在 KiCad fp 库核实）→ 生成 netlist → pcbnew Python 建 board 放置 → 导出 DSN → freerouting 布线 → SES 回读 → `kicad-cli pcb drc --format json` 0 违规。验收 = G4 JSON 全绿 + 渲染图归档。
+2. **G9 攻关备选**：①试 ESP-IDF 框架替代 Arduino（Espressif CI 已验证 IDF+Wokwi+C3 可行）；②或放弃云仿真，固件行为断言降级为「host 单测(A) + 实机待验(C)」如实标注。
+3. **G10**：Gerber/钻孔/坐标导出 + BOM 装配库存终验 + 测试报告 docx（md2docx 管线复用）。
+4. 大统领动作项（保留）：JLCPCB 官方 API 申请（有订单史后）；Wokwi token 已配置 ✅。

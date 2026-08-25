@@ -1,0 +1,22 @@
+2026-08-25 13:21:02.136 INFO   Freerouting v2.3.0 (build-date: 2026-08-07)
+2026-08-25 13:21:03.830 INFO   Opening 'src\hardware\m2-board\m2_board.dsn'...
+2026-08-25 13:21:04.413 INFO   [C163F5\C11C1A] Loading board file 'm2_board.dsn'...
+2026-08-25 13:21:10.781 INFO   [C163F5\C11C1A] Starting routing of 'm2_board' on 1 thread...
+2026-08-25 13:21:10.826 INFO   [C163F5\C11C1A] Fanout stage started on board '46664afada7611573f430ff508a415ba' with 61 of 75 SMD pins needing fanout (0 already connected, 14 netless).
+2026-08-25 13:21:11.982 INFO   [C163F5\C11C1A] Fanout pass #1 on board '9286a59557442dcc9342174b214fa17c' completed in 1.14 seconds with 57 SMD pins fanouted, 0 not routed, 0 insert errors, +24 extra vias (0 SMD pins still to check in pass, ripup costs=100).
+2026-08-25 13:21:12.192 INFO   [C163F5\C11C1A] Fanout pass #2 on board '3cec9d55cf6e5a13de591f91ccf9eb5a' completed in 0.20 seconds with 7 SMD pins fanouted, 0 not routed, 0 insert errors, +7 extra vias (0 SMD pins still to check in pass, ripup costs=200).
+2026-08-25 13:21:12.243 INFO   [C163F5\C11C1A] Fanout pass #3 on board '3cec9d55cf6e5a13de591f91ccf9eb5a' completed in 0.04 seconds with 0 SMD pins fanouted, 0 not routed, 0 insert errors, +0 extra vias (0 SMD pins still to check in pass, ripup costs=300).
+2026-08-25 13:21:12.257 INFO   [C163F5\C11C1A] Fanout stage completed: started with 61 total SMD pins, completed in 1.43 seconds, escaped pins: 61/61 (100.0%), using 1.41 total CPU seconds, 3.44 GB total allocated, and 243.6 MB peak heap usage.
+2026-08-25 13:21:12.269 INFO   [C163F5\C11C1A] Auto-routing stage started on board '3cec9d55cf6e5a13de591f91ccf9eb5a' for 34 unrouted items.
+2026-08-25 13:21:14.324 INFO   [C163F5\C11C1A] Auto-routing pass #1 on board '3cec9d55cf6e5a13de591f91ccf9eb5a' was completed in 1.98 seconds with the score of 771.87 (5 unrouted and 48 violations), using 2.88 CPU seconds and the job allocated 9.65 GB of memory so far.
+2026-08-25 13:21:14.998 INFO   [C163F5\C11C1A] Auto-routing pass #2 on board 'b3d18cb40f36cba1aa9dbcdea466b0ea' was completed in 0.59 seconds with the score of 818.74 (2 unrouted and 48 violations), using 3.80 CPU seconds and the job allocated 13.75 GB of memory so far.
+2026-08-25 13:21:15.462 INFO   [C163F5\C11C1A] Auto-routing pass #3 on board '100917e2e11220960ba21b9814bef24b' was completed in 0.36 seconds with the score of 849.99 (0 unrouted and 48 violations), using 3.80 CPU seconds and the job allocated 13.75 GB of memory so far.
+2026-08-25 13:21:15.543 INFO   [C163F5\C11C1A] Auto-routing stage completed: started with 60 unrouted nets, completed in 4.76 seconds, final score: 849.99 (0 unrouted and 48 violations), using 3.80 total CPU seconds, 13.75 GB total allocated, and 252.7 MB peak heap usage.
+2026-08-25 13:21:15.645 INFO   [C163F5\C11C1A] Starting optimization on 1 thread...
+2026-08-25 13:21:15.685 INFO   [C163F5\C11C1A] Optimization stage started on board 'ee0a1e662195b7b618fb6d6397d35115' with score 849.99 (0 unrouted and 48 violations).
+2026-08-25 13:21:19.321 INFO   [C163F5\C11C1A] Stopping optimization pass #1 early after 50 consecutive items could not be improved.
+2026-08-25 13:21:19.354 INFO   [C163F5\C11C1A] Optimizer pass #1 on board 'b8fb4d07631cbd0b47eee3fb6e43c8fe' was completed in 3.55 seconds with the score of 849.99 (0 unrouted and 48 violations).
+2026-08-25 13:21:19.388 INFO   [C163F5\C11C1A] Stopping optimizer because the improvement in this pass (0.0000%) is below the threshold (1.00%).
+2026-08-25 13:21:19.422 INFO   [C163F5\C11C1A] Optimization stage completed: started with score 849.99 (0 unrouted and 48 violations), completed in 3.70 seconds, final score: 849.99 (0 unrouted and 48 violations), using 3.56 total CPU seconds, 25.77 GB total allocated, and 250.0 MB peak heap usage.
+2026-08-25 13:21:19.452 INFO   [C163F5\C11C1A] Optimization was completed in 3.81 seconds with the score of 849.99 (0 unrouted and 48 violations).
+2026-08-25 13:21:44.323 WARN   Analytics tracking: first delivery failure in this window - /v1/analytics/track - IOException: Server returned HTTP response code: 502 for URL: https://api.freerouting.app/v1/analytics/track | Server response: error code: 502. Further failures will be aggregated and reported every 60 minutes.

@@ -1,0 +1,294 @@
+{
+    "$schema": "https://schemas.kicad.org/drc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-08-25T12:44:05",
+    "ignored_checks": [
+        {
+            "description": "Footprint has no courtyard defined",
+            "key": "missing_courtyard"
+        },
+        {
+            "description": "Track endpoint not centered on via",
+            "key": "track_not_centered_on_via"
+        },
+        {
+            "description": "Tuning profile track geometries",
+            "key": "tuning_profile_track_geometries"
+        },
+        {
+            "description": "Footprint doesn't match symbol's footprint filters",
+            "key": "footprint_filters_mismatch"
+        },
+        {
+            "description": "Footprint component type doesn't match footprint pads",
+            "key": "footprint_type_mismatch"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning",
+        "exclusion"
+    ],
+    "kicad_version": "10.0.5",
+    "schematic_parity": [],
+    "source": "m2_board.kicad_pcb",
+    "unconnected_items": [],
+    "violations": [
+        {
+            "description": "短路了两个不同网络的项目 (网络 GND 和 )",
+            "items": [
+                {
+                    "description": "U1 的PTH 焊盘 19 [GND]",
+                    "pos": {
+                        "x": 17.155,
+                        "y": 15.445
+                    },
+                    "uuid": "99dd82fb-d5af-4d35-9738-bc470d0f9f24"
+                },
+                {
+                    "description": "U1 的PTH 焊盘 19 [<no net>]",
+                    "pos": {
+                        "x": 18.255,
+                        "y": 15.445
+                    },
+                    "uuid": "ef08c7db-5287-4d54-85e4-26958990de33"
+                }
+            ],
+            "severity": "error",
+            "type": "shorting_items"
+        },
+        {
+            "description": "短路了两个不同网络的项目 (网络 GND 和 )",
+            "items": [
+                {
+                    "description": "U1 的PTH 焊盘 19 [GND]",
+                    "pos": {
+                        "x": 17.155,
+                        "y": 15.445
+                    },
+                    "uuid": "99dd82fb-d5af-4d35-9738-bc470d0f9f24"
+                },
+                {
+                    "description": "U1 的PTH 焊盘 19 [<no net>]",
+                    "pos": {
+                        "x": 18.255,
+                        "y": 15.445
+                    },
+                    "uuid": "ef08c7db-5287-4d54-85e4-26958990de33"
+                }
+            ],
+            "severity": "error",
+            "type": "shorting_items"
+        },
+        {
+            "description": "孔径超出范围 (电路板配置约束 最小孔径 0.3000 mm; 实际 0.2000 mm)",
+            "items": [
+                {
+                    "description": "U1 的PTH 焊盘 19 [GND]",
+                    "pos": {
+                        "x": 17.155,
+                        "y": 15.445
+                    },
+                    "uuid": "99dd82fb-d5af-4d35-9738-bc470d0f9f24"
+                }
+            ],
+            "severity": "error",
+            "type": "drill_out_of_range"
+        },
+        {
+            "description": "孔径超出范围 (电路板配置约束 最小孔径 0.3000 mm; 实际 0.2000 mm)",
+            "items": [
+                {
+                    "description": "U1 的PTH 焊盘 19 [<no net>]",
+                    "pos": {
+                        "x": 17.155,
+                        "y": 16.545
+                    },
+                    "uuid": "2df19cdb-6366-4c2f-9ae0-c17e69711281"
+                }
+            ],
+            "severity": "error",
+            "type": "drill_out_of_range"
+        },
+        {
+            "description": "孔径超出范围 (电路板配置约束 最小孔径 0.3000 mm; 实际 0.2000 mm)",
+            "items": [
+                {
+                    "description": "U1 的PTH 焊盘 19 [<no net>]",
+                    "pos": {
+                        "x": 17.705,
+                        "y": 14.895
+                    },
+                    "uuid": "0f8cbe97-ed70-4930-b151-d2499accb8d3"
+                }
+            ],
+            "severity": "error",
+            "type": "drill_out_of_range"
+        },
+        {
+            "description": "孔径超出范围 (电路板配置约束 最小孔径 0.3000 mm; 实际 0.2000 mm)",
+            "items": [
+                {
+                    "description": "U1 的PTH 焊盘 19 [<no net>]",
+                    "pos": {
+                        "x": 17.705,
+                        "y": 15.995
+                    },
+                    "uuid": "c4440655-163e-4496-be72-0a199fd89704"
+                }
+            ],
+            "severity": "error",
+            "type": "drill_out_of_range"
+        },
+        {
+            "description": "孔径超出范围 (电路板配置约束 最小孔径 0.3000 mm; 实际 0.2000 mm)",
+            "items": [
+                {
+                    "description": "U1 的PTH 焊盘 19 [<no net>]",
+                    "pos": {
+                        "x": 17.705,
+                        "y": 17.095
+                    },
+                    "uuid": "5ed8fa2b-327f-4ce2-a98e-8b3dd2c1426c"
+                }
+            ],
+            "severity": "error",
+            "type": "drill_out_of_range"
+        },
+        {
+            "description": "孔径超出范围 (电路板配置约束 最小孔径 0.3000 mm; 实际 0.2000 mm)",
+            "items": [
+                {
+                    "description": "U1 的PTH 焊盘 19 [<no net>]",
+                    "pos": {
+                        "x": 18.255,
+                        "y": 15.445
+                    },
+                    "uuid": "ef08c7db-5287-4d54-85e4-26958990de33"
+                }
+            ],
+            "severity": "error",
+            "type": "drill_out_of_range"
+        },
+        {
+            "description": "孔径超出范围 (电路板配置约束 最小孔径 0.3000 mm; 实际 0.2000 mm)",
+            "items": [
+                {
+                    "description": "U1 的PTH 焊盘 19 [<no net>]",
+                    "pos": {
+                        "x": 18.255,
+                        "y": 16.545
+                    },
+                    "uuid": "caa7c32a-14ab-4710-a010-4864618e151a"
+                }
+            ],
+            "severity": "error",
+            "type": "drill_out_of_range"
+        },
+        {
+            "description": "孔径超出范围 (电路板配置约束 最小孔径 0.3000 mm; 实际 0.2000 mm)",
+            "items": [
+                {
+                    "description": "U1 的PTH 焊盘 19 [<no net>]",
+                    "pos": {
+                        "x": 18.805,
+                        "y": 14.895
+                    },
+                    "uuid": "3c662cec-a1c0-4f40-98e0-3637cf1981ca"
+                }
+            ],
+            "severity": "error",
+            "type": "drill_out_of_range"
+        },
+        {
+            "description": "孔径超出范围 (电路板配置约束 最小孔径 0.3000 mm; 实际 0.2000 mm)",
+            "items": [
+                {
+                    "description": "U1 的PTH 焊盘 19 [<no net>]",
+                    "pos": {
+                        "x": 18.805,
+                        "y": 15.995
+                    },
+                    "uuid": "62545e7f-f012-40b0-98d2-dd3e5fbddc00"
+                }
+            ],
+            "severity": "error",
+            "type": "drill_out_of_range"
+        },
+        {
+            "description": "孔径超出范围 (电路板配置约束 最小孔径 0.3000 mm; 实际 0.2000 mm)",
+            "items": [
+                {
+                    "description": "U1 的PTH 焊盘 19 [<no net>]",
+                    "pos": {
+                        "x": 18.805,
+                        "y": 17.095
+                    },
+                    "uuid": "1264a8ea-38bd-4601-8012-ea8fe959eab6"
+                }
+            ],
+            "severity": "error",
+            "type": "drill_out_of_range"
+        },
+        {
+            "description": "孔径超出范围 (电路板配置约束 最小孔径 0.3000 mm; 实际 0.2000 mm)",
+            "items": [
+                {
+                    "description": "U1 的PTH 焊盘 19 [<no net>]",
+                    "pos": {
+                        "x": 19.355,
+                        "y": 15.445
+                    },
+                    "uuid": "88ff6feb-3c5e-4ea5-86c6-ed9aee47ddd7"
+                }
+            ],
+            "severity": "error",
+            "type": "drill_out_of_range"
+        },
+        {
+            "description": "孔径超出范围 (电路板配置约束 最小孔径 0.3000 mm; 实际 0.2000 mm)",
+            "items": [
+                {
+                    "description": "U1 的PTH 焊盘 19 [<no net>]",
+                    "pos": {
+                        "x": 19.355,
+                        "y": 16.545
+                    },
+                    "uuid": "46c62e81-e2c1-4563-a333-c7cba0d4725e"
+                }
+            ],
+            "severity": "error",
+            "type": "drill_out_of_range"
+        },
+        {
+            "description": "走线宽度 (电路板配置约束 最小宽度 0.2000 mm; 实际 0.1500 mm)",
+            "items": [
+                {
+                    "description": "走线 [BOOT] (F.Cu), 长度: 1.0067 mm",
+                    "pos": {
+                        "x": 8.545,
+                        "y": 20.295
+                    },
+                    "uuid": "67a002d2-1ec7-49ab-afc1-11bceb6619c4"
+                }
+            ],
+            "severity": "error",
+            "type": "track_width"
+        },
+        {
+            "description": "走线宽度 (电路板配置约束 最小宽度 0.2000 mm; 实际 0.1500 mm)",
+            "items": [
+                {
+                    "description": "走线 [BOOT] (F.Cu), 长度: 0.3403 mm",
+                    "pos": {
+                        "x": 7.2977,
+                        "y": 20.5356
+                    },
+                    "uuid": "8c4d5fdc-d287-4440-ae46-43cb1659db16"
+                }
+            ],
+            "severity": "error",
+            "type": "track_width"
+        }
+    ]
+}
