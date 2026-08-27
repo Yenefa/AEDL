@@ -1,3 +1,4 @@
+import csv
 import hashlib
 import json
 from pathlib import Path
@@ -15,6 +16,7 @@ from gates.gate_core import (
     validate_bom,
     zip_entry_names,
 )
+from gates.make_bom_csv import generate_bom_csv
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,8 +31,16 @@ class GateCoreTests(unittest.TestCase):
         report = ROOT / "notes/m1-evidence/g4_drc_final.json"
         self.assertEqual(count_drc_findings(report), (0, 0))
 
-    def test_bom_rejects_tbd(self):
-        errors = validate_bom(ROOT / "gates/bom/bom_v1.json")
+    def test_canonical_bom_is_complete(self):
+        self.assertEqual(validate_bom(ROOT / "gates/bom/bom_v1.json"), [])
+
+    def test_bom_rejects_tbd_fixture(self):
+        source = json.loads((ROOT / "gates/bom/bom_v1.json").read_text(encoding="utf-8"))
+        source["items"][0]["lcsc"] = "TBD"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            fixture = Path(temp_dir) / "bom.json"
+            fixture.write_text(json.dumps(source), encoding="utf-8")
+            errors = validate_bom(fixture)
         self.assertTrue(any("TBD" in error for error in errors))
 
     def test_current_delivery_refs_match_all_17_physical_parts(self):
@@ -125,6 +135,43 @@ class GateCoreTests(unittest.TestCase):
                 count_erc_errors(erc_path)
             with self.assertRaises(ValueError):
                 count_drc_findings(drc_path)
+
+    def test_generated_bom_matches_every_canonical_field(self):
+        source_path = ROOT / "gates/bom/bom_v1.json"
+        source = json.loads(source_path.read_text(encoding="utf-8"))
+        by_ref = {}
+        for item in source["items"]:
+            for ref in (part.strip() for part in item["ref"].split(",")):
+                by_ref[ref] = item
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "bom.csv"
+            self.assertEqual(generate_bom_csv(source_path, output_path), 17)
+            with output_path.open("r", encoding="utf-8-sig", newline="") as handle:
+                rows = list(csv.DictReader(handle))
+
+        self.assertEqual({row["Designator"] for row in rows}, set(by_ref))
+        for row in rows:
+            item = by_ref[row["Designator"]]
+            self.assertEqual(row["Comment"], item["value"])
+            self.assertEqual(row["Footprint"], item["footprint"])
+            self.assertEqual(row["LCSC Part #"], item["lcsc"])
+            self.assertEqual(row["JLC Lib"], item["jlc_lib"])
+            self.assertEqual(row["Stock@freeze"], str(item["stock"]))
+
+    def test_invalid_bom_does_not_overwrite_existing_csv(self):
+        source = json.loads((ROOT / "gates/bom/bom_v1.json").read_text(encoding="utf-8"))
+        source["items"][0]["lcsc"] = "TBD"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source_path = root / "bom.json"
+            output_path = root / "bom.csv"
+            source_path.write_text(json.dumps(source), encoding="utf-8")
+            output_path.write_bytes(b"sentinel")
+
+            with self.assertRaises(ValueError):
+                generate_bom_csv(source_path, output_path)
+            self.assertEqual(output_path.read_bytes(), b"sentinel")
 
 
 if __name__ == "__main__":

@@ -1,52 +1,115 @@
 # -*- coding: utf-8 -*-
-"""make_bom_csv.py — 从 bom_v1.json 展开 per-ref BOM CSV（G10 交付物）。
+"""Generate the per-reference delivery BOM from the canonical grouped BOM."""
 
-输出: delivery/bom.csv（嘉立创 SMT 可直接使用的列结构）
-退出码: 0 成功
-"""
+from __future__ import annotations
+
+import argparse
 import csv
-import io
 import json
+from pathlib import Path
 import sys
+import tempfile
+from typing import List, Optional
 
-SRC = r"gates\bom\bom_v1.json"
-OUT = r"delivery\bom.csv"
+
+ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_SOURCE = ROOT / "gates" / "bom" / "bom_v1.json"
+DEFAULT_OUTPUT = ROOT / "delivery" / "bom.csv"
+FIELDNAMES = (
+    "Comment",
+    "Designator",
+    "Footprint",
+    "LCSC Part #",
+    "JLC Lib",
+    "Stock@freeze",
+)
+
+if __package__:
+    from .gate_core import validate_bom
+else:
+    sys.path.insert(0, str(ROOT))
+    from gates.gate_core import validate_bom
 
 
-def main():
-    bom = json.load(io.open(SRC, encoding="utf-8"))
+def generate_bom_csv(source_path: Path, output_path: Path) -> int:
+    """Validate *source_path* and atomically generate *output_path*.
+
+    The returned integer is the number of physical reference rows. Invalid input
+    raises ``ValueError`` before the existing output is touched.
+    """
+    source_path = Path(source_path)
+    output_path = Path(output_path)
+    errors = validate_bom(source_path)
+    if errors:
+        raise ValueError("invalid canonical BOM: " + "; ".join(errors))
+
+    with source_path.open("r", encoding="utf-8-sig") as handle:
+        bom = json.load(handle)
+
     rows = []
     for item in bom["items"]:
-        refs = [r.strip() for r in item["ref"].split(",")]
-        lcsc = item.get("lcsc", "")
-        if lcsc == "TBD":
-            continue  # 未冻结料位不进交付 BOM（R5/R6 已在下方特判）
-        for ref in refs:
-            rows.append({
-                "Comment": item["value"],
-                "Designator": ref,
-                "Footprint": item.get("footprint", ""),
-                "LCSC Part #": lcsc,
-                "JLC Lib": item.get("jlc_lib", ""),
-                "Stock@freeze": item.get("stock", ""),
-            })
-    # R5/R6 5.1k（bom_v1 中 TBD→已实查 C22356467）
-    for ref in ("R5", "R6"):
-        rows.append({
-            "Comment": "5.1kΩ",
-            "Designator": ref,
-            "Footprint": "Resistor_SMD:R_0603_1608Metric",
-            "LCSC Part #": "C22356467",
-            "JLC Lib": "expand",
-            "Stock@freeze": 352561,
-        })
+        for ref in (part.strip() for part in item["ref"].split(",")):
+            rows.append(
+                {
+                    "Comment": item["value"],
+                    "Designator": ref,
+                    "Footprint": item["footprint"],
+                    "LCSC Part #": item["lcsc"],
+                    "JLC Lib": item["jlc_lib"],
+                    "Stock@freeze": item["stock"],
+                }
+            )
+    rows.sort(key=lambda row: row["Designator"])
 
-    rows.sort(key=lambda r: r["Designator"])
-    with io.open(OUT, "w", encoding="utf-8-sig", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
-        w.writeheader()
-        w.writerows(rows)
-    print(f"bom rows={len(rows)} -> {OUT}")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_name: Optional[str] = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8-sig",
+            newline="",
+            dir=str(output_path.parent),
+            prefix=output_path.name + ".",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary:
+            temporary_name = temporary.name
+            writer = csv.DictWriter(temporary, fieldnames=FIELDNAMES)
+            writer.writeheader()
+            writer.writerows(rows)
+        Path(temporary_name).replace(output_path)
+    finally:
+        if temporary_name:
+            temporary_path = Path(temporary_name)
+            if temporary_path.exists():
+                temporary_path.unlink()
+    return len(rows)
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE)
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    args = parser.parse_args(argv)
+
+    try:
+        row_count = generate_bom_csv(args.source, args.output)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        print(json.dumps({"status": "fail", "errors": [str(error)]}, ensure_ascii=False))
+        return 1
+
+    print(
+        json.dumps(
+            {
+                "status": "pass",
+                "rows": row_count,
+                "message": f"bom rows={row_count}",
+                "source": str(args.source),
+                "output": str(args.output),
+            },
+            ensure_ascii=False,
+        )
+    )
     return 0
 
 

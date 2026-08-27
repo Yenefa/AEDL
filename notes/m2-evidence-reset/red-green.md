@@ -57,6 +57,101 @@ Ran 3 tests in 0.005s
 OK
 ```
 
+## Task 2 - source-only BOM generator RED
+
+Command:
+
+```powershell
+py -3 -m unittest tests.test_gate_core.GateCoreTests.test_generated_bom_matches_every_canonical_field -v
+```
+
+Exit code: `1`
+
+```text
+ImportError: cannot import name 'generate_bom_csv' from 'gates.make_bom_csv'
+Ran 1 test in 0.000s
+FAILED (errors=1)
+```
+
+## Task 2 - source-only BOM generator GREEN
+
+Command:
+
+```powershell
+py -3 -m unittest tests.test_gate_core.GateCoreTests.test_generated_bom_matches_every_canonical_field tests.test_gate_core.GateCoreTests.test_invalid_bom_does_not_overwrite_existing_csv -v
+```
+
+Exit code: `0`
+
+```text
+test_generated_bom_matches_every_canonical_field (tests.test_gate_core.GateCoreTests) ... ok
+test_invalid_bom_does_not_overwrite_existing_csv (tests.test_gate_core.GateCoreTests) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.018s
+
+OK
+```
+
+Actual regeneration command:
+
+```powershell
+py -3 gates/make_bom_csv.py
+```
+
+Exit code: `0`
+
+```json
+{"status": "pass", "rows": 17, "message": "bom rows=17", "source": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\gates\\bom\\bom_v1.json", "output": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\delivery\\bom.csv"}
+```
+
+Task 2 regression command:
+
+```powershell
+py -3 -m unittest tests.test_gate_core -v
+```
+
+Exit code: `0`; `Ran 11 tests in 0.047s`; `OK`.
+
+## Task 2 - canonical BOM completeness RED
+
+Command:
+
+```powershell
+py -3 -m unittest tests.test_gate_core.GateCoreTests.test_canonical_bom_is_complete -v
+```
+
+Exit code: `1`
+
+Observed failure: 12 canonical-source defects, including malformed date-only `frozen_at`, missing footprints, and R5/R6 `TBD` / missing stock / missing library.
+
+```text
+test_canonical_bom_is_complete (tests.test_gate_core.GateCoreTests) ... FAIL
+AssertionError: Lists differ: ["malformed frozen_at: '2026-08-24'", ...] != []
+First list contains 12 additional elements.
+Ran 1 test in 0.002s
+FAILED (failures=1)
+```
+
+## Task 2 - canonical BOM completeness GREEN
+
+Command:
+
+```powershell
+py -3 -m unittest tests.test_gate_core.GateCoreTests.test_canonical_bom_is_complete -v
+```
+
+Exit code: `0`
+
+```text
+test_canonical_bom_is_complete (tests.test_gate_core.GateCoreTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.002s
+
+OK
+```
+
 ## Task 1 - remaining pure helper API RED
 
 Command:

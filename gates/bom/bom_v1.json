@@ -1,8 +1,12 @@
 {
   "_meta": {
     "board": "ESP32-C3 温湿度记录仪 v0.1（USB-C 供电）",
-    "frozen_at": "2026-08-24",
-    "data_source": "jlcpcb.com 实时目录（gates/bom_query.py），库存口径=JLC 贴片装配",
+    "frozen_at": "2026-08-25T05:44:05Z",
+    "frozen_at_basis": "git commit 132987f recorded the final R5/R6 stock; exact query time was not preserved",
+    "data_source": "Historical jlcpcb.com assembly-catalog snapshot queried through gates/bom_query.py; not refreshed during the evidence reset",
+    "source_query": "gates/bom_query.py",
+    "source_evidence": "git bd9d973:gates/bom/bom_v1.json; git 132987f:gates/make_bom_csv.py",
+    "freshness": "historical snapshot; current inventory is unknown",
     "gate": "G1"
   },
   "items": [
@@ -13,6 +17,7 @@
       "jlc_lib": "expand",
       "stock": 2978,
       "symbol": "RF_Module:ESP32-C3-WROOM-02",
+      "footprint": "RF_Module:ESP32-C3-WROOM-02",
       "note": "换型记录：原选 MINI-1(C2838502) 因 KiCad 标准库无符号，改用官方符号+封装齐备的 WROOM-02"
     },
     {
@@ -21,7 +26,8 @@
       "lcsc": "C2687423",
       "jlc_lib": "expand",
       "stock": 30438,
-      "symbol": "Sensor_Humidity:SHT30-DIS"
+      "symbol": "Sensor_Humidity:SHT30-DIS",
+      "footprint": "Sensor_Humidity:Sensirion_DFN-8-1EP_2.5x2.5mm_P0.5mm_EP1.1x1.7mm"
     },
     {
       "ref": "U3",
@@ -38,7 +44,8 @@
       "lcsc": "C165948",
       "jlc_lib": "expand",
       "stock": 395840,
-      "symbol": "Connector:USB_C_Receptacle_USB2.0_16P"
+      "symbol": "Connector:USB_C_Receptacle_USB2.0_16P",
+      "footprint": "Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12"
     },
     {
       "ref": "SW1,SW2",
@@ -47,6 +54,7 @@
       "jlc_lib": "expand",
       "stock": 211077,
       "symbol": "Switch:SW_Push",
+      "footprint": "Button_Switch_SMD:SW_SPST_TS-1088-xR020",
       "role": "SW1=EN复位 SW2=IO9 BOOT"
     },
     {
@@ -66,7 +74,7 @@
       "stock": 92990,
       "symbol": "Device:R",
       "footprint": "Resistor_SMD:R_0603_1608Metric",
-      "role": "I2C 上拉 SDA/SCL=GPIO8/9"
+      "role": "I2C 上拉 R1=SDA/GPIO4, R2=SCL/GPIO5"
     },
     {
       "ref": "R3",
@@ -74,6 +82,7 @@
       "lcsc": "C177644",
       "jlc_lib": "expand",
       "stock": 12586,
+      "footprint": "Resistor_SMD:R_0603_1608Metric",
       "role": "EN 上拉"
     },
     {
@@ -82,14 +91,17 @@
       "lcsc": "C177649",
       "jlc_lib": "expand",
       "stock": 81521,
+      "footprint": "Resistor_SMD:R_0603_1608Metric",
       "role": "LED 限流 GPIO3"
     },
     {
       "ref": "R5,R6",
       "value": "5.1kΩ",
-      "lcsc": "TBD",
-      "role": "CC1/CC2 下拉",
-      "todo": "G1 复查补编号"
+      "lcsc": "C22356467",
+      "jlc_lib": "expand",
+      "stock": 352561,
+      "footprint": "Resistor_SMD:R_0603_1608Metric",
+      "role": "CC1/CC2 下拉"
     },
     {
       "ref": "C1",
@@ -106,6 +118,7 @@
       "lcsc": "C15850",
       "jlc_lib": "base",
       "stock": 8697924,
+      "footprint": "Capacitor_SMD:C_0805_2012Metric",
       "role": "3V3 储能"
     },
     {
