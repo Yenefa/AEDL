@@ -35,21 +35,38 @@ def _read_json(path: Path) -> Dict[str, Any]:
     return data
 
 
+def _validate_kicad_metadata(data: Dict[str, Any], report_kind: str, path: Path) -> None:
+    expected_schema = f"https://schemas.kicad.org/{report_kind}.v1.json"
+    if data.get("$schema") != expected_schema:
+        raise ValueError(f"{report_kind.upper()} report has invalid schema metadata: {path}")
+    for field in ("kicad_version", "source"):
+        if not isinstance(data.get(field), str) or not data[field].strip():
+            raise ValueError(f"{report_kind.upper()} report has no {field}: {path}")
+
+
 def count_erc_errors(path: Path) -> int:
     """Count KiCad ERC violations whose severity is exactly ``error``."""
     data = _read_json(path)
+    _validate_kicad_metadata(data, "erc", path)
     sheets = data.get("sheets")
-    if not isinstance(sheets, list):
-        raise ValueError(f"ERC report has no sheets list: {path}")
+    if not isinstance(sheets, list) or not sheets:
+        raise ValueError(f"ERC report has no non-empty sheets list: {path}")
 
     count = 0
     for index, sheet in enumerate(sheets):
         if not isinstance(sheet, dict) or not isinstance(sheet.get("violations"), list):
             raise ValueError(f"ERC sheet {index} has no violations list: {path}")
+        if not isinstance(sheet.get("path"), str) or not sheet["path"]:
+            raise ValueError(f"ERC sheet {index} has no path: {path}")
         for violation in sheet["violations"]:
             if not isinstance(violation, dict):
                 raise ValueError(f"ERC sheet {index} contains a malformed violation: {path}")
-            if str(violation.get("severity", "")).lower() == "error":
+            severity = violation.get("severity")
+            if severity not in ("error", "warning", "exclusion"):
+                raise ValueError(
+                    f"ERC sheet {index} has missing or unknown severity {severity!r}: {path}"
+                )
+            if severity == "error":
                 count += 1
     return count
 
@@ -57,11 +74,35 @@ def count_erc_errors(path: Path) -> int:
 def count_drc_findings(path: Path) -> Tuple[int, int]:
     """Return ``(violations, unconnected_items)`` from a KiCad DRC report."""
     data = _read_json(path)
+    _validate_kicad_metadata(data, "drc", path)
     violations = data.get("violations")
     unconnected = data.get("unconnected_items")
     if not isinstance(violations, list) or not isinstance(unconnected, list):
         raise ValueError(f"DRC report lacks finding arrays: {path}")
     return len(violations), len(unconnected)
+
+
+def erc_gate_verdict(path: Path) -> Dict[str, Any]:
+    """Translate an ERC report into an explicit process verdict."""
+    error_count = count_erc_errors(path)
+    passed = error_count == 0
+    return {
+        "status": "pass" if passed else "fail",
+        "exit_code": 0 if passed else 1,
+        "error_count": error_count,
+    }
+
+
+def drc_gate_verdict(path: Path) -> Dict[str, Any]:
+    """Translate a DRC report into an explicit process verdict."""
+    violation_count, unconnected_count = count_drc_findings(path)
+    passed = violation_count == 0 and unconnected_count == 0
+    return {
+        "status": "pass" if passed else "fail",
+        "exit_code": 0 if passed else 1,
+        "violation_count": violation_count,
+        "unconnected_count": unconnected_count,
+    }
 
 
 def validate_bom(path: Path) -> List[str]:
