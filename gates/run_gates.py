@@ -275,7 +275,13 @@ def _artifact_hashes(paths: Dict[str, Path]) -> Dict[str, Any]:
     return result
 
 
-def run(root: Path, kicad_cli: Optional[str] = None, manifest_path: Optional[Path] = None, skip_kicad: bool = False) -> Dict[str, Any]:
+def run(
+    root: Path,
+    kicad_cli: Optional[str] = None,
+    manifest_path: Optional[Path] = None,
+    skip_kicad: bool = False,
+    output_root: Optional[Path] = None,
+) -> Dict[str, Any]:
     root = Path(root).resolve()
     # Snapshot repository state before the runner rewrites its own reports.
     git = _git_snapshot(root)
@@ -336,7 +342,15 @@ def run(root: Path, kicad_cli: Optional[str] = None, manifest_path: Optional[Pat
         "artifacts": artifacts,
         "gates": evidence["gates"],
     }
-    target = Path(manifest_path) if manifest_path else root / "notes" / "m2-evidence-reset" / "run_manifest.json"
+    if manifest_path:
+        target = Path(manifest_path)
+    elif output_root:
+        target = Path(output_root)
+        if not target.is_absolute():
+            target = root / target
+        target = target / "run_manifest.json"
+    else:
+        target = root / "notes" / "m2-evidence-reset" / "run_manifest.json"
     _write_json_atomic(target, manifest)
     return manifest
 
@@ -344,12 +358,20 @@ def run(root: Path, kicad_cli: Optional[str] = None, manifest_path: Optional[Pat
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=None)
+    parser.add_argument("--scope", choices=("m2",), default="m2")
     parser.add_argument("--kicad-cli", default=None)
     parser.add_argument("--manifest", default=None)
+    parser.add_argument("--output-root", default=None)
     parser.add_argument("--skip-kicad", action="store_true")
     args = parser.parse_args(argv)
     root = Path(args.root).resolve() if args.root else Path(__file__).resolve().parents[1]
-    manifest = run(root, args.kicad_cli, Path(args.manifest) if args.manifest else None, args.skip_kicad)
+    manifest = run(
+        root,
+        args.kicad_cli,
+        Path(args.manifest) if args.manifest else None,
+        args.skip_kicad,
+        Path(args.output_root) if args.output_root else None,
+    )
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
     return int(manifest["exit_code"])
 

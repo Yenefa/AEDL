@@ -3,7 +3,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from gates.run_gates import evaluate_evidence
+from gates.run_gates import evaluate_evidence, run
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -45,6 +45,13 @@ class RunGatesTests(unittest.TestCase):
         self.assertEqual(manifest["status"], "fail")
         self.assertTrue(all(gate["status"] == "fail" for gate in manifest["gates"]))
         self.assertTrue(any("invalid schema metadata" in error for error in manifest["gates"][0]["errors"]))
+
+    def test_output_root_alias_writes_a_manifest(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_root = Path(temp_dir) / "runs"
+            manifest = run(ROOT, skip_kicad=True, output_root=output_root)
+            self.assertEqual(manifest["status"], "fail")
+            self.assertTrue((output_root / "run_manifest.json").is_file())
 
 
 if __name__ == "__main__":
