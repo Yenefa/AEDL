@@ -277,6 +277,8 @@ def _artifact_hashes(paths: Dict[str, Path]) -> Dict[str, Any]:
 
 def run(root: Path, kicad_cli: Optional[str] = None, manifest_path: Optional[Path] = None, skip_kicad: bool = False) -> Dict[str, Any]:
     root = Path(root).resolve()
+    # Snapshot repository state before the runner rewrites its own reports.
+    git = _git_snapshot(root)
     evidence_dir = root / "notes" / "m2-evidence-reset" / "generated"
     erc_report = evidence_dir / "g2_erc_current.json"
     drc_report = evidence_dir / "g4_drc_current.json"
@@ -307,7 +309,6 @@ def run(root: Path, kicad_cli: Optional[str] = None, manifest_path: Optional[Pat
         evidence["status"] = "fail"
         evidence["exit_code"] = 1
     run_at = _utc_now()
-    git = _git_snapshot(root)
     for gate in evidence["gates"]:
         gate["evidence_grade"] = "C" if gate["name"] == "board_review" else "A"
     artifacts = _artifact_hashes(
