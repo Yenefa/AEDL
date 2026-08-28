@@ -10,7 +10,8 @@
 py -3 gates\run_gates.py
 ```
 
-当前 HEAD：`b6ec4c3`。manifest：`notes/m2-evidence-reset/run_manifest.json`，run_id 为
+当前分支为 `master`（HEAD 请以 `git rev-parse HEAD` 实时查询；本次证据基线为
+`c00b594`）。manifest：`notes/m2-evidence-reset/run_manifest.json`，run_id 为
 `m2-6fc04cc67d044c56d8202d8313064bf16f286a8c-2026-08-28T04:32:34Z`，退出码 `1`。
 
 | 门禁 | 结果 | 事实 |
