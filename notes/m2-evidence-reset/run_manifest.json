@@ -1,10 +1,10 @@
 {
   "schema_version": "m2-evidence-reset-run.v1",
-  "run_id": "m2-6fc04cc67d044c56d8202d8313064bf16f286a8c-2026-08-28T04:32:34Z",
-  "run_at": "2026-08-28T04:32:34Z",
+  "run_id": "m2-ac1198dadd2571724489c8ff9a4b6aa91dda9e57-2026-08-28T04:42:24Z",
+  "run_at": "2026-08-28T04:42:24Z",
   "root": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent",
   "git": {
-    "commit": "6fc04cc67d044c56d8202d8313064bf16f286a8c",
+    "commit": "ac1198dadd2571724489c8ff9a4b6aa91dda9e57",
     "dirty": false,
     "status_porcelain": ""
   },
@@ -85,12 +85,12 @@
     },
     "erc_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g2_erc_current.json",
-      "sha256": "91905330d5145c591dcb65d0cef110456bc45b8be7c12f3864b5ce1003fb00a3",
+      "sha256": "2a7038ebfac3818a90f12eb6e7a074a14fc217c0c31c971d5de6799c2ec6dd95",
       "exists": true
     },
     "drc_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g4_drc_current.json",
-      "sha256": "605fe80c1c32c3bbe4e3524652179be91a34fed6273a5381b15a09170890a871",
+      "sha256": "c889a5668281e427de4bb843dff7795c18be5823d39184ad82d18485352acd69",
       "exists": true
     }
   },
