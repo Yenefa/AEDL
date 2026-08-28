@@ -1,12 +1,12 @@
 {
   "schema_version": "m2-evidence-reset-run.v1",
-  "run_id": "m2-49a5c2411e297fbe95c46dcca3ec650087ee3417-2026-08-28T06:06:03Z",
-  "run_at": "2026-08-28T06:06:03Z",
+  "run_id": "m2-ec6556d4295ffc0df017ab751640075dd0fd70bb-2026-08-28T06:12:51Z",
+  "run_at": "2026-08-28T06:12:51Z",
   "root": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent",
   "git": {
-    "commit": "49a5c2411e297fbe95c46dcca3ec650087ee3417",
-    "dirty": true,
-    "status_porcelain": "M gates/run_gates.py\n M src/hardware/m2-board/intent_v1.json\n M src/hardware/m2-board/m2_board.kicad_sch\n M tests/test_run_gates.py"
+    "commit": "ec6556d4295ffc0df017ab751640075dd0fd70bb",
+    "dirty": false,
+    "status_porcelain": ""
   },
   "status": "fail",
   "exit_code": 1,
@@ -85,12 +85,12 @@
     },
     "erc_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g2_erc_current.json",
-      "sha256": "f21f99a1e6db5cf309e621661b4204ddb5a0449089395e3f4be05580aa98fd69",
+      "sha256": "97b081017b700b670244d3bad09996c39ba7b23fd95172ef6279c65745d3c88c",
       "exists": true
     },
     "drc_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g4_drc_current.json",
-      "sha256": "1b51b7f8993aff9eed287d9f47fc9a0ffb6ed7689b662ebe2deac6ed78876def",
+      "sha256": "3704c4cb49fd0c9ad4cf12ce8e64097e8bc3edd318958a3dc2698d00ed5b6cb9",
       "exists": true
     }
   },
