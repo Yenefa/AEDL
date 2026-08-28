@@ -6,6 +6,8 @@
 
 **Architecture:** Put all deterministic parsing and checks in a Python standard-library core, with a thin CLI that runs KiCad and writes immutable evidence. Keep physical layout review as an explicit structured gate instead of pretending DRC proves usability. Preserve the existing board and evidence until regenerated outputs pass the new runner.
 
+**执行状态（2026-08-28）**：Task 1、Task 2、Task 4 和 Task 5 的确定性部分已落地；Task 3 的电源语义修复尚未完成。对 `m2_board.kicad_sch` 的手工 PWR_FLAG 尝试曾导致 KiCad 无法加载，已恢复原文件并保留真实 ERC=2 证据；不得把该任务标记为通过。当前 runner 预期退出码为 1，制造放行继续阻断。
+
 **Tech Stack:** Python 3.9 standard library and `unittest`, KiCad 10 CLI, existing akcli/pcbnew/freerouting tools, CSV/JSON/ZIP/SHA-256 evidence.
 
 ---
@@ -265,4 +267,3 @@ Run the real gate command again and preserve its final manifest.
 git add gates/board_review_v1.json docs/M2板级工程评审.md docs/M2测试报告.md docs/HANDOFF.md README.md notes/runs
 git commit -m "docs: reset M2 status to verified evidence"
 ```
-

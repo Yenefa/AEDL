@@ -6,15 +6,11 @@
 2. 板级最小约束与网络类不一致 → 同步 DS 最小值
 3. 板框过小 → 60x40
 """
+import argparse
 import json
 import os
+from pathlib import Path
 import sys
-
-import pcbnew
-
-ROOT = r"C:\Users\fuker\Desktop\workspace\project-027-autonomous-hardware-agent"
-FPDIR = r"C:\Users\fuker\AppData\Local\Programs\KiCad\10.0\share\kicad\footprints"
-OUT = os.path.join(ROOT, r"src\hardware\m2-board\m2_board.kicad_pcb")
 
 FP_MAP = {
     "U1": ("RF_Module", "ESP32-C3-WROOM-02"),
@@ -41,7 +37,35 @@ MARGIN = 3.0
 GAP = 1.5
 
 
-def fp_bbox_mm(fp):
+def resolve_root(root_arg):
+    """Resolve an override or derive the repository root from this script."""
+    if root_arg:
+        return Path(root_arg).resolve()
+    return Path(__file__).resolve().parents[1]
+
+
+def resolve_footprint_root(override):
+    if override:
+        return Path(override).resolve()
+    configured = os.environ.get("KICAD10_FOOTPRINT_DIR")
+    if configured:
+        return Path(configured).resolve()
+    symbol_dir = os.environ.get("KICAD10_SYMBOL_DIR")
+    if symbol_dir:
+        return (Path(symbol_dir).resolve().parent / "footprints")
+    raise ValueError("KiCad footprint root unavailable; use --footprint-root")
+
+
+def physical_components(components):
+    """Return intent components that require PCB footprints."""
+    return {
+        ref: component
+        for ref, component in components.items()
+        if not component.get("virtual", False)
+    }
+
+
+def fp_bbox_mm(fp, pcbnew):
     """实测封装外廓（优先 Courtyard，退回 BoundingBox），返回 (w,h)。"""
     try:
         crty = fp.GetCourtyard(pcbnew.F_CrtYd)
@@ -54,8 +78,21 @@ def fp_bbox_mm(fp):
     return pcbnew.ToMM(bb.GetWidth()), pcbnew.ToMM(bb.GetHeight())
 
 
-def main():
-    intent = json.load(open(os.path.join(ROOT, r"src\hardware\m2-board\intent_v1.json"), encoding="utf-8"))
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--root")
+    parser.add_argument("--footprint-root")
+    args = parser.parse_args(argv)
+
+    root = resolve_root(args.root)
+    footprint_root = resolve_footprint_root(args.footprint_root)
+    intent_path = root / "src" / "hardware" / "m2-board" / "intent_v1.json"
+    output_path = root / "src" / "hardware" / "m2-board" / "m2_board.kicad_pcb"
+
+    import pcbnew
+
+    with intent_path.open("r", encoding="utf-8-sig") as handle:
+        intent = json.load(handle)
 
     board = pcbnew.BOARD()
 
@@ -94,15 +131,15 @@ def main():
     # 先加载全部封装，测尺寸，按面积降序装箱
     loaded = {}
     sizes = {}
-    for ref, comp in intent["components"].items():
+    for ref, comp in physical_components(intent["components"]).items():
         lib, name = FP_MAP[ref]
-        fp = pcbnew.FootprintLoad(os.path.join(FPDIR, lib + ".pretty"), name)
+        fp = pcbnew.FootprintLoad(str(footprint_root / (lib + ".pretty")), name)
         if fp is None:
             raise RuntimeError(f"footprint not found: {lib}:{name}")
         fp.SetReference(ref)
         fp.SetValue(comp.get("value", ""))
         loaded[ref] = fp
-        sizes[ref] = fp_bbox_mm(fp)
+        sizes[ref] = fp_bbox_mm(fp, pcbnew)
 
     order = sorted(sizes, key=lambda r: -(sizes[r][0] * sizes[r][1]))
     x = MARGIN
@@ -127,6 +164,11 @@ def main():
     for net, members in intent["nets"].items():
         for member in members:
             ref, pin = member.split(".", 1)
+            if ref not in loaded and intent["components"].get(ref, {}).get("virtual", False):
+                continue
+            if ref not in loaded:
+                unmatched.append(member)
+                continue
             hits = [pd for pd in loaded[ref].Pads() if pd.GetNumber() == pin]
             if not hits:
                 unmatched.append(member)
@@ -150,7 +192,8 @@ def main():
 
     seg(0, 0, W, 0); seg(W, 0, W, H); seg(W, H, 0, H); seg(0, H, 0, 0)
 
-    ok = pcbnew.SaveBoard(OUT, board)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    ok = pcbnew.SaveBoard(str(output_path), board)
     print(f"saved={ok} board={W}x{H}mm")
     print("positions:")
     for ref in sorted(pos_mm):

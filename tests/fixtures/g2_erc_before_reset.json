@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schemas.kicad.org/erc.v1.json",
+  "coordinate_units": "mm",
+  "date": "2026-08-24T22:51:38",
+  "included_severities": ["error", "warning", "exclusion"],
+  "kicad_version": "10.0.5",
+  "sheets": [
+    {
+      "path": "/",
+      "uuid_path": "/a1dbe1c3-f1f0-496b-b2c7-2a432ea67147",
+      "violations": [
+        {
+          "description": "Input Power pin not driven by any Output Power pins",
+          "items": [
+            {
+              "description": "Symbol U3 引脚 1 [V_{IN}, Power input, Line]",
+              "pos": {"x": 0.8763, "y": 2.4511},
+              "uuid": "c199aa44-a2fd-5d2a-add9-e5acdcccd470"
+            }
+          ],
+          "severity": "error",
+          "type": "power_pin_not_driven"
+        },
+        {
+          "description": "Input Power pin not driven by any Output Power pins",
+          "items": [
+            {
+              "description": "Symbol U1 引脚 9 [GND, Power input, Line]",
+              "pos": {"x": 2.7051, "y": 2.2225},
+              "uuid": "873b32e0-4398-5def-b7e4-c135f91ea2c2"
+            }
+          ],
+          "severity": "error",
+          "type": "power_pin_not_driven"
+        }
+      ]
+    }
+  ],
+  "source": "m2_board.kicad_sch"
+}

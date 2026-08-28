@@ -23,7 +23,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class GateCoreTests(unittest.TestCase):
-    def test_current_erc_is_not_green(self):
+    def test_pre_reset_erc_evidence_is_not_green(self):
+        report = ROOT / "tests/fixtures/g2_erc_before_reset.json"
+        self.assertEqual(count_erc_errors(report), 2)
+
+    def test_authoritative_current_erc_is_not_green(self):
         report = ROOT / "notes/m1-evidence/g2_erc_m2board.json"
         self.assertEqual(count_erc_errors(report), 2)
 
