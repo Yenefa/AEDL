@@ -1,12 +1,12 @@
 {
   "schema_version": "m2-evidence-reset-run.v1",
-  "run_id": "m2-ea12e101eb7e5a21cb2c45df0087e0314fd07850-2026-08-28T04:27:27Z",
-  "run_at": "2026-08-28T04:27:27Z",
+  "run_id": "m2-f3ff7dcdb79c7e966d5e744150cb9df7c0ae09b8-2026-08-28T04:30:56Z",
+  "run_at": "2026-08-28T04:30:56Z",
   "root": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent",
   "git": {
-    "commit": "ea12e101eb7e5a21cb2c45df0087e0314fd07850",
+    "commit": "f3ff7dcdb79c7e966d5e744150cb9df7c0ae09b8",
     "dirty": true,
-    "status_porcelain": "M README.md\n M docs/HANDOFF.md\n M \"docs/M2\\346\\265\\213\\350\\257\\225\\346\\212\\245\\345\\221\\212.md\"\n M docs/superpowers/plans/2026-08-28-m2-evidence-reset.md\n M src/hardware/m2-board/m2_board.kicad_sch\n M tests/test_gate_core.py\n M tools/build_board.py\n?? \"docs/M2\\346\\235\\277\\347\\272\\247\\345\\267\\245\\347\\250\\213\\350\\257\\204\\345\\256\\241.md\"\n?? gates/board_review_v1.json\n?? gates/run_gates.py\n?? notes/m2-evidence-reset/generated/\n?? notes/m2-evidence-reset/run_manifest.json\n?? tests/fixtures/\n?? tests/test_build_board.py\n?? tests/test_run_gates.py"
+    "status_porcelain": "M notes/m2-evidence-reset/generated/g2_erc_current.json\n M notes/m2-evidence-reset/generated/g4_drc_current.json"
   },
   "status": "fail",
   "exit_code": 1,
@@ -85,12 +85,12 @@
     },
     "erc_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g2_erc_current.json",
-      "sha256": "ba23423e38a7aa47145610fff174a78218100f436d9d01a7a932330927eb8ad2",
+      "sha256": "225331bc5e73f53f6149f3b4739064edab8cf6a01a7393e9fcc91df372237950",
       "exists": true
     },
     "drc_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g4_drc_current.json",
-      "sha256": "092b34ad55a7ef5c71af352c2651dd1b06952c41d319a9a28281be58e11833be",
+      "sha256": "1f3bdea06b876f5897e0bf03b0a56a942e14e940d0e326c1bcdd37599b0dea66",
       "exists": true
     }
   },
