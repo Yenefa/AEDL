@@ -27,11 +27,11 @@ class GateCoreTests(unittest.TestCase):
         report = ROOT / "tests/fixtures/g2_erc_before_reset.json"
         self.assertEqual(count_erc_errors(report), 2)
 
-    def test_authoritative_current_erc_is_not_green(self):
+    def test_historical_m1_erc_evidence_is_not_green(self):
         report = ROOT / "notes/m1-evidence/g2_erc_m2board.json"
         self.assertEqual(count_erc_errors(report), 2)
 
-    def test_current_drc_is_green(self):
+    def test_historical_m1_drc_evidence_is_green(self):
         report = ROOT / "notes/m1-evidence/g4_drc_final.json"
         self.assertEqual(count_drc_findings(report), (0, 0))
 

@@ -140,7 +140,13 @@ def _evaluate_intent(root: Path) -> Dict[str, Any]:
         if not isinstance(component, dict) or not isinstance(component.get("lib_id"), str):
             errors.append(f"intent component {ref!r} has no lib_id")
         if isinstance(component, dict) and component.get("virtual"):
-            errors.append(f"intent contains unsupported virtual component {ref}")
+            is_power_flag = (
+                ref.startswith("#FLG")
+                and component.get("lib_id") == "power:PWR_FLAG"
+                and component.get("value") == "PWR_FLAG"
+            )
+            if not is_power_flag:
+                errors.append(f"intent contains unsupported virtual component {ref}")
     for net, members in nets.items():
         if not isinstance(members, list) or len(members) < 2:
             errors.append(f"intent net {net!r} must have at least two members")

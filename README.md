@@ -2,11 +2,11 @@
 
 > 📅 创建日期：2026-08-24
 > 🔢 项目编号：project-027
-> 🏷️ 状态：M2 证据重置中（G2 ERC 与板级评审阻断，禁止下单）
+> 🏷️ 状态：M2 证据重置中（G2 ERC 已通过；板级评审仍阻断，禁止下单）
 
 ## 概述
 
-做一个单 Agent 自主嵌入式研发系统：用户只描述想做什么，Agent 自动完成技术调研、器件选型、电路设计、原理图、PCB、仿真、固件开发、调试和自动验证。本仓库当前以 ESP32-C3/SHT30 板为 M2 载体，重点验证可复现的门禁与证据链；当前真实结果是 G2 ERC 仍有 2 个电源驱动错误，BOARD_REVIEW 未完成，因此不宣称生产文件已获下单授权。
+做一个单 Agent 自主嵌入式研发系统：用户只描述想做什么，Agent 自动完成技术调研、器件选型、电路设计、原理图、PCB、仿真、固件开发、调试和自动验证。本仓库当前以 ESP32-C3/SHT30 板为 M2 载体，重点验证可复现的门禁与证据链；当前 KiCad G2 ERC=0、G4 DRC=0/0，但 BOARD_REVIEW 未完成，因此不宣称生产文件已获下单授权。
 
 ## 技术栈
 
@@ -46,15 +46,14 @@ py -3 gates\run_gates.py
 ```
 
 runner 会调用 KiCad 10.0.5、解析结构化 ERC/DRC JSON，并写入
-`notes/m2-evidence-reset/run_manifest.json`。当前预期退出码为 `1`：ERC 为 2 个
-`power_pin_not_driven`，板级评审 `manufacturing_release=false`；BOM/POS/ZIP
-结构检查和 DRC 0/0 仍会如实记录。
+`notes/m2-evidence-reset/run_manifest.json`。当前预期退出码为 `1`，唯一阻断为
+板级评审 `manufacturing_release=false`；ERC=0、DRC=0/0 与 BOM/POS/ZIP 结构检查
+会如实记录。
 
 下一步必须按顺序完成：
 
-1. 从 intent/原理图生成源补齐 +5V/GND 的电源驱动语义，重新跑 G2 ERC。
-2. 由具名评审人完成 USB、天线、回流、去耦、走线、热、保护和装配 8 项评审。
-3. 只有 G2 与 BOARD_REVIEW 同时通过，才复核 G10 并考虑嘉立创下单；回件后再做上电和长时间实测。
+1. 由具名评审人完成 USB、天线、回流、去耦、走线、热、保护和装配 8 项评审。
+2. 只有 G2 与 BOARD_REVIEW 同时通过，才复核 G10 并考虑嘉立创下单；回件后再做上电和长时间实测。
 
 ## 备注
 

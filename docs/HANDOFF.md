@@ -2,7 +2,7 @@
 
 ## 当前状态（2026-08-28）
 
-本轮完成了 M2 证据重置的确定性部分：canonical BOM、结构化 KiCad 解析、BOM/POS/ZIP 一致性检查和失败关闭 runner。当前项目仍不是可下单状态。
+本轮完成了 M2 证据重置的确定性部分：canonical BOM、结构化 KiCad 解析、BOM/POS/ZIP 一致性检查、失败关闭 runner，以及 +5V/GND 的两个虚拟 `PWR_FLAG` 电源驱动语义。当前项目仍不是可下单状态。
 
 一键命令：
 
@@ -10,14 +10,13 @@
 py -3 gates\run_gates.py
 ```
 
-当前分支为 `master`（HEAD 请以 `git rev-parse HEAD` 实时查询；本次证据基线为
-`ac1198d`）。manifest：`notes/m2-evidence-reset/run_manifest.json`，run_id 为
-`m2-ac1198dadd2571724489c8ff9a4b6aa91dda9e57-2026-08-28T04:42:24Z`，退出码 `1`。
+当前分支为 `master`（HEAD、manifest 的 run_id 请以实时命令查询）。一键 runner
+仍返回 `1`，但原因只剩实体板评审未授权，不是 ERC/DRC/BOM/G10 结构问题。
 
 | 门禁 | 结果 | 事实 |
 | --- | --- | --- |
 | G1 | PASS（结构） | 17 个物理料位；BOM 字段完整，但库存快照为历史数据，当前库存未知 |
-| G2 | **FAIL** | KiCad 10.0.5 ERC 发现 2 个 `power_pin_not_driven`：U3 VIN、U1 GND |
+| G2 | PASS | KiCad 10.0.5 ERC 0 error；`#FLG01` 驱动 +5V，`#FLG02` 驱动 GND |
 | G4 | PASS | KiCad DRC 0 violation / 0 unconnected |
 | G10 | PASS（结构） | BOM/POS 17 个引用一致，Gerber ZIP 26 个条目；未授权下单 |
 | BOARD_REVIEW | **FAIL** | 8 项均 `needs_physical`，`manufacturing_release=false` |
@@ -34,9 +33,9 @@ py -3 gates\run_gates.py
 
 ## 下一步验收顺序
 
-1. 在 intent/原理图生成源中补齐 +5V/GND 的电源驱动语义（正式 KiCad 操作或可靠生成器），重新生成原理图并取得 ERC 0；禁止编辑 ERC JSON。
-2. 具名评审人完成 USB 外形/边缘、ESP 天线净空、地回流、去耦、USB 走线、SHT30 热、输入保护、装配方向 8 项检查。
-3. 将每项真实证据写入评审记录，确认 `manufacturing_release=true` 后，才允许复核 G10 并考虑嘉立创下单。
+1. 具名评审人完成 USB 外形/边缘、ESP 天线净空、地回流、去耦、USB 走线、SHT30 热、输入保护、装配方向 8 项检查。
+2. 将每项真实证据写入评审记录，确认 `manufacturing_release=true` 后，才允许复核 G10 并考虑嘉立创下单。
+3. 恢复并实测可用的原理图生成器后，重新生成当前含 `PWR_FLAG` 的 M2 `ops_gen.json`；当前 `ops` gate 仍是 M1 历史代理证据，不能当作本版重放证明。
 4. 回件后执行上电、功耗、BLE 距离、温湿度读数和 24/168 小时稳定性测试；这些均是后续 C 级证据。
 
 ## 约束与边界

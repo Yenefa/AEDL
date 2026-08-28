@@ -1,12 +1,12 @@
 {
   "schema_version": "m2-evidence-reset-run.v1",
-  "run_id": "m2-ac1198dadd2571724489c8ff9a4b6aa91dda9e57-2026-08-28T04:42:24Z",
-  "run_at": "2026-08-28T04:42:24Z",
+  "run_id": "m2-49a5c2411e297fbe95c46dcca3ec650087ee3417-2026-08-28T06:06:03Z",
+  "run_at": "2026-08-28T06:06:03Z",
   "root": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent",
   "git": {
-    "commit": "ac1198dadd2571724489c8ff9a4b6aa91dda9e57",
-    "dirty": false,
-    "status_porcelain": ""
+    "commit": "49a5c2411e297fbe95c46dcca3ec650087ee3417",
+    "dirty": true,
+    "status_porcelain": "M gates/run_gates.py\n M src/hardware/m2-board/intent_v1.json\n M src/hardware/m2-board/m2_board.kicad_sch\n M tests/test_run_gates.py"
   },
   "status": "fail",
   "exit_code": 1,
@@ -25,8 +25,8 @@
         "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g2_erc_current.json",
         "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\hardware\\m2-board\\m2_board.kicad_sch"
       ],
-      "exit_code": 5,
-      "stdout": "发现 2 条违规项\r\n已将 ERC 报告保存到文件 C:/Users/fuker/Desktop/workspace/project-027-autonomous-hardware-agent/notes/m2-evidence-reset/generated/g2_erc_current.json\r\n",
+      "exit_code": 0,
+      "stdout": "发现 0 条违规项\r\n已将 ERC 报告保存到文件 C:/Users/fuker/Desktop/workspace/project-027-autonomous-hardware-agent/notes/m2-evidence-reset/generated/g2_erc_current.json\r\n",
       "stderr": ""
     },
     {
@@ -55,7 +55,7 @@
   "artifacts": {
     "intent": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\hardware\\m2-board\\intent_v1.json",
-      "sha256": "87a95e985b27efd52bc6733c7a429f504943e84cbdca426634f83792f29d514d",
+      "sha256": "b844e28fcbfdf5054dad35cd4914d3c1cb494ed6fdbb3f595d12813289796696",
       "exists": true
     },
     "bom": {
@@ -85,27 +85,25 @@
     },
     "erc_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g2_erc_current.json",
-      "sha256": "2a7038ebfac3818a90f12eb6e7a074a14fc217c0c31c971d5de6799c2ec6dd95",
+      "sha256": "f21f99a1e6db5cf309e621661b4204ddb5a0449089395e3f4be05580aa98fd69",
       "exists": true
     },
     "drc_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g4_drc_current.json",
-      "sha256": "c889a5668281e427de4bb843dff7795c18be5823d39184ad82d18485352acd69",
+      "sha256": "1b51b7f8993aff9eed287d9f47fc9a0ffb6ed7689b662ebe2deac6ed78876def",
       "exists": true
     }
   },
   "gates": [
     {
       "name": "erc",
-      "status": "fail",
+      "status": "pass",
       "details": {
-        "status": "fail",
-        "exit_code": 1,
-        "error_count": 2
+        "status": "pass",
+        "exit_code": 0,
+        "error_count": 0
       },
-      "errors": [
-        "ERC error violations present"
-      ],
+      "errors": [],
       "evidence_grade": "A"
     },
     {
@@ -152,7 +150,7 @@
       "status": "pass",
       "details": {
         "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\hardware\\m2-board\\intent_v1.json",
-        "component_count": 17,
+        "component_count": 19,
         "net_count": 13
       },
       "errors": [],

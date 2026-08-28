@@ -2267,12 +2267,117 @@
 			)
 		)
 		(embedded_fonts no)
-	))
+	)
+		(symbol "power:PWR_FLAG"
+			(power)
+			(pin_numbers hide)
+			(pin_names
+				(offset 0) hide)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "#FLG"
+				(at 0 1.905 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Value" "PWR_FLAG"
+				(at 0 3.81 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "~"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "Special symbol for telling ERC where power comes from"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_keywords" "flag power"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "PWR_FLAG_0_0"
+				(pin power_out line
+					(at 0 0 90)
+					(length 0)
+					(name "pwr"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(symbol "PWR_FLAG_0_1"
+				(polyline
+					(pts
+						(xy 0 0) (xy 0 1.27) (xy -1.016 1.905) (xy 0 2.54) (xy 1.016 1.905) (xy 0 1.27)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+		)
+	)
 	(sheet_instances
 		(path "/"
 			(page "1")
 		)
 	)
+	(symbol (lib_id "power:PWR_FLAG") (at 15.24 15.24 0) (unit 1) (uuid "d543b9df-7a23-4f4f-bf8d-0d39b9f05b01") (pin "1" (uuid "cc89fbdc-3fd5-4b76-9926-df629925dc01")) (property "Reference" "#FLG01" (at 15.24 17.145 0) (effects (font (size 1.27 1.27)) (hide yes))) (instances (project "noname" (path "/a1dbe1c3-f1f0-496b-b2c7-2a432ea67147" (reference "#FLG01") (unit 1))))
+	(property "Value" "PWR_FLAG" (at 15.24 19.05 0) (effects (font (size 1.27 1.27))))
+	(property "Footprint" "" (at 15.24 15.24 0) (effects (font (size 1.27 1.27)) (hide yes))))
+	(symbol (lib_id "power:PWR_FLAG") (at 45.72 15.24 0) (unit 1) (uuid "d543b9df-7a23-4f4f-bf8d-0d39b9f05b02") (pin "1" (uuid "cc89fbdc-3fd5-4b76-9926-df629925dc02")) (property "Reference" "#FLG02" (at 45.72 17.145 0) (effects (font (size 1.27 1.27)) (hide yes))) (instances (project "noname" (path "/a1dbe1c3-f1f0-496b-b2c7-2a432ea67147" (reference "#FLG02") (unit 1))))
+	(property "Value" "PWR_FLAG" (at 45.72 19.05 0) (effects (font (size 1.27 1.27))))
+	(property "Footprint" "" (at 45.72 15.24 0) (effects (font (size 1.27 1.27)) (hide yes))))
+	(label "+5V" (at 15.24 15.24 90) (effects (font (size 1.27 1.27)) (justify left bottom)) (uuid "1d2fa5e3-6d4b-4ed7-8e6a-6e79a2b51201"))
+	(label "GND" (at 45.72 15.24 90) (effects (font (size 1.27 1.27)) (justify left bottom)) (uuid "1d2fa5e3-6d4b-4ed7-8e6a-6e79a2b51202"))
 	(symbol (lib_id "Device:C") (at 34.29 36.83 0) (unit 1) (uuid "e46cc14c-5087-53cb-82de-beee2d27e9da") (pin "1" (uuid "ec04ed02-55cf-5545-b7a4-740d903d21e0")) (pin "2" (uuid "e24e32f5-590d-5b61-a1aa-cd60bec99a4b")) (property "Reference" "C1" (at 37.592 35.56 0) (effects (font (size 1.27 1.27)) (justify left))) (instances (project "noname" (path "/a1dbe1c3-f1f0-496b-b2c7-2a432ea67147" (reference "C1") (unit 1))))
 	(property "Value" "10uF" (at 37.592 38.1 0) (effects (font (size 1.27 1.27)) (justify left)))
 	(property "Footprint" "Capacitor_SMD:C_0805_2012Metric" (at 34.29 36.83 0) (effects (font (size 1.27 1.27)) (hide yes))))
