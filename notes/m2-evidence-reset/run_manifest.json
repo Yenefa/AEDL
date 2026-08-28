@@ -1,12 +1,12 @@
 {
   "schema_version": "m2-evidence-reset-run.v1",
-  "run_id": "m2-f3ff7dcdb79c7e966d5e744150cb9df7c0ae09b8-2026-08-28T04:30:56Z",
-  "run_at": "2026-08-28T04:30:56Z",
+  "run_id": "m2-6fc04cc67d044c56d8202d8313064bf16f286a8c-2026-08-28T04:32:34Z",
+  "run_at": "2026-08-28T04:32:34Z",
   "root": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent",
   "git": {
-    "commit": "f3ff7dcdb79c7e966d5e744150cb9df7c0ae09b8",
-    "dirty": true,
-    "status_porcelain": "M notes/m2-evidence-reset/generated/g2_erc_current.json\n M notes/m2-evidence-reset/generated/g4_drc_current.json"
+    "commit": "6fc04cc67d044c56d8202d8313064bf16f286a8c",
+    "dirty": false,
+    "status_porcelain": ""
   },
   "status": "fail",
   "exit_code": 1,
@@ -85,12 +85,12 @@
     },
     "erc_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g2_erc_current.json",
-      "sha256": "225331bc5e73f53f6149f3b4739064edab8cf6a01a7393e9fcc91df372237950",
+      "sha256": "91905330d5145c591dcb65d0cef110456bc45b8be7c12f3864b5ce1003fb00a3",
       "exists": true
     },
     "drc_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g4_drc_current.json",
-      "sha256": "1f3bdea06b876f5897e0bf03b0a56a942e14e940d0e326c1bcdd37599b0dea66",
+      "sha256": "605fe80c1c32c3bbe4e3524652179be91a34fed6273a5381b15a09170890a871",
       "exists": true
     }
   },
