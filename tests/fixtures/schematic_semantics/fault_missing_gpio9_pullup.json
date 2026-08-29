@@ -1,0 +1,15 @@
+{
+  "id": "FAULT_MISSING_GPIO9_PULLUP_COMMON_MODE",
+  "expected_rule": "ESP32_GPIO9_PULLUP",
+  "mutations": [
+    { "op": "delete", "path": ["views", "intent", "pins", "R9.1"] },
+    { "op": "delete", "path": ["views", "intent", "pins", "R9.2"] },
+    { "op": "delete", "path": ["views", "intent", "components", "R9"] },
+    { "op": "delete", "path": ["views", "netlist", "pins", "R9.1"] },
+    { "op": "delete", "path": ["views", "netlist", "pins", "R9.2"] },
+    { "op": "delete", "path": ["views", "netlist", "components", "R9"] },
+    { "op": "delete", "path": ["views", "pcb", "pins", "R9.1"] },
+    { "op": "delete", "path": ["views", "pcb", "pins", "R9.2"] },
+    { "op": "delete", "path": ["views", "pcb", "components", "R9"] }
+  ]
+}

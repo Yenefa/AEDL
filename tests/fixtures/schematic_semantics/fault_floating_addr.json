@@ -1,0 +1,10 @@
+{
+  "id": "FAULT_FLOATING_SHT30_ADDR_COMMON_MODE",
+  "expected_rule": "SHT30_ADDRESS",
+  "mutations": [
+    { "op": "set", "path": ["views", "intent", "pins", "U2.2", "net"], "value": null },
+    { "op": "set", "path": ["views", "netlist", "pins", "U2.2", "net"], "value": null },
+    { "op": "set", "path": ["views", "netlist", "pins", "U2.2", "no_connect"], "value": true },
+    { "op": "set", "path": ["views", "pcb", "pins", "U2.2", "net"], "value": null }
+  ]
+}

@@ -17,12 +17,12 @@
 - Modify: `tests/test_gate_core.py`
 - Create: `notes/m2-semantic-repair/baseline_failure.json`
 
-- [ ] Add a failing test requiring `manufacturing_release=false` and explicit revocation metadata for the superseded sign-off.
-- [ ] Run the focused test and confirm RED against the currently signed release.
-- [ ] Record the confirmed USB polarity, SHT30 ADDR, nRESET, EN, and GPIO9 defects without rewriting historical machine evidence.
-- [ ] Set release false with reason, timestamp, superseded signer/evidence reference, and `human_resign_required=true`.
-- [ ] Run the focused test and confirm GREEN.
-- [ ] Commit only task-owned files.
+- [x] Add a failing test requiring `manufacturing_release=false` and explicit revocation metadata for the superseded sign-off.
+- [x] Run the focused test and confirm RED against the currently signed release.
+- [x] Record the confirmed USB polarity, SHT30 ADDR, nRESET, EN, and GPIO9 defects without rewriting historical machine evidence.
+- [x] Set release false with reason, timestamp, superseded signer/evidence reference, and `human_resign_required=true`.
+- [x] Run the focused test and confirm GREEN.
+- [x] Commit only task-owned files.
 
 ## Task 2: Add an independent schematic semantics contract
 
@@ -32,14 +32,14 @@
 - Create: `tests/test_schematic_semantics.py`
 - Create: `tests/fixtures/schematic_semantics/*`
 
-- [ ] Write tests for required USB pin polarity, connector-side resistor nets, SHT30 ADDR=GND/0x44, ALERT/nRESET NC policy, EN RC, GPIO9 pull-up, and firmware address agreement.
-- [ ] Write fail-closed tests for missing files, malformed JSON, duplicate/unknown pins, unknown severities/rules, and incomplete observations.
-- [ ] Add deliberate fault-injection fixtures for reversed USB, floating ADDR, missing EN capacitor, missing GPIO9 pull-up, and firmware/address mismatch.
-- [ ] Run focused tests and confirm RED because the evaluator does not yet exist.
-- [ ] Implement a deterministic evaluator with structured findings and non-zero exit on any contract violation.
-- [ ] Cross-check four independently obtained views: intent, KiCad netlist, PCB pad-to-net mapping, and firmware constants.
-- [ ] Run all semantic tests and confirm GREEN.
-- [ ] Commit implementation, contract, fixtures, and tests.
+- [x] Write tests for required USB pin polarity, connector-side resistor nets, SHT30 ADDR=GND/0x44, ALERT/nRESET NC policy, EN RC, GPIO9 pull-up, and firmware address agreement.
+- [x] Write fail-closed tests for missing files, malformed JSON, duplicate/unknown pins, unknown severities/rules, and incomplete observations.
+- [x] Add deliberate fault-injection fixtures for reversed USB, floating ADDR, missing EN capacitor, missing GPIO9 pull-up, and firmware/address mismatch.
+- [x] Run focused tests and confirm RED because the evaluator does not yet exist.
+- [x] Implement a deterministic evaluator with structured findings and non-zero exit on any contract violation.
+- [x] Cross-check four independently obtained views: intent, KiCad netlist, PCB pad-to-net mapping, and firmware constants.
+- [x] Run all semantic tests and confirm GREEN.
+- [x] Commit implementation, contract, fixtures, and tests.
 
 ## Task 3: Turn the incident into an executable learning gate
 
@@ -78,7 +78,7 @@
 
 **Files:**
 - Modify: `src/hardware/m2-board/intent_v1.json`
-- Modify: `src/hardware/m2-board/m2.kicad_sch`
+- Modify: `src/hardware/m2-board/m2_board.kicad_sch`
 - Regenerate: `src/hardware/m2-board/ops_gen.json`
 - Create or update: `notes/m2-evidence-reset/generated/ops_validate_current.json`
 - Modify: `tests/test_run_gates.py`
@@ -95,7 +95,7 @@
 
 **Files:**
 - Modify: `tools/build_board.py`
-- Modify: `src/hardware/m2-board/m2.kicad_pcb`
+- Modify: `src/hardware/m2-board/m2_board.kicad_pcb`
 - Modify or create: `tests/test_board_review.py`
 - Modify: `tools/board_review.py`
 

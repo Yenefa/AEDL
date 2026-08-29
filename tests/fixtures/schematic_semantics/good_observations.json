@@ -1,0 +1,90 @@
+{
+  "$schema": "https://aedl.local/schemas/schematic-observations.v1.json",
+  "schema_version": 1,
+  "views": {
+    "intent": {
+      "pins": {
+        "J1.A6": { "net": "USB_DP_CONN", "no_connect": false },
+        "J1.B6": { "net": "USB_DP_CONN", "no_connect": false },
+        "J1.A7": { "net": "USB_DM_CONN", "no_connect": false },
+        "J1.B7": { "net": "USB_DM_CONN", "no_connect": false },
+        "R7.1": { "net": "USB_DP_CONN", "no_connect": false },
+        "R7.2": { "net": "USB_DP", "no_connect": false },
+        "R8.1": { "net": "USB_DM_CONN", "no_connect": false },
+        "R8.2": { "net": "USB_DM", "no_connect": false },
+        "U1.14": { "net": "USB_DP", "no_connect": false },
+        "U1.13": { "net": "USB_DM", "no_connect": false },
+        "U2.2": { "net": "GND", "no_connect": false },
+        "U2.3": { "net": null, "no_connect": true },
+        "U2.6": { "net": null, "no_connect": true },
+        "C5.1": { "net": "EN", "no_connect": false },
+        "C5.2": { "net": "GND", "no_connect": false },
+        "R9.1": { "net": "+3V3", "no_connect": false },
+        "R9.2": { "net": "BOOT", "no_connect": false }
+      },
+      "components": {
+        "R7": { "value": "22R" },
+        "R8": { "value": "22R" },
+        "C5": { "value": "1uF" },
+        "R9": { "value": "10k" }
+      }
+    },
+    "netlist": {
+      "pins": {
+        "J1.A6": { "net": "USB_DP_CONN", "no_connect": false },
+        "J1.B6": { "net": "USB_DP_CONN", "no_connect": false },
+        "J1.A7": { "net": "USB_DM_CONN", "no_connect": false },
+        "J1.B7": { "net": "USB_DM_CONN", "no_connect": false },
+        "R7.1": { "net": "USB_DP_CONN", "no_connect": false },
+        "R7.2": { "net": "USB_DP", "no_connect": false },
+        "R8.1": { "net": "USB_DM_CONN", "no_connect": false },
+        "R8.2": { "net": "USB_DM", "no_connect": false },
+        "U1.14": { "net": "USB_DP", "no_connect": false },
+        "U1.13": { "net": "USB_DM", "no_connect": false },
+        "U2.2": { "net": "GND", "no_connect": false },
+        "U2.3": { "net": null, "no_connect": true },
+        "U2.6": { "net": null, "no_connect": true },
+        "C5.1": { "net": "EN", "no_connect": false },
+        "C5.2": { "net": "GND", "no_connect": false },
+        "R9.1": { "net": "+3V3", "no_connect": false },
+        "R9.2": { "net": "BOOT", "no_connect": false }
+      },
+      "components": {
+        "R7": { "value": "22R" },
+        "R8": { "value": "22R" },
+        "C5": { "value": "1uF" },
+        "R9": { "value": "10k" }
+      }
+    },
+    "pcb": {
+      "pins": {
+        "J1.A6": { "net": "USB_DP_CONN", "no_connect": false },
+        "J1.B6": { "net": "USB_DP_CONN", "no_connect": false },
+        "J1.A7": { "net": "USB_DM_CONN", "no_connect": false },
+        "J1.B7": { "net": "USB_DM_CONN", "no_connect": false },
+        "R7.1": { "net": "USB_DP_CONN", "no_connect": false },
+        "R7.2": { "net": "USB_DP", "no_connect": false },
+        "R8.1": { "net": "USB_DM_CONN", "no_connect": false },
+        "R8.2": { "net": "USB_DM", "no_connect": false },
+        "U1.14": { "net": "USB_DP", "no_connect": false },
+        "U1.13": { "net": "USB_DM", "no_connect": false },
+        "U2.2": { "net": "GND", "no_connect": false },
+        "U2.3": { "net": null, "no_connect": true },
+        "U2.6": { "net": null, "no_connect": true },
+        "C5.1": { "net": "EN", "no_connect": false },
+        "C5.2": { "net": "GND", "no_connect": false },
+        "R9.1": { "net": "+3V3", "no_connect": false },
+        "R9.2": { "net": "BOOT", "no_connect": false }
+      },
+      "components": {
+        "R7": { "value": "22R" },
+        "R8": { "value": "22R" },
+        "C5": { "value": "1uF" },
+        "R9": { "value": "10k" }
+      }
+    },
+    "firmware": {
+      "constants": { "DEFAULT_ADDR": 68 }
+    }
+  }
+}

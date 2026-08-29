@@ -1,0 +1,156 @@
+{
+  "$schema": "https://aedl.local/schemas/schematic-semantics-report.v1.json",
+  "schema_version": 1,
+  "board_id": "project-027-m2-esp32c3-sht30",
+  "status": "fail",
+  "summary": {
+    "passed": 0,
+    "failed": 5,
+    "total": 5
+  },
+  "findings": [
+    {
+      "rule_id": "USB_POLARITY_AND_SERIES",
+      "kind": "connectivity",
+      "severity": "critical",
+      "status": "fail",
+      "title": "USB D+/D- polarity and 22 ohm series termination",
+      "source_ids": [
+        "ESP32_C3_WROOM_02_DATASHEET",
+        "ESP32_C3_SCHEMATIC_CHECKLIST"
+      ],
+      "details": [
+        "intent.pins.J1.A6: expected {\"net\": \"USB_DP_CONN\"}, observed {\"net\": \"USB_DP\", \"no_connect\": false}",
+        "intent.pins.J1.B6: expected {\"net\": \"USB_DP_CONN\"}, observed {\"net\": \"USB_DP\", \"no_connect\": false}",
+        "intent.pins.J1.A7: expected {\"net\": \"USB_DM_CONN\"}, observed {\"net\": \"USB_DM\", \"no_connect\": false}",
+        "intent.pins.J1.B7: expected {\"net\": \"USB_DM_CONN\"}, observed {\"net\": \"USB_DM\", \"no_connect\": false}",
+        "intent.pins.R7.1: expected {\"net\": \"USB_DP_CONN\"}, observed \"<missing>\"",
+        "intent.pins.R7.2: expected {\"net\": \"USB_DP\"}, observed \"<missing>\"",
+        "intent.pins.R8.1: expected {\"net\": \"USB_DM_CONN\"}, observed \"<missing>\"",
+        "intent.pins.R8.2: expected {\"net\": \"USB_DM\"}, observed \"<missing>\"",
+        "intent.pins.U1.14: expected {\"net\": \"USB_DP\"}, observed {\"net\": \"USB_DM\", \"no_connect\": false}",
+        "intent.pins.U1.13: expected {\"net\": \"USB_DM\"}, observed {\"net\": \"USB_DP\", \"no_connect\": false}",
+        "intent.components.R7: expected {\"value\": \"22R\"}, observed \"<missing>\"",
+        "intent.components.R8: expected {\"value\": \"22R\"}, observed \"<missing>\"",
+        "netlist.pins.J1.A6: expected {\"net\": \"USB_DP_CONN\"}, observed {\"net\": \"USB_DP\", \"no_connect\": false}",
+        "netlist.pins.J1.B6: expected {\"net\": \"USB_DP_CONN\"}, observed {\"net\": \"USB_DP\", \"no_connect\": false}",
+        "netlist.pins.J1.A7: expected {\"net\": \"USB_DM_CONN\"}, observed {\"net\": \"USB_DM\", \"no_connect\": false}",
+        "netlist.pins.J1.B7: expected {\"net\": \"USB_DM_CONN\"}, observed {\"net\": \"USB_DM\", \"no_connect\": false}",
+        "netlist.pins.R7.1: expected {\"net\": \"USB_DP_CONN\"}, observed \"<missing>\"",
+        "netlist.pins.R7.2: expected {\"net\": \"USB_DP\"}, observed \"<missing>\"",
+        "netlist.pins.R8.1: expected {\"net\": \"USB_DM_CONN\"}, observed \"<missing>\"",
+        "netlist.pins.R8.2: expected {\"net\": \"USB_DM\"}, observed \"<missing>\"",
+        "netlist.pins.U1.14: expected {\"net\": \"USB_DP\"}, observed {\"net\": \"USB_DM\", \"no_connect\": false}",
+        "netlist.pins.U1.13: expected {\"net\": \"USB_DM\"}, observed {\"net\": \"USB_DP\", \"no_connect\": false}",
+        "netlist.components.R7: expected {\"value\": \"22R\"}, observed \"<missing>\"",
+        "netlist.components.R8: expected {\"value\": \"22R\"}, observed \"<missing>\"",
+        "pcb.pins.J1.A6: expected {\"net\": \"USB_DP_CONN\"}, observed {\"net\": \"USB_DP\", \"no_connect\": false}",
+        "pcb.pins.J1.B6: expected {\"net\": \"USB_DP_CONN\"}, observed {\"net\": \"USB_DP\", \"no_connect\": false}",
+        "pcb.pins.J1.A7: expected {\"net\": \"USB_DM_CONN\"}, observed {\"net\": \"USB_DM\", \"no_connect\": false}",
+        "pcb.pins.J1.B7: expected {\"net\": \"USB_DM_CONN\"}, observed {\"net\": \"USB_DM\", \"no_connect\": false}",
+        "pcb.pins.R7.1: expected {\"net\": \"USB_DP_CONN\"}, observed \"<missing>\"",
+        "pcb.pins.R7.2: expected {\"net\": \"USB_DP\"}, observed \"<missing>\"",
+        "pcb.pins.R8.1: expected {\"net\": \"USB_DM_CONN\"}, observed \"<missing>\"",
+        "pcb.pins.R8.2: expected {\"net\": \"USB_DM\"}, observed \"<missing>\"",
+        "pcb.pins.U1.14: expected {\"net\": \"USB_DP\"}, observed {\"net\": \"USB_DM\", \"no_connect\": false}",
+        "pcb.pins.U1.13: expected {\"net\": \"USB_DM\"}, observed {\"net\": \"USB_DP\", \"no_connect\": false}",
+        "pcb.components.R7: expected {\"value\": \"22R\"}, observed \"<missing>\"",
+        "pcb.components.R8: expected {\"value\": \"22R\"}, observed \"<missing>\""
+      ]
+    },
+    {
+      "rule_id": "SHT30_ADDRESS",
+      "kind": "connectivity",
+      "severity": "critical",
+      "status": "fail",
+      "title": "SHT30 ADDR is tied low and firmware uses 0x44",
+      "source_ids": [
+        "SHT3X_DIS_DATASHEET"
+      ],
+      "details": [
+        "intent.pins.U2.2: expected {\"net\": \"GND\"}, observed \"<missing>\"",
+        "netlist.pins.U2.2: expected {\"net\": \"GND\"}, observed {\"net\": null, \"no_connect\": true}",
+        "pcb.pins.U2.2: expected {\"net\": \"GND\"}, observed {\"net\": null, \"no_connect\": true}"
+      ]
+    },
+    {
+      "rule_id": "SHT30_UNUSED_PINS",
+      "kind": "connectivity",
+      "severity": "major",
+      "status": "fail",
+      "title": "Unused SHT30 ALERT and nRESET are intentionally unconnected",
+      "source_ids": [
+        "SHT3X_DIS_DATASHEET"
+      ],
+      "details": [
+        "netlist.pins.U2.6: expected {\"net\": null, \"no_connect\": true}, observed {\"net\": \"+3V3\", \"no_connect\": false}",
+        "pcb.pins.U2.6: expected {\"net\": null}, observed {\"net\": \"+3V3\", \"no_connect\": false}"
+      ]
+    },
+    {
+      "rule_id": "ESP32_EN_RC",
+      "kind": "connectivity",
+      "severity": "major",
+      "status": "fail",
+      "title": "ESP32-C3 EN has the approved 10 kohm and 1 uF reset network",
+      "source_ids": [
+        "ESP32_C3_SCHEMATIC_CHECKLIST"
+      ],
+      "details": [
+        "intent.pins.C5.1: expected {\"net\": \"EN\"}, observed \"<missing>\"",
+        "intent.pins.C5.2: expected {\"net\": \"GND\"}, observed \"<missing>\"",
+        "intent.components.C5: expected {\"value\": \"1uF\"}, observed \"<missing>\"",
+        "netlist.pins.C5.1: expected {\"net\": \"EN\"}, observed \"<missing>\"",
+        "netlist.pins.C5.2: expected {\"net\": \"GND\"}, observed \"<missing>\"",
+        "netlist.components.C5: expected {\"value\": \"1uF\"}, observed \"<missing>\"",
+        "pcb.pins.C5.1: expected {\"net\": \"EN\"}, observed \"<missing>\"",
+        "pcb.pins.C5.2: expected {\"net\": \"GND\"}, observed \"<missing>\"",
+        "pcb.components.C5: expected {\"value\": \"1uF\"}, observed \"<missing>\""
+      ]
+    },
+    {
+      "rule_id": "ESP32_GPIO9_PULLUP",
+      "kind": "connectivity",
+      "severity": "major",
+      "status": "fail",
+      "title": "ESP32-C3 GPIO9 boot strap has an external 10 kohm pull-up",
+      "source_ids": [
+        "ESP32_C3_SCHEMATIC_CHECKLIST"
+      ],
+      "details": [
+        "intent.pins.R9.1: expected {\"net\": \"+3V3\"}, observed \"<missing>\"",
+        "intent.pins.R9.2: expected {\"net\": \"BOOT\"}, observed \"<missing>\"",
+        "intent.components.R9: expected {\"value\": \"10k\"}, observed \"<missing>\"",
+        "netlist.pins.R9.1: expected {\"net\": \"+3V3\"}, observed \"<missing>\"",
+        "netlist.pins.R9.2: expected {\"net\": \"BOOT\"}, observed \"<missing>\"",
+        "netlist.components.R9: expected {\"value\": \"10k\"}, observed \"<missing>\"",
+        "pcb.pins.R9.1: expected {\"net\": \"+3V3\"}, observed \"<missing>\"",
+        "pcb.pins.R9.2: expected {\"net\": \"BOOT\"}, observed \"<missing>\"",
+        "pcb.components.R9: expected {\"value\": \"10k\"}, observed \"<missing>\""
+      ]
+    }
+  ],
+  "inputs": {
+    "contract": {
+      "path": "gates\\contracts\\m2_schematic_contract_v1.json",
+      "sha256": "5802cbace183161361e1f3e5be868650f84ab336d53a7f30475de4d5af6fb2f6"
+    },
+    "intent": {
+      "path": "src\\hardware\\m2-board\\intent_v1.json",
+      "sha256": "b844e28fcbfdf5054dad35cd4914d3c1cb494ed6fdbb3f595d12813289796696"
+    },
+    "netlist": {
+      "path": "notes\\m2-semantic-repair\\m2_board_before_repair.net.xml",
+      "sha256": "c4f507552bd08f7eaebe347f38ec1b2e157faff542508436c8f0911e321dd5d1"
+    },
+    "pcb": {
+      "path": "src\\hardware\\m2-board\\m2_board.kicad_pcb",
+      "sha256": "80595738b04335f0da6c0bce04015332d3a5c9c7988c582b4364444a6bda77c9"
+    },
+    "firmware": {
+      "path": "src\\firmware\\include\\sht30.h",
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    }
+  },
+  "generated_at": "2026-08-29T17:10:55Z"
+}
