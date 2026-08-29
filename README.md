@@ -10,11 +10,10 @@
 
 ## AI 开发必读
 
-任何 AI Agent 在本仓库产生实质贡献前，必须先读根目录 `AGENTS.md`、
-`docs/compliance/AEDL_开发记录与AI使用规范_v1.0.md` 和
-`docs/compliance/README.md`；收尾前按实际工作更新 AI 使用、第三方资源、工程决策与
-Evidence 台账。AI 新增记录默认保持 `PENDING_HUMAN_REVIEW`；只有团队成员实际审核后，
-才能据实改为 `HUMAN_REVIEWED` 或 `ACCEPTED`，AI 不得自行声称已人工审核。
+任何 AI Agent 在本仓库产生实质贡献前，必须完整读取根目录 `AGENTS.md`。该文件是
+AEDL 当前 v1.4 Agent 执行层唯一规范；项目实时状态另见 `docs/HANDOFF.md`，合规台账按
+`AGENTS.md` 的触发条件更新。`docs/compliance/AEDL_开发记录与AI使用规范_v1.0.md`
+保留为历史基线与格式参考，不再作为与根 `AGENTS.md` 并列的当前执行规范。
 
 ## 技术栈
 

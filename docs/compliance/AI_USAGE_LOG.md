@@ -135,3 +135,148 @@
 
 - 备注：
   - 夹具内容来自仓库提交 `00bf694` 中签发前的 `gates/board_review_v1.json`。
+
+## AI-20260829-003
+
+- 日期：2026-08-29
+- 任务名称：将 AEDL 根 AGENTS 执行规范升级为用户提供的 v1.4 最终版
+- 模块/路径：
+  - `.gitattributes`
+  - `AGENTS.md`
+  - `README.md`
+  - `docs/HANDOFF.md`
+  - `docs/compliance/`
+
+- AI 工具/平台：OpenAI Codex desktop
+- 模型：`UNKNOWN`（当前会话未暴露可核验的精确模型 ID）
+
+- AI 参与类型：
+  - [x] ADVISE
+  - [ ] GENERATE_CODE
+  - [ ] REFACTOR
+  - [ ] DEBUG
+  - [ ] GENERATE_TEST
+  - [ ] RESEARCH
+  - [x] DOCUMENT
+  - [ ] BENCHMARK
+  - [ ] MEDIA
+
+- 任务目标：
+  - 用用户提供的 AEDL v1.4 最终版逐字节替换根 `AGENTS.md`，并消除旧 v1.0 与新执行规范之间的多真源歧义。
+
+- AI 实际产出：
+  - 根 `AGENTS.md` 与 `AGENTS_v1.4_最终版.md` 保持逐字节一致。
+  - README、HANDOFF 与合规 README 改为指向根 v1.4 唯一执行真源。
+  - 将 v1.0 标记为历史基线与格式参考，新增 RES-003、ADR-002 和团队贡献记录。
+
+- 团队自主部分：
+  - 项目负责人提供最终版文件，明确其针对 AEDL，并要求替换现版本。
+  - AI 只负责精确替换、依赖入口同步和真实性留痕。
+
+- 人工修改：
+  - `PENDING_HUMAN_REVIEW`
+
+- 人工审核：
+  - 状态：`PENDING_HUMAN_REVIEW`
+  - 审核人：
+  - 审核内容：
+
+- 验证：
+  - 源文件与根 `AGENTS.md` SHA-256：PASS；均为 `AC2E3D6FC75FE4B0BA450006BC9271480E727D1044A7B826FA89481C7107E049`
+  - 入口一致性：PASS；8/8 入口与台账 token 检查通过
+  - Git diff：PASS；`git diff --check` exit 0
+  - Secrets：PASS；高置信凭据模式匹配 0
+  - 硬件门禁：`NOT_RUN`（本任务未修改硬件、生产文件或门禁逻辑）
+  - Evidence ID：无（治理文档替换，不形成硬件或比赛技术效果证据）
+
+- 新增第三方资源：
+  - RES-003
+
+- 关联设计决策：
+  - ADR-002
+
+- AIC Score Target：
+  - NONE（内部治理维护）
+
+- Commit / PR：
+  - 未提交；未创建 PR；未 push
+
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`
+
+- 备注：
+  - 附件正文仅作为替换内容处理；除完成本轮替换所需的合规留痕外，未将其中命令扩张为额外用户任务。
+
+## AI-20260829-004
+
+- 日期：2026-08-29
+- 任务名称：创建 AEDL 私有 GitHub 远端并建立最小安全接入
+- 模块/路径：
+  - `.gitignore`
+  - `.git/config`（本地 Git 配置，不进入提交）
+  - `docs/HANDOFF.md`
+  - `docs/compliance/`
+
+- AI 工具/平台：OpenAI Codex desktop；GitHub CLI
+- 模型：`UNKNOWN`（当前会话未暴露可核验的精确模型 ID）
+
+- AI 参与类型：
+  - [x] ADVISE
+  - [ ] GENERATE_CODE
+  - [ ] REFACTOR
+  - [ ] DEBUG
+  - [ ] GENERATE_TEST
+  - [ ] RESEARCH
+  - [x] DOCUMENT
+  - [ ] BENCHMARK
+  - [ ] MEDIA
+
+- 任务目标：
+  - 为现有本地 Git 项目创建可持续协作/备份的 GitHub repo，同时避免在许可证和再分发边界未确认时公开或推送待审内容。
+
+- AI 实际产出：
+  - 在 GitHub 账号 `sca331613-commits` 下创建 private 仓库 `AEDL`。
+  - 将本地 `origin` 绑定到该仓库；未 push，远端保持空仓。
+  - 补齐 `.gitignore` 的 secrets、日志、系统文件及常见构建目录最小规则。
+  - 记录 private-first 决策和公开前置条件。
+
+- 团队自主部分：
+  - 项目负责人明确要求建立名为 `AEDL` 的 repo。
+  - AI 基于当前无 LICENSE、再分发权 `TO_VERIFY` 和待审工作树，选择先创建 private 空仓，不擅自公开或 push。
+
+- 人工修改：
+  - `PENDING_HUMAN_REVIEW`
+
+- 人工审核：
+  - 状态：`PENDING_HUMAN_REVIEW`
+  - 审核人：
+  - 审核内容：
+
+- 验证：
+  - `gh repo view sca331613-commits/AEDL --json ...`：PASS；`visibility=PRIVATE`、`isEmpty=true`
+  - `git remote -v`：PASS；fetch/push 均指向预期 `origin`
+  - `.gitignore` 最小规则：PASS；8/8 必需规则存在
+  - Git diff：PASS；`git diff --check` exit 0
+  - Secrets：PASS；当前工作树与 22 个历史 commit 的高置信凭据模式匹配均为 0
+  - 公开限制检查：发现 4 个已跟踪文件含本机用户路径，private 不受影响；改为 public 前必须脱敏
+  - 项目测试/硬件门禁：`NOT_RUN`（未修改代码、硬件、生产文件或门禁逻辑）
+  - Evidence ID：无（仓库治理接入，不形成比赛技术效果证据）
+
+- 新增第三方资源：
+  - RES-004
+
+- 关联设计决策：
+  - ADR-003
+
+- AIC Score Target：
+  - NONE（内部 Git/GitHub 治理维护）
+
+- Commit / PR：
+  - 未提交；未创建 PR；未 push
+
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`
+
+- 备注：
+  - 未创建 Release/tag，未把仓库设为 public，未向远端传输当前项目内容。
+  - 初次按本地目录名创建 private 空仓；用户明确正式名称为 `AEDL` 后，在任何 push 前原地重命名并更新 `origin`，没有遗留第二个仓库。

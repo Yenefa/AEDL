@@ -8,3 +8,21 @@ __pycache__/
 tools/bin/
 *.elf.tmp
 delivery/*.zip
+
+# Secrets and machine-local configuration
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Common dependency and build outputs
+node_modules/
+dist/
+
+# OS metadata and runtime logs
+.DS_Store
+Thumbs.db
+*.log

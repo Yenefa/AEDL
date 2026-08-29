@@ -1,9 +1,8 @@
 # HANDOFF — project-027-autonomous-hardware-agent
 
-> **AI 接手强制前置**：在任何实质修改前，完整阅读根目录 `AGENTS.md`、
-> `docs/compliance/AEDL_开发记录与AI使用规范_v1.0.md` 与 `docs/compliance/README.md`；
-> 收尾时按真实工作更新对应台账；AI 新增记录默认保持 `PENDING_HUMAN_REVIEW`，
-> 只有团队成员实际审核后才能改为 `HUMAN_REVIEWED` 或 `ACCEPTED`。
+> **AI 接手强制前置**：在任何实质修改前，完整阅读根目录 `AGENTS.md`；该文件是
+> AEDL 当前 v1.4 Agent 执行层唯一规范。本 HANDOFF 提供项目状态与硬件证据边界；
+> `docs/compliance/AEDL_开发记录与AI使用规范_v1.0.md` 仅保留为历史基线与格式参考。
 
 ## 当前状态（2026-08-29）
 
@@ -11,6 +10,14 @@ M2 板级闭环完成：功能布局重建（J1 贴边/去耦靠 IC/SHT30 隔热
 DRC 从 5 条违规收敛到 0 → 8 项板级评审基于机器实测证据全部签发（`manufacturing_release=true`，
 具名评审人 sca331613-commits）→ delivery 全套重新导出 → 一键 runner **7/7 门禁 PASS，
 exit 0**。项目已获下单授权，等待嘉立创回件做 C 级实测。
+
+## Git / GitHub
+
+- 本地分支：`master`；当前已提交 HEAD 为 `9d74d9c`。
+- 私有远端：`https://github.com/sca331613-commits/AEDL`。
+- 2026-08-29 已创建并绑定 `origin`；远端当前为空，未 push。
+- AEDL AGENTS v1.4 与本次 repo 接入改动仍未提交，状态保持 `PENDING_HUMAN_REVIEW`。
+- 项目尚无 LICENSE，RES-001/RES-003 的再分发权仍为 `TO_VERIFY`，且 4 个已跟踪文件含本机用户路径；完成许可证、路径脱敏和公开内容审计前不得改为 public。
 
 一键命令：
 
@@ -33,8 +40,8 @@ SHT30 距最近热源 35.2mm（要求 >=10mm）；丝印 17/17 覆盖。证据�
 
 ## 关键文件
 
-- `AGENTS.md`：项目技术约束与 AEDL AI 开发强制收尾规则；所有 AI 的第一入口。
-- `docs/compliance/AEDL_开发记录与AI使用规范_v1.0.md`：项目内 AEDL 规范真源。
+- `AGENTS.md`：AEDL v1.4 Git/AIC/AI 使用与合规执行层唯一规范；所有 AI 的第一入口。
+- `docs/compliance/AEDL_开发记录与AI使用规范_v1.0.md`：历史基线与台账格式参考，不是当前并列执行真源。
 - `docs/compliance/README.md`：台账路由、适用起点和历史回填边界。
 - `gates/gate_core.py`：只消费结构化证据，缺字段、空 sheet、未知 severity 均失败关闭。
 - `gates/run_gates.py`：一键运行 KiCad ERC/DRC 并生成 manifest；不信任 KiCad 单独退出码。
@@ -65,4 +72,4 @@ SHT30 距最近热源 35.2mm（要求 >=10mm）；丝印 17/17 覆盖。证据�
 - 禁止把 Wokwi/host 单测/DRC 0 描述成实体硬件验证；C 级实测回件前不得宣称"板子能工作"。
 - 8 项评审结论基于机器几何实测 + DRC 0 违规签发；朝向/阻抗/气流/瞬态的实物复核待回件。
 - 禁止把当前板描述成已经完成的通用自主硬件 Agent；本轮只验证一块 ESP32-C3/SHT30 载板和门禁闭环。
-- 本分支未 push；下单动作由项目负责人执行。
+- 已绑定 private `origin`，但本分支未 push；下单动作由项目负责人执行。
