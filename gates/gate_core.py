@@ -255,6 +255,40 @@ def validate_board_review(path: Path) -> List[str]:
     elif not release:
         errors.append("manufacturing_release is false")
 
+        revocation = meta.get("release_revocation")
+        if not isinstance(revocation, dict):
+            errors.append("release_revocation must be an object when manufacturing_release is false")
+        else:
+            incident_id = revocation.get("incident_id")
+            if not isinstance(incident_id, str) or not incident_id.strip():
+                errors.append("release_revocation has no incident_id")
+
+            revoked_at = revocation.get("revoked_at")
+            if not isinstance(revoked_at, str):
+                errors.append("release_revocation revoked_at must be an ISO-8601 UTC string")
+            else:
+                try:
+                    parsed = datetime.fromisoformat(revoked_at.replace("Z", "+00:00"))
+                    if not revoked_at.endswith("Z") or parsed.utcoffset() is None:
+                        raise ValueError
+                except ValueError:
+                    errors.append(f"malformed release_revocation revoked_at: {revoked_at!r}")
+
+            reason = revocation.get("reason")
+            if not isinstance(reason, str) or not reason.strip():
+                errors.append("release_revocation has no reason")
+            if revocation.get("human_resign_required") is not True:
+                errors.append("release_revocation must require human re-sign")
+
+            superseded = revocation.get("superseded_signoff")
+            if not isinstance(superseded, dict):
+                errors.append("release_revocation superseded_signoff must be an object")
+            else:
+                for field in ("reviewer", "reviewed_at", "auto_evidence", "drc_evidence"):
+                    value = superseded.get(field)
+                    if not isinstance(value, str) or not value.strip():
+                        errors.append(f"release_revocation superseded_signoff has no {field}")
+
     reviewed_at = meta.get("reviewed_at")
     if reviewed_at is not None:
         if not isinstance(reviewed_at, str):

@@ -1,11 +1,24 @@
 {
   "_meta": {
-    "reviewer": "sca331613-commits",
-    "reviewed_at": "2026-08-29T08:13:39Z",
-    "manufacturing_release": true,
-    "note": "8 项评审基于 board_review_auto.json 机器实测证据 + g4_drc_current.json（0 违规 0 未连接）签发；实物级验证（上电、功耗、BLE 距离、温湿度、瞬态、外壳配合）回件后另行执行。",
+    "reviewer": null,
+    "reviewed_at": null,
+    "manufacturing_release": false,
+    "note": "原 2026-08-29 签发已因硬件语义缺陷撤销。当前不得下单；修复并生成独立语义证据后仍须由人工重新审核签发。实体级验证继续保持未执行。",
     "auto_evidence": "notes/m2-evidence-reset/generated/board_review_auto.json",
-    "drc_evidence": "notes/m2-evidence-reset/generated/g4_drc_current.json"
+    "drc_evidence": "notes/m2-evidence-reset/generated/g4_drc_current.json",
+    "release_revocation": {
+      "incident_id": "PIT-20260830-001",
+      "revoked_at": "2026-08-29T16:58:02Z",
+      "reason": "独立数据手册复核确认 USB D+/D- 接反、SHT30 ADDR 悬空且 nRESET 处理不符合建议，同时缺少 ESP32-C3 EN RC、GPIO9 上拉和 USB 串联电阻；原门禁只验证了错误意图的一致性，不能继续支持制造放行。",
+      "human_resign_required": true,
+      "superseded_signoff": {
+        "reviewer": "sca331613-commits",
+        "reviewed_at": "2026-08-29T08:13:39Z",
+        "auto_evidence": "notes/m2-evidence-reset/generated/board_review_auto.json",
+        "drc_evidence": "notes/m2-evidence-reset/generated/g4_drc_current.json",
+        "board_review_sha256_before_revocation": "a1681ca910164397f27afdf0b9a2349cba7b040e9e2fc047b19217a97e9eb02f"
+      }
+    }
   },
   "reviews": [
     {

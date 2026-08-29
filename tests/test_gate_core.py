@@ -128,6 +128,57 @@ class GateCoreTests(unittest.TestCase):
 
             self.assertEqual(validate_board_review(review_path), [])
 
+    def test_current_board_review_release_is_revoked_after_semantic_escape(self):
+        review = json.loads((ROOT / "gates/board_review_v1.json").read_text(encoding="utf-8"))
+        meta = review["_meta"]
+        self.assertIs(meta["manufacturing_release"], False)
+        revocation = meta["release_revocation"]
+        self.assertEqual(revocation["incident_id"], "PIT-20260830-001")
+        self.assertIs(revocation["human_resign_required"], True)
+        self.assertEqual(revocation["superseded_signoff"]["reviewer"], "sca331613-commits")
+        self.assertTrue(revocation["superseded_signoff"]["auto_evidence"])
+        self.assertTrue(revocation["superseded_signoff"]["drc_evidence"])
+
+    def test_revoked_board_review_requires_audit_metadata(self):
+        required_ids = (
+            "USB_EDGE",
+            "ESP_ANTENNA",
+            "GROUND_RETURN",
+            "DECOUPLING",
+            "USB_ROUTING",
+            "SHT30_THERMAL",
+            "PROTECTION",
+            "ASSEMBLY",
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            review_path = Path(temp_dir) / "review.json"
+            review_path.write_text(
+                json.dumps(
+                    {
+                        "_meta": {
+                            "reviewer": None,
+                            "reviewed_at": None,
+                            "manufacturing_release": False,
+                        },
+                        "reviews": [
+                            {
+                                "id": item_id,
+                                "item": item_id,
+                                "status": "pass",
+                                "evidence": "historical measured evidence",
+                                "decision": "historical decision",
+                            }
+                            for item_id in required_ids
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            errors = validate_board_review(review_path)
+
+        self.assertTrue(any("release_revocation must be an object" in error for error in errors))
+
     def test_malformed_structured_reports_fail_closed(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
