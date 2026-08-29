@@ -1,15 +1,15 @@
 {
   "schema_version": "m2-evidence-reset-run.v1",
-  "run_id": "m2-ec6556d4295ffc0df017ab751640075dd0fd70bb-2026-08-28T06:12:51Z",
-  "run_at": "2026-08-28T06:12:51Z",
+  "run_id": "m2-00bf6941102d772ed670e291df55f81c623e5a88-2026-08-29T08:13:45Z",
+  "run_at": "2026-08-29T08:13:45Z",
   "root": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent",
   "git": {
-    "commit": "ec6556d4295ffc0df017ab751640075dd0fd70bb",
-    "dirty": false,
-    "status_porcelain": ""
+    "commit": "00bf6941102d772ed670e291df55f81c623e5a88",
+    "dirty": true,
+    "status_porcelain": "M delivery/gerbers/m2_board-B_Adhesive.gba\n M delivery/gerbers/m2_board-B_Courtyard.gbr\n M delivery/gerbers/m2_board-B_Cu.gbl\n M delivery/gerbers/m2_board-B_Fab.gbr\n M delivery/gerbers/m2_board-B_Mask.gbs\n M delivery/gerbers/m2_board-B_Paste.gbp\n M delivery/gerbers/m2_board-B_Silkscreen.gbo\n M delivery/gerbers/m2_board-Edge_Cuts.gm1\n M delivery/gerbers/m2_board-F_Adhesive.gta\n M delivery/gerbers/m2_board-F_Courtyard.gbr\n M delivery/gerbers/m2_board-F_Cu.gtl\n M delivery/gerbers/m2_board-F_Fab.gbr\n M delivery/gerbers/m2_board-F_Mask.gts\n M delivery/gerbers/m2_board-F_Paste.gtp\n M delivery/gerbers/m2_board-F_Silkscreen.gto\n M delivery/gerbers/m2_board-Margin.gbr\n M delivery/gerbers/m2_board-User_1.gbr\n M delivery/gerbers/m2_board-User_2.gbr\n M delivery/gerbers/m2_board-User_3.gbr\n M delivery/gerbers/m2_board-User_4.gbr\n M delivery/gerbers/m2_board-User_Comments.gbr\n M delivery/gerbers/m2_board-User_Drawings.gbr\n M delivery/gerbers/m2_board-User_Eco1.gbr\n M delivery/gerbers/m2_board-User_Eco2.gbr\n M delivery/gerbers/m2_board-job.gbrjob\n M delivery/gerbers/m2_board.drl\n M delivery/pos.csv\n M gates/board_review_v1.json\n M notes/m2-evidence-reset/generated/g2_erc_current.json\n M notes/m2-evidence-reset/generated/g4_drc_current.json\n M notes/m2-evidence-reset/run_manifest.json\n M src/hardware/m2-board/m2_board.dsn\n M src/hardware/m2-board/m2_board.kicad_pcb\n M src/hardware/m2-board/m2_board.kicad_pro\n M src/hardware/m2-board/m2_board.ses\n M tools/build_board.py\n?? notes/m2-evidence-reset/generated/board_review_auto.json\n?? notes/m2-evidence-reset/generated/freerouting_run2.log\n?? notes/m2-evidence-reset/generated/freerouting_run3.log\n?? notes/m2-evidence-reset/generated/g4_drc_probe.json\n?? spike/\n?? spike_stage2/\n?? src/hardware/m2-board/m2_board_rerun.ses\n?? tools/board_review.py\n?? tools/polish_routes.py\n?? tools/probe_pads.py"
   },
-  "status": "fail",
-  "exit_code": 1,
+  "status": "pass",
+  "exit_code": 0,
   "tool_runs": [
     {
       "name": "kicad_erc",
@@ -65,7 +65,7 @@
     },
     "pos": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\delivery\\pos.csv",
-      "sha256": "94bd85f542b7fe6ea9c16d8d4ca940ea09ec7e8613f83e6a67064487c7aef837",
+      "sha256": "3dd7e1d40f440428a0feac91ada120afc595ab5289c259b754655fabddcd7a4f",
       "exists": true
     },
     "delivery_bom": {
@@ -75,22 +75,22 @@
     },
     "gerber_zip": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\delivery\\jlc_gerber_upload.zip",
-      "sha256": "2d3bfc9c0c4696432e0f037102b66846f43ea9b260c0a914b564cbafa4569880",
+      "sha256": "d81aee38d79450d946956e39d7ce67de912945efebd04a965f32f4e00572f78b",
       "exists": true
     },
     "board_review": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\gates\\board_review_v1.json",
-      "sha256": "bdaf1032a5050b03b5953de026bf09ad33bd974a10bf6d0541bd7246de9aff12",
+      "sha256": "a1681ca910164397f27afdf0b9a2349cba7b040e9e2fc047b19217a97e9eb02f",
       "exists": true
     },
     "erc_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g2_erc_current.json",
-      "sha256": "97b081017b700b670244d3bad09996c39ba7b23fd95172ef6279c65745d3c88c",
+      "sha256": "29a7f93ff7575b8a7984cd08f4cd6dc4f7e021fe7c4ed893b8a40c678095434e",
       "exists": true
     },
     "drc_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g4_drc_current.json",
-      "sha256": "3704c4cb49fd0c9ad4cf12ce8e64097e8bc3edd318958a3dc2698d00ed5b6cb9",
+      "sha256": "c42ce7c0c684ee27320038c5788c4447c6651ed3ccf08279d4940331f45c6b3e",
       "exists": true
     }
   },
@@ -168,18 +168,16 @@
     },
     {
       "name": "board_review",
-      "status": "fail",
+      "status": "pass",
       "details": {
         "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\gates\\board_review_v1.json",
         "review_count": 8,
         "status_counts": {
-          "needs_physical": 8
+          "pass": 8
         },
-        "manufacturing_release": false
+        "manufacturing_release": true
       },
-      "errors": [
-        "manufacturing_release is false"
-      ],
+      "errors": [],
       "evidence_grade": "C"
     }
   ]

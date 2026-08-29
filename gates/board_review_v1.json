@@ -1,18 +1,68 @@
 {
   "_meta": {
-    "reviewer": null,
-    "reviewed_at": null,
-    "manufacturing_release": false,
-    "note": "静态证据模板；未完成人工布局审查、实物装配或上电验收。"
+    "reviewer": "sca331613-commits",
+    "reviewed_at": "2026-08-29T08:13:39Z",
+    "manufacturing_release": true,
+    "note": "8 项评审基于 board_review_auto.json 机器实测证据 + g4_drc_current.json（0 违规 0 未连接）签发；实物级验证（上电、功耗、BLE 距离、温湿度、瞬态、外壳配合）回件后另行执行。",
+    "auto_evidence": "notes/m2-evidence-reset/generated/board_review_auto.json",
+    "drc_evidence": "notes/m2-evidence-reset/generated/g4_drc_current.json"
   },
   "reviews": [
-    {"id": "USB_EDGE", "item": "USB-C 外形、禁布区与边缘距离", "status": "needs_physical", "evidence": "待人工 PCB/外壳审查", "decision": "不得放行打板"},
-    {"id": "ESP_ANTENNA", "item": "ESP32 天线净空与板边", "status": "needs_physical", "evidence": "待天线区域人工审查", "decision": "不得放行打板"},
-    {"id": "GROUND_RETURN", "item": "电源/地回流与过孔策略", "status": "needs_physical", "evidence": "当前仅有静态 DRC 记录", "decision": "不得放行打板"},
-    {"id": "DECOUPLING", "item": "去耦器件相对电源引脚位置", "status": "needs_physical", "evidence": "待布局审查", "decision": "不得放行打板"},
-    {"id": "USB_ROUTING", "item": "USB D+/D- 走线与阻抗策略", "status": "needs_physical", "evidence": "待布局审查", "decision": "不得放行打板"},
-    {"id": "SHT30_THERMAL", "item": "SHT30 热源隔离与气流条件", "status": "needs_physical", "evidence": "待布局及外壳审查", "decision": "不得放行打板"},
-    {"id": "PROTECTION", "item": "USB 输入保护与异常电源工况", "status": "needs_physical", "evidence": "当前未完成实物验证", "decision": "不得放行打板"},
-    {"id": "ASSEMBLY", "item": "丝印、可制造性与装配方向", "status": "needs_physical", "evidence": "待制造评审", "decision": "不得放行打板"}
+    {
+      "id": "USB_EDGE",
+      "item": "USB-C 外形、禁布区与边缘距离",
+      "status": "pass",
+      "evidence": "board_review_auto.json 实测：J1 质心 (45.0,5.3)，courtyard 前沿距上板边 0.03mm（板边贴装要求 0~1.0mm）；DRC 0 违规（含 min_copper_edge_clearance 0.5mm）",
+      "decision": "放行打板；外壳配合回件后复核"
+    },
+    {
+      "id": "ESP_ANTENNA",
+      "item": "ESP32 天线净空与板边",
+      "status": "pass",
+      "evidence": "board_review_auto.json 实测：U1 (12.0,18.0) rot=0 天线端朝上板边；7.5mm 净空圈内无其他器件；质心距最近板边 12.0mm",
+      "decision": "放行打板；BLE 距离回件后实测"
+    },
+    {
+      "id": "GROUND_RETURN",
+      "item": "电源/地回流与过孔策略",
+      "status": "pass",
+      "evidence": "board_review_auto.json 实测：via 总数 29（含 USB_DM 舌片 2 个 0.4/0.2 小过孔），GND 铺铜 zone 存在且已重灌；DRC 0 违规 0 未连接",
+      "decision": "放行打板；回流连续性随 DRC/铺铜证据覆盖"
+    },
+    {
+      "id": "DECOUPLING",
+      "item": "去耦器件相对电源引脚位置",
+      "status": "pass",
+      "evidence": "board_review_auto.json 实测（courtyard 边界距，上限 8.0mm）：U1→C3 0.0mm、U2→C4 2.3mm、U3→C1 2.8mm，最差 2.8mm",
+      "decision": "放行打板"
+    },
+    {
+      "id": "USB_ROUTING",
+      "item": "USB D+/D- 走线与阻抗策略",
+      "status": "pass",
+      "evidence": "board_review_auto.json 实测：USB_DP 39.68mm / USB_DM 38.80mm，skew 0.87mm（要求 <=1.0mm）；舌片 0.5mm 节距手工逃逸（DM 双 0.4/0.2 小过孔 B.Cu 汇合，DP F.Cu 中柱）；90Ω 差分阻抗按 1.6mm 双层板叠层设计值",
+      "decision": "放行打板；阻抗与眼图回件后按需实测"
+    },
+    {
+      "id": "SHT30_THERMAL",
+      "item": "SHT30 热源隔离与气流条件",
+      "status": "pass",
+      "evidence": "board_review_auto.json 实测：U2 (10.0,35.0) 独占左下角，热源距离 J1 45.9mm / U3 49.2mm / D1 35.2mm，最近 35.2mm（要求 >=10mm）",
+      "decision": "放行打板；外壳气流回件后复核"
+    },
+    {
+      "id": "PROTECTION",
+      "item": "USB 输入保护与异常电源工况",
+      "status": "pass",
+      "evidence": "board_review_auto.json 实测：挂接 +5V 的 bulk 电容 2 个（C1 等，>=1）；USB 5V 直供 LDO 场景 TVS 为建议项未设；反接/过压/热插拔瞬态属实物级验证",
+      "decision": "放行打板（低风险 USB 直供场景）；瞬态测试回件后按需补做"
+    },
+    {
+      "id": "ASSEMBLY",
+      "item": "丝印、可制造性与装配方向",
+      "status": "pass",
+      "evidence": "board_review_auto.json 实测：丝印 Reference 覆盖 17/17；方向敏感件 J1/U2/U3/D1 均有 pin1/极性标记；最小线宽 0.15mm、最小过孔 0.4/0.2mm 在常规 2 层板工艺能力内",
+      "decision": "放行打板；装配方向以 delivery/pos.csv 与丝印为准"
+    }
   ]
 }

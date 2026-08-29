@@ -32,6 +32,32 @@ FP_MAP = {
     "C4": ("Capacitor_SMD", "C_0603_1608Metric"),
 }
 
+# 布局 v2 — 功能布局覆盖表（质心 mm，rot 度）。
+# v1 纯面积装箱导致三类板级评审 FAIL（见 notes/m2-evidence-reset/generated/board_review_auto.json）：
+#   1) J1 未贴板边（USB_EDGE）      → J1 贴上边（y=3.75 ≈ 连接器深度 7.45mm 之半）
+#   2) 去耦电容远离 IC（DECOUPLING）→ C1→U3 入口 / C2→U3 出口 / C3→U1 / C4→U2 就近
+#   3) SHT30 距 LDO 5.3mm（THERMAL）→ U2 独占左下角，距 U3/J1/D1 均 >=30mm
+# 另：U1 天线端（-Y）朝上板边且 7.5mm 净空圈内无器件（ESP_ANTENNA）。
+PLACEMENT = {
+    "J1": (45.0, 5.3, 0),     # USB-C 贴上板边：courtyard 前沿距边 0.55mm，舌片焊盘顶距边 0.53mm（>=0.5 DRC 约束）
+    "U1": (12.0, 18.0, 0),    # ESP32 天线朝上（最近边），左侧
+    "U3": (54.0, 13.0, 0),    # LDO 右上，J1 下方
+    "C1": (54.0, 8.5, 0),     # +5V bulk，U3 入口旁
+    "C2": (49.0, 13.0, 0),    # +3V3 bulk，U3 出口旁
+    "C3": (23.5, 12.0, 0),    # U1 电源去耦，贴 U1 右边界
+    "U2": (10.0, 35.0, 0),    # SHT30 左下角，远离热源
+    "C4": (14.0, 35.0, 0),    # U2 去耦旁
+    "R5": (40.0, 11.5, 0),    # CC1 下拉，J1 下方（避开 J1 courtyard）
+    "R6": (44.0, 11.5, 0),    # CC2 下拉，J1 下方
+    "R3": (23.5, 26.0, 0),    # EN 上拉，U1 右侧
+    "R1": (23.0, 31.0, 0),    # I2C SDA 上拉，U1/U2 之间
+    "R2": (23.0, 34.0, 0),    # I2C SCL 上拉
+    "SW1": (29.0, 33.0, 0),   # EN 按键
+    "SW2": (37.0, 36.0, 0),   # BOOT 按键
+    "R4": (38.0, 26.0, 0),    # LED 限流
+    "D1": (44.0, 26.0, 0),    # LED
+}
+
 W, H = 60.0, 40.0
 MARGIN = 3.0
 GAP = 1.5
@@ -100,6 +126,7 @@ def main(argv=None):
     TRACK, CLR, VIA_D, VIA_DRILL = 0.2, 0.18, 0.6, 0.3
     MIN_TRACK = 0.15
     MIN_DRILL = 0.2
+    MIN_VIA_D = 0.4  # 舌片 0.5mm 节距走廊放不下 0.6 过孔，允许 0.4/0.2 小过孔
     nc.SetTrackWidth(pcbnew.FromMM(TRACK))
     nc.SetClearance(pcbnew.FromMM(CLR))
     nc.SetViaDiameter(pcbnew.FromMM(VIA_D))
@@ -111,8 +138,8 @@ def main(argv=None):
         ("m_TrackMinWidth", MIN_TRACK),
         ("m_MinThroughDrill", MIN_DRILL),
         ("m_MinClearance", CLR),
-        ("m_ViasMinSize", VIA_D),
-        ("m_ViasMinDrill", VIA_DRILL),
+        ("m_ViasMinSize", MIN_VIA_D),
+        ("m_ViasMinDrill", MIN_DRILL),
     ):
         if hasattr(ds, attr):
             try:
@@ -142,11 +169,22 @@ def main(argv=None):
         sizes[ref] = fp_bbox_mm(fp, pcbnew)
 
     order = sorted(sizes, key=lambda r: -(sizes[r][0] * sizes[r][1]))
+
+    # 布局 v2：PLACEMENT 覆盖的器件用功能位（rot 全为 0）；其余回退货架装箱
+    pos_mm = {}
+    for ref in order:
+        if ref in PLACEMENT:
+            cx, cy, _rot = PLACEMENT[ref]
+            pos_mm[ref] = (cx, cy)
+            loaded[ref].SetPosition(pcbnew.VECTOR2I(pcbnew.FromMM(cx), pcbnew.FromMM(cy)))
+            board.Add(loaded[ref])
+
     x = MARGIN
     y = MARGIN
     row_h = 0.0
-    pos_mm = {}
     for ref in order:
+        if ref in PLACEMENT:
+            continue  # 已按功能位放置
         w, h = sizes[ref]
         if x + w > W - MARGIN:
             x = MARGIN
@@ -180,6 +218,70 @@ def main(argv=None):
     floating = sum(
         1 for fp in loaded.values() for pad in fp.Pads() if not pad.GetNetname()
     )
+
+    # J1 手工扇出：0.5mm 舌片节距下 freerouting 无法自行逃逸的焊盘。
+    # 几何依据（J1@45,5.3，舌片焊盘底边 y=1.98，定位 NPTH @ (42.11/47.89, 2.7) r=0.325，
+    # 孔-铜净距约束 0.25 → 走线中心距孔心 >= 0.65）：
+    #   A6(USB_DP)/A7(USB_DM) 直下即可（相邻逃逸柱中心距 0.5，净距 0.3 >= 0.18）；
+    #   A9(+5V) 与右 NPTH 水平距仅 0.65 → 0.15mm 细线贴净空边缘下钻 B.Cu 后交给 freerouting；
+    #   B5(CC2) 过孔 (46.45, 3.15) 避开 A9 走廊与 USB_DP 汇合横线（净距 >=0.48）。
+    # 2026-08-29 实测（freerouting 日志）：fanout 阶段 61 个 SMD 焊盘仅 A7 逃逸失败
+    # → USB_DM 永久未连接，必须手工补对称逃逸柱；+5V 深回廊 (44.6,12.81) 是按
+    # 历史布线主流硬编码的，重建后堵死 C1-1 接入通道（via→C1-1 unrouted）→ 删除。
+    def fanout(net_name, pts, layer, width):
+        net = net_items[net_name]
+        for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
+            tr = pcbnew.PCB_TRACK(board)
+            tr.SetNet(net)
+            tr.SetLayer(layer)
+            tr.SetStart(pcbnew.VECTOR2I(pcbnew.FromMM(x1), pcbnew.FromMM(y1)))
+            tr.SetEnd(pcbnew.VECTOR2I(pcbnew.FromMM(x2), pcbnew.FromMM(y2)))
+            tr.SetWidth(pcbnew.FromMM(width))
+            board.Add(tr)
+
+    def fanout_via(net_name, x, y, size=0.6, drill=0.3):
+        v = pcbnew.PCB_VIA(board)
+        v.SetNet(net_items[net_name])
+        v.SetViaType(pcbnew.VIATYPE_THROUGH)
+        v.SetPosition(pcbnew.VECTOR2I(pcbnew.FromMM(x), pcbnew.FromMM(y)))
+        v.SetWidth(pcbnew.FromMM(size))
+        v.SetDrill(pcbnew.FromMM(drill))
+        board.Add(v)
+
+    # USB 差分对四焊盘交错（B7/DM=44.25, A6/DP=44.75, A7/DM=45.25, B6/DP=45.75，
+    # 全 F.Cu、0.5mm 节距）：0.6mm 过孔需与相邻走线中心距 >=0.58，走廊里放不下
+    # → DM 两焊盘就近下 0.4/0.2 小过孔（环宽 0.1/孔径 0.2 = 约束下限）转 B.Cu 汇合；
+    #   DP 在 F.Cu 于 y=2.8 汇合（A7 过孔底缘 y=2.5，净距 0.2）后中柱下行。
+    fanout("USB_DM", [(44.25, 1.9), (44.25, 2.3)], pcbnew.F_Cu, 0.2)
+    fanout_via("USB_DM", 44.25, 2.3, 0.4, 0.2)
+    fanout("USB_DM", [(45.25, 1.9), (45.25, 2.3)], pcbnew.F_Cu, 0.2)
+    fanout_via("USB_DM", 45.25, 2.3, 0.4, 0.2)
+    # B.Cu 两小过孔直连（中心距 1.0，边缘净距 0.6），无悬空端；逃逸由 freerouting 从过孔续接
+    fanout("USB_DM", [(44.25, 2.3), (45.25, 2.3)], pcbnew.B_Cu, 0.2)
+
+    fanout("USB_DP", [(44.75, 1.9), (44.75, 2.8)], pcbnew.F_Cu, 0.2)
+    fanout("USB_DP", [(45.75, 1.9), (45.75, 2.8)], pcbnew.F_Cu, 0.2)
+    fanout("USB_DP", [(44.75, 2.8), (45.25, 2.8), (45.25, 5.2)], pcbnew.F_Cu, 0.2)
+    fanout("USB_DP", [(45.75, 2.8), (45.25, 2.8)], pcbnew.F_Cu, 0.2)
+
+    # A9/B4 +5V：贴 NPTH 净空边缘下钻 B.Cu，后续交给 freerouting
+    fanout("+5V", [(47.2, 1.9), (47.2, 3.6)], pcbnew.F_Cu, 0.15)
+    fanout_via("+5V", 47.2, 3.6)
+
+    # B5 CC2：过孔置于 USB_DP 汇合横线与 +5V 逃逸柱之间
+    #   (46.45,3.15) 距 DP 横线端点 (45.75,2.8) 0.78、距 +5V 过孔 (47.2,3.6) 0.87（均 >=0.58/0.78）
+    fanout("CC2", [(46.75, 1.9), (46.75, 2.3), (46.45, 3.15)], pcbnew.F_Cu, 0.2)
+    fanout_via("CC2", 46.45, 3.15)
+    fanout("CC2", [(46.45, 3.15), (46.45, 4.4)], pcbnew.B_Cu, 0.2)
+
+    # J1 Reference 丝印默认在封装外上方 rel(0,-5.645)，贴边放置会超出板外 → 移到左侧板内
+    j1_ref = loaded["J1"].Reference()
+    try:
+        j1_ref.SetPos0(pcbnew.VECTOR2I(pcbnew.FromMM(-6.3), pcbnew.FromMM(0.0)))
+    except Exception:
+        j1_ref.SetPosition(
+            pcbnew.VECTOR2I(pcbnew.FromMM(45.0 - 6.3), pcbnew.FromMM(5.3))
+        )
 
     def seg(x1, y1, x2, y2):
         sh = pcbnew.PCB_SHAPE(board)

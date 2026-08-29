@@ -1,0 +1,134 @@
+{
+  "generated_at": "2026-08-29T08:10:48Z",
+  "pcb": "src\\hardware\\m2-board\\m2_board.kicad_pcb",
+  "board_outline_mm": [
+    0.0,
+    0.0,
+    60.0,
+    40.0
+  ],
+  "footprint_count": 17,
+  "nets": [
+    "+3V3",
+    "+5V",
+    "BOOT",
+    "CC1",
+    "CC2",
+    "EN",
+    "GND",
+    "LED_A",
+    "LED_DRV",
+    "SCL",
+    "SDA",
+    "USB_DM",
+    "USB_DP"
+  ],
+  "reviews": [
+    {
+      "id": "USB_EDGE",
+      "status": "pass",
+      "evidence": "USB-C J1 质心 (45.0,5.3)，courtyard 前沿距上板边 0.03mm（板边贴装要求 0~1.0mm）；外形/禁布区与外壳配合需评审人在 PCB 渲染中目检",
+      "measured": {
+        "courtyard_front_to_edge_mm": 0.03
+      }
+    },
+    {
+      "id": "ESP_ANTENNA",
+      "status": "pass",
+      "evidence": "ESP32-C3 U1 (12.0,18.0) rot=0.0; 质心距板边 12.00mm；7.5mm 净空圈内器件: 无；天线端朝向=板边(正确)（按 WROOM-02 天线在 -Y 端、rot=0.0deg 推断）",
+      "measured": {
+        "edge_distance_mm": 12.0,
+        "keepout_intruders": [],
+        "antenna_facing_edge": true
+      }
+    },
+    {
+      "id": "GROUND_RETURN",
+      "status": "pass",
+      "evidence": "via 总数=29，铺铜 zone 存在=True；USB_DP/DM 下方与 SHT30 周边的地回流连续性需评审人在 KiCad 渲染中确认",
+      "measured": {
+        "via_count": 29,
+        "zones": true
+      }
+    },
+    {
+      "id": "DECOUPLING",
+      "status": "pass",
+      "evidence": "IC→最近去耦电容距离（courtyard 边界距，上限 8.0mm）：[{\"ic\": \"U2\", \"nearest_cap\": \"C4\", \"boundary_distance_mm\": 2.3}, {\"ic\": \"U1\", \"nearest_cap\": \"C3\", \"boundary_distance_mm\": 0.0}, {\"ic\": \"U3\", \"nearest_cap\": \"C1\", \"boundary_distance_mm\": 2.8}]",
+      "measured": {
+        "worst_distance_mm": 2.8,
+        "ics": [
+          {
+            "ic": "U2",
+            "nearest_cap": "C4",
+            "boundary_distance_mm": 2.3
+          },
+          {
+            "ic": "U1",
+            "nearest_cap": "C3",
+            "boundary_distance_mm": 0.0
+          },
+          {
+            "ic": "U3",
+            "nearest_cap": "C1",
+            "boundary_distance_mm": 2.8
+          }
+        ]
+      }
+    },
+    {
+      "id": "USB_ROUTING",
+      "status": "pass",
+      "evidence": "USB 差分对走线长度(mm)：{'USB_DP': 39.68, 'USB_DM': 38.8}；skew=0.87mm（要求 <= 1.0mm）；90Ω 差分阻抗需按 1.6mm 双层板叠层计算复核",
+      "measured": {
+        "lengths_mm": {
+          "USB_DP": 39.68,
+          "USB_DM": 38.8
+        },
+        "skew_mm": 0.87
+      }
+    },
+    {
+      "id": "SHT30_THERMAL",
+      "status": "pass",
+      "evidence": "SHT30 U2 (10.0,35.0)；热源距离：[('J1', 45.9), ('U3', 49.2), ('D1', 35.2)]；最近 D1 @35.2mm（要求 >= 10.0mm）；外壳气流需实物复核",
+      "measured": {
+        "nearest_heat_source_mm": 35.2
+      }
+    },
+    {
+      "id": "PROTECTION",
+      "status": "pass",
+      "evidence": "PCB 实测：挂接 +5V 的电容 2 个（bulk 要求 >=1）；原理图 TVS/ESD 器件=False（USB 5V 直供 LDO 场景为建议项）；反接/过压/热插拔瞬态属实物级验证",
+      "measured": {
+        "vbus_caps": 2,
+        "tvs": false
+      }
+    },
+    {
+      "id": "ASSEMBLY",
+      "status": "pass",
+      "evidence": "丝印 Reference 覆盖 17/17；方向敏感件（pin1/极性）：['J1', 'U2', 'U3', 'D1']；装配方向与工艺备注由评审人在装配图上确认",
+      "measured": {
+        "silk_missing": [],
+        "polarity_parts": [
+          "J1",
+          "U2",
+          "U3",
+          "D1"
+        ]
+      }
+    }
+  ],
+  "summary": {
+    "USB_EDGE": "pass",
+    "ESP_ANTENNA": "pass",
+    "GROUND_RETURN": "pass",
+    "DECOUPLING": "pass",
+    "USB_ROUTING": "pass",
+    "SHT30_THERMAL": "pass",
+    "PROTECTION": "pass",
+    "ASSEMBLY": "pass"
+  },
+  "note": "机器测量证据；朝向/阻抗/气流/瞬态等无法静态判定项已在 evidence 中标注，需具名评审人在 KiCad 中复核后签发 manufacturing_release。"
+}
