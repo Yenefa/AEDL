@@ -13,10 +13,10 @@ exit 0**。项目已获下单授权，等待嘉立创回件做 C 级实测。
 
 ## Git / GitHub
 
-- 本地分支：`master`；当前已提交 HEAD 为 `9d74d9c`。
+- 本地分支：`master`；当前已提交 HEAD 为 `c7f4dda`。
 - 私有远端：`https://github.com/sca331613-commits/AEDL`。
 - 2026-08-29 已创建并绑定 `origin`；远端当前为空，未 push。
-- AEDL AGENTS v1.4 与本次 repo 接入改动仍未提交，状态保持 `PENDING_HUMAN_REVIEW`。
+- AEDL AGENTS v1.4 与 repo 接入改动已本地提交为 `c7f4dda`；本次 AI 使用披露同步仍未提交，状态保持 `PENDING_HUMAN_REVIEW`。
 - 项目尚无 LICENSE，RES-001/RES-003 的再分发权仍为 `TO_VERIFY`，且 4 个已跟踪文件含本机用户路径；完成许可证、路径脱敏和公开内容审计前不得改为 public。
 
 一键命令：

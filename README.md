@@ -15,6 +15,14 @@ AEDL 当前 v1.4 Agent 执行层唯一规范；项目实时状态另见 `docs/HA
 `AGENTS.md` 的触发条件更新。`docs/compliance/AEDL_开发记录与AI使用规范_v1.0.md`
 保留为历史基线与格式参考，不再作为与根 `AGENTS.md` 并列的当前执行规范。
 
+## AI 使用披露
+
+- 截至 2026-08-29，仓库中已登记、可审计的 AI 贡献使用 **OpenAI Codex desktop**；具体任务、产出与审核状态见 `docs/compliance/AI_USAGE_LOG.md`。
+- `AI-20260829-001` 至 `AI-20260829-004` 的运行环境未提供可核验的精确模型 ID，因此模型如实记为 `UNKNOWN`；不得根据客户端名称反推具体模型版本。
+- 当前 `AI-20260829-005` 运行上下文只确认该 Codex Agent **基于 GPT-5**，精确部署型号/版本仍为 `UNKNOWN`。
+- `OpenCode / Claude Code` 是本项目计划支持的 Agent 底座，不等于本阶段实际使用记录；合规台账建立前的历史工作使用了哪些 AI 仍为 `UNKNOWN`，不做倒推回填。
+- GitHub CLI 是仓库操作工具，不是 AI 模型或 AI Agent。
+
 ## 技术栈
 
 - Agent 底座：OpenCode / Claude Code（skills + MCP）

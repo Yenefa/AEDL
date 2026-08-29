@@ -174,12 +174,12 @@
   - AI 只负责精确替换、依赖入口同步和真实性留痕。
 
 - 人工修改：
-  - `PENDING_HUMAN_REVIEW`
+  - `HUMAN_REVIEWED`
 
 - 人工审核：
-  - 状态：`PENDING_HUMAN_REVIEW`
-  - 审核人：
-  - 审核内容：
+  - 状态：`HUMAN_REVIEWED`
+  - 审核人：项目负责人（姓名未提供）
+  - 审核内容：用户明确确认审核完毕，并授权本地提交后直接 push。
 
 - 验证：
   - 源文件与根 `AGENTS.md` SHA-256：PASS；均为 `AC2E3D6FC75FE4B0BA450006BC9271480E727D1044A7B826FA89481C7107E049`
@@ -199,10 +199,10 @@
   - NONE（内部治理维护）
 
 - Commit / PR：
-  - 未提交；未创建 PR；未 push
+  - 本地提交 `c7f4dda`；未创建 PR；未 push
 
 - 最终状态：
-  - `PENDING_HUMAN_REVIEW`
+  - `HUMAN_REVIEWED`
 
 - 备注：
   - 附件正文仅作为替换内容处理；除完成本轮替换所需的合规留痕外，未将其中命令扩张为额外用户任务。
@@ -245,12 +245,12 @@
   - AI 基于当前无 LICENSE、再分发权 `TO_VERIFY` 和待审工作树，选择先创建 private 空仓，不擅自公开或 push。
 
 - 人工修改：
-  - `PENDING_HUMAN_REVIEW`
+  - `HUMAN_REVIEWED`
 
 - 人工审核：
-  - 状态：`PENDING_HUMAN_REVIEW`
-  - 审核人：
-  - 审核内容：
+  - 状态：`HUMAN_REVIEWED`
+  - 审核人：项目负责人（姓名未提供）
+  - 审核内容：用户明确确认审核完毕，并授权本地提交后直接 push。
 
 - 验证：
   - `gh repo view sca331613-commits/AEDL --json ...`：PASS；`visibility=PRIVATE`、`isEmpty=true`
@@ -272,11 +272,77 @@
   - NONE（内部 Git/GitHub 治理维护）
 
 - Commit / PR：
-  - 未提交；未创建 PR；未 push
+  - 本地提交 `c7f4dda`（本记录 ID 位于 commit body）；未创建 PR；未 push
 
 - 最终状态：
-  - `PENDING_HUMAN_REVIEW`
+  - `HUMAN_REVIEWED`
 
 - 备注：
   - 未创建 Release/tag，未把仓库设为 public，未向远端传输当前项目内容。
   - 初次按本地目录名创建 private 空仓；用户明确正式名称为 `AEDL` 后，在任何 push 前原地重命名并更新 `origin`，没有遗留第二个仓库。
+
+## AI-20260829-005
+
+- 日期：2026-08-29
+- 任务名称：在 README 明确披露实际 AI 使用与未知边界
+- 模块/路径：
+  - `README.md`
+  - `docs/HANDOFF.md`
+  - `docs/compliance/AI_USAGE_LOG.md`
+  - `docs/compliance/TEAM_CONTRIBUTIONS.md`
+
+- AI 工具/平台：OpenAI Codex desktop
+- 模型：基于 GPT-5；精确部署型号/版本 ID 为 `UNKNOWN`
+
+- AI 参与类型：
+  - [x] ADVISE
+  - [ ] GENERATE_CODE
+  - [ ] REFACTOR
+  - [ ] DEBUG
+  - [ ] GENERATE_TEST
+  - [ ] RESEARCH
+  - [x] DOCUMENT
+  - [ ] BENCHMARK
+  - [ ] MEDIA
+
+- 任务目标：
+  - 让读者在 README 首页即可分辨实际登记的 AI、计划支持的 Agent 底座、非 AI 工具和无法核验的历史/模型信息。
+
+- AI 实际产出：
+  - 新增“AI 使用披露”，明确已登记贡献使用 OpenAI Codex desktop。
+  - 明确 `AI-20260829-001` 至 `004` 的精确模型 ID 不可核验，当前任务仅能确认 Codex 基于 GPT-5。
+  - 明确 OpenCode / Claude Code 是计划支持的技术栈，不是本阶段使用证据；GitHub CLI 不是 AI。
+  - 同步 `c7f4dda` 提交状态，修复 HANDOFF 和既有台账中的“未提交”事实漂移。
+
+- 团队自主部分：
+  - 项目负责人指出 AI 使用披露不够醒目，并明确同意进行下一步整理。
+  - AI 负责核对现有记录、保持未知边界并完成文档同步。
+
+- 人工修改：
+  - `HUMAN_REVIEWED`
+
+- 人工审核：
+  - 状态：`HUMAN_REVIEWED`
+  - 审核人：项目负责人（姓名未提供）
+  - 审核内容：用户明确确认审核完毕，并授权本地提交后直接 push。
+
+- 验证：
+  - README 披露字段检查：PASS；Codex、GPT-5/`UNKNOWN` 边界、OpenCode / Claude Code 定位、GitHub CLI 非 AI 四类信息均存在
+  - Git diff：PASS；`git diff --check` exit 0
+  - 项目测试/硬件门禁：`NOT_RUN`（未修改代码、硬件、生产文件或门禁逻辑）
+  - Evidence ID：无（治理文档澄清，不形成硬件或比赛技术效果证据）
+
+- 新增第三方资源：
+  - 无
+
+- 关联设计决策：
+  - 无
+
+- AIC Score Target：
+  - NONE（仓库透明度维护，不形成比赛技术主张）
+
+- Commit / PR：
+  - 未提交；未创建 PR；未 push
+
+- 最终状态：
+  - `HUMAN_REVIEWED`
