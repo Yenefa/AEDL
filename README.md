@@ -8,6 +8,14 @@
 
 做一个单 Agent 自主嵌入式研发系统：用户只描述想做什么，Agent 自动完成技术调研、器件选型、电路设计、原理图、PCB、仿真、固件开发、调试和自动验证。本仓库当前以 ESP32-C3/SHT30 板为 M2 载体，重点验证可复现的门禁与证据链。当前 KiCad G2 ERC=0、G4 DRC=0/0、8 项板级评审基于机器实测证据全部签发（`manufacturing_release=true`），一键 runner exit 0，生产文件已授权嘉立创下单；实体板级验证（上电/BLE/温湿度精度/瞬态）待回件后执行。
 
+## AI 开发必读
+
+任何 AI Agent 在本仓库产生实质贡献前，必须先读根目录 `AGENTS.md`、
+`docs/compliance/AEDL_开发记录与AI使用规范_v1.0.md` 和
+`docs/compliance/README.md`；收尾前按实际工作更新 AI 使用、第三方资源、工程决策与
+Evidence 台账。AI 新增记录默认保持 `PENDING_HUMAN_REVIEW`；只有团队成员实际审核后，
+才能据实改为 `HUMAN_REVIEWED` 或 `ACCEPTED`，AI 不得自行声称已人工审核。
+
 ## 技术栈
 
 - Agent 底座：OpenCode / Claude Code（skills + MCP）
@@ -32,6 +40,8 @@ python tools\md2docx.py docs\report-draft.md "docs\单Agent自主嵌入式研发
 | --------- | --------------------------------------------- |
 | `src/`    | 硬件（m2-board 原理图/PCB/intent）与固件源码   |
 | `docs/`   | 调研报告、HANDOFF.md、M2 测试报告、板级工程评审 |
+| `docs/compliance/` | AEDL AI 使用规范、AI/第三方资源/决策/团队贡献台账 |
+| `docs/evidence/` | 可验证主张与原始 evidence 的索引 |
 | `notes/`  | 各里程碑证据（ERC/DRC/评审/manifest，机器生成）|
 | `assets/` | 静态资源（架构图等）                          |
 | `gates/`  | 失败关闭门禁（run_gates.py + gate_core.py + bom/board_review 真源）|

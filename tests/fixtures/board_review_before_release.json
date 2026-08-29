@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "reviewer": null,
+    "reviewed_at": null,
+    "manufacturing_release": false,
+    "note": "静态证据模板；未完成人工布局审查、实物装配或上电验收。"
+  },
+  "reviews": [
+    {"id": "USB_EDGE", "item": "USB-C 外形、禁布区与边缘距离", "status": "needs_physical", "evidence": "待人工 PCB/外壳审查", "decision": "不得放行打板"},
+    {"id": "ESP_ANTENNA", "item": "ESP32 天线净空与板边", "status": "needs_physical", "evidence": "待天线区域人工审查", "decision": "不得放行打板"},
+    {"id": "GROUND_RETURN", "item": "电源/地回流与过孔策略", "status": "needs_physical", "evidence": "当前仅有静态 DRC 记录", "decision": "不得放行打板"},
+    {"id": "DECOUPLING", "item": "去耦器件相对电源引脚位置", "status": "needs_physical", "evidence": "待布局审查", "decision": "不得放行打板"},
+    {"id": "USB_ROUTING", "item": "USB D+/D- 走线与阻抗策略", "status": "needs_physical", "evidence": "待布局审查", "decision": "不得放行打板"},
+    {"id": "SHT30_THERMAL", "item": "SHT30 热源隔离与气流条件", "status": "needs_physical", "evidence": "待布局及外壳审查", "decision": "不得放行打板"},
+    {"id": "PROTECTION", "item": "USB 输入保护与异常电源工况", "status": "needs_physical", "evidence": "当前未完成实物验证", "decision": "不得放行打板"},
+    {"id": "ASSEMBLY", "item": "丝印、可制造性与装配方向", "status": "needs_physical", "evidence": "待制造评审", "decision": "不得放行打板"}
+  ]
+}

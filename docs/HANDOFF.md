@@ -1,5 +1,10 @@
 # HANDOFF — project-027-autonomous-hardware-agent
 
+> **AI 接手强制前置**：在任何实质修改前，完整阅读根目录 `AGENTS.md`、
+> `docs/compliance/AEDL_开发记录与AI使用规范_v1.0.md` 与 `docs/compliance/README.md`；
+> 收尾时按真实工作更新对应台账；AI 新增记录默认保持 `PENDING_HUMAN_REVIEW`，
+> 只有团队成员实际审核后才能改为 `HUMAN_REVIEWED` 或 `ACCEPTED`。
+
 ## 当前状态（2026-08-29）
 
 M2 板级闭环完成：功能布局重建（J1 贴边/去耦靠 IC/SHT30 隔热）→ freerouting 重布线 →
@@ -28,6 +33,9 @@ SHT30 距最近热源 35.2mm（要求 >=10mm）；丝印 17/17 覆盖。证据�
 
 ## 关键文件
 
+- `AGENTS.md`：项目技术约束与 AEDL AI 开发强制收尾规则；所有 AI 的第一入口。
+- `docs/compliance/AEDL_开发记录与AI使用规范_v1.0.md`：项目内 AEDL 规范真源。
+- `docs/compliance/README.md`：台账路由、适用起点和历史回填边界。
 - `gates/gate_core.py`：只消费结构化证据，缺字段、空 sheet、未知 severity 均失败关闭。
 - `gates/run_gates.py`：一键运行 KiCad ERC/DRC 并生成 manifest；不信任 KiCad 单独退出码。
 - `gates/bom/bom_v1.json`：唯一 BOM 真源；`delivery/bom.csv` 由脚本生成。
@@ -53,6 +61,7 @@ SHT30 距最近热源 35.2mm（要求 >=10mm）；丝印 17/17 覆盖。证据�
 
 ## 约束与边界
 
+- 任何 AI 的实质贡献都必须写入 `docs/compliance/AI_USAGE_LOG.md`；涉及新第三方资源、关键决策或效果证据时同步更新对应台账。AI 不得自行标记人工审核通过。
 - 禁止把 Wokwi/host 单测/DRC 0 描述成实体硬件验证；C 级实测回件前不得宣称"板子能工作"。
 - 8 项评审结论基于机器几何实测 + DRC 0 违规签发；朝向/阻抗/气流/瞬态的实物复核待回件。
 - 禁止把当前板描述成已经完成的通用自主硬件 Agent；本轮只验证一块 ESP32-C3/SHT30 载板和门禁闭环。

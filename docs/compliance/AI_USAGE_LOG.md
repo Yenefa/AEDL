@@ -1,0 +1,137 @@
+# AI Usage Log
+
+> 项目内所有实质 AI 贡献按 `AI-YYYYMMDD-NNN` 记录。AI 新增记录的默认状态必须为 `PENDING_HUMAN_REVIEW`；只有团队成员实际审核后才能改变人工审核状态。
+
+## AI-20260829-001
+
+- 日期：2026-08-29
+- 任务名称：将 AEDL 开发记录与 AI 使用规范固化为 project-027 项目级约束
+- 模块/路径：
+  - `.gitattributes`
+  - `AGENTS.md`
+  - `README.md`
+  - `docs/HANDOFF.md`
+  - `docs/compliance/`
+  - `docs/evidence/EVIDENCE_INDEX.md`
+
+- AI 工具/平台：OpenAI Codex desktop
+- 模型：`UNKNOWN`（当前会话未暴露可核验的精确模型 ID）
+
+- AI 参与类型：
+  - [x] ADVISE
+  - [ ] GENERATE_CODE
+  - [ ] REFACTOR
+  - [ ] DEBUG
+  - [ ] GENERATE_TEST
+  - [ ] RESEARCH
+  - [x] DOCUMENT
+  - [ ] BENCHMARK
+  - [ ] MEDIA
+
+- 任务目标：
+  - 把用户提供的 AEDL v1.0 规范迁入仓库，建立所有后续 AI 都能发现的项目入口与合规台账。
+
+- AI 实际产出：
+  - 在根 `AGENTS.md` 写入强制开工、收尾、真实性、审核和最终回复规则。
+  - 建立项目内规范真源、四类合规台账与 Evidence 索引。
+  - 在 README 与 HANDOFF 增加冗余入口，降低不同 AI 工具漏读风险。
+  - 为规范原文自带的 Markdown 强制换行空格增加单文件 Git whitespace 例外，保持项目副本与用户提供原文件的 SHA-256 一致，不放宽其他文件。
+
+- 团队自主部分：
+  - 项目负责人提供规范原文并明确决定将其纳入本项目，要求后续 AI 一律遵守。
+  - AI 只负责项目化映射、文件组织和真实性边界落地。
+
+- 人工修改：
+  - 审核期间检测到 `AGENTS.md` 的适用 AI 工具列表由 `Cursor、OpenHands` 调整为 `Opencode`；具体修改者身份无法由 Git 工作树核验（`UNKNOWN`）。
+
+- 人工审核：
+  - 状态：`HUMAN_REVIEWED`
+  - 审核人：项目负责人（姓名未提供）
+  - 审核内容：用户明确确认人工审核通过，并授权本地提交、明确不 push。
+
+- 验证：
+  - 修改前命令：`py -3 gates\run_gates.py`
+  - 修改前结果：PASS；exit 0；7/7 门禁通过；`manufacturing_release=true`
+  - 修改后结构检查：PASS；10 个必需文件存在且非空；规范源文件与项目副本 SHA-256 一致；AGENTS/README/HANDOFF 引用检查通过
+  - 修改后回归门禁：PASS；exit 0；7/7 门禁通过；`board_review=pass`；`manufacturing_release=true`
+  - Evidence ID：EVID-20260829-001、EVID-20260829-002
+
+- 新增第三方资源：
+  - RES-001
+  - RES-002
+
+- 关联设计决策：
+  - ADR-001
+
+- Commit / PR：
+  - 本次本地提交（提交信息关联本记录 ID）；未创建 PR；不 push。
+
+- 最终状态：
+  - `ACCEPTED`
+
+- 备注：
+  - 本次未对 2026-08-29 之前的历史 AI 使用、第三方资源或团队贡献做无证据回填。
+
+## AI-20260829-002
+
+- 日期：2026-08-29
+- 任务名称：修复签发后失效的历史 board review 门禁测试
+- 模块/路径：
+  - `tests/test_run_gates.py`
+  - `tests/fixtures/board_review_before_release.json`
+
+- AI 工具/平台：OpenAI Codex desktop
+- 模型：`UNKNOWN`（当前会话未暴露可核验的精确模型 ID）
+
+- AI 参与类型：
+  - [ ] ADVISE
+  - [ ] GENERATE_CODE
+  - [ ] REFACTOR
+  - [x] DEBUG
+  - [x] GENERATE_TEST
+  - [ ] RESEARCH
+  - [x] DOCUMENT
+  - [ ] BENCHMARK
+  - [ ] MEDIA
+
+- 任务目标：
+  - 保留“历史证据不得被判绿”的失败关闭回归意图，同时使测试不再依赖当前可变的签发文件。
+
+- AI 实际产出：
+  - 复现并定位 1/30 单测失败。
+  - 从签发前提交冻结 `board_review_before_release.json` 夹具。
+  - 让历史证据测试引用冻结夹具；未修改生产门禁实现和当前 `gates/board_review_v1.json`。
+
+- 团队自主部分：
+  - 项目既有规则要求历史失败证据与当前签发证据隔离，并保持失败关闭语义。
+
+- 人工修改：
+  - 未报告额外人工修改。
+
+- 人工审核：
+  - 状态：`HUMAN_REVIEWED`
+  - 审核人：项目负责人（姓名未提供）
+  - 审核内容：用户明确确认人工审核通过，并授权本地提交、明确不 push。
+
+- 验证：
+  - RED：`py -3 -m unittest tests.test_run_gates.RunGatesTests.test_historical_evidence_is_reported_as_blocked_not_green -v`
+  - RED 结果：FAIL；当前 signed board review 返回 `pass`，旧断言期望 `fail`
+  - GREEN：同一命令
+  - GREEN 结果：PASS；1/1
+  - 全量单测：`py -3 -m unittest discover -s tests -v` → PASS；30/30
+  - Evidence ID：EVID-20260829-003
+
+- 新增第三方资源：
+  - 无
+
+- 关联设计决策：
+  - 无
+
+- Commit / PR：
+  - 本次本地提交（提交信息关联本记录 ID）；未创建 PR；不 push。
+
+- 最终状态：
+  - `ACCEPTED`
+
+- 备注：
+  - 夹具内容来自仓库提交 `00bf694` 中签发前的 `gates/board_review_v1.json`。

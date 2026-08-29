@@ -1,0 +1,2 @@
+# Preserve the exact imported AEDL source, including its Markdown hard-break spaces.
+docs/compliance/AEDL_开发记录与AI使用规范_v1.0.md whitespace=-blank-at-eol

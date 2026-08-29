@@ -82,7 +82,7 @@ class RunGatesTests(unittest.TestCase):
             ROOT,
             ROOT / "notes/m1-evidence/g2_erc_m2board.json",
             ROOT / "notes/m1-evidence/g4_drc_final.json",
-            ROOT / "gates/board_review_v1.json",
+            ROOT / "tests/fixtures/board_review_before_release.json",
         )
 
         self.assertEqual(manifest["status"], "fail")
