@@ -1464,3 +1464,36 @@
 
 - 最终状态：
   - `PENDING_HUMAN_REVIEW`
+
+## AI-20260831-017
+
+- 日期：2026-08-31（深夜）
+- 任务名称：P8/P9 验收 + API 契约缺口补全 + 门禁基线刷新 + 状态卡更新
+- 模块/路径：`docs/api/requirements_api.md`（v1.1）、`tests/test_requirements_runtime_server.py`（+2 活体用例）、`notes/m2-evidence-reset/generated/*`（刷新）、`docs/HANDOFF.md`（状态卡）、本台账
+
+- 做了什么：
+  - **验收 P8（76830b2/AI-015）通过**：neuroboard.md 六步齐全；kicad-ai(amcolex) 以五条
+    GitHub API 检索留痕判"不存在/不可核实"，外部转述能力描述维持不引用；Konnect AGPL-3.0
+    双授权取证（license 字段 + README 原文摘录）入 THIRD_PARTY.md，红线维持 BLOCKED。
+  - **验收 P9（bdf5607/AI-016）通过**：board_review 51 条特征化/golden 测试 + 最小 PCB
+    夹具（tests/fixtures/board_review/），全绿。
+  - **补全 P2 遗留的 6 条 API 契约缺口**（v1.1）：各端点请求/响应形状、错误码全集
+    （400 JSON/404/204，与 _safe_route 行为一致）、浏览器取得合同路径的三层分工、
+    联调状态（HTTP 层自动化已覆盖；浏览器级 E2E 仍 NOT_RUN）。全部依据实装，测试钉住。
+  - 新增 2 条活体测试：/api/validate 对真实 M2 合同 → pass；对不存在路径 → fail。
+  - 重跑 11 门禁：9 PASS + board_review FAIL（manufacturing_release=false）+
+    datasheet_contract 32 BLOCK——与状态卡语义一致，刷新证据工件并提交。
+  - HANDOFF 状态卡更新至深夜实测值（206/206、通宵三卡收官）。
+
+- 诚实边界：
+  - **AI-012 撞号**：本会话 ea5e944 与 intake 会话 0f8f1f4 均标 [AI-20260831-012]
+    （并行会话按"台账最大号+1"领号，时间窗重叠）。不改写已有提交，按台账条目内容
+    （而非编号）甄别；后续会话领号前须重新 grep。
+  - `parse_llm_proposal` 的 `"ok": not warnings or True` 死逻辑未代修（P7 周期2 已钉现状），
+    留人工裁决是否改为 `True` 或 `not warnings`。
+
+- 验证：全量 206/206 OK；11 门禁实跑核对；活体测试 12/12。
+
+- Commit / PR：81b0365（API v1.1）、证据刷新与本文档随本条提交；已推送。
+
+- 最终状态：`PENDING_HUMAN_REVIEW`

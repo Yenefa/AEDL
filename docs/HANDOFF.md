@@ -10,16 +10,16 @@
 > 到具体会话；据此识别前任/并行会话的工作边界、未审改动和已知坑，避免并发写坏工作区。
 > 收尾时按 AGENTS.md 第 4 节为本次实质工作新增一条记录，默认 `PENDING_HUMAN_REVIEW`。
 
-## 项目状态卡（2026-08-31，AI-20260831-011 更新）
+## 项目状态卡（2026-08-31 深夜，AI-20260831-017 更新）
 
 - 板子：M2 ESP32-C3+SHT30；D1 极性已修、U3 已换料 C235316；待人工重签 board_review 后方可下单。
 - 门禁：11 个 = 9 PASS + board_review FAIL（仅 `manufacturing_release=false` 等重签）+ datasheet_contract FAIL（32 项 BLOCK，全部待人工签发类）。
-- 分支：`fix/m2-schematic-semantic-release` @ `e51fa93`，已推送（与 origin 同步）；master 未合并。
-- 测试：127/127 全绿（`py -3 -m unittest discover -s tests`，2026-08-31 实测）。
-- 待大统领：① 重签 board_review；② datasheet_contract 32 项签发（优先 U3 热复核、J1 需 HRO 官方图纸）；③ 未提交批次 commit 决定（第 11 门禁全套 + D1 修复证据）；④ master 合并。
-- 吸收：CircuitBot intake+实装（第 10/11 门禁）；KiCadAI / KiCad MCP intake 完成（Konnect AGPL 红线）；NeuroBoard 未开始；kicad-ai(amcolex) 404 待人工定案。
-- 检索：ID 引用地图见 `docs/ID_MAP.md`；协作任务卡见 `docs/COLLABORATION.md`；RAG 取舍见 `docs/knowledge/RAG_DECISION.md`。
-- 历史细节：见下方归档区（现状以上方状态卡为准）。
+- 分支：`fix/m2-schematic-semantic-release`，已推送；master 未合并。
+- 测试：206/206 全绿（`py -3 -m unittest discover -s tests`，2026-08-31 深夜实测）。
+- 通宵三卡：P7 runtime server 实测+31 新测试+400 JSON 修复；P8 NeuroBoard intake+kicad-ai 判"不存在"+Konnect license 取证；P9 board_review 51 条特征化/golden 测试。API 契约 6 条缺口已补（v1.1）。
+- 待大统领：① 重签 board_review；② datasheet_contract 32 项签发（U3 热复核倾向路线 B=换 ≥1A 方案，需你裁决）；③ master 合并；④ `ok` 死逻辑与 AI-012 撞号两处小裁决（见台账 017）。
+- 吸收：CircuitBot/KiCadAI/KiCad MCP/NeuroBoard intake 全部完成；kicad-ai(amcolex) 判"不存在/不可核实"。
+- 检索：`docs/ID_MAP.md`；协作卡：`docs/COLLABORATION.md`；RAG 取舍：`docs/knowledge/RAG_DECISION.md`。
 
 ## 归档：并行会话历史（截至 2026-08-31）
 
