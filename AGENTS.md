@@ -81,6 +81,15 @@ AIC Score Target：已知评分项 / NONE / UNKNOWN
 
 若歧义会影响架构、公共接口、Benchmark、开源边界或比赛技术主张，先请求人工确认。
 
+## 2.1 AEDL 硬件发布前项目专属必读
+
+凡任务涉及硬件选型、原理图、PCB、BOM/CPL/Gerber、板级门禁、制造签发或下单，实质修改前还必须完整读取：
+
+- `docs/knowledge/PROJECT_PITFALLS.md`
+- `docs/knowledge/IMPROVEMENT_SYSTEM.md`
+
+并执行 `gates/learning_gate.py` 已提升的项目经验控制。历史交付物彼此一致、ERC/DRC 通过、自动板级评审通过，都不能替代独立数据手册合同、当前源文件哈希绑定、具名人工制造签发或回件后的实体 C 级验证。
+
 ---
 
 # 3. Git / GitHub 规则
@@ -733,6 +742,8 @@ EVID-...
 - [ ] 实际运行的测试和结果如实记录
 - [ ] 未运行的重要测试标记 `NOT_RUN`
 - [ ] 无虚假 Evidence / Benchmark
+- [ ] 硬件自动静态检查未被表述为人工制造签发或实体 C 级验证
+- [ ] BOM 库存已按精确料号即时复核；零库存/未知库存失败关闭且未自动换料
 
 ### Compliance
 - [ ] AI Usage：按需更新

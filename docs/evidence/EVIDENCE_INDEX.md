@@ -36,6 +36,38 @@
 - 已知限制：仓库规则能约束会读取项目入口的 AI；无法从仓库内部强制一个完全忽略项目文件的外部工具。
 - 人工核验：`HUMAN_REVIEWED`（项目负责人，姓名未提供，2026-08-29）
 
+## EVID-20260830-001
+
+- 日期：2026-08-30
+- 对应主张：BOM 零库存失败关闭 → 受控换料 → 全链证据哈希重绑定的完整闭环可执行；
+  换料后 DRC/board review 机器实测恢复全绿（不含人工签发与实体验证）。
+- 关联模块：`gates/refresh_bom_stock.py`、`gates/run_gates.py`、`gates/export_delivery.py`、
+  `tools/generate_m2_ops.py`、`tools/board_review.py`、`src/hardware/m2-board/`
+- 关联 AI Usage：AI-20260830-002
+- 关联 ADR：无
+- 测试/实验：U3 换料 C82942→C235316（SOT-23-5→SOT-353）前后全链门禁与单测对比。
+- 环境：Windows；Python 3.9.13；KiCad 10.0.5；akcli 0.21.0；jlcpcb 0.1.0
+- 执行命令：
+  - `py -3 gates\refresh_bom_stock.py`（换料前：FAIL C82942 zero stock；换料后：PASS parts=14）
+  - `py -3 gates\run_gates.py`（换料后：8/9 gate PASS，exit 1，唯一 fail 为
+    board_review 人工重签待定）
+  - `py -3 -m unittest discover -s tests`（77/77 OK）
+  - `py -3 gates\export_delivery.py`（PASS rows=21 zip_entries=11）
+  - `py -3 tools\generate_m2_ops.py`（PASS op_count=109）
+  - `py -3 tools\board_review.py`（8/8 pass，含 U3 重纳入三项检查）
+- Runs：换料前基线 1 轮；换料后全链 2 轮（含收敛迭代共 4 次 run_gates）
+- 结果：C82942 库存实时为 0（早 5 → 晚 0）触发失败关闭；C235316 库存 3329；
+  DRC 0 violation / 0 unconnected；77/77 单测；交付物 21 行哈希绑定。
+- 原始证据：`notes/m2-evidence-reset/generated/bom_stock_current.json`、
+  `notes/m2-evidence-reset/generated/g4_drc_current.json`、
+  `notes/m2-evidence-reset/generated/ops_validate_current.json`、
+  `notes/m2-evidence-reset/generated/board_review_auto.json`、
+  `notes/m2-evidence-reset/run_manifest.json`、`delivery/manifest_v1.json`
+- 是否可复现：YES（库存为外部瞬时状态，复现时数值会变）
+- 已知限制：全部为静态/机器证据；board_review 的 manufacturing_release 仍为 false
+  等待人工重签；无任何实体硬件验证；C235316 库存随时可能变化，下单前需重刷。
+- 人工核验：`PENDING_HUMAN_REVIEW`
+
 ## EVID-20260829-003
 
 - 日期：2026-08-29

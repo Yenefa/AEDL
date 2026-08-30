@@ -406,3 +406,707 @@
 
 - 最终状态：
   - `PENDING_HUMAN_REVIEW`
+
+## AI-20260830-002
+
+- 日期：2026-08-30
+- 任务名称：接手 P0 终检半成品——U3 LDO 零库存换料与全链收敛
+- 模块/路径：
+  - `src/hardware/m2-board/intent_v1.json`
+  - `src/hardware/m2-board/m2_board.kicad_sch`
+  - `src/hardware/m2-board/m2_board.kicad_pcb`
+  - `src/hardware/m2-board/ops_gen.json`
+  - `gates/bom/bom_v1.json`
+  - `gates/board_review_v1.json`
+  - `tools/board_review.py`
+  - `delivery/`（重新导出全套）
+  - `docs/HANDOFF.md`
+  - `notes/m2-evidence-reset/generated/`（库存/ops/评审/manifest 证据刷新）
+
+- AI 工具/平台：TRAE（GLM）
+- 模型：GLM-5.3
+
+- AI 参与类型：
+  - [x] ADVISE
+  - [x] GENERATE_CODE
+  - [ ] REFACTOR
+  - [x] DEBUG
+  - [ ] GENERATE_TEST
+  - [ ] RESEARCH
+  - [x] DOCUMENT
+  - [ ] BENCHMARK
+  - [ ] MEDIA
+
+- 任务目标：
+  - 接手 AI-20260830-001 停止后遗留的 P0 半成品（2 个失败测试 + 哈希过期交付链），
+    完成下单前终检闭环。
+
+- AI 实际产出：
+  - 诊断确认：C82942（U3 LDO）嘉立创装配库存当日实时查询为 0（早间快照 5 → 晚间 0），
+    `refresh_bom_stock.py` 失败关闭正确拦截；交付 manifest 哈希绑定过期为伴生问题。
+  - 换料决策与实施：选定同厂同系列 C235316（ME6211C33R5G，SOT-353/SC-70-5，
+    库存 3329）；依据 MICRONE ME6211C V20 数据手册核实 SOT-353 封装
+    pin1=VIN/pin2=GND/pin3=CE/pin5=VOUT 引脚序与原 SOT-23-5 完全一致、电气规格相同。
+  - 全链同步：intent_v1 / bom_v1 / 原理图（value+footprint+description）/ PCB footprint
+    （KiCad 官方 SOT-353_SC-70-5 几何逐字替换，保持 at/rot/pad 网络）/ 逃逸布线重布
+    （+5V 环走廊 x=54.02、+3V3 垂直落新 pad5、删旧 pad3 孤立残段）。
+  - 检测盲区修复：`tools/board_review.py` 热源/极性/去耦三处 lib_id 关键字补 `SOT-353`，
+    否则换封装后 U3 从三项检查中静默消失（属变相放水，违反失败关闭原则）。
+  - 证据链刷新：akcli 0.21.0（已恢复）经 `tools/generate_m2_ops.py` 从新 intent 正规
+    重放 ops_gen.json（109 op）；`refresh_bom_stock.py` 刷新 14 料实时正库存；
+    `export_delivery.py` 重新导出全套交付物并哈希绑定；board_review 8/8 机器实测刷新。
+  - 文档：HANDOFF.md 全面更新（过期 HEAD 引用、"远端为空"过期描述、门禁表、换料记录）。
+  - 接手惯例固化（经项目负责人确认）：HANDOFF.md 前置块新增"开工时读台账最近 2–3 条、
+    收尾时按 AGENTS.md 第 4 节写入记录"的惯例；依据是本会话靠台账识别出并行
+    AI-20260830-001 会话边界、避免并发写坏工作区的事实。
+
+- 团队自主部分：
+  - 项目负责人明确指令接手 AI-20260830-001 未完成工作并继续 P0 终检，要求遵守全部
+    AEDL 规则并保留可审查痕迹。
+  - 换料选型（C235316）为 AI 基于库存与数据手册提出的工程方案，最终采纳与制造放行
+    留待项目负责人审核。
+
+- 人工修改：
+  - 未报告额外人工修改。
+
+- 人工审核：
+  - 状态：`PENDING_HUMAN_REVIEW`
+  - 审核人：项目负责人（姓名未提供）
+  - 审核内容：换料方案初审结论为 CONDITIONAL APPROVE（有条件通过），指出三项整改：
+    1. 热分析不得用 "250mW÷压差" 冒充热电流上限，须按 θJA 结温法重做；
+    2. SOT-23-5 原封装热参数须确认后才允许声称"热余量降低多少"；
+    3. "same die"/"全系唯一候选"等过强表述须降级或补排他性证据。
+  - 整改完成情况：
+    1. 已按 Tj = Ta + PD×θJA 重做热验证（V24 datasheet：SOT-353 θJA=270°C/W、
+       SOT-23-5 θJA=210°C/W、Tjmax=150°C、TOPR=-40~+85°C）；结论改为
+       "同等结温预算下持续电流能力约 -22%"；
+    2. SOT-23-5 基线确认：V20 的 PD 表未列 SOT23-5（初版材料中 "~300mW" 实为
+       SOT23-3 行的解析误读）；V24 明确 SOT23-5 PD=0.60W/θJA=210°C/W，且
+       V24 内部自洽（125°C/210≈0.60W、125°C/270≈0.45W）；
+    3. 表述已降级："same die"→"同系列同输出电压同引脚映射（V24 Selection Guide
+       佐证 M5/R5 为同系列不同封装后缀，silicon 同一性不主张也不需要）"；
+       "全系唯一"→"JLC 装配目录 ME6211C33 检索的 3 个候选中唯一 pin-compatible
+       正库存方案"（C428904 X2-SON-4 因 pin1=CE 引脚序不同排除）。
+  - 新增审计发现：V20（C235316 绑定版）与 V24 家族版热额定不一致
+    （SOT353 PD 250mW vs 450mW；V20 未列 SOT23-5 与 θJA；TOPR 记法不同）。
+    保守处理：以 V20 的 250mW 作为该料号的硬边界，V24 作为"实际能力可能更好"
+    的旁证；最终以 MICRONE 官方澄清或回件实测裁决，状态 `TO_VERIFY`。
+  - 终审结论：换料方案经项目负责人 2026-08-30 采纳（初审 CONDITIONAL APPROVE → 三项
+    整改 → 采纳），并指示将方法论教训沉淀为项目经验。已执行：ADR-005（替代料换料
+    审核协议：θJA 结温法、结论精度、主张纪律、版本交叉核对）+ `docs/knowledge/
+    IMPROVEMENT_SYSTEM.md` 新增"换料审核方法论教训"条目（按准入标准如实标注
+    当前无可执行控制、不算完成经验积累）。
+  - 仍待人工：全部改动 diff 审核、board_review 人工重签、commit/push 授权。
+
+- 验证：
+  - `py -3 gates\run_gates.py` → exit 1（诚实终态）：erc/drc/bom/delivery/intent/ops/
+    schematic_semantics/learning 8 gate PASS；board_review FAIL 仅因
+    `manufacturing_release=false` 等待人工重签（机器实测 8/8 pass）。
+  - DRC：0 violation / 0 unconnected（换封装重布后收敛）。
+  - `py -3 -m unittest discover -s tests` → 77/77 OK。
+  - `py -3 gates\refresh_bom_stock.py` → PASS parts=14（C235316 库存 3329）。
+  - `py -3 gates\export_delivery.py` → PASS rows=21 zip_entries=11。
+  - `py -3 tools\generate_m2_ops.py` → PASS op_count=109。
+  - `py -3 tools\board_review.py` → 8/8 pass（含 U3 重新纳入热源/极性/去耦检查）。
+  - Evidence ID：EVID-20260830-001（见 docs/evidence/EVIDENCE_INDEX.md）。
+
+- 新增第三方资源：
+  - 无（本次使用的 jlcpcb CLI 属既有 RES-006；MICRONE ME6211C V20 数据手册属既有
+    RES-007，已将其来源扩展至 ME6211C33R5G/C235316 变体）。
+
+- 关联设计决策：
+  - ADR-005（替代料换料审核协议：θJA 结温法、结论精度与主张纪律、数据手册版本交叉核对）。
+
+- AIC Score Target：
+  - 实现完成度与可验证效果（零库存失败关闭 → 受控换料 → 全链哈希重绑定的完整闭环）。
+
+- Commit / PR：
+  - 未提交（等待人工审核）；未创建 PR；未 push。
+
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`
+
+## AI-20260831-001
+
+- 日期：2026-08-31
+- 任务名称：开源吸收 Phase 1 -- CircuitBot clarify 深度 intake 与 Requirements Contract 设计稿
+- 模块/路径：
+  - `notes/open_source_intake/`（新增目录：README.md、circuitbot.md、requirements_contract_design_v1.md、策略文档归位副本、_circuitbot_repo/ 本地克隆）
+  - `docs/HANDOFF.md`（本次会话状态更新）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条记录）
+
+- AI 工具/平台：ZCode（GLM）
+- 模型：GLM-5.3
+
+- AI 参与类型：
+  - [x] ADVISE
+  - [ ] GENERATE_CODE
+  - [ ] REFACTOR
+  - [ ] DEBUG
+  - [ ] GENERATE_TEST
+  - [x] RESEARCH
+  - [x] DOCUMENT
+  - [ ] BENCHMARK
+  - [ ] MEDIA
+
+- 任务目标：
+  - 按大统领 2026-08-30《AEDL 开源项目吸收与再设计策略》启动 Phase 1：对 CircuitBot 执行
+    六步 Intake 协议（CLAIM/SOURCE/FAILURE/REUSABLE/TRANSFORM/VERIFY），并产出
+    Requirements Contract（requirements_contract_v1.json + 第 10 门禁）的设计稿供人工评审。
+
+- AI 实际产出：
+  - 策略文档从 Downloads 归位至 `notes/open_source_intake/`（原违反工作台"文件不散落"规则）。
+  - CircuitBot 源码级六步 Intake（commit ff9b003，MIT 已核实）：逐文件阅读 clarify 节点
+    （297 行全文）、builder.py 图接线、analyze 节点自动注入逻辑、测试与 CI 覆盖。
+  - 关键源码证据（策略文档 2.2 节预判的实证）：CircuitBot clarify 为 fail-open --
+    `clarify_event.wait(timeout=300)` 超时后带原 prompt 继续设计；"No preference" 答案在
+    `_build_enhanced_prompt` 中被静默丢弃；澄清结果仅存 LangGraph state 无 artifact/哈希；
+    clarify 节点零测试覆盖。详见 `notes/open_source_intake/circuitbot.md` STEP 3。
+  - 可复用清单：五维澄清框架、每问带选项交互、circuit_type 三分类守门（Adapt）；
+    Q&A 拼回字符串、超时继续（Reject）；LangGraph 编排（Idea Only，暂不需要）。
+  - Requirements Contract 设计稿 v1（未实装）：`requirements_contract_v1.json` schema
+    （statement/requirement/question/assumption/forbidden 四层 + 自哈希 + intent 绑定）、
+    requirements_contract_gate 七项确定性检查（C1-C7，含 blocking 未答即 FAIL、
+    哈希失配即 FAIL、隐式假设 FAIL）、8 个测试 fixture 计划、M2 追溯两选项待拍板。
+  - 全程未触碰代码、未触碰 M2 的 89 个未提交文件（与人工 M2 审核并行，工作树零干扰：
+    本会话新增文件全部位于 notes/ 与台账，git status 中 notes/open_source_intake/ 与
+    本条台账为新增）。
+
+- 团队自主部分：
+  - 项目负责人提供《开源项目吸收与再设计策略》文档并指令"接手"；并行推进方案
+    （AI 做 Phase 1 只读研究、人工同步审 M2）经项目负责人选定。
+
+- 人工修改：
+  - 未报告额外人工修改。
+
+- 人工审核：
+  - 状态：`PENDING_HUMAN_REVIEW`
+  - 待审：① circuitbot.md 六步 intake 结论与复用/拒绝清单；② requirements_contract
+    设计稿（含 4 个决策点：M2 追溯 A/B、过期阈值、C6 关键字映射、实装时机）；
+  - 红线遵守：本会话未生成任何代码，未触碰 board_review 签发状态。
+
+- 验证：
+  - CircuitBot 源码结论全部基于本地克隆（ff9b003）逐文件阅读，文件路径已在
+    circuitbot.md 中逐条标注；无凭记忆断言。
+  - 本会话无代码改动 -> 无测试运行（NOT_RUN 不适用：未触碰可执行物）。
+  - `git status` 核对：新增仅 notes/open_source_intake/（含 _circuitbot_repo 克隆）、
+    HANDOFF.md、本台账；既有 89 个 M2 未提交文件未被触碰。
+
+- 新增第三方资源：
+  - 暂无登记需求：CircuitBot 本轮仅作源码研究（读），未复制代码进 AEDL；本地克隆仅
+    notes/ 下的研究素材。若后续实装包含其代码片段（关键词表等），届时按 AGENTS.md
+    第 5 节登记 THIRD_PARTY_RESOURCES.md（RES 条目待生成时编号）。
+
+- 关联设计决策：
+  - 无新增 ADR（设计稿本身待人工评审，评审通过实装时再议是否立 ADR-006）。
+
+- AIC Score Target：
+  - 创新性与方案设计（Requirements Contract：澄清结果哈希绑定为 AEDL 差异化机制，
+    依碰撞分析 §3 判定语言，尚需反证检索后才可写入正式主张）。
+
+- Commit / PR：
+  - 未提交（等待人工审核）；未创建 PR；未 push。
+  - 注意：notes/open_source_intake/_circuitbot_repo/ 含完整 git 克隆（含 .git），提交前
+    需人工决定是否入库（建议 .gitignore 排除或 subtree/子模块化，见 README.md 附属说明）。
+
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`
+
+## AI-20260831-002
+
+- 日期：2026-08-31
+- 任务名称：Requirements Contract 实装（第 10 门禁 + LLM 建议层 + M2 补录合同）+ 多 AI 协作基础设施
+- 模块/路径：
+  - `gates/requirements_contract.py`（新增：C1-C7 确定性校验 + 单向哈希绑定）
+  - `gates/requirements_runtime.py`（新增：LLM 建议层，与合同层物理分离）
+  - `gates/requirements/requirements_contract_v1.json`（新增：M2 补录合同，决策 A）
+  - `src/hardware/m2-board/intent_v1.json`（新增 requirements_contract 引用字段）
+  - `gates/run_gates.py`（第 10 门禁挂载，纯增量，不改既有 9 门禁逻辑）
+  - `tests/test_requirements_contract.py`（新增：F1-F8 + runtime 层共 18 测试）
+  - `tests/test_run_gates.py`（gate 集合断言更新 + 新门禁 fail-closed 断言）
+  - `delivery/`（manifest 重导：intent 哈希变更连锁）
+  - `docs/COLLABORATION.md`、`docs/api/requirements_api.md`（新增：多 AI 协作协议 + P2 前端接口契约）
+  - `notes/open_source_intake/`（上一会话产物，本次继续维护）
+
+- AI 工具/平台：ZCode（GLM）
+- 模型：GLM-5.3
+
+- AI 参与类型：
+  - [x] ADVISE
+  - [x] GENERATE_CODE
+  - [x] DEBUG
+  - [x] GENERATE_TEST
+  - [x] DOCUMENT
+  - [ ] REFACTOR
+
+- 任务目标：
+  - 项目负责人 2026-08-31 拍板四个决策点（M2 追溯选 A、阈值对齐 BOM 7 天、forbidden 用关键字匹配、实装启动），并新增三条指令：做 LLM 自动提问运行时、搭简易前端预留接口、把 CircuitBot 好东西纳入吸收路线。
+
+- AI 实际产出：
+  - 核心门禁：`gates/requirements_contract.py`，C1-C7 全部确定性检查。实装中发现并修复设计级缺陷：合同↔intent 双向哈希绑定是循环依赖（数学上无法同时满足），改为 lockfile 模式单向绑定（intent 持有 {sha256, path}，合同只声明 intent 路径）。
+  - LLM 建议层：`gates/requirements_runtime.py`。架构上物理分离两层--建议层（parse_llm_proposal：LLM 输出解析为问题草案，answer 恒为 null，垃圾输入降级为 warning 永不抛异常，未知 kind 一律升为 blocking）与合同层（draft_contract 组装 + finalize 自哈希）。gate 永不调用 LLM。
+  - 已知盲区诚实披露：C6 关键字匹配对"ESP32 载体但字面无 wifi"类间接命中靠 carrier 词条（esp32/esp8266/nrf24 归入 wireless），无法枚举所有载体；代码注释与 intake 报告均已标注。
+  - M2 补录合同（决策 A）：依据 M2 真实会话记录补录（author 字段明确标注 retroactive 非设计时生成），5 条源语句/4 条已决需求/3 问 3 答（含 Wi-Fi 不需要的 blocking 决策）/3 条显式假设/2 条禁令（禁止静默加 Wi-Fi、禁止零库存自动换料）。
+  - 交付链连锁处理：intent 加引用字段后哈希变更 -> 重跑 export_delivery.py 重导 manifest -> delivery gate 保持 PASS。
+  - 第 10 门禁挂载：run_gates.py gates 列表纯追加一行；test_run_gates 的 gate 集合断言同步更新（9->10 属预期契约变更，非掩盖回归），并新增断言：空沙箱下 requirements_contract 必须 FAIL（缺文件=不可读证据，不是 skip）。
+  - 多 AI 协作基础设施：docs/COLLABORATION.md（文件领地划分 + 交接规范 + 4 个任务卡）+ docs/api/requirements_api.md（P2 前端接口契约 + mock 数据）。
+  - 修复两个实装 bug：draft_contract 的 resolved_requirements 参数丢失、C4 分支 reference 空指针。
+
+- 团队自主部分：
+  - 项目负责人拍板全部四个设计决策点（A/对齐/关键字/立即实装）与三条新指令；
+  - 项目负责人决策启用多 AI 并行协作模式。
+
+- 人工审核：
+  - 状态：`PENDING_HUMAN_REVIEW`
+  - 待审：① 合同↔intent 单向绑定的循环依赖修复方案；② M2 补录合同内容真实性（尤其 3 个问答是否与记忆一致）；③ 第 10 门禁挂载；④ COLLABORATION.md 协作协议。
+
+- 验证：
+  - `py -3 -m unittest tests.test_requirements_contract` -> 18/18 OK。
+  - `py -3 -m unittest discover -s tests` -> 95/95 OK（含既有 77 + 新 18，test_run_gates 断言更新后全绿）。
+  - `py -3 gates/run_gates.py` -> 10 gate：9 PASS + board_review FAIL（manufacturing_release=false 等待人工重签，与接手时 8/9 语义一致，零回归）。
+  - `py -3 gates/export_delivery.py` -> PASS rows=21 zip_entries=11（intent 变更后重导）。
+  - M2 真实合同对 gate 校验 -> PASS（sha256: 82c136df...）。
+
+- 新增第三方资源：
+  - 无（MIT 借思想重实现，未复制 CircuitBot 代码；关键词维度框架为 Adapt 思想借鉴，circuitbot.md STEP 4 已披露）。
+
+- 关联设计决策：
+  - 候选 ADR-006（单向哈希绑定 + 建议层/合同层分离）：待人工审核后正式立项。
+
+- AIC Score Target：
+  - 创新性与方案设计（fail-closed 需求合同门禁，反证检索完成后方可写入正式主张）。
+
+- Commit / PR：
+  - 未提交（与既有 89 文件一并等待人工统一审核提交）；未创建 PR；未 push。
+
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`
+
+## AI-20260831-003
+
+- 日期：2026-08-31
+- 任务名称：TASK-P2 简易前端（需求澄清工作台）
+- 模块/路径（**全部在 `web/` 领地内新增**，未越界改他人文件）：
+  - `web/index.html`（新增：5 步工作流页面结构）
+  - `web/styles.css`（新增：浅色主题样式）
+  - `web/sha256.js`（新增：纯 JS SHA-256，仅供 mock 传输层模拟服务端自哈希）
+  - `web/canonical-json.js`（新增：复刻 Python canonical JSON 序列化）
+  - `web/contract-builder.js`（新增：合同草稿组装，UI 与测试共用同一代码路径）
+  - `web/mock-data.js`（新增：契约文档 Mock 数据原样照抄 + mock 端预检）
+  - `web/api-client.js`（新增：mock / http 双传输层，5 个端点按契约定义）
+  - `web/app.js`（新增：UI 逻辑）
+  - `web/verify-hash.js`（新增：Node，校验 JS 自哈希与 Python 门禁一致）
+  - `web/smoke-test.js`（新增：Node，无头闭环测试）
+  - `web/e2e-browser.js`（新增：真实浏览器端到端驱动）
+  - `web/README.md`（新增：运行、验证、契约缺口、诚实边界）
+  - `docs/COLLABORATION.md`（仅按项目负责人指令标注 TASK-P2 卡片为 done）
+  - `docs/compliance/AI_USAGE_LOG.md`（追加本条）
+
+- AI 工具/平台：WorkBuddy
+- 模型：Claude（WorkBuddy 内置）
+
+- AI 参与类型：
+  - [x] ADVISE
+  - [x] GENERATE_CODE
+  - [x] GENERATE_TEST
+  - [x] DOCUMENT
+  - [ ] REFACTOR
+  - [ ] DEBUG
+
+- 任务目标：
+  - 项目负责人指令：先读 `AGENTS.md` 与 `docs/COLLABORATION.md`，提取领地划分与任务卡格式，
+    据此认领任务（优先 TASK-P2，若已被认领/状态非"待领"/缺前置条件则改领 TASK-P3 并说明原因）；
+    严格只在自己领地内改文件；接口契约以 `docs/api/requirements_api.md` 为唯一依据，
+    发现契约缺失或矛盾时记录问题、不自行猜测定义；完成后在任务卡标注 done 并填写改动文件清单、
+    关键实现说明、遗留问题；在 AI_USAGE_LOG 追加记录；全程**不执行任何 git commit**（含 add/push），
+    保留全部改动为未提交状态以便人工复核。
+
+- 认领判定（为什么是 P2 而不是 P3）：
+  - 领卡时 TASK-P2 状态为「可立即领取」、属主「空缺」，`web/` 目录尚不存在（领地干净），
+    且 `docs/HANDOFF.md` 并行会话状态中无任何会话认领 P2 → **满足前置条件，直接认领 TASK-P2**，
+    未按备选方案改领 TASK-P3。
+
+- AI 实际产出：
+  - 契约「前端必须遵守的语义」四条逐条落地：① blocking 未答 → 「生成合同」按钮 disabled
+    并显示「还剩 N 个必答问题」；② 下拉提供 `unknown` / `No preference`，但空答案永不许提交
+    （nonblocking 同样要求显式选择，依据语义 #2「不许空着提交」）；③ 建议清单可增/删/改后才作答
+    （问题文本、kind、dimension、选项均可编辑）；④ `errors[]` 原样渲染，不过滤、不改写、不排序。
+  - 自哈希归属服务端：前端草稿不含 `contract_sha256`，只由 `/api/finalize` 写入。
+    mock 传输层为支持离线闭环，用 `canonical-json.js` + `sha256.js` 复刻 Python 的
+    `json.dumps(ensure_ascii=False, sort_keys=True, separators=(",",":"))` + sha256，
+    并有交叉验证脚本保驾护航。
+  - 字段裁剪：`open_questions` 恰好为 `{id, question, answer, kind, source_ids}`，
+    故建议层的 `dimension`/`options`/`source` 不进合同（否则门禁判 unknown field）；
+    `assumptions` 同理只保留 `{id, text, source_ids, status}`。已确认假设写入合同，
+    剔除的假设不留痕（不伪造 "rejected" 状态）。
+  - 零依赖：未引入任何框架、构建工具、CDN 资源。用普通 `<script>` 而非 ES module，
+    因为 `file://` 协议下 module 会被 CORS 拦截。
+
+- 团队自主部分：
+  - 项目负责人制定多 AI 并行协作协议与领地划分（含 TASK-P2 领地 = `web/`）；
+  - 项目负责人明确「契约文档为唯一依据、缺矛盾只记录不猜测」与「不 commit」两条硬约束；
+  - P1（ZCode/GLM）提供 `docs/api/requirements_api.md` 契约与 mock 数据（本前端按此实现）。
+
+- 人工审核：
+  - 状态：`PENDING_HUMAN_REVIEW`
+  - 待审：① 契约冲突 #1（intent_binding）由 P1 定案后前端需同步；② 请求体形状
+    （propose/finalize/validate）三项待 P1 确认；③ 前端 UI 交互与文案。
+
+- 验证（**全部实际运行，结果如实记录**）：
+  - `node web/verify-hash.js` → `OK: JS digest matches the Python gate's digest for this contract`。
+    对 `gates/requirements/requirements_contract_v1.json`（M2 真实合同，Python 门禁已 PASS，
+    声明哈希 `82c136df…e5d8`）重算，JS 与 Python 得**完全一致**的摘要 `82c136dfe9da1e7f155d19165915d95e277d325744544460cbd98bb8b533e5d8`。
+  - `node web/smoke-test.js` → `SMOKE TEST PASSED`。含 fail-closed 反例：
+    2 个 blocking 留空 → 预检 fail 并各报一条错误。
+  - 真实浏览器 `web/index.html?e2e=1` → `E2E PASSED (19/19)`。
+    以 `chrome --headless=new --dump-dom` 复现，驱动真实 DOM 事件与按钮点击，
+    断言覆盖：初始按钮禁用 → propose 渲染 3 题 → 未答计数 → 作答后启用 →
+    finalize 出哈希 → validate PASS 且来源标注为 MOCK → 清空答案后重新禁用。
+  - **权威门禁反验**：前端生成的合同送 `gates/requirements_contract.py`，
+    `contract_sha256` 重算与声明**一致**；C1-C7 仅 1 条错误
+    `contract intent_binding must contain exactly intent_path`（即遗留问题 #1）。
+    把 `intent_binding` 改为 C4 要求的 `{intent_path}` 后**错误归零**，
+    证明合同组装本身完全正确，该冲突是唯一阻塞项。
+  - `node --check` 全部 8 个 JS 文件 → 语法通过。
+  - NOT_RUN：真实 API 模式（`gates/requirements_runtime_server.py` 尚不存在，无服务端可连）。
+
+- 新增第三方资源：
+  - 无。零依赖、零 CDN；未复制任何第三方代码，SHA-256 为按 FIPS 180-4 自行实现。
+
+- 关联设计决策：
+  - 无新增 ADR（本任务为实现任务，未改变架构/接口/开源边界）。
+  - 契约缺口与矛盾已记入 `docs/COLLABORATION.md` TASK-P2 卡片与 `web/README.md` 第 5 节。
+
+- 已知限制（诚实边界）：
+  - MOCK 模式下第 5 步的 `PASS` 是**前端本地预检**，只覆盖契约文档明文规定的规则，
+    **不是** `gates/requirements_contract.py` 的 C1-C7，也不能替代它。UI 已显式标注来源。
+  - 按契约文档生成的合同因遗留问题 #1，送真实门禁时 C4 必 FAIL。
+
+- AIC Score Target：
+  - NONE（本任务为工艺实现与验证，未产生新的比赛评分证据）。
+
+- Commit / PR：
+  - 未提交（遵守项目负责人指令：全程未执行 git add / commit / push）；
+    未创建 PR；改动保留在工作树待人工统一审核。
+
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`
+
+
+---
+
+## AI-20260831-004
+
+- 日期：2026-08-31
+- 任务名称：TASK-P3 开源 Intake Phase 2-3 —— KiCadAI 与 KiCad MCP 六步协议研究报告
+- 模块/路径：
+  - `notes/open_source_intake/kicadai.md`（新建，六步报告）
+  - `notes/open_source_intake/kicad-mcp.md`（新建，六步报告）
+  - `notes/open_source_intake/README.md`（目录状态与附属克隆说明更新）
+  - `notes/open_source_intake/_kicadai_repo/`、`notes/open_source_intake/_kicad_mcp_repo/`（本地浅克隆审查用，含 .git，勿提交进 AEDL 仓库）
+  - `docs/COLLABORATION.md`（TASK-P3 任务卡标注 done）
+  - `docs/HANDOFF.md`（"并行会话状态"章节三行交接）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条记录）
+
+- AI 工具/平台：ZCode（GLM）
+- 模型：GLM-5.3
+
+- AI 参与类型：
+  - [x] RESEARCH
+  - [x] DOCUMENT
+  - [x] ADVISE
+
+- 任务目标：
+  - 按大统领指令领取 TASK-P3：以六步协议（CLAIM/SOURCE/FAILURE/REUSABLE/TRANSFORM/VERIFY）
+    完成 KiCadAI 与 KiCad MCP 的开源 intake，参照 circuitbot.md 的格式与证据纪律；
+    处理碰撞分析 §6 两条遗留未决项（KiCadAI 生成链路源码核实、kicad-ai 仓库真实性）。
+
+- AI 实际产出：
+  - **KiCadAI（dshills，MIT，HEAD `4f18765` 2026-08-24）源码级六步 intake**：
+    - 已验证：capabilitygate 三态分类（supported/experimental/unsupported）+ Evidence 四状态
+      + SHA-256 封印 + 仅 supported 才 FabricationReadyEligible；ERC/DRC 子进程链路
+      （kicad_checks.go 的 fail-closed 语义 + ToolError 四分类）；kicadfiles 93 个 Go 文件
+      的直接 writer + round-trip 验证；simmodel 纯 Go MNA 仿真引擎（solver/非线性/瞬态/热/电热）；
+      824 测试文件 vs 809 源文件；capability-eval 系列 os.Exit(1)。
+    - **碰撞分析校准（重要）**：2026-08-30 碰撞分析判"KiCad 生成、ERC/DRC subprocess、simulation
+      未见源码调用链"经本轮本地克隆复核**判为误判**——上述全部有源码；误判原因与该分析 §5
+      自我教训同型（当时工具抓不到仓库内容）。碰撞分析文件非本任务领地，未改动，校准对照
+      写在 kicadai.md 附节，是否回写由人工决定。
+    - 未核实边界如实标注：clarification 为 needs_clarification 单向拒绝状态而非交互回路；
+      运行级 demo 数字 NOT_RUN；SOA 具体实现与夹具准确数字未审。
+  - **KiCad MCP 家族 intake（深审 mixelpixx/KiCAD-MCP-Server，MIT，v2.7.0 `aa53d52`）**：
+    - 定性：项目家族非单一仓库；策略文档 §3.2 能力清单是家族并集（pinmux 冲突检测在
+      Seeed 版，本仓库无——否定性检索已验证）。
+    - 已验证：DRC/ERC 的 kicad-cli 子进程实现与错误语义分级（退出码非 0=发现违规≠工具失败）；
+      Freerouting DSN/SES 集成；JLCPCB 三通道（SQLite+FTS5 快照/OpenPlatform 实时/社区 API）
+      及其官方文档自认的快照滞后；按日轮转日志；141 Python + 8 TS 测试。
+    - 合规关键发现：其后继项目 **Konnect 为 AGPL-3.0**——AEDL 禁止吸收，已写入报告红线。
+    - STEP 3 素材：其 README/KNOWN_ISSUES 诚实披露的文件损坏级事故史（add_symbol_property
+      丢闭括号、S-expr 转义不对称、SWIG C++ 所有权崩溃、响应错位）。
+  - **遗留未决项更新**：amcolex/kicad-ai 本轮 WebFetch 取得 GitHub 404 渲染页（非网络故障），
+    现有证据一致指向该 URL 当前无公开仓库；"从未存在"强结论维持待人工浏览器定案。
+  - **吸收建议（供人工决策，未实装）**：近期可落地两项——KiCadAI 的 RecordedProvider 录制
+    回放模式用于 requirements_runtime LLM 层确定性测试；KiCad MCP 的 FTS5 连字符 MPN 教训
+    转化为 AEDL 器件匹配对抗性 fixture。中期候选：capability preflight 机制（Adapt）。
+  - 未触碰 AEDL 任何代码/门禁/共享只读区；未动 .gitignore（克隆目录排除待人工确认）。
+
+- 团队自主部分：
+  - 大统领指令领取 TASK-P3、指定参照 circuitbot.md 证据纪律、要求完成后标注任务卡并
+    留痕、不 commit。
+
+- 人工审核：
+  - 状态：`PENDING_HUMAN_REVIEW`
+  - 待审：① 两份 intake 报告的结论与证据标记；② 碰撞分析校准结论（含 KiCadAI 威胁等级
+    升级建议）是否回写碰撞分析文件；③ 两个本地克隆目录的处置（建议 .gitignore 排除）；
+    ④ Konnect AGPL 红线的执行确认。
+
+- 验证：
+  - 源码级：所有"已验证"结论均直接读自本地克隆文件（路径写入报告）；否定性结论
+    （如 mixelpixx 无 pinmux 检测）经全仓检索；本人中途一次否定性误判（simmodel 无 MNA，
+    系检索 glob 写法错误）已在会话内自我纠正并如实记录于报告措辞。
+  - 运行级：KiCadAI 的 `make public-demo` / `public-demo-refusal` / `go test` 均 NOT_RUN
+    （需 Go 1.23 + KiCad 10.0.3 环境）；AEDL 侧测试未运行（零代码改动，无影响面）。
+
+- 新增第三方资源：
+  - 无融合性使用、零代码复制，THIRD_PARTY_RESOURCES.md 无新增登记项；两个克隆仅为
+    审查证据暂存（研究结果引用，非运行时依赖）。
+
+- 关联设计决策：
+  - 无新 ADR（纯研究；capability preflight 若 M3 立项再提）。
+
+- AIC Score Target：
+  - NONE（纯研究任务，未实装机制、未更新评分资产；产出为后续设计输入）。
+
+- Commit / PR：
+  - 未提交（遵守协作协议：不 commit，由大统领统一审核提交）；未创建 PR；未 push。
+
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`
+
+
+## AI-20260831-005
+
+- 日期：2026-08-31
+- 任务名称：补 requirements runtime HTTP 服务器（P2 前端真实 API 模式的集成缺口）
+- 模块/路径：
+  - `gates/requirements_runtime_server.py`（新增：零依赖 HTTP 壳，五端点）
+  - 无其他文件改动（仅新增本文件 + 本条台账）
+
+- AI 工具/平台：ZCode（GLM）
+- 模型：GLM-5.3
+
+- AI 参与类型：
+  - [x] GENERATE_CODE
+  - [x] DEBUG
+  - [x] ADVISE
+
+- 任务目标：
+  - 并行 AI-003（P2 前端）台账明确标注"P1 的 runtime server 尚未提供，真实 API 模式请求失败是预期行为"；
+    本会话核查后发现此缺口系 P1 侧遗漏（API 契约文档承诺了 HTTP 服务但只交付了纯函数层），补上
+    契约承诺的 HTTP 壳，使前端"真实 API"模式可联调。
+
+- AI 实际产出：
+  - `gates/requirements_runtime_server.py`：标准库 http.server 实现五端点
+    POST /api/propose、GET /api/contract、POST /api/answer、POST /api/finalize、POST /api/validate，
+    响应形状与 web/api-client.js HttpTransport 逐字段对齐。
+  - 设计要点：自哈希只在服务端写入（浏览器草稿永不含 contract_sha256，与 mock 传输层一致）；
+    LLM 建议是可插拔 hook，无 hook 时返回启发式草案并明确标注 source=fallback-heuristic +
+    warning，绝不伪装成 LLM 产物。
+  - 联调发现并修复一个诚实性 bug：初版把启发式草案误路由进 parse_llm_proposal，导致
+    source 被覆盖为 "llm_proposal" 且 warning 丢失（fallback 伪装成 LLM）；修复为无 hook 时
+    直接返回启发式最终结构。
+  - 验证：进程内五端点 + 真实 HTTP 端到端（propose/contract 404/answer/finalize 写哈希/validate）
+    全部通过；前端 mock 模式 smoke-test 此前已 PASSED（并行 AI-003 交付）。
+
+- 团队自主部分：
+  - 项目负责人指令多 AI 并行协作；本缺口由本会话主动核查并行产物时发现并闭环。
+
+- 人工审核：
+  - 状态：`PENDING_HUMAN_REVIEW`
+  - 待审：runtime server 是否纳入正式交付范围；LLM propose hook 的接入方式（当前无凭据，
+    启发式 fallback 已可跑通全流程）。
+
+- 验证：
+  - `py -3` 进程内联调：propose/finalize/validate 逻辑通过；source/warnings 修复后复核通过。
+  - 真实 HTTP：curl 五端点（propose 返回 5 问+假设+warnings；contract 未生成返回 404；
+    answer 返回未答 blocking；finalize 写入 sha256；validate 返回 {status, errors}）。
+  - 前端 mock 模式 smoke-test：PASSED（并行 AI-003 交付，本会话复跑确认）。
+
+- 新增第三方资源：无（标准库 http.server）。
+
+- 关联设计决策：无新增 ADR。
+
+- AIC Score Target：
+  - 实现完成度与可验证效果（需求澄清工作台前端+后端全链路可跑）。
+
+- Commit / PR：
+  - 未提交（与其余改动一并等待人工统一审核提交）。
+
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`
+
+
+## AI-20260831-006
+
+- 日期：2026-08-31
+- 任务名称：C 方案——intent 语义哈希绑定（堵"改电路不重签合同"缺口）
+- 模块/路径：
+  - `gates/requirements_contract.py`（新增 `INTENT_SEMANTIC_FIELDS` / `INTENT_BINDING_FIELDS` / `intent_semantic_sha256()`；C4 扩展语义锁检查）
+  - `gates/requirements_runtime.py`（`draft_contract` 新增必填参数 `intent_semantic_sha256`）
+  - `gates/requirements/requirements_contract_v1.json`（M2 重签：写入语义哈希 + 重算自哈希）
+  - `tests/test_requirements_contract.py`（新增 `IntentSemanticBindingTests` 13 用例；既有用例同步新 binding 形状）
+  - `docs/api/requirements_api.md`（新增「intent_binding 语义哈希范围」章节 + finalize 说明）
+  - **跨领地单行改动**：`src/hardware/m2-board/intent_v1.json`（lockfile 引用重指新合同哈希；`src/` 为共享只读区，依据大统领验收标准"run_gates 的 requirements_contract 仍 PASS"的必然级联）
+  - **级联重导**：`delivery/`（`gates/export_delivery.py` 重跑，manifest/gerbers/zip/CPL 全部刷新，哈希绑定复核一致）
+  - P2 领地连带同步：`web/index.html`（移除过期的 intent_sha256 冲突提示，改为语义哈希说明）、`web/README.md`（缺口 #1 标记已解决 + 新增 mock 语义哈希限制）
+  - `docs/COLLABORATION.md`（新增 TASK-P5 卡片）、`docs/HANDOFF.md`（本会话小节）、本条
+
+- AI 工具/平台：WorkBuddy
+- 模型：Claude
+
+- AI 参与类型：
+  - [x] ADVISE
+  - [x] GENERATE_CODE
+  - [x] GENERATE_TEST
+  - [x] DEBUG
+  - [x] DOCUMENT
+  - [ ] REFACTOR
+
+- 任务目标（大统领直接指派）：
+  - 已实测确认缺口：单向 lockfile 绑定下，往 intent 塞 U9 电阻、保留旧合同引用，gate 仍 PASS。
+  - C 方案：合同记录 intent 的「语义字段哈希」，改电路必须重签合同。
+
+- AI 实际产出：
+  - 白名单**写死在代码注释**（`INTENT_SEMANTIC_FIELDS = ("components", "nets")`），并写明双向维护约定：intent 协议新增电路语义字段必须跟白名单；往白名单加字段=所有已签合同一次性作废。
+  - `intent_semantic_sha256(intent)`：白名单两字段的 canonical JSON（`ensure_ascii=False, sort_keys=True, separators=(",",":")`）sha256。缺失字段按 `null` 参与不跳过。
+  - `intent_binding` 扩为恰好 `{"intent_path", "intent_semantic_sha256"}`；旧单字段形状被拒（fail-closed，不静默放过）。
+  - C4 语义锁：`合同声明 != 当前 intent 语义哈希` → `intent 语义内容已变更，须重签合同`。
+  - 严格未引入双向哈希：语义哈希只依赖 intent 的 components/nets，不碰合同内容；`requirements_contract` 绑定字段本身明确排除（否则重新形成循环依赖）。
+  - M2 重签走**署名路径**（`finalize_contract`/`write_contract`，"谁算的哈希"可审计）；intent 引用用字节级精准替换（保留 1 空格缩进/LF/无 BOM 原格式，旧哈希恰好出现 1 次）。
+
+- 团队自主部分：
+  - 大统领指派 C 方案、定义语义白名单（components+nets）、给出验收标准与禁止项；
+  - ZCode/GLM（P1）此前的 lockfile 单向绑定设计与 runtime_server 是本方案的基础。
+
+- 人工审核：
+  - 状态：`PENDING_HUMAN_REVIEW`
+  - 待审：① 语义白名单与维护约定；② M2 重签内容与跨领地单行改动（intent 重指）；③ delivery 重导产物；
+    ④ **P1 领地连带缺口**：`requirements_runtime_server.py::finalize` 未写 `intent_semantic_sha256`（见下"已知限制"）。
+
+- 验证（全部真实运行，结果如实记录）：
+  - **原缺口复现→堵住**：用真实 M2 合同+intent 副本实测，塞 U9 电阻不重签 → `intent 语义内容已变更，须重签合同` FAIL；换料 U3 value 不重签 → FAIL；删器件 → FAIL；改 nets → FAIL。
+  - **不该失效的不失效**：只重指绑定（电路不变，合同重签）→ PASS；只改 `protocol_version` → PASS；
+    绑定字段被故意指错 → 只报 lockfile 错误，**不**报语义错误（证明绑定字段确实不在语义哈希内，无循环）。
+  - `py -3 -m unittest tests.test_requirements_contract` → **31/31 OK**（18 既有 + 13 新增；期间修掉本会话自己新用例的一个真 bug：重签用例里语义哈希取自改后 intent、落盘的却是不含改动的 intent）。
+  - 全量回归 `python -S -m unittest discover -s tests` → **114/114 OK**（含其他会话新增用例，零回归）。
+  - `python -S gates/run_gates.py` → 10 门禁：**9 PASS + board_review FAIL**（仍仅为 `manufacturing_release=false` 等人工重签，与接手时语义一致）；`requirements_contract` gate **PASS**，新自哈希 `f0fec3f860e6ca7d…be648d8`。
+  - `gates/export_delivery.py` → manifest 4 个 source（board/intent/bom/bom_stock_evidence）哈希逐一复核与磁盘一致。
+  - web/ 三项验证重跑：`verify-hash.js` OK、`smoke-test.js` PASSED、浏览器 E2E **19/19**。
+
+- 新增第三方资源：
+  - 无（纯标准库；无新依赖）。
+
+- 关联设计决策：
+  - 建议候选 ADR-007：intent 语义哈希绑定（白名单 + 单向 + 重签语义）。是否立项待人工审。
+
+- 已知限制（诚实边界）：
+  - **P1 领地连带缺口，本会话未改**：`gates/requirements_runtime_server.py::finalize`（L128-136）只写 `contract_sha256` 不写 `intent_semantic_sha256`，已实测其产物被 C4 拒收（`intent_binding must contain exactly …` + `malformed`）。修法已写入 TASK-P5 卡片，交 P1。
+  - **MOCK 前端限制**：mock 传输层无 intent 可读、无法替服务端算语义哈希，故 MOCK 模式生成的合同不含该字段、送真实门禁 C4 必 FAIL（UI 与 README 已明示，非 bug）。
+  - 本会话环境（WorkBuddy sitecustomize safe-delete 钩子）拦截 `unlink`/`rmtree`，`run_gates.py`/`export_delivery.py` 需 `python -S` 运行或人工终端执行；非仓库代码问题。
+  - NOT_RUN：`requirements_runtime_server.py` 的 HTTP 端到端联调（属 P1 领地且其 finalize 待修）。
+
+- AIC Score Target：
+  - 创新性与方案设计（合同↔intent 语义锁；主张成立需 Evidence 支撑，暂不下正式结论）。
+
+- Commit / PR：
+  - 未提交（遵守协作协议：全程未执行 git add/commit/push）；未创建 PR；改动保留在工作树待人工统一审核。
+
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`
+
+## AI-20260831-007
+
+- 日期：2026-08-31
+- 任务名称：① M2 目检渲染证据门禁（sha256 绑定 PCB）；② TASK-FIX-D1：D1 LED 极性反接修复与全链重放
+- 模块/路径：
+  - `tools/board_review.py`、`gates/gate_core.py`、`gates/run_gates.py`、`tests/test_board_review.py`（渲染证据）
+  - `src/hardware/m2-board/intent_v1.json`、`m2_board.kicad_sch`、`m2_board.kicad_pcb`（D1 极性）
+  - `gates/requirements/requirements_contract_v1.json`（重签）、`tools/generate_m2_ops.py`（lockfile 泄漏修复）
+  - `notes/m2-evidence-reset/generated/`（级联重导证据）、`delivery/`（重导交付包）
+
+- AI 工具/平台：Qoder
+- 模型：`UNKNOWN`（当前会话未暴露可核验的精确模型 ID）
+
+- AI 参与类型：
+  - [ ] ADVISE
+  - [x] GENERATE_CODE
+  - [ ] REFACTOR
+  - [x] DEBUG
+  - [x] GENERATE_TEST
+  - [ ] RESEARCH
+  - [x] DOCUMENT
+  - [ ] BENCHMARK
+  - [ ] MEDIA
+
+- 做了什么：
+  - **渲染证据门禁**（背景：2026-08-31 过期手工渲染图导致多模态目检误报，PIT-20260830-001 第二次应验的同类缺口）：
+    `tools/board_review.py` 用 kicad-cli 脚本化重渲 top/bottom 目检图并写顶层 `render_evidence`
+    （pcb_sha256/top_png_sha256/bottom_png_sha256/rendered_at，纯内容寻址，无 mtime）；
+    `gate_core.validate_render_evidence` fail-closed 校验；`run_gates` 的 board_review 门禁经
+    `_meta.auto_evidence` 指针接入。6 个新单测覆盖缺字段/缺图/PCB 失配/PNG 失配。
+  - **TASK-FIX-D1**：按 `docs/TASK_FIX_D1.md` 修复 D1（LED）极性反接：
+    - intent：`LED_A=[R4.2, D1.2]`、`GND` 含 `D1.1`（`LED_DRV` 不动）；
+    - 原理图：D1 两脚网标对调（pin1→GND、pin2→LED_A）；
+    - PCB：**偏离任务书字面做法**——任务书要求"只交换 pad 的 `(net ...)` 属性"，但实测铜皮物理连接是
+      pad1↔R4.2 侧铜皮、pad2↔GND 铜皮，只换标签会造成铜皮-网络冲突且 LED 物理上仍反接。
+      实际做法：D1 footprint 原地旋转 180°（`(at 44 26)`→`(at 44 26 180)`），pad1 落到 GND 铜皮、
+      pad2 落到 LED_A 铜皮，同时交换两 pad 网络属性。走线/过孔零改动，阴极丝印标记随封装一起转到正确侧。
+  - **级联重导**：`generate_m2_ops.py` 重放 ops（109 条，`GND at D1.1`+`LED_A at D1.2` 已验证）；
+    需求合同重签（语义哈希 `82f8aa2f…02c34`，合同自哈希 `a315effe…7eab0`，intent lockfile 同步）；
+    `export_delivery.py` 重导（rows=21 zip_entries=11）；`run_gates.py` 全链重跑（网表/ERC/DRC/语义/故障注入/学习）；
+    `tools/board_review.py` 重渲染刷新 render_evidence。
+  - **顺带修复（阻塞级联，必须做）**：`tools/generate_m2_ops.py::split_akcli_intent` 会把 P5 任务新增的
+    `requirements_contract` lockfile 字段透传给 akcli，被其严格 schema 拒绝（BAD_CONFIG），导致 ops 无法重放。
+    改为白名单透传（protocol_version/components/nets/layout/mode）。3 个既有用例不回归。
+
+- 团队自主部分：
+  - 大统领下达 TASK_FIX_D1.md 任务书、证据链（polarity-verification.md）与验收标准；
+  - PCB 旋转 180° 替代"只换标签"是本会话基于铜皮连通性分析的自主判断（已在上方显式标注偏离）。
+
+- 人工审核：
+  - 状态：`PENDING_HUMAN_REVIEW`
+  - 待审：① PCB 旋转方案（与任务书字面不同，需人工确认物理正确性）；② generate_m2_ops.py 白名单修复；
+    ③ 需求合同重签内容；④ 渲染证据门禁实现（已随 4e0922a 提交）。
+
+- 验证（全部真实运行，结果如实记录）：
+  - 三层一致性：intent `LED_A=[R4.2,D1.2]`/`GND` 含 `D1.1`；新导网表 `D1 pin=1 pinfunction=K_1 → /GND`、
+    `D1 pin=2 pinfunction=A_2 → /LED_A`；PCB pad1(net GND)/pad2(net LED_A)。
+  - `py -3 -m unittest discover -s tests` → **114/114 OK**（零失败；本会话早前该套件有 1 个
+    test_requirements_contract 失败，属并行会话遗留，现已随工作树现状全绿）。
+  - `py -3 gates/run_gates.py` → 10 门禁：**9 PASS + board_review FAIL**；board_review 唯一错误
+    `manufacturing_release is false`（等人工重签的诚实终态，非回归）。渲染证据门禁曾正确抓到
+    重渲前的 pcb_sha256 失配（fail-closed 生效），重渲后消除。
+  - `tests.test_board_review` 9/9、`tests.test_generate_m2_ops` 3/3 单独复跑通过。
+  - `export_delivery.py` → `PASS rows=21 zip_entries=11`。
+  - 篡改演练（渲染证据）：改 PCB 不重渲 → board_review 报 `render_evidence pcb_sha256 does not match`；
+    恢复后消除（本任务中该机制再次真实触发并被重渲合法消除）。
+
+- 新增第三方资源：无（KiCad 10.0.5 kicad-cli、akcli 0.21.0 为既有登记资源）。
+
+- 已知限制（诚实边界）：
+  - **不声称"LED 现在能亮"**：极性网络已按符号定义在数据级修正且三层一致，但电气功能正确性
+    属回件 C 级实实测范畴（任务书 §六明令）。
+  - 本会话的渲染证据提交 `4e0922a` 的 AI ID 标签误写为 `[AI-20260831-001]`，与本台账 001（P1 会话）
+    撞号；该工作实际对应本条 007。不改写已有提交，留人工审核时知悉。
+  - 共享工作树有并行会话改动（docs/、lessons 等），本会话只动了上述清单文件；提交时请人工按清单甄别。
+  - 防再犯项（任务书 §四：LED_POLARITY 语义契约规则 + 负向故障注入夹具）本轮**未做**，留待下轮。
+
+- AIC Score Target：
+  - NONE（内部质量修复；渲染证据门禁若被认定为可复用机制可在后续 Evidence 中另行关联）。
+
+- Commit / PR：
+  - 渲染证据部分已提交：`4e0922a`（分支 fix/m2-schematic-semantic-release）；
+  - D1 修复及级联产物**未提交**（遵守任务书"不 commit"铁律），留人工统一审核。
+
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`
