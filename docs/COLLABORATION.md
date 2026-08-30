@@ -123,6 +123,15 @@
 - ⚠️ **留给 P1 的连带缺口（本会话领地外，未改动）**：`gates/requirements_runtime_server.py` 的 `finalize`（L128-136）只写 `contract_sha256`，**没有写 `intent_semantic_sha256`**。已实测：经它 finalize 的合同送 C4 会被拒（`intent_binding must contain exactly intent_path, intent_semantic_sha256` + `malformed`）。修法：在写自哈希前 `binding["intent_semantic_sha256"] = intent_semantic_sha256(json.loads(intent_path.read_text(...)))`。该文件属 P1 领地，本会话只记录不动手。
 - 遗留（非阻塞）：run_gates/export 在本会话环境里被 WorkBuddy 的 sitecustomize safe-delete 钩子拦截 `unlink`/`rmtree`（回收站不可用），需用 `python -S` 运行或人工在正常终端跑；这不是仓库代码问题。
 
+### TASK-P7：finalize 语义哈希缺口修复 + runtime server 测试补强 🔨 进行中（通宵自迭代）
+- 属主：ZCode 主会话。任务书全文（领地/待办池/验收标准）：`docs/OVERNIGHT_20260901.md` TASK-P7 卡。
+
+### TASK-P8：开源 Intake Phase 4（NeuroBoard）+ 遗留定案 🔨 进行中（通宵自迭代）
+- 属主：空缺待领（研究路，领地 `notes/open_source_intake/`）。任务书：`docs/OVERNIGHT_20260901.md` TASK-P8 卡。
+
+### TASK-P9：board_review 特征化测试 + 可插拔协议预备 🔨 进行中（通宵自迭代）
+- 属主：空缺待领（代码路，领地 `tests/test_board_review_golden.py` 等）。任务书：`docs/OVERNIGHT_20260901.md` TASK-P9 卡。
+
 ## 4. 大统领的职责（只有你能做的）
 
 - 审 M2 的 89 文件 + 重签 board_review + commit/push 授权（不变，仍是第一优先）
