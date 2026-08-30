@@ -23,13 +23,22 @@ try:
         erc_gate_verdict,
         drc_gate_verdict,
         read_bom_refs,
+        read_intent_physical_refs,
         read_pos_refs,
         sha256_file,
         validate_board_review,
         validate_bom,
+        validate_bom_freshness,
+        validate_bom_stock_evidence,
+        validate_delivery_manifest,
+        validate_delivery_bom,
+        validate_jlc_cpl,
+        validate_render_evidence,
         zip_entry_names,
     )
+    from .export_delivery import EXPECTED_GERBER_FILES, validate_gerber_set
     from .learning_gate import validate_lessons_registry
+    from .make_jlc_cpl import generate_jlc_cpl
     from .schematic_semantics import REPORT_SCHEMA as SEMANTIC_REPORT_SCHEMA, evaluate_paths
     from .semantic_fault_injection import REPORT_SCHEMA as FAULT_REPORT_SCHEMA, generate_fault_injection_report
 except ImportError:  # direct ``py gates/run_gates.py`` execution
@@ -38,24 +47,27 @@ except ImportError:  # direct ``py gates/run_gates.py`` execution
         drc_gate_verdict,
         erc_gate_verdict,
         read_bom_refs,
+        read_intent_physical_refs,
         read_pos_refs,
         sha256_file,
         validate_board_review,
         validate_bom,
+        validate_bom_freshness,
+        validate_bom_stock_evidence,
+        validate_delivery_manifest,
+        validate_delivery_bom,
+        validate_jlc_cpl,
+        validate_render_evidence,
         zip_entry_names,
     )
+    from export_delivery import EXPECTED_GERBER_FILES, validate_gerber_set  # type: ignore
     from learning_gate import validate_lessons_registry  # type: ignore
+    from make_jlc_cpl import generate_jlc_cpl  # type: ignore
     from schematic_semantics import REPORT_SCHEMA as SEMANTIC_REPORT_SCHEMA, evaluate_paths  # type: ignore
     from semantic_fault_injection import REPORT_SCHEMA as FAULT_REPORT_SCHEMA, generate_fault_injection_report  # type: ignore
 
 
-REQUIRED_ZIP_ENTRIES = {
-    "m2_board-Edge_Cuts.gm1",
-    "m2_board-F_Cu.gtl",
-    "m2_board-B_Cu.gbl",
-    "m2_board.drl",
-    "m2_board-job.gbrjob",
-}
+REQUIRED_ZIP_ENTRIES = set(EXPECTED_GERBER_FILES)
 OPS_EVIDENCE_SCHEMA = "https://aedl.local/schemas/m2-ops-validation.v1.json"
 LEARNING_REPORT_SCHEMA = "https://aedl.local/schemas/learning-gate-report.v1.json"
 
@@ -92,33 +104,91 @@ def _evaluate_drc(path: Path) -> Dict[str, Any]:
 
 def _evaluate_bom(root: Path) -> Dict[str, Any]:
     path = root / "gates" / "bom" / "bom_v1.json"
-    errors = validate_bom(path)
-    return _gate("bom", "pass" if not errors else "fail", {"path": str(path), "error_count": len(errors)}, errors)
+    stock_evidence = root / "notes" / "m2-evidence-reset" / "generated" / "bom_stock_current.json"
+    errors = validate_bom(path) + validate_bom_freshness(path)
+    details: Dict[str, Any] = {
+        "path": str(path),
+        "stock_evidence": str(stock_evidence),
+    }
+    if not stock_evidence.is_file():
+        errors.append(f"missing current BOM stock evidence: {stock_evidence}")
+    else:
+        errors.extend(validate_bom_stock_evidence(path, stock_evidence))
+        with stock_evidence.open("r", encoding="utf-8-sig") as handle:
+            evidence = json.load(handle)
+        stocks = [
+            (part.get("assembly_stock"), part.get("lcsc"))
+            for part in evidence.get("parts", [])
+            if isinstance(part, dict)
+            and isinstance(part.get("assembly_stock"), int)
+            and not isinstance(part.get("assembly_stock"), bool)
+        ]
+        if stocks:
+            minimum_stock, minimum_code = min(stocks)
+            details["minimum_assembly_stock"] = minimum_stock
+            details["minimum_stock_lcsc"] = minimum_code
+    details["error_count"] = len(errors)
+    return _gate("bom", "pass" if not errors else "fail", details, errors)
 
 
-def _evaluate_delivery(root: Path) -> Dict[str, Any]:
+def _evaluate_delivery(root: Path, fresh_cpl: Optional[Path] = None) -> Dict[str, Any]:
     bom = root / "gates" / "bom" / "bom_v1.json"
+    intent = root / "src" / "hardware" / "m2-board" / "intent_v1.json"
     pos = root / "delivery" / "pos.csv"
     csv_path = root / "delivery" / "bom.csv"
     archive = root / "delivery" / "jlc_gerber_upload.zip"
+    manifest = root / "delivery" / "manifest_v1.json"
+    gerber_dir = root / "delivery" / "gerbers"
     errors: List[str] = []
-    details: Dict[str, Any] = {"paths": [str(bom), str(pos), str(csv_path), str(archive)]}
-    for path in (bom, pos, csv_path, archive):
+    details: Dict[str, Any] = {
+        "paths": [str(intent), str(bom), str(pos), str(csv_path), str(archive), str(manifest)],
+    }
+    for path in (intent, bom, pos, csv_path, archive, manifest):
         if not path.is_file():
             errors.append(f"missing delivery artifact: {path}")
 
-    if not errors:
+    if all(path.is_file() for path in (intent, bom, pos, csv_path)):
         bom_refs = read_bom_refs(bom)
         pos_refs = read_pos_refs(pos)
+        delivery_bom_refs = read_pos_refs(csv_path)
+        intent_refs = read_intent_physical_refs(intent)
+        details["intent_ref_count"] = len(intent_refs)
         details["bom_ref_count"] = len(bom_refs)
         details["pos_ref_count"] = len(pos_refs)
-        if bom_refs != pos_refs:
-            errors.append("BOM and POS reference sets differ")
+        details["delivery_bom_ref_count"] = len(delivery_bom_refs)
+        if bom_refs != intent_refs:
+            errors.append("canonical BOM and physical intent reference sets differ")
+        if pos_refs != intent_refs:
+            errors.append("POS and physical intent reference sets differ")
+        if delivery_bom_refs != intent_refs:
+            errors.append("delivery BOM and physical intent reference sets differ")
+        errors.extend(validate_delivery_bom(bom, csv_path))
+        errors.extend(validate_jlc_cpl(pos))
+
+    if manifest.is_file():
+        errors.extend(validate_delivery_manifest(root, manifest, EXPECTED_GERBER_FILES))
+    errors.extend(validate_gerber_set(gerber_dir))
+
+    if archive.is_file():
         names = set(zip_entry_names(archive))
         details["zip_entry_count"] = len(names)
-        missing = sorted(REQUIRED_ZIP_ENTRIES - names)
+        missing = sorted(EXPECTED_GERBER_FILES - names)
+        unexpected = sorted(names - EXPECTED_GERBER_FILES)
         if missing:
             errors.append(f"ZIP is missing required entries: {missing}")
+        if unexpected:
+            errors.append(f"ZIP contains unexpected non-production entries: {unexpected}")
+
+    if fresh_cpl is not None:
+        fresh_cpl = Path(fresh_cpl)
+        details["fresh_cpl"] = str(fresh_cpl)
+        if not fresh_cpl.is_file():
+            errors.append(f"fresh current-PCB CPL evidence is missing: {fresh_cpl}")
+        else:
+            errors.extend(validate_jlc_cpl(fresh_cpl))
+            details["fresh_cpl_sha256"] = sha256_file(fresh_cpl)
+            if pos.is_file() and pos.read_bytes() != fresh_cpl.read_bytes():
+                errors.append("delivery CPL differs from fresh current-PCB millimetre export")
     return _gate("delivery", "pass" if not errors else "fail", details, errors)
 
 
@@ -330,11 +400,24 @@ def _evaluate_board_review(path: Path) -> Dict[str, Any]:
             status = review["status"]
             status_counts[status] = status_counts.get(status, 0) + 1
     metadata = data.get("_meta") if isinstance(data.get("_meta"), dict) else {}
+    root = Path(path).resolve().parents[1]
+    auto_reference = metadata.get("auto_evidence")
+    auto_evidence_path: Optional[Path] = None
+    if not isinstance(auto_reference, str) or not auto_reference.strip():
+        errors.append("board review _meta has no auto_evidence pointer")
+    else:
+        candidate = Path(auto_reference)
+        auto_evidence_path = candidate if candidate.is_absolute() else root / candidate
+        errors.extend(validate_render_evidence(
+            auto_evidence_path,
+            root / "src" / "hardware" / "m2-board" / "m2_board.kicad_pcb",
+        ))
     details = {
         "path": str(path),
         "review_count": len(reviews),
         "status_counts": status_counts,
         "manufacturing_release": metadata.get("manufacturing_release"),
+        "auto_evidence": str(auto_evidence_path) if auto_evidence_path else None,
     }
     return _gate("board_review", "pass" if not errors else "fail", details, errors)
 
@@ -346,20 +429,46 @@ def evaluate_evidence(
     board_review: Path,
     semantic_report: Optional[Path] = None,
     learning_report: Optional[Path] = None,
+    fresh_cpl: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """Evaluate all non-process evidence and return a serializable manifest."""
     root = Path(root).resolve()
     semantic_report = semantic_report or root / "notes" / "m2-evidence-reset" / "generated" / "schematic_semantics_current.json"
     learning_report = learning_report or root / "notes" / "m2-evidence-reset" / "generated" / "learning_gate_current.json"
+
+    def _evaluate_requirements_contract(root: Path) -> Dict[str, Any]:
+        """10th gate: NL -> intent provenance (Phase 1 CircuitBot intake).
+
+        Fail-closed wrapper around the deterministic contract validator; the
+        LLM advisory runtime (gates/requirements_runtime.py) is intentionally
+        NOT called here - the gate only verifies artifacts, never generates.
+        """
+        from gates.requirements_contract import requirements_contract_gate_verdict
+
+        contract_path = root / "gates" / "requirements" / "requirements_contract_v1.json"
+        intent_path = root / "src" / "hardware" / "m2-board" / "intent_v1.json"
+        verdict = requirements_contract_gate_verdict(contract_path, intent_path)
+        return _gate(
+            "requirements_contract",
+            verdict["status"],
+            {
+                "contract_path": str(contract_path),
+                "intent_path": str(intent_path),
+                "contract_sha256": verdict.get("contract_sha256"),
+            },
+            verdict["errors"],
+        )
+
     gates = [
         _safe_gate("erc", lambda: _evaluate_erc(Path(erc_report))),
         _safe_gate("drc", lambda: _evaluate_drc(Path(drc_report))),
         _safe_gate("bom", lambda: _evaluate_bom(root)),
-        _safe_gate("delivery", lambda: _evaluate_delivery(root)),
+        _safe_gate("delivery", lambda: _evaluate_delivery(root, fresh_cpl)),
         _safe_gate("intent", lambda: _evaluate_intent(root)),
         _safe_gate("ops", lambda: _evaluate_ops(root)),
         _safe_gate("schematic_semantics", lambda: _evaluate_schematic_semantics(root, Path(semantic_report))),
         _safe_gate("learning", lambda: _evaluate_learning(root, Path(learning_report))),
+        _safe_gate("requirements_contract", lambda: _evaluate_requirements_contract(root)),
         _safe_gate("board_review", lambda: _evaluate_board_review(Path(board_review))),
     ]
     passed = all(gate["status"] == "pass" for gate in gates)
@@ -453,6 +562,7 @@ def run(
     semantic_report = evidence_dir / "schematic_semantics_current.json"
     fault_report = evidence_dir / "semantic_fault_injection_current.json"
     learning_report = evidence_dir / "learning_gate_current.json"
+    cpl_report = evidence_dir / "m2_board_cpl_current.csv"
     tools: List[Dict[str, Any]] = []
     tool_errors: List[str] = []
     netlist_fresh = False
@@ -474,6 +584,14 @@ def run(
             netlist_command = [str(cli), "sch", "export", "netlist", "--format", "kicadxml", "--output", str(netlist_temp), str(sch)]
             erc_command = [str(cli), "sch", "erc", "--format", "json", "--severity-all", "--exit-code-violations", "--output", str(erc_report), str(sch)]
             drc_command = [str(cli), "pcb", "drc", "--format", "json", "--severity-all", "--exit-code-violations", "--output", str(drc_report), str(board)]
+            raw_pos = evidence_dir / "m2_board_pos_mm_current.csv.tmp"
+            raw_pos.unlink(missing_ok=True)
+            cpl_report.unlink(missing_ok=True)
+            pos_command = [
+                str(cli), "pcb", "export", "pos", "--format", "csv",
+                "--units", "mm", "--side", "both", "--exclude-dnp",
+                "--output", str(raw_pos), str(board),
+            ]
             netlist_run = {"name": "kicad_netlist", **_run_tool(netlist_command, root)}
             tools.append(netlist_run)
             if netlist_run.get("exit_code") == 0 and netlist_temp.is_file():
@@ -481,6 +599,19 @@ def run(
                 netlist_fresh = True
             tools.append({"name": "kicad_erc", **_run_tool(erc_command, root)})
             tools.append({"name": "kicad_drc", **_run_tool(drc_command, root)})
+            pos_run = {"name": "kicad_pos_mm", **_run_tool(pos_command, root)}
+            tools.append(pos_run)
+            if pos_run.get("exit_code") == 0 and raw_pos.is_file():
+                try:
+                    generate_jlc_cpl(raw_pos, cpl_report, units="mm")
+                except Exception as exc:
+                    tool_errors.append(
+                        f"fresh current-PCB CPL conversion failed: {type(exc).__name__}: {exc}"
+                    )
+                finally:
+                    raw_pos.unlink(missing_ok=True)
+            else:
+                tool_errors.append("fresh current-PCB millimetre position export failed")
 
     generated_at = _utc_now()
     if netlist_fresh:
@@ -562,6 +693,7 @@ def run(
         board_review,
         semantic_report,
         learning_report,
+        cpl_report if not skip_kicad else None,
     )
     if tool_errors:
         evidence["gates"].append(_gate("kicad_tool", "fail", errors=tool_errors))
@@ -580,6 +712,7 @@ def run(
             "board_review": board_review,
             "ops_evidence": evidence_dir / "ops_validate_current.json",
             "semantic_netlist": netlist_report,
+            "cpl_current": cpl_report,
             "semantic_report": semantic_report,
             "fault_injection_report": fault_report,
             "learning_report": learning_report,
@@ -603,6 +736,7 @@ def run(
             "learning": str(learning_report),
             "fault_injection": str(fault_report),
             "netlist": str(netlist_report),
+            "cpl": str(cpl_report),
         },
         "artifacts": artifacts,
         "gates": evidence["gates"],

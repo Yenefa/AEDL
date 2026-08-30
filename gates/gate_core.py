@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import csv
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import hashlib
 import io
 import json
+import math
 from pathlib import Path
 import re
 from typing import Any, Dict, List, Set, Tuple
@@ -15,6 +16,17 @@ import zipfile
 
 _REF_RE = re.compile(r"^[A-Z]+[0-9]+$")
 _LCSC_RE = re.compile(r"^C[0-9]+$")
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_JLC_CPL_FIELDS = ("Designator", "Mid X", "Mid Y", "Rotation", "Layer")
+_DELIVERY_BOM_FIELDS = (
+    "Comment", "Designator", "Footprint", "LCSC Part #", "JLC Lib", "Stock@freeze"
+)
+_PRODUCTION_LAYERS = (
+    "F.Cu", "B.Cu", "F.Paste", "B.Paste", "F.Silkscreen",
+    "B.Silkscreen", "F.Mask", "B.Mask", "Edge.Cuts",
+)
+BOM_STOCK_EVIDENCE_SCHEMA = "https://aedl.local/schemas/bom-stock-snapshot.v1.json"
+DELIVERY_MANIFEST_SCHEMA = "https://aedl.local/schemas/m2-delivery-manifest.v1.json"
 BOARD_REVIEW_IDS = (
     "USB_EDGE",
     "ESP_ANTENNA",
@@ -172,6 +184,155 @@ def validate_bom(path: Path) -> List[str]:
     return errors
 
 
+def validate_bom_freshness(
+    path: Path,
+    *,
+    now: datetime | None = None,
+    max_age_days: int = 7,
+) -> List[str]:
+    """Fail closed when the canonical BOM stock snapshot is stale or future-dated."""
+    if not isinstance(max_age_days, int) or isinstance(max_age_days, bool) or max_age_days <= 0:
+        raise ValueError("max_age_days must be a positive integer")
+
+    current = datetime.now(timezone.utc) if now is None else now
+    if current.tzinfo is None or current.utcoffset() is None:
+        raise ValueError("now must be timezone-aware")
+
+    data = _read_json(path)
+    meta = data.get("_meta")
+    if not isinstance(meta, dict):
+        return ["BOM _meta must be an object for freshness validation"]
+    frozen_at = meta.get("frozen_at")
+    if not isinstance(frozen_at, str) or not frozen_at.endswith("Z"):
+        return ["BOM frozen_at must be an ISO-8601 UTC string for freshness validation"]
+    try:
+        frozen = datetime.fromisoformat(frozen_at.replace("Z", "+00:00"))
+    except ValueError:
+        return [f"BOM frozen_at is malformed for freshness validation: {frozen_at!r}"]
+
+    age = current.astimezone(timezone.utc) - frozen.astimezone(timezone.utc)
+    if age < -timedelta(minutes=5):
+        return [f"BOM stock snapshot is future-dated: frozen_at={frozen_at}"]
+    if age > timedelta(days=max_age_days):
+        return [
+            f"BOM stock snapshot is stale: age={age.total_seconds() / 86400:.2f} days, "
+            f"maximum={max_age_days} days"
+        ]
+    return []
+
+
+def validate_bom_stock_evidence(bom_path: Path, evidence_path: Path) -> List[str]:
+    """Validate the live-catalog report and bind every row to the canonical BOM."""
+    bom = _read_json(bom_path)
+    evidence = _read_json(evidence_path)
+    errors: List[str] = []
+    expected_top = {
+        "$schema", "schema_version", "generated_at", "status", "errors",
+        "tool", "bom", "bom_sha256", "parts",
+    }
+    missing = sorted(expected_top - set(evidence))
+    unknown = sorted(set(evidence) - expected_top)
+    if missing:
+        errors.append(f"BOM stock evidence missing fields: {missing}")
+    if unknown:
+        errors.append(f"BOM stock evidence has unknown fields: {unknown}")
+    if evidence.get("$schema") != BOM_STOCK_EVIDENCE_SCHEMA or evidence.get("schema_version") != 1:
+        errors.append("BOM stock evidence schema/version mismatch")
+    if evidence.get("bom") != "gates/bom/bom_v1.json":
+        errors.append("BOM stock evidence points to an unexpected BOM path")
+    current_hash = sha256_file(bom_path)
+    if evidence.get("bom_sha256") != current_hash:
+        errors.append("BOM stock evidence hash does not match canonical BOM")
+
+    status = evidence.get("status")
+    evidence_errors = evidence.get("errors")
+    if status not in ("pass", "fail"):
+        errors.append(f"BOM stock evidence has unknown status {status!r}")
+    if not isinstance(evidence_errors, list) or any(
+        not isinstance(item, str) or not item.strip() for item in (evidence_errors or [])
+    ):
+        errors.append("BOM stock evidence errors must be a list of non-empty strings")
+        evidence_errors = []
+    if status == "pass" and evidence_errors:
+        errors.append("passing BOM stock evidence contains errors")
+    if status == "fail":
+        if not evidence_errors:
+            errors.append("failed BOM stock evidence has no errors")
+        errors.append("BOM stock evidence status is fail: " + "; ".join(evidence_errors))
+
+    generated_at = evidence.get("generated_at")
+    frozen_at = bom.get("_meta", {}).get("frozen_at") if isinstance(bom.get("_meta"), dict) else None
+    if status == "pass" and generated_at != frozen_at:
+        errors.append("BOM stock evidence timestamp does not match canonical BOM frozen_at")
+    for field in ("generated_at", "tool"):
+        if not isinstance(evidence.get(field), str) or not evidence[field].strip():
+            errors.append(f"BOM stock evidence has no {field}")
+
+    items = bom.get("items")
+    if not isinstance(items, list) or not items:
+        return errors + ["canonical BOM has no items for stock evidence validation"]
+    canonical: Dict[str, Dict[str, Any]] = {}
+    for index, item in enumerate(items):
+        if not isinstance(item, dict) or not isinstance(item.get("lcsc"), str):
+            errors.append(f"canonical BOM item {index} has no LCSC code")
+            continue
+        code = item["lcsc"]
+        expected = {
+            "mpn": item.get("mpn"),
+            "manufacturer": item.get("manufacturer"),
+            "package": item.get("catalog_package"),
+            "library": item.get("jlc_lib"),
+            "assembly_stock": item.get("stock"),
+        }
+        if code in canonical and canonical[code] != expected:
+            errors.append(f"canonical BOM repeats {code} with conflicting catalog data")
+        canonical[code] = expected
+
+    parts = evidence.get("parts")
+    if not isinstance(parts, list) or not parts:
+        return errors + ["BOM stock evidence parts must be a non-empty list"]
+    by_code: Dict[str, Dict[str, Any]] = {}
+    expected_part_fields = {
+        "lcsc", "mpn", "manufacturer", "package", "library", "assembly_stock"
+    }
+    for index, part in enumerate(parts):
+        if not isinstance(part, dict):
+            errors.append(f"BOM stock evidence parts[{index}] must be an object")
+            continue
+        missing_part = sorted(expected_part_fields - set(part))
+        unknown_part = sorted(set(part) - expected_part_fields)
+        if missing_part:
+            errors.append(f"BOM stock evidence parts[{index}] missing fields: {missing_part}")
+        if unknown_part:
+            errors.append(f"BOM stock evidence parts[{index}] has unknown fields: {unknown_part}")
+        code = part.get("lcsc")
+        if not isinstance(code, str) or not _LCSC_RE.fullmatch(code):
+            errors.append(f"BOM stock evidence parts[{index}] has malformed LCSC code")
+            continue
+        if code in by_code:
+            errors.append(f"BOM stock evidence contains duplicate {code}")
+        by_code[code] = part
+        stock = part.get("assembly_stock")
+        if not isinstance(stock, int) or isinstance(stock, bool) or stock < 0:
+            errors.append(f"BOM stock evidence {code} has invalid assembly stock")
+        elif status == "pass" and stock <= 0:
+            errors.append(f"passing BOM stock evidence {code} has non-positive assembly stock")
+
+    if set(by_code) != set(canonical):
+        errors.append(
+            "BOM stock evidence code set differs from canonical BOM: "
+            f"missing={sorted(set(canonical) - set(by_code))} "
+            f"unexpected={sorted(set(by_code) - set(canonical))}"
+        )
+    for code in sorted(set(by_code) & set(canonical)):
+        for field, expected in canonical[code].items():
+            if status == "fail" and field == "assembly_stock":
+                continue
+            if by_code[code].get(field) != expected:
+                errors.append(f"BOM stock evidence {code} field {field} differs from canonical BOM")
+    return errors
+
+
 def read_bom_refs(path: Path) -> Set[str]:
     """Expand and return the unique physical reference set from a grouped BOM."""
     data = _read_json(path)
@@ -189,6 +350,88 @@ def read_bom_refs(path: Path) -> Set[str]:
             if ref in refs:
                 raise ValueError(f"BOM contains duplicate ref {ref}: {path}")
             refs.add(ref)
+    return refs
+
+
+def validate_delivery_bom(canonical_path: Path, delivery_path: Path) -> List[str]:
+    """Require every delivery BOM cell to match the expanded canonical BOM."""
+    canonical = _read_json(canonical_path)
+    items = canonical.get("items")
+    if not isinstance(items, list) or not items:
+        return ["canonical BOM items must be a non-empty list"]
+    expected: Dict[str, Dict[str, str]] = {}
+    for index, item in enumerate(items):
+        if not isinstance(item, dict) or not isinstance(item.get("ref"), str):
+            return [f"canonical BOM item {index} has no ref string"]
+        for ref in (part.strip() for part in item["ref"].split(",")):
+            if not _REF_RE.fullmatch(ref) or ref in expected:
+                return [f"canonical BOM has malformed or duplicate ref {ref!r}"]
+            expected[ref] = {
+                "Comment": str(item.get("value", "")),
+                "Designator": ref,
+                "Footprint": str(item.get("footprint", "")),
+                "LCSC Part #": str(item.get("lcsc", "")),
+                "JLC Lib": str(item.get("jlc_lib", "")),
+                "Stock@freeze": str(item.get("stock", "")),
+            }
+
+    errors: List[str] = []
+    actual: Dict[str, Dict[str, str]] = {}
+    with Path(delivery_path).open("r", encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        if tuple(reader.fieldnames or ()) != _DELIVERY_BOM_FIELDS:
+            return ["delivery BOM header must be exactly: " + ",".join(_DELIVERY_BOM_FIELDS)]
+        for row_number, row in enumerate(reader, start=2):
+            if None in row:
+                errors.append(f"delivery BOM row {row_number} has unexpected extra fields")
+                continue
+            ref = str(row.get("Designator", "")).strip()
+            if not _REF_RE.fullmatch(ref):
+                errors.append(f"delivery BOM row {row_number} has malformed designator {ref!r}")
+                continue
+            if ref in actual:
+                errors.append(f"delivery BOM contains duplicate designator {ref}")
+            actual[ref] = {field: str(row.get(field, "")) for field in _DELIVERY_BOM_FIELDS}
+    if set(actual) != set(expected):
+        errors.append(
+            "delivery BOM reference set differs from canonical BOM: "
+            f"missing={sorted(set(expected) - set(actual))} "
+            f"unexpected={sorted(set(actual) - set(expected))}"
+        )
+    for ref in sorted(set(actual) & set(expected)):
+        for field in _DELIVERY_BOM_FIELDS:
+            if actual[ref].get(field) != expected[ref][field]:
+                errors.append(f"delivery BOM {ref} field {field} differs from canonical BOM")
+    return errors
+
+
+def read_intent_physical_refs(path: Path) -> Set[str]:
+    """Return the fail-closed physical component references from canonical intent."""
+    data = _read_json(path)
+    if data.get("protocol_version") != 1:
+        raise ValueError(f"intent protocol_version must be 1: {path}")
+    components = data.get("components")
+    if not isinstance(components, dict) or not components:
+        raise ValueError(f"intent components must be a non-empty object: {path}")
+    refs: Set[str] = set()
+    for ref, component in components.items():
+        if not isinstance(ref, str) or not _REF_RE.fullmatch(ref):
+            if isinstance(ref, str) and ref.startswith("#"):
+                pass
+            else:
+                raise ValueError(f"intent has malformed component ref {ref!r}: {path}")
+        if not isinstance(component, dict):
+            raise ValueError(f"intent component {ref!r} must be an object: {path}")
+        virtual = component.get("virtual", False)
+        if not isinstance(virtual, bool):
+            raise ValueError(f"intent component {ref!r} has non-boolean virtual flag: {path}")
+        if virtual:
+            continue
+        if not _REF_RE.fullmatch(ref):
+            raise ValueError(f"physical intent component has malformed ref {ref!r}: {path}")
+        refs.add(ref)
+    if not refs:
+        raise ValueError(f"intent contains no physical component references: {path}")
     return refs
 
 
@@ -220,6 +463,47 @@ def read_pos_refs(path: Path) -> Set[str]:
     return refs
 
 
+def validate_jlc_cpl(path: Path) -> List[str]:
+    """Strictly validate JLC's five-column CPL shape and numeric content."""
+    errors: List[str] = []
+    with Path(path).open("r", encoding="utf-8-sig", newline="") as handle:
+        reader = csv.reader(handle)
+        try:
+            header = next(reader)
+        except StopIteration:
+            return ["JLC CPL is empty"]
+        if tuple(header) != _JLC_CPL_FIELDS:
+            return ["JLC CPL header must be exactly: " + ",".join(_JLC_CPL_FIELDS)]
+        seen: Set[str] = set()
+        row_count = 0
+        for row_number, row in enumerate(reader, start=2):
+            row_count += 1
+            if len(row) != len(_JLC_CPL_FIELDS):
+                errors.append(
+                    f"JLC CPL row {row_number} has {len(row)} fields; "
+                    f"expected {len(_JLC_CPL_FIELDS)}"
+                )
+                continue
+            ref, pos_x, pos_y, rotation, layer = row
+            if not _REF_RE.fullmatch(ref):
+                errors.append(f"JLC CPL row {row_number} has malformed designator {ref!r}")
+            elif ref in seen:
+                errors.append(f"JLC CPL contains duplicate designator {ref}")
+            seen.add(ref)
+            for field, value in (("Mid X", pos_x), ("Mid Y", pos_y), ("Rotation", rotation)):
+                try:
+                    number = float(value)
+                except ValueError:
+                    number = math.nan
+                if not math.isfinite(number):
+                    errors.append(f"JLC CPL row {row_number} field {field} is not finite")
+            if layer not in ("Top", "Bottom"):
+                errors.append(f"JLC CPL row {row_number} has invalid Layer {layer!r}")
+    if row_count == 0:
+        errors.append("JLC CPL contains no placement rows")
+    return errors
+
+
 def zip_entry_names(path: Path) -> List[str]:
     """Return sorted, safe file entry names from a ZIP archive."""
     with zipfile.ZipFile(str(path), "r") as archive:
@@ -238,6 +522,166 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def validate_delivery_manifest(
+    root: Path,
+    manifest_path: Path,
+    expected_gerber_files: Set[str],
+) -> List[str]:
+    """Bind delivery files and their ZIP payload to the current design sources."""
+    root = Path(root).resolve()
+    manifest = _read_json(manifest_path)
+    errors: List[str] = []
+    expected_top = {
+        "$schema", "schema_version", "generated_at", "generator", "kicad_cli",
+        "kicad_version", "settings", "sources", "artifacts",
+    }
+    missing = sorted(expected_top - set(manifest))
+    unknown = sorted(set(manifest) - expected_top)
+    if missing:
+        errors.append(f"delivery manifest missing fields: {missing}")
+    if unknown:
+        errors.append(f"delivery manifest has unknown fields: {unknown}")
+    if manifest.get("$schema") != DELIVERY_MANIFEST_SCHEMA or manifest.get("schema_version") != 1:
+        errors.append("delivery manifest schema/version mismatch")
+    if manifest.get("generator") != "gates/export_delivery.py":
+        errors.append("delivery manifest generator mismatch")
+    for field in ("generated_at", "kicad_cli", "kicad_version"):
+        if not isinstance(manifest.get(field), str) or not manifest[field].strip():
+            errors.append(f"delivery manifest has no {field}")
+    generated_at = manifest.get("generated_at")
+    if isinstance(generated_at, str):
+        try:
+            parsed = datetime.fromisoformat(generated_at.replace("Z", "+00:00"))
+            if not generated_at.endswith("Z") or parsed.utcoffset() is None:
+                raise ValueError
+        except ValueError:
+            errors.append(f"delivery manifest generated_at is malformed: {generated_at!r}")
+
+    settings = manifest.get("settings")
+    expected_settings = {
+        "gerber_layers": list(_PRODUCTION_LAYERS),
+        "gerber_x2": True,
+        "gerber_netlist_attributes": True,
+        "gerber_protel_extensions": True,
+        "position_units": "mm",
+        "position_sides": "both",
+        "bottom_x_negated": False,
+        "rotation_correction_applied": False,
+        "jlc_preview_orientation_review_required": True,
+    }
+    if not isinstance(settings, dict):
+        errors.append("delivery manifest settings must be an object")
+    else:
+        if set(settings) != set(expected_settings):
+            errors.append("delivery manifest settings field set mismatch")
+        for field, expected in expected_settings.items():
+            if settings.get(field) != expected:
+                errors.append(f"delivery manifest setting {field} mismatch")
+
+    expected_sources = {
+        "board": "src/hardware/m2-board/m2_board.kicad_pcb",
+        "intent": "src/hardware/m2-board/intent_v1.json",
+        "bom": "gates/bom/bom_v1.json",
+        "bom_stock_evidence": "notes/m2-evidence-reset/generated/bom_stock_current.json",
+    }
+    sources = manifest.get("sources")
+    if not isinstance(sources, dict):
+        errors.append("delivery manifest sources must be an object")
+        sources = {}
+    if set(sources) != set(expected_sources):
+        errors.append("delivery manifest source set mismatch")
+    for name, relative in expected_sources.items():
+        entry = sources.get(name)
+        if not isinstance(entry, dict) or set(entry) != {"path", "sha256"}:
+            errors.append(f"delivery manifest source {name} must contain only path and sha256")
+            continue
+        if entry.get("path") != relative:
+            errors.append(f"delivery manifest source {name} path mismatch")
+            continue
+        source_path = root / Path(relative)
+        if not source_path.is_file():
+            errors.append(f"delivery manifest source {name} is missing: {source_path}")
+            continue
+        digest = entry.get("sha256")
+        if not isinstance(digest, str) or not _SHA256_RE.fullmatch(digest):
+            errors.append(f"delivery manifest source {name} has malformed hash")
+        elif digest != sha256_file(source_path):
+            errors.append(f"delivery manifest source {name} hash mismatch")
+
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, dict):
+        errors.append("delivery manifest artifacts must be an object")
+        artifacts = {}
+    if set(artifacts) != {"bom", "cpl", "gerber_zip", "gerbers"}:
+        errors.append("delivery manifest artifact set mismatch")
+
+    simple_artifacts = {
+        "bom": ("delivery/bom.csv", {"path", "sha256", "rows"}),
+        "cpl": ("delivery/pos.csv", {"path", "sha256", "rows"}),
+        "gerber_zip": (
+            "delivery/jlc_gerber_upload.zip",
+            {"path", "sha256", "entries"},
+        ),
+    }
+    for name, (relative, fields) in simple_artifacts.items():
+        entry = artifacts.get(name)
+        if not isinstance(entry, dict) or set(entry) != fields:
+            errors.append(f"delivery manifest artifact {name} field set mismatch")
+            continue
+        if entry.get("path") != relative:
+            errors.append(f"delivery manifest artifact {name} path mismatch")
+            continue
+        artifact_path = root / Path(relative)
+        if not artifact_path.is_file():
+            errors.append(f"delivery manifest artifact {name} is missing: {artifact_path}")
+            continue
+        digest = entry.get("sha256")
+        if not isinstance(digest, str) or not _SHA256_RE.fullmatch(digest):
+            errors.append(f"delivery manifest artifact {name} has malformed hash")
+        elif digest != sha256_file(artifact_path):
+            errors.append(f"delivery manifest artifact {name} hash mismatch")
+        if name in ("bom", "cpl"):
+            rows = entry.get("rows")
+            if not isinstance(rows, int) or isinstance(rows, bool) or rows <= 0:
+                errors.append(f"delivery manifest artifact {name} has invalid row count")
+
+    gerbers = artifacts.get("gerbers")
+    if not isinstance(gerbers, dict):
+        errors.append("delivery manifest gerbers must be an object")
+        gerbers = {}
+    if set(gerbers) != set(expected_gerber_files):
+        errors.append("delivery manifest Gerber file set mismatch")
+    for name in sorted(set(gerbers) & set(expected_gerber_files)):
+        digest = gerbers.get(name)
+        file_path = root / "delivery" / "gerbers" / name
+        if not isinstance(digest, str) or not _SHA256_RE.fullmatch(digest):
+            errors.append(f"delivery manifest Gerber {name} has malformed hash")
+        elif not file_path.is_file():
+            errors.append(f"delivery Gerber is missing: {file_path}")
+        elif digest != sha256_file(file_path):
+            errors.append(f"delivery manifest Gerber {name} hash mismatch")
+
+    zip_entry = artifacts.get("gerber_zip")
+    archive_path = root / "delivery" / "jlc_gerber_upload.zip"
+    if isinstance(zip_entry, dict):
+        entries = zip_entry.get("entries")
+        if entries != sorted(expected_gerber_files):
+            errors.append("delivery manifest ZIP entry list mismatch")
+    if archive_path.is_file():
+        try:
+            actual_entries = zip_entry_names(archive_path)
+            if actual_entries != sorted(expected_gerber_files):
+                errors.append("delivery ZIP file set differs from required production set")
+            with zipfile.ZipFile(str(archive_path), "r") as archive:
+                for name in sorted(set(actual_entries) & set(gerbers)):
+                    digest = hashlib.sha256(archive.read(name)).hexdigest()
+                    if digest != gerbers.get(name):
+                        errors.append(f"delivery ZIP entry {name} differs from exported Gerber")
+        except (OSError, ValueError, KeyError, zipfile.BadZipFile) as exc:
+            errors.append(f"invalid delivery ZIP: {type(exc).__name__}: {exc}")
+    return errors
 
 
 def validate_board_review(path: Path) -> List[str]:
@@ -348,4 +792,53 @@ def validate_board_review(path: Path) -> List[str]:
         for required_id in BOARD_REVIEW_IDS:
             if statuses.get(required_id) != "pass":
                 errors.append(f"released review {required_id} is not pass")
+    return errors
+
+
+def validate_render_evidence(auto_evidence_path: Path, pcb_path: Path) -> List[str]:
+    """Bind the M2 visual-inspection renders to the current PCB by content hash.
+
+    Stale renders (images produced from an older PCB) caused false AI
+    inspection verdicts, so freshness is judged only by sha256, never mtime:
+    the recorded pcb_sha256 must match the current PCB file and each recorded
+    PNG hash must match the rendered image on disk.
+    """
+    auto_evidence_path = Path(auto_evidence_path)
+    pcb_path = Path(pcb_path)
+    if not auto_evidence_path.is_file():
+        return [f"missing board review auto evidence: {auto_evidence_path}"]
+    try:
+        data = _read_json(auto_evidence_path)
+    except (OSError, ValueError) as exc:
+        return [f"board review auto evidence is unreadable: {type(exc).__name__}: {exc}"]
+
+    render = data.get("render_evidence")
+    if not isinstance(render, dict) or not render:
+        return ["board review auto evidence has no render_evidence (rerun tools/board_review.py)"]
+
+    errors: List[str] = []
+    recorded_pcb = render.get("pcb_sha256")
+    if not isinstance(recorded_pcb, str) or not _SHA256_RE.fullmatch(recorded_pcb):
+        errors.append("render_evidence has a malformed pcb_sha256")
+    elif not pcb_path.is_file():
+        errors.append(f"missing PCB for render evidence validation: {pcb_path}")
+    elif recorded_pcb != sha256_file(pcb_path):
+        errors.append(
+            "render_evidence pcb_sha256 does not match the current PCB "
+            "(render images are stale; rerun tools/board_review.py)"
+        )
+
+    for key, filename in (
+        ("top_png_sha256", "board_top.png"),
+        ("bottom_png_sha256", "board_bottom.png"),
+    ):
+        image_path = auto_evidence_path.parent / filename
+        if not image_path.is_file():
+            errors.append(f"render evidence image is missing: {image_path}")
+            continue
+        recorded = render.get(key)
+        if not isinstance(recorded, str) or not _SHA256_RE.fullmatch(recorded):
+            errors.append(f"render_evidence has a malformed {key}")
+        elif recorded != sha256_file(image_path):
+            errors.append(f"render_evidence {key} does not match {filename}")
     return errors

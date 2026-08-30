@@ -12,9 +12,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
+import os
 import re
+import shutil
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,6 +28,10 @@ ROOT = Path(__file__).resolve().parents[1]
 PCB_PATH = ROOT / "src" / "hardware" / "m2-board" / "m2_board.kicad_pcb"
 SCH_PATH = ROOT / "src" / "hardware" / "m2-board" / "m2_board.kicad_sch"
 OUT_PATH = ROOT / "notes" / "m2-evidence-reset" / "generated" / "board_review_auto.json"
+
+# 目检渲染图固定输出（3D 视图，1600x900 high；约 12-13s/张，低频工具可接受）
+RENDER_TARGETS = (("top", "board_top.png"), ("bottom", "board_bottom.png"))
+RENDER_WIDTH, RENDER_HEIGHT = 1600, 900
 
 # mm 阈值（依据：ESP32-C3-WROOM-02 硬件设计指南 / USB-C 板边连接器惯例 / SHT30 数据手册）
 USB_EDGE_MAX_MM = 1.0        # USB-C courtyard 前沿（壳体侧）距板边：贴边安装要求
@@ -220,7 +228,7 @@ def boundary_distance(cap: Dict[str, Any], ic: Dict[str, Any]) -> Optional[float
 def review_decoupling(footprints) -> Dict[str, Any]:
     caps = [f for f in footprints if f["lib_id"].startswith("C_")]
     ics = [f for f in footprints if any(k in f["lib_id"]
-            for k in ("ESP32", "SOT-23", "Sensirion", "DFN-8"))]
+            for k in ("ESP32", "SOT-23", "SOT-353", "Sensirion", "DFN-8"))]
     if not caps or not ics:
         return {"id": "DECOUPLING", "status": "fail",
                 "evidence": f"caps={len(caps)} ics={len(ics)} 未找齐"}
@@ -287,7 +295,7 @@ def review_thermal(footprints) -> Dict[str, Any]:
     if not sht:
         return {"id": "SHT30_THERMAL", "status": "fail", "evidence": "SHT30 footprint not found"}
     sources = [(f["ref"], dist(sht, f)) for f in footprints
-               if any(k in f["lib_id"] for k in ("USB_C", "SOT-23", "LED"))]
+               if any(k in f["lib_id"] for k in ("USB_C", "SOT-23", "SOT-353", "LED"))]
     if not sources:
         return {"id": "SHT30_THERMAL", "status": "pass",
                 "evidence": "板上无 USB/LDO/LED 热源",
@@ -330,7 +338,7 @@ def review_assembly(footprints, pcb_text: str) -> Dict[str, Any]:
                     if f'"{f["ref"]}"' not in pcb_text]
     polarity_parts = [f["ref"] for f in footprints
                       if any(k in f["lib_id"]
-                             for k in ("LED", "Sensirion", "USB_C", "SOT-23"))]
+                             for k in ("LED", "Sensirion", "USB_C", "SOT-23", "SOT-353"))]
     ok = not silk_missing and len(footprints) > 0
     return {"id": "ASSEMBLY", "status": "pass" if ok else "fail",
             "evidence": f"丝印 Reference 覆盖 {len(footprints) - len(silk_missing)}"
@@ -338,6 +346,54 @@ def review_assembly(footprints, pcb_text: str) -> Dict[str, Any]:
                         f"装配方向与工艺备注由评审人在装配图上确认",
             "measured": {"silk_missing": silk_missing,
                          "polarity_parts": polarity_parts}}
+
+
+# ---------------------------------------------------------------- 目检渲染（kicad-cli）
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def find_kicad_cli() -> Optional[Path]:
+    """KICAD_CLI 环境变量 → PATH → 已知安装路径；找不到返回 None（渲染即 fail）。"""
+    env_value = os.environ.get("KICAD_CLI")
+    if env_value and Path(env_value).is_file():
+        return Path(env_value).resolve()
+    found = shutil.which("kicad-cli")
+    if found:
+        return Path(found).resolve()
+    default = Path(r"C:\Users\fuker\AppData\Local\Programs\KiCad\10.0\bin\kicad-cli.exe")
+    if default.is_file():
+        return default
+    return None
+
+
+def render_board_views(kicad_cli: Path, pcb_path: Path, out_dir: Path) -> List[str]:
+    """用 kicad-cli 重渲 top/bottom 目检图（覆盖旧图），返回错误列表（空=成功）。"""
+    errors: List[str] = []
+    for side, filename in RENDER_TARGETS:
+        out_path = out_dir / filename
+        command = [
+            str(kicad_cli), "pcb", "render",
+            "--side", side, "--quality", "high",
+            "--width", str(RENDER_WIDTH), "--height", str(RENDER_HEIGHT),
+            "-o", str(out_path), str(pcb_path),
+        ]
+        try:
+            completed = subprocess.run(command, capture_output=True, timeout=180)
+        except Exception as exc:
+            errors.append(f"kicad-cli render {side} could not run: {type(exc).__name__}: {exc}")
+            continue
+        if completed.returncode != 0 or not out_path.is_file():
+            stderr = (completed.stderr or b"").decode("utf-8", errors="replace")[-400:]
+            errors.append(
+                f"kicad-cli render {side} failed (exit {completed.returncode}): {stderr.strip()}"
+            )
+    return errors
 
 
 # ---------------------------------------------------------------- 主流程
@@ -358,6 +414,17 @@ def main() -> int:
         review_assembly(pcb["footprints"], pcb_text),
     ]
 
+    render_errors: List[str] = []
+    kicad_cli = find_kicad_cli()
+    if kicad_cli is None:
+        render_errors.append(
+            "kicad-cli not found; set KICAD_CLI or add KiCad to PATH "
+            "(render evidence is mandatory for the board_review gate)"
+        )
+    else:
+        print(f"[RENDER] {kicad_cli}")
+        render_errors = render_board_views(kicad_cli, PCB_PATH, OUT_PATH.parent)
+
     report = {
         "generated_at": utc_now(),
         "pcb": str(PCB_PATH.relative_to(ROOT)),
@@ -369,12 +436,26 @@ def main() -> int:
         "note": "机器测量证据；朝向/阻抗/气流/瞬态等无法静态判定项已在 evidence 中标注，"
                 "需具名评审人在 KiCad 中复核后签发 manufacturing_release。",
     }
+    if not render_errors:
+        report["render_evidence"] = {
+            "pcb_sha256": sha256_file(PCB_PATH),
+            "top_png_sha256": sha256_file(OUT_PATH.parent / "board_top.png"),
+            "bottom_png_sha256": sha256_file(OUT_PATH.parent / "board_bottom.png"),
+            "rendered_at": utc_now(),
+        }
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n",
                         encoding="utf-8")
     print(f"[BOARD-REVIEW-AUTO] {OUT_PATH}")
     for r in reviews:
         print(f"  {r['id']:15s} {r['status'].upper():6s} {r['evidence'][:110]}")
+    if render_errors:
+        for message in render_errors:
+            print(f"  RENDER FAIL     {message}")
+        print("RESULT: render evidence missing; board_review gate will fail closed")
+        return 1
+    for _, filename in RENDER_TARGETS:
+        print(f"  RENDER          {OUT_PATH.parent / filename}")
     failed = [r["id"] for r in reviews if r["status"] != "pass"]
     print(f"RESULT: {len(reviews) - len(failed)}/{len(reviews)} pass"
           + (f"; failed: {failed}" if failed else ""))

@@ -1,5 +1,10 @@
+import hashlib
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
+from gates.gate_core import validate_render_evidence
 from tools.board_review import review_exit_code, review_usb_routing
 
 
@@ -59,6 +64,99 @@ class BoardReviewTests(unittest.TestCase):
         self.assertEqual(result["status"], "fail")
         self.assertIn("U1.14", " ".join(result["measured"]["endpoint_mismatches"]))
         self.assertIn("U1.13", " ".join(result["measured"]["endpoint_mismatches"]))
+
+
+def build_render_fixture(root: Path) -> dict:
+    generated = root / "notes" / "m2-evidence-reset" / "generated"
+    generated.mkdir(parents=True)
+    pcb = root / "src" / "hardware" / "m2-board" / "m2_board.kicad_pcb"
+    pcb.parent.mkdir(parents=True)
+    pcb.write_bytes(b"(kicad_pcb (version 20260831) (pcb-v1))")
+    top = generated / "board_top.png"
+    bottom = generated / "board_bottom.png"
+    top.write_bytes(b"PNG-TOP")
+    bottom.write_bytes(b"PNG-BOTTOM")
+    auto = generated / "board_review_auto.json"
+    auto.write_text(
+        json.dumps(
+            {
+                "render_evidence": {
+                    "pcb_sha256": hashlib.sha256(pcb.read_bytes()).hexdigest(),
+                    "top_png_sha256": hashlib.sha256(top.read_bytes()).hexdigest(),
+                    "bottom_png_sha256": hashlib.sha256(bottom.read_bytes()).hexdigest(),
+                    "rendered_at": "2026-08-31T00:00:00Z",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    return {"auto": auto, "pcb": pcb, "top": top, "bottom": bottom}
+
+
+class RenderEvidenceTests(unittest.TestCase):
+    def test_current_render_evidence_passes(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            fixture = build_render_fixture(root)
+
+            errors = validate_render_evidence(fixture["auto"], fixture["pcb"])
+
+        self.assertEqual(errors, [])
+
+    def test_missing_render_evidence_fails_closed(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            fixture = build_render_fixture(root)
+            fixture["auto"].write_text(json.dumps({"reviews": []}), encoding="utf-8")
+
+            errors = validate_render_evidence(fixture["auto"], fixture["pcb"])
+
+        self.assertEqual(len(errors), 1)
+        self.assertIn("render_evidence", errors[0])
+
+    def test_missing_auto_evidence_file_fails_closed(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            fixture = build_render_fixture(root)
+            fixture["auto"].unlink()
+
+            errors = validate_render_evidence(fixture["auto"], fixture["pcb"])
+
+        self.assertEqual(len(errors), 1)
+        self.assertIn("missing", errors[0])
+
+    def test_stale_pcb_sha256_fails(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            fixture = build_render_fixture(root)
+            fixture["pcb"].write_bytes(b"(kicad_pcb (version 20260831) (pcb-v2))")
+
+            errors = validate_render_evidence(fixture["auto"], fixture["pcb"])
+
+        self.assertEqual(len(errors), 1)
+        self.assertIn("pcb_sha256", errors[0])
+
+    def test_missing_png_fails(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            fixture = build_render_fixture(root)
+            fixture["top"].unlink()
+
+            errors = validate_render_evidence(fixture["auto"], fixture["pcb"])
+
+        self.assertEqual(len(errors), 1)
+        self.assertIn("board_top.png", errors[0])
+
+    def test_png_hash_mismatch_fails(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            fixture = build_render_fixture(root)
+            fixture["bottom"].write_bytes(b"PNG-BOTTOM-STALE")
+
+            errors = validate_render_evidence(fixture["auto"], fixture["pcb"])
+
+        self.assertEqual(len(errors), 1)
+        self.assertIn("bottom_png_sha256", errors[0])
 
 
 if __name__ == "__main__":

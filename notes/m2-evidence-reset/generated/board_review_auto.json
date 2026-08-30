@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-30T06:12:36Z",
+  "generated_at": "2026-08-30T18:10:10Z",
   "pcb": "src\\hardware\\m2-board\\m2_board.kicad_pcb",
   "board_outline_mm": [
     0.0,
@@ -56,14 +56,14 @@
     {
       "id": "DECOUPLING",
       "status": "pass",
-      "evidence": "IC→最近去耦电容距离（courtyard 边界距，上限 8.0mm）：[{\"ic\": \"U3\", \"nearest_cap\": \"C1\", \"boundary_distance_mm\": 2.8}, {\"ic\": \"U2\", \"nearest_cap\": \"C4\", \"boundary_distance_mm\": 2.3}, {\"ic\": \"U1\", \"nearest_cap\": \"C3\", \"boundary_distance_mm\": 0.0}]",
+      "evidence": "IC→最近去耦电容距离（courtyard 边界距，上限 8.0mm）：[{\"ic\": \"U3\", \"nearest_cap\": \"C1\", \"boundary_distance_mm\": 3.4}, {\"ic\": \"U2\", \"nearest_cap\": \"C4\", \"boundary_distance_mm\": 2.3}, {\"ic\": \"U1\", \"nearest_cap\": \"C3\", \"boundary_distance_mm\": 0.0}]",
       "measured": {
-        "worst_distance_mm": 2.8,
+        "worst_distance_mm": 3.4,
         "ics": [
           {
             "ic": "U3",
             "nearest_cap": "C1",
-            "boundary_distance_mm": 2.8
+            "boundary_distance_mm": 3.4
           },
           {
             "ic": "U2",
@@ -140,5 +140,11 @@
     "PROTECTION": "pass",
     "ASSEMBLY": "pass"
   },
-  "note": "机器测量证据；朝向/阻抗/气流/瞬态等无法静态判定项已在 evidence 中标注，需具名评审人在 KiCad 中复核后签发 manufacturing_release。"
+  "note": "机器测量证据；朝向/阻抗/气流/瞬态等无法静态判定项已在 evidence 中标注，需具名评审人在 KiCad 中复核后签发 manufacturing_release。",
+  "render_evidence": {
+    "pcb_sha256": "e938de66697a85692f2ca3f5cad73e458357f5ed783b5ec3d1af13ccc43783b4",
+    "top_png_sha256": "b00559da94d86327e5d3d9df635c07e642689b937488d5ee0939cec49a73c844",
+    "bottom_png_sha256": "8e2fcc020538bdad8370c72e4dd9c97c704623578ad791a2a2e017070ad16bc1",
+    "rendered_at": "2026-08-30T18:10:10Z"
+  }
 }
