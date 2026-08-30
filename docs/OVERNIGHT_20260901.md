@@ -81,6 +81,9 @@
      "吸收什么/怎么吸收/红线"建议，**不实装**。
 - 明早验收标准：neuroboard.md 六步齐全；两遗留各有证据定案或"无法确定"+已试路径清单；台账有条目。
 
+### P8 进度日志
+- [07:01] 第1周期: `neuroboard.md` 六步完成（本地克隆 `_neuroboard_repo/` @ `d8e3248`；碰撞分析 §2.3/§2.4 逐项复核成立并补行号；新增 5 项发现：LICENSE 文件 MIT 与 README 法律声明块 CC BY-NC 4.0 双声明矛盾、`GlobalDRC` 恒 `return True`、`engines/` 零文件但被 `victory_lap.py` 依赖、`tests/` 仅 2 文件 307 行且无测试 CI、`__pycache__`/运行产物入库）；11 门禁能力对照表成文（erc/drc 有形态等价但 fail-open，其余 9 项无等价）；判决=零代码复用，只作反面教材；全量测试 127/127 绿。
+
 ## TASK-P9：board_review 特征化测试 + 可插拔协议预备（代码路，属主空缺待领）
 
 - 领地（可写）：`tests/test_board_review_golden.py`（新建）、`tests/fixtures/board_review/`（新建夹具目录）、
