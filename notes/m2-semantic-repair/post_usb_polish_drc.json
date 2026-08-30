@@ -1,0 +1,130 @@
+{
+    "$schema": "https://schemas.kicad.org/drc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-08-30T14:08:40",
+    "ignored_checks": [
+        {
+            "description": "Footprint has no courtyard defined",
+            "key": "missing_courtyard"
+        },
+        {
+            "description": "Track endpoint not centered on via",
+            "key": "track_not_centered_on_via"
+        },
+        {
+            "description": "Tuning profile track geometries",
+            "key": "tuning_profile_track_geometries"
+        },
+        {
+            "description": "Footprint doesn't match symbol's footprint filters",
+            "key": "footprint_filters_mismatch"
+        },
+        {
+            "description": "Footprint component type doesn't match footprint pads",
+            "key": "footprint_type_mismatch"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning",
+        "exclusion"
+    ],
+    "kicad_version": "10.0.5",
+    "schematic_parity": [],
+    "source": "m2_board.kicad_pcb",
+    "unconnected_items": [],
+    "violations": [
+        {
+            "description": "短路了两个不同网络的项目 (网络 USB_DM_CONN 和 GND)",
+            "items": [
+                {
+                    "description": "走线 [USB_DM_CONN] (B.Cu), 长度: 1.8756 mm",
+                    "pos": {
+                        "x": 40.089,
+                        "y": 6.1841
+                    },
+                    "uuid": "b59358bf-5206-42bf-93cf-fe6c343c945b"
+                },
+                {
+                    "description": "J1 的PTH 焊盘 SH [GND]",
+                    "pos": {
+                        "x": 40.68,
+                        "y": 6.35
+                    },
+                    "uuid": "de629855-0037-4832-8c4b-c390e684eca3"
+                }
+            ],
+            "severity": "error",
+            "type": "shorting_items"
+        },
+        {
+            "description": "短路了两个不同网络的项目 (网络 USB_DM_CONN 和 GND)",
+            "items": [
+                {
+                    "description": "走线 [USB_DM_CONN] (B.Cu), 长度: 1.8756 mm",
+                    "pos": {
+                        "x": 38.8409,
+                        "y": 4.7841
+                    },
+                    "uuid": "6143dcd8-95d5-41ce-9bf5-dabe2c89c528"
+                },
+                {
+                    "description": "J1 的PTH 焊盘 SH [GND]",
+                    "pos": {
+                        "x": 40.68,
+                        "y": 6.35
+                    },
+                    "uuid": "de629855-0037-4832-8c4b-c390e684eca3"
+                }
+            ],
+            "severity": "error",
+            "type": "shorting_items"
+        },
+        {
+            "description": "底层阻焊开窗区域与不同网络的项目相连",
+            "items": [
+                {
+                    "description": "走线 [USB_DM_CONN] (B.Cu), 长度: 1.8756 mm",
+                    "pos": {
+                        "x": 38.8409,
+                        "y": 4.7841
+                    },
+                    "uuid": "6143dcd8-95d5-41ce-9bf5-dabe2c89c528"
+                },
+                {
+                    "description": "J1 的PTH 焊盘 SH [GND]",
+                    "pos": {
+                        "x": 40.68,
+                        "y": 6.35
+                    },
+                    "uuid": "de629855-0037-4832-8c4b-c390e684eca3"
+                }
+            ],
+            "severity": "error",
+            "type": "solder_mask_bridge"
+        },
+        {
+            "description": "底层阻焊开窗区域与不同网络的项目相连",
+            "items": [
+                {
+                    "description": "走线 [USB_DM_CONN] (B.Cu), 长度: 1.8756 mm",
+                    "pos": {
+                        "x": 40.089,
+                        "y": 6.1841
+                    },
+                    "uuid": "b59358bf-5206-42bf-93cf-fe6c343c945b"
+                },
+                {
+                    "description": "J1 的PTH 焊盘 SH [GND]",
+                    "pos": {
+                        "x": 40.68,
+                        "y": 6.35
+                    },
+                    "uuid": "de629855-0037-4832-8c4b-c390e684eca3"
+                }
+            ],
+            "severity": "error",
+            "type": "solder_mask_bridge"
+        }
+    ]
+}

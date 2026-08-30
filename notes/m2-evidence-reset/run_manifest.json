@@ -1,12 +1,12 @@
 {
   "schema_version": "m2-evidence-reset-run.v1",
-  "run_id": "m2-4e0922a27e55cd136b05c216e59ec776606df5c9-2026-08-30T19:55:11Z",
-  "run_at": "2026-08-30T19:55:11Z",
+  "run_id": "m2-e51fa939e2f23139d7c9bf4e00e54f2065e6ae60-2026-08-30T21:22:32Z",
+  "run_at": "2026-08-30T21:22:32Z",
   "root": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent",
   "git": {
-    "commit": "4e0922a27e55cd136b05c216e59ec776606df5c9",
+    "commit": "e51fa939e2f23139d7c9bf4e00e54f2065e6ae60",
     "dirty": true,
-    "status_porcelain": "M .gitignore\n M AGENTS.md\n M delivery/bom.csv\n D delivery/gerbers/m2_board-B_Adhesive.gba\n D delivery/gerbers/m2_board-B_Courtyard.gbr\n M delivery/gerbers/m2_board-B_Cu.gbl\n D delivery/gerbers/m2_board-B_Fab.gbr\n M delivery/gerbers/m2_board-B_Mask.gbs\n M delivery/gerbers/m2_board-B_Paste.gbp\n M delivery/gerbers/m2_board-B_Silkscreen.gbo\n M delivery/gerbers/m2_board-Edge_Cuts.gm1\n D delivery/gerbers/m2_board-F_Adhesive.gta\n D delivery/gerbers/m2_board-F_Courtyard.gbr\n M delivery/gerbers/m2_board-F_Cu.gtl\n D delivery/gerbers/m2_board-F_Fab.gbr\n M delivery/gerbers/m2_board-F_Mask.gts\n M delivery/gerbers/m2_board-F_Paste.gtp\n M delivery/gerbers/m2_board-F_Silkscreen.gto\n D delivery/gerbers/m2_board-Margin.gbr\n D delivery/gerbers/m2_board-User_1.gbr\n D delivery/gerbers/m2_board-User_2.gbr\n D delivery/gerbers/m2_board-User_3.gbr\n D delivery/gerbers/m2_board-User_4.gbr\n D delivery/gerbers/m2_board-User_Comments.gbr\n D delivery/gerbers/m2_board-User_Drawings.gbr\n D delivery/gerbers/m2_board-User_Eco1.gbr\n D delivery/gerbers/m2_board-User_Eco2.gbr\n M delivery/gerbers/m2_board-job.gbrjob\n M delivery/gerbers/m2_board.drl\n M delivery/pos.csv\n M docs/HANDOFF.md\n M docs/compliance/AI_USAGE_LOG.md\n M docs/compliance/DECISIONS.md\n M docs/compliance/README.md\n M docs/compliance/THIRD_PARTY_RESOURCES.md\n M docs/evidence/EVIDENCE_INDEX.md\n M docs/knowledge/IMPROVEMENT_SYSTEM.md\n M docs/knowledge/PROJECT_PITFALLS.md\n M gates/board_review_v1.json\n M gates/bom/bom_v1.json\n M gates/lessons_registry_v1.json\n M notes/m2-evidence-reset/generated/board_bottom.png\n M notes/m2-evidence-reset/generated/board_review_auto.json\n M notes/m2-evidence-reset/generated/board_top.png\n M notes/m2-evidence-reset/generated/g2_erc_current.json\n M notes/m2-evidence-reset/generated/g4_drc_current.json\n M notes/m2-evidence-reset/generated/learning_gate_current.json\n M notes/m2-evidence-reset/generated/m2_board_current.net.xml\n M notes/m2-evidence-reset/generated/ops_validate_current.json\n M notes/m2-evidence-reset/generated/schematic_semantics_current.json\n M notes/m2-evidence-reset/generated/semantic_fault_injection_current.json\n M notes/m2-evidence-reset/run_manifest.json\n M src/hardware/m2-board/intent_v1.json\n M src/hardware/m2-board/m2_board.kicad_pcb\n M src/hardware/m2-board/m2_board.kicad_sch\n M src/hardware/m2-board/ops_gen.json\n M tests/test_gate_core.py\n M tests/test_run_gates.py\n M tools/generate_m2_ops.py\n?? delivery/jlc_gerber_upload.zip\n?? delivery/manifest_v1.json\n?? docs/COLLABORATION.md\n?? docs/PARALLEL_TASKS_20260831.md\n?? docs/TASK_FIX_D1.md\n?? docs/api/\n?? docs/competition/\n?? gates/export_delivery.py\n?? gates/make_jlc_cpl.py\n?? gates/refresh_bom_stock.py\n?? gates/requirements/\n?? gates/requirements_contract.py\n?? gates/requirements_runtime.py\n?? gates/requirements_runtime_server.py\n?? notes/competitor-collision-analysis-2026-08-30.md\n?? \"notes/m2-evidence-reset/M2\\347\\233\\256\\346\\243\\200\\346\\217\\220\\347\\244\\272\\350\\257\\215-\\345\\244\\232\\346\\250\\241\\346\\200\\201AI.md\"\n?? notes/m2-evidence-reset/cpl-rotation-audit.md\n?? notes/m2-evidence-reset/generated/board_top_2d.svg\n?? notes/m2-evidence-reset/generated/bom_stock_current.json\n?? notes/m2-evidence-reset/generated/g4_drc_probe.json\n?? notes/m2-evidence-reset/generated/m2_board_cpl_current.csv\n?? notes/m2-evidence-reset/polarity-verification.md\n?? notes/m2-semantic-repair/candidate.net.xml\n?? notes/m2-semantic-repair/candidate_erc.json\n?? notes/m2-semantic-repair/candidate_semantics_before_pcb.json\n?? notes/m2-semantic-repair/formal_semantics_before_pcb.json\n?? notes/m2-semantic-repair/m2_board_rebuilt.kicad_sch\n?? notes/m2-semantic-repair/post_rebuild_pre_route_semantics.json\n?? notes/m2-semantic-repair/post_ref_polish_drc.json\n?? notes/m2-semantic-repair/post_route2_drc.json\n?? notes/m2-semantic-repair/post_route_drc.json\n?? notes/m2-semantic-repair/post_route_semantics.json\n?? notes/m2-semantic-repair/post_usb_polish2_drc.json\n?? notes/m2-semantic-repair/post_usb_polish_drc.json\n?? notes/m2-semantic-repair/pre_route_drc.json\n?? notes/open_source_intake/\n?? spike/\n?? spike_stage2/\n?? src/hardware/m2-board/m2_board_rerun.ses\n?? tests/test_export_delivery.py\n?? tests/test_make_jlc_cpl.py\n?? tests/test_refresh_bom_stock.py\n?? tests/test_requirements_contract.py\n?? tools/polish_routes.py\n?? tools/probe_pads.py\n?? web/"
+    "status_porcelain": "M docs/HANDOFF.md\n M docs/compliance/AI_USAGE_LOG.md\n M gates/run_gates.py\n M notes/m2-evidence-reset/generated/g2_erc_current.json\n M notes/m2-evidence-reset/generated/g4_drc_current.json\n M notes/m2-evidence-reset/generated/learning_gate_current.json\n M notes/m2-evidence-reset/generated/m2_board_current.net.xml\n M notes/m2-evidence-reset/generated/schematic_semantics_current.json\n M notes/m2-evidence-reset/generated/semantic_fault_injection_current.json\n M notes/m2-evidence-reset/polarity-verification.md\n M notes/m2-evidence-reset/run_manifest.json\n M tests/test_run_gates.py\n?? gates/datasheet_contract.py\n?? notes/m2-semantic-repair/candidate.net.xml\n?? notes/m2-semantic-repair/candidate_erc.json\n?? notes/m2-semantic-repair/candidate_semantics_before_pcb.json\n?? notes/m2-semantic-repair/formal_semantics_before_pcb.json\n?? notes/m2-semantic-repair/m2_board_rebuilt.kicad_sch\n?? notes/m2-semantic-repair/post_rebuild_pre_route_semantics.json\n?? notes/m2-semantic-repair/post_ref_polish_drc.json\n?? notes/m2-semantic-repair/post_route2_drc.json\n?? notes/m2-semantic-repair/post_route_drc.json\n?? notes/m2-semantic-repair/post_route_semantics.json\n?? notes/m2-semantic-repair/post_usb_polish2_drc.json\n?? notes/m2-semantic-repair/post_usb_polish_drc.json\n?? notes/m2-semantic-repair/pre_route_drc.json\n?? spike/\n?? spike_stage2/\n?? src/hardware/m2-board/evidence/\n?? src/hardware/m2-board/m2_board_rerun.ses\n?? tests/test_datasheet_contract.py\n?? tools/polish_routes.py\n?? tools/probe_pads.py"
   },
   "status": "fail",
   "exit_code": 1,
@@ -134,7 +134,7 @@
     },
     "semantic_netlist": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\m2_board_current.net.xml",
-      "sha256": "f021ce27756ad62fcf2a44d39be8847f7c1b40a9424a37482368e558708eacd4",
+      "sha256": "1aac0d7c15303b2c372143aa7351ede6df6ee32ec06318ce82e39e2d4c0ef6a3",
       "exists": true
     },
     "cpl_current": {
@@ -144,27 +144,27 @@
     },
     "semantic_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\schematic_semantics_current.json",
-      "sha256": "96a04487c07dee194bc2d4aa45ddac05f0da080a0e4ff95d56418332bfccfdd6",
+      "sha256": "d2d776aaab5fe8bc1793873b858dd72a7b450a63416693b3fcc0bda3655f6e59",
       "exists": true
     },
     "fault_injection_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\semantic_fault_injection_current.json",
-      "sha256": "959d92034aca094b9704aba884ef41b5b15c2d5066ad3deb9c386528b2467c22",
+      "sha256": "c7c60c1d3b59d65d3c41fc8c6f71fc05400d4731b5a81c29a18cfcb1e23362c5",
       "exists": true
     },
     "learning_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\learning_gate_current.json",
-      "sha256": "f0bf8832d75db997b26581f499c2dd1113746a49c67d1da54e0b56a4d5c62d18",
+      "sha256": "93aa7de03731a4aec6e7cd3d81569f4242a507881b1ad7903e3c14cc0a87a9ac",
       "exists": true
     },
     "erc_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g2_erc_current.json",
-      "sha256": "912c36eeccd554a9bb45f628a9043643c530164e91863ef6cb16d8d14a9cb265",
+      "sha256": "7b4527b68b86b47d2368d177a9b33a53ed1b71f8fa7c7e3f0b8311f84ac6a514",
       "exists": true
     },
     "drc_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g4_drc_current.json",
-      "sha256": "60a5e2788040aa163d786049c35aa929d7d5131219864a14132d31a9a1abab50",
+      "sha256": "98612b4d2023c18f9505e9c507eb64238de35edaac02419ab4c57c61b1f44159",
       "exists": true
     }
   },
@@ -302,6 +302,50 @@
       },
       "errors": [
         "manufacturing_release is false"
+      ],
+      "evidence_grade": "A"
+    },
+    {
+      "name": "datasheet_contract",
+      "status": "fail",
+      "details": {
+        "manifest": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\hardware\\m2-board\\evidence\\datasheet_manifest.json",
+        "contracts": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\hardware\\m2-board\\evidence\\contracts\\m2_component_contracts.json",
+        "block_count": 32
+      },
+      "errors": [
+        "DS4-6 U1: required check 'pinout' has no check_evidence record",
+        "DS4-6 U1: required check 'supply_voltage' has no check_evidence record",
+        "DS4-6 U1: required check 'power_source_capacity' has no check_evidence record",
+        "DS4-6 U1: required check 'enable_and_strapping' has no check_evidence record",
+        "DS4-6 U1: required check 'decoupling' has no check_evidence record",
+        "DS4-6 U1: required check 'antenna_keepout' has no check_evidence record",
+        "DS4-6 U1: required check 'recommended_land_pattern' has no check_evidence record",
+        "DS4-6 U2: required check 'pinout' has no check_evidence record",
+        "DS4-6 U2: required check 'address_selection' has no check_evidence record",
+        "DS4-6 U2: required check 'i2c_pullups' has no check_evidence record",
+        "DS4-6 U2: required check 'decoupling' has no check_evidence record",
+        "DS4-6 U2: required check 'package_orientation' has no check_evidence record",
+        "DS4-6 U2: required check 'handling_and_board_cleaning' has no check_evidence record",
+        "DS3 U3: contract 'M2-U3-POWER-MARGIN' is BLOCK_UNTIL_REVIEWED and has no check_evidence record yet",
+        "DS4-6 U3: required check 'pinout' has no check_evidence record",
+        "DS4-6 U3: required check 'input_output_voltage' has no check_evidence record",
+        "DS4-6 U3: required check 'output_current_package_specific' has no check_evidence record",
+        "DS4-6 U3: required check 'absolute_maximum_power_dissipation' has no check_evidence record",
+        "DS4-6 U3: required check 'input_output_capacitors' has no check_evidence record",
+        "DS4-6 U3: check 'thermal_margin' is recorded as blocked but the block decision needs engineer sign-off",
+        "DS4-6 D1: check 'exact_mpn' is unsigned (status=machine_prechecked); only a human signature clears a check",
+        "DS4-6 D1: check 'polarity' is unsigned (status=awaiting_engineer); only a human signature clears a check",
+        "DS4-6 D1: check 'forward_voltage' is unsigned (status=machine_prechecked); only a human signature clears a check",
+        "DS4-6 D1: check 'forward_current' is unsigned (status=machine_prechecked); only a human signature clears a check",
+        "DS4-6 D1: check 'reverse_voltage_or_reverse_current' is unsigned (status=machine_prechecked); only a human signature clears a check",
+        "DS4-6 D1: check 'package_marking' is unsigned (status=awaiting_engineer); only a human signature clears a check",
+        "DS4-6 J1: required check 'exact_mpn' has no check_evidence record",
+        "DS4-6 J1: required check 'pin_numbering' has no check_evidence record",
+        "DS4-6 J1: check 'mechanical_drawing' is unsigned (status=machine_prechecked); only a human signature clears a check",
+        "DS4-6 J1: required check 'recommended_land_pattern' has no check_evidence record",
+        "DS4-6 J1: required check 'orientation' has no check_evidence record",
+        "DS4-6 J1: required check 'rated_current' has no check_evidence record"
       ],
       "evidence_grade": "A"
     }

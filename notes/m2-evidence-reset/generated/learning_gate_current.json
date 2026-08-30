@@ -1,7 +1,7 @@
 {
   "$schema": "https://aedl.local/schemas/learning-gate-report.v1.json",
   "schema_version": 1,
-  "generated_at": "2026-08-30T20:40:42Z",
+  "generated_at": "2026-08-30T22:23:14Z",
   "status": "pass",
   "lesson_count": 1,
   "errors": [],
@@ -12,7 +12,7 @@
     },
     "fault_injection_proof": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\semantic_fault_injection_current.json",
-      "sha256": "9900ba10536c5c671c1f428fb785fd11073d07254924d3b377e666a3ece70e8b"
+      "sha256": "7af6cb1f97e5ec02c1d77a7ef59243ddb837691c85499fcd10d790d9be3cad05"
     }
   }
 }

@@ -257,7 +257,7 @@ class RunGatesTests(unittest.TestCase):
         self.assertTrue(any("invalid schema metadata" in error for error in manifest["gates"][0]["errors"]))
         self.assertEqual(
             {gate["name"] for gate in manifest["gates"]},
-            {"erc", "drc", "bom", "delivery", "intent", "ops", "schematic_semantics", "learning", "requirements_contract", "board_review"},
+            {"erc", "drc", "bom", "delivery", "intent", "ops", "schematic_semantics", "learning", "requirements_contract", "board_review", "datasheet_contract"},
         )
         # The 10th gate must also fail closed on an empty sandbox (missing
         # contract file counts as unreadable evidence, never as a skip).
@@ -265,6 +265,10 @@ class RunGatesTests(unittest.TestCase):
         self.assertEqual(rc_gate["status"], "fail")
         self.assertTrue(any("unreadable" in error or "missing" in error.lower()
                             for error in rc_gate["errors"]), rc_gate["errors"])
+        # The 11th gate (datasheet truth layer) fails closed without a manifest.
+        ds_gate = next(g for g in manifest["gates"] if g["name"] == "datasheet_contract")
+        self.assertEqual(ds_gate["status"], "fail")
+        self.assertTrue(any("missing datasheet manifest" in error for error in ds_gate["errors"]), ds_gate["errors"])
 
     def test_output_root_alias_writes_a_manifest(self):
         with tempfile.TemporaryDirectory() as temp_dir:

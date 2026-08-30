@@ -2,7 +2,7 @@
   "$schema": "https://aedl.local/schemas/schematic-semantics-report.v1.json",
   "schema_version": 1,
   "board_id": "project-027-m2-esp32c3-sht30",
-  "generated_at": "2026-08-30T20:40:42Z",
+  "generated_at": "2026-08-30T22:23:14Z",
   "status": "fail",
   "summary": {
     "passed": 0,

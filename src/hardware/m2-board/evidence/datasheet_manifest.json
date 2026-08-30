@@ -1,0 +1,332 @@
+{
+  "$schema": "https://aedl.local/schemas/m2-datasheet-manifest.v1.json",
+  "schema_version": 1,
+  "board": "project-027-m2-esp32c3-sht30",
+  "policy": "critical_components_fail_closed",
+  "generated_at": "2026-08-30T21:14:10Z",
+  "generated_by": "Qoder session (AI-20260831-009), human adjudications 2026-08-31",
+  "state_machine": "missing -> evidence_found -> machine_prechecked -> awaiting_engineer -> verified|rejected；status=verified 只表示『资料里的事实被确认』，设计是否满足由 decision 表达（pass|fail|blocked），两者必须分离；转绿必须 signed_by=human，机器最高只能到 machine_prechecked，不得代签。",
+  "notes": "datasheet PDF 本地冻结副本记录 sha256+retrieved_at 以便复现；网页链接失效不影响已冻结副本。U3 输出电流人工裁决 400mA（V20 按封装表优先于分销商 500mA 字段）；V20 原件在本环境因 TLS 拦截未冻结，裁决记录为人工声明、待原件冻结后补签。",
+  "components": [
+    {
+      "refdes": "U1",
+      "manufacturer": "Espressif Systems",
+      "mpn": "ESP32-C3-WROOM-02-N4",
+      "lcsc": "C2934560",
+      "status": "REQUIRED",
+      "documents": [
+        {
+          "type": "datasheet",
+          "source_url": "https://www.espressif.com/sites/default/files/documentation/esp32-c3-wroom-02_datasheet_en.pdf",
+          "local_file": "src/hardware/m2-board/evidence/datasheets/U1_ESP32-C3-WROOM-02/esp32-c3-wroom-02_datasheet_en.pdf",
+          "sha256": "2375b1be75ebbfcffa050e6a26c3ee7957bc7171b319066081a491d1b2e21161",
+          "retrieved_at": "2026-08-30T20:58:00Z"
+        },
+        {
+          "type": "hardware_design_guidelines",
+          "source_url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32c3/index.html",
+          "local_file": null,
+          "note": "URL-only；500mA 供电能力建议出自此处（本地快照未取）"
+        },
+        {
+          "type": "kicad_library",
+          "source_url": "https://github.com/espressif/kicad-libraries",
+          "local_file": null
+        }
+      ],
+      "required_checks": [
+        "pinout",
+        "supply_voltage",
+        "power_source_capacity",
+        "enable_and_strapping",
+        "decoupling",
+        "antenna_keepout",
+        "recommended_land_pattern"
+      ],
+      "check_evidence": {}
+    },
+    {
+      "refdes": "U2",
+      "manufacturer": "Sensirion",
+      "mpn": "SHT30-DIS-B10KS",
+      "lcsc": "C2687423",
+      "status": "REQUIRED",
+      "documents": [
+        {
+          "type": "datasheet",
+          "source_url": "https://sensirion.com/media/documents/213E6A3B/63A5A569/Datasheet_SHT3x_DIS.pdf",
+          "local_file": "src/hardware/m2-board/evidence/datasheets/U2_SHT30-DIS-B10KS/Sensirion_SHT3x_DIS_datasheet.pdf",
+          "sha256": "095b1853e7f4328f5897c9ca6c392a7dd8b0202eda66b0a2629f9cb840dd496d",
+          "retrieved_at": "2026-08-30T20:58:00Z"
+        },
+        {
+          "type": "handling_instructions",
+          "source_url": "https://sensirion.com/resource/user_guide/sht/handling_instructions",
+          "local_file": null,
+          "note": "URL-only；禁 board wash / 避免 VOC 与清洗剂 / 回流 260C 30s 等要求的出处"
+        }
+      ],
+      "required_checks": [
+        "pinout",
+        "address_selection",
+        "i2c_pullups",
+        "decoupling",
+        "package_orientation",
+        "handling_and_board_cleaning"
+      ],
+      "check_evidence": {}
+    },
+    {
+      "refdes": "U3",
+      "manufacturer": "MICRONE(Nanjing Micro One Elec)",
+      "mpn": "ME6211C33R5G",
+      "lcsc": "C235316",
+      "status": "BLOCKED_POWER_THERMAL",
+      "adjudications": [
+        {
+          "id": "U3_MAX_OUTPUT_CURRENT",
+          "adjudged_by": "human",
+          "adjudged_at": "2026-08-31",
+          "value": "400 mA",
+          "resolution": "datasheet_package_specific_value_wins",
+          "conflicting_claim": "LCSC 商品页标 500 mA",
+          "source": "ME6211 V20 datasheet『ME6211C33（SOT343R, FBP1*1-4L, SOT353）Maximum Output Current = 400mA』，https://datasheet.lcsc.com/datasheet/pdf/2079c21a565bb18f68c1d4daad5e823a.pdf",
+          "local_frozen_copy": "src/hardware/m2-board/evidence/datasheets/U3_ME6211C33R5G/ME6211_V20_lcsc_official.pdf",
+          "note": "人工裁决；V20 原件已冻结并经机器逐页核对，裁决获得一手文档背书",
+          "verified_pages": "p9（SOT353 专属表 400mA）；p5（SOT353 Pd=250mW）"
+        }
+      ],
+      "documents": [
+        {
+          "type": "datasheet",
+          "source_url": "https://stm32-base.org/assets/pdf/regulators/ME6211.pdf",
+          "local_file": "src/hardware/m2-board/evidence/datasheets/U3_ME6211C33R5G/ME6211_stm32base_mirror.pdf",
+          "sha256": "7e33d6651f019782b16169a5b26b7cad43e9d462b5e25dc54815b458f88fd59b",
+          "retrieved_at": "2026-08-30T20:57:00Z",
+          "note": "V14 镜像（20 页，p5 含 Absolute Maximum Ratings：SOT353 Pd=250mW）。V20（含按封装 400mA 表）在本环境因 TLS 拦截未冻结。"
+        },
+        {
+          "type": "distributor_exact_mpn",
+          "source_url": "https://www.lcsc.com/product-detail/C235316.html",
+          "local_file": null,
+          "note": "分销商标称 500mA，已被人工裁决让位于 datasheet 按封装值 400mA"
+        },
+        {
+          "type": "datasheet",
+          "source_url": "https://datasheet.lcsc.com/datasheet/pdf/2079c21a565bb18f68c1d4daad5e823a.pdf?productCode=C235316",
+          "local_file": "src/hardware/m2-board/evidence/datasheets/U3_ME6211C33R5G/ME6211_V20_lcsc_official.pdf",
+          "sha256": "23084e9d0d0fd762c7419509ee656856be36f08ffc39f184e22a2acf7cfae5e6",
+          "retrieved_at": "2026-08-30T21:25:00Z",
+          "note": "V20 原件（23 页）。p5 Absolute Maximum Ratings：SOT353 Pd=250mW；p9『ME6211C33 (SOT343R, FBP1*1-4L, SOT353)』I_OUTMAX=400mA（标准封装表为 500mA）——人工裁决的 400mA 已由冻结原件背书。"
+        }
+      ],
+      "required_checks": [
+        "pinout",
+        "input_output_voltage",
+        "output_current_package_specific",
+        "absolute_maximum_power_dissipation",
+        "input_output_capacitors",
+        "thermal_margin"
+      ],
+      "check_evidence": {
+        "thermal_margin": {
+          "status": "blocked",
+          "decision": "blocked",
+          "machine_prechecked": {
+            "vin_v": 5.0,
+            "vout_v": 3.3,
+            "delta_v_v": 1.7,
+            "pd_absmax_mw": 250,
+            "pd_absmax_source": "V14 p5（已冻结副本）；V20 同值（人工裁决转述）",
+            "current_at_absmax_ma": 147,
+            "esp32_c3_worst_case_load_estimate_ma": 150,
+            "theta_ja": null,
+            "theta_ja_note": "V20 未提供厂家 θJA；禁止抄用第三方『常见 θJA』代签"
+          },
+          "note": "150mA×1.7V=255mW 已越过 250mW absmax（absmax 不是工作点）。路线 B（人工倾向）：走正式 ECO/ADR 换 >=1A 级 3.3V regulator；换料完成前不得修改 BOM，U3 保持 BLOCKED。"
+        }
+      }
+    },
+    {
+      "refdes": "D1",
+      "manufacturer": "Hubei KENTO Elec",
+      "mpn": "KT-0603R",
+      "lcsc": "C2286",
+      "status": "DATASHEET_FROZEN_AWAITING_SIGNOFF",
+      "documents": [
+        {
+          "type": "datasheet",
+          "source_url": "https://datasheet.lcsc.com/datasheet/pdf/011ec3e8cb1e825f6961d29bc4db4c7a.pdf",
+          "local_file": "src/hardware/m2-board/evidence/datasheets/D1_KT-0603R/KT-0603R_KENTO_approval_spec_revA0.pdf",
+          "sha256": "a3bac1cc9c59cb306ad03512945cce12c87bb54252abc223b796e1d20d41d4a1",
+          "retrieved_at": "2026-08-30T21:10:00Z",
+          "note": "湖北匡通电子承认书（Specification for Approval），Revision A.0，2018-12-06，0603 红光；人工提供原件，机器冻结入证据库"
+        }
+      ],
+      "required_checks": [
+        "exact_mpn",
+        "polarity",
+        "forward_voltage",
+        "forward_current",
+        "reverse_voltage_or_reverse_current",
+        "package_marking"
+      ],
+      "check_evidence": {
+        "exact_mpn": {
+          "status": "machine_prechecked",
+          "candidate_decision": "pass",
+          "source": {
+            "document": "KT-0603R_KENTO_approval_spec_revA0.pdf",
+            "page": 1,
+            "section": "承认书抬头（0603-0.6 红光，Rev A.0，2018-12-06）"
+          },
+          "observed": {
+            "manufacturer": "Hubei KENTO Elec",
+            "mpn": "KT-0603R",
+            "package": "1.6x0.8x0.6mm 0603 红光",
+            "matches_bom": true
+          },
+          "note": "BOM 绑定 KT-0603R/C2286/KENTO 与冻结承认书一致；待工程师签发"
+        },
+        "polarity": {
+          "status": "awaiting_engineer",
+          "machine_prechecked": {
+            "symbol_pin_map": "Device:LED pin1=K pin2=A（KiCad 官方符号，已读库核实）",
+            "footprint_marker": "LED_0603_1608Metric F.Fab 阴极三角在 pad1 侧",
+            "post_fix_nets": "D1.1(K)->GND, D1.2(A)->LED_A（TASK-FIX-D1 后，DS2 断言机械通过）",
+            "footprint_rotated": "PCB footprint 原地旋转 180°（pad1 落 GND 铜皮），丝印阴极标记随之转向，需人工在渲染图/实物确认朝向"
+          },
+          "note": "网络级极性已修复并机器验证；物理朝向仍需人工目检签发"
+        },
+        "forward_voltage": {
+          "status": "machine_prechecked",
+          "candidate_decision": "pass",
+          "source": {
+            "document": "KT-0603R_KENTO_approval_spec_revA0.pdf",
+            "page": 3,
+            "section": "5. Electrical Optical Characteristics"
+          },
+          "observed": {
+            "parameter": "Forward Voltage VF",
+            "min_v": 1.8,
+            "max_v": 2.4,
+            "condition": "IF=20mA"
+          },
+          "design_value": "R4=1k, GPIO 3.3V -> IF=(3.3-VF)/1k ≈ 0.9~1.5mA",
+          "note": "设计电流远低于测试条件，VF 余量充足；待工程师签发"
+        },
+        "forward_current": {
+          "status": "machine_prechecked",
+          "candidate_decision": "pass",
+          "source": {
+            "document": "KT-0603R_KENTO_approval_spec_revA0.pdf",
+            "page": 3,
+            "section": "4. Maximum Absolute Ratings"
+          },
+          "observed": {
+            "parameter": "DC Forward Current IF",
+            "value": 25,
+            "unit": "mA",
+            "power_dissipation_absmax_mw": 40
+          },
+          "design_value": "IF ≈ 0.9~1.5mA << 25mA；P ≈ 2.2~3.6mW << 40mW",
+          "note": "待工程师签发"
+        },
+        "reverse_voltage_or_reverse_current": {
+          "status": "machine_prechecked",
+          "candidate_decision": "pass",
+          "source": {
+            "document": "KT-0603R_KENTO_approval_spec_revA0.pdf",
+            "page": 3,
+            "section": "4. Maximum Absolute Ratings"
+          },
+          "observed": {
+            "parameter": "Backward Voltage VR",
+            "value": 5,
+            "unit": "V",
+            "reverse_current_max": "5uA @ VR=5V"
+          },
+          "design_value": "修复后反偏≈0V；旧故障态反偏≈3.3V < 5V absmax",
+          "note": "措辞严格：reverse voltage remains below datasheet absolute maximum；这不表示反接可接受——反接是功能错误，已修复"
+        },
+        "package_marking": {
+          "status": "awaiting_engineer",
+          "machine_prechecked": {
+            "datasheet_package": "1.6x0.8x0.6mm",
+            "footprint": "LED_SMD:LED_0603_1608Metric",
+            "fab_marker": "F.Fab 阴极三角（pad1 侧）"
+          },
+          "note": "承认书未给出本体丝印极性标记样式，需人工确认实物标记与装配方向"
+        }
+      },
+      "note": "datasheet 已冻结（人工提供 + 机器核验参数逐条一致：Pd 40mW / IFP 60mA / IF 25mA / VR 5V / VF 1.8-2.4V@20mA / IR≤5uA@5V / 回流 260C 10s）。所有 check 仍 awaiting_engineer，机器不代签。"
+    },
+    {
+      "refdes": "J1",
+      "manufacturer": "Korean Hroparts Elec",
+      "mpn": "TYPE-C-31-M-12",
+      "lcsc": "C165948",
+      "status": "FROZEN_PROVENANCE_QUESTIONABLE",
+      "documents": [
+        {
+          "type": "mechanical_drawing_mirror",
+          "source_url": "https://file1.huaqiu.com/web3/M00/4D/71/wKgZPGmqPlGAaTPnAAHNXNNJTw8053.pdf",
+          "via_page": "https://pdf.elecfans.com/p/5145754.html",
+          "local_file": "src/hardware/m2-board/evidence/datasheets/J1_TYPE-C-31-M-12/TYPE-C-31-M-12_drawing_elecfans_mirror.pdf",
+          "sha256": "ef0e00dd15271414b281e97e561ae8cdc429feb9f1a7ad5606d3257005c0294b",
+          "retrieved_at": "2026-08-30T21:25:00Z",
+          "note": "1 页工程图：TYPE-C-31-M-12，16-pin（A1-A12/B12-B1）、0.5mm pitch、20V、插拔力 0.5-2.0kgf、-30~+80C、峰值板温 280C/10s、含 PCB EDGE 与 RECOMMEND P.C.B LAYOUT。⚠️ 出处疑点：图面水印/标题栏为 HIROSE，与 BOM 制造商 Korean Hroparts Elec（HRO）不一致——疑似仿制厂文档或镜像站误标，只能作几何参考，不得作为实际订购 MPN 的签发依据；签发需工程师取得 HRO 官方图纸。"
+        },
+        {
+          "type": "manufacturer_product_page",
+          "source_url": "https://en.krhro.com/Product-Details/726.html",
+          "local_file": null,
+          "note": "HRO 官方页仍列此料：8.94x7.35x3.16mm / 16-pin / 贴片直角 / 20V 5A / 10000 次插拔 / -30~+80C"
+        },
+        {
+          "type": "mechanical_drawing_mirror",
+          "source_url": "https://pdf.elecfans.com/p/5145754.html",
+          "local_file": null,
+          "note": "mechanical drawing 镜像查看页（含 M-12/12A/12B/12C 系列）；0.5mm pitch、8x0.30mm 信号脚、4x0.60mm VBUS/GND 脚、外壳固定孔、板边基准、建议布局——本环境无法冻结原始 PDF，须人工下载冻结"
+        },
+        {
+          "type": "distributor_exact_mpn",
+          "source_url": "https://www.lcsc.com/product-detail/C165948.html",
+          "local_file": null
+        },
+        {
+          "type": "kicad_footprint_reference",
+          "source_url": "https://github.com/KiCad/kicad-footprints/blob/master/Connector_USB.pretty/USB_C_Receptacle_HRO_TYPE-C-31-M-12.kicad_mod",
+          "local_file": null,
+          "note": "KiCad 官方 footprint 依据 HRO drawing 建立——但不得因『用了官方 footprint』自动签 mechanical PASS；TYPE-C-31-M-12 有大量同名仿制件，固定脚/局部尺寸可能不同，必须 actual ordered MPN -> manufacturer drawing -> footprint geometry -> engineer compare -> verified"
+        }
+      ],
+      "required_checks": [
+        "exact_mpn",
+        "pin_numbering",
+        "mechanical_drawing",
+        "recommended_land_pattern",
+        "orientation",
+        "rated_current"
+      ],
+      "check_evidence": {
+        "mechanical_drawing": {
+          "status": "machine_prechecked",
+          "candidate_decision": null,
+          "observed": {
+            "pins": "16-pin A1-A12/B12-B1",
+            "pitch_mm": 0.5,
+            "voltage_rating": "20V",
+            "operating_temp": "-30~+80C",
+            "peak_solder": "280C/10s",
+            "pcb_edge_datum": true,
+            "recommended_layout": true,
+            "provenance_flag": "HIROSE watermark vs BOM manufacturer HRO — mismatch, treat as reference only"
+          },
+          "note": "机器预检；出处疑点未消，签发前必须取得 HRO 官方图纸并由工程师比对"
+        }
+      },
+      "note": "图纸已定位未冻结；板边开口方向已有 board_review 几何检查，不能替代原厂图纸比对。"
+    }
+  ]
+}

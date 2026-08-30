@@ -1,0 +1,314 @@
+{
+    "$schema": "https://schemas.kicad.org/drc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-08-30T13:50:25",
+    "ignored_checks": [
+        {
+            "description": "Footprint has no courtyard defined",
+            "key": "missing_courtyard"
+        },
+        {
+            "description": "Track endpoint not centered on via",
+            "key": "track_not_centered_on_via"
+        },
+        {
+            "description": "Tuning profile track geometries",
+            "key": "tuning_profile_track_geometries"
+        },
+        {
+            "description": "Footprint doesn't match symbol's footprint filters",
+            "key": "footprint_filters_mismatch"
+        },
+        {
+            "description": "Footprint component type doesn't match footprint pads",
+            "key": "footprint_type_mismatch"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning",
+        "exclusion"
+    ],
+    "kicad_version": "10.0.5",
+    "schematic_parity": [],
+    "source": "m2_board.kicad_pcb",
+    "unconnected_items": [
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "走线 [USB_DP_CONN] (F.Cu), 长度: 2.4000 mm",
+                    "pos": {
+                        "x": 45.25,
+                        "y": 2.8
+                    },
+                    "uuid": "9f085bbb-3aaa-436b-aef3-7d1dbe910ebc"
+                },
+                {
+                    "description": "走线 [USB_DP_CONN] (F.Cu), 长度: 1.0396 mm",
+                    "pos": {
+                        "x": 24.8601,
+                        "y": 17.2649
+                    },
+                    "uuid": "140b01ab-32d6-499e-bec5-efdc7dbdf092"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        }
+    ],
+    "violations": [
+        {
+            "description": "Courtyards overlap",
+            "items": [
+                {
+                    "description": "封装 C5",
+                    "pos": {
+                        "x": 2.0,
+                        "y": 13.5
+                    },
+                    "uuid": "1761573a-db4c-45bc-b062-ca39036a1e7e"
+                },
+                {
+                    "description": "封装 U1",
+                    "pos": {
+                        "x": 12.0,
+                        "y": 18.0
+                    },
+                    "uuid": "d2da3f26-3d61-4e1f-b8e5-b47ab57e44f0"
+                }
+            ],
+            "severity": "error",
+            "type": "courtyards_overlap"
+        },
+        {
+            "description": "Courtyards overlap",
+            "items": [
+                {
+                    "description": "封装 R9",
+                    "pos": {
+                        "x": 2.0,
+                        "y": 22.5
+                    },
+                    "uuid": "7bf69359-df84-4433-8629-ef1f66f6cb9d"
+                },
+                {
+                    "description": "封装 U1",
+                    "pos": {
+                        "x": 12.0,
+                        "y": 18.0
+                    },
+                    "uuid": "d2da3f26-3d61-4e1f-b8e5-b47ab57e44f0"
+                }
+            ],
+            "severity": "error",
+            "type": "courtyards_overlap"
+        },
+        {
+            "description": "Via is not connected or connected on only one layer",
+            "items": [
+                {
+                    "description": "过孔 [SCL] (F.Cu - B.Cu)",
+                    "pos": {
+                        "x": 23.0993,
+                        "y": 34.7257
+                    },
+                    "uuid": "48f598dc-f49b-4e50-9cfc-7e6ab8ba9f13"
+                }
+            ],
+            "severity": "warning",
+            "type": "via_dangling"
+        },
+        {
+            "description": "Track has unconnected end",
+            "items": [
+                {
+                    "description": "走线 [USB_DP_CONN] (F.Cu), 长度: 2.4000 mm",
+                    "pos": {
+                        "x": 45.25,
+                        "y": 2.8
+                    },
+                    "uuid": "9f085bbb-3aaa-436b-aef3-7d1dbe910ebc"
+                }
+            ],
+            "severity": "warning",
+            "type": "track_dangling"
+        },
+        {
+            "description": "Via is not connected or connected on only one layer",
+            "items": [
+                {
+                    "description": "过孔 [USB_DP_CONN] (F.Cu - B.Cu)",
+                    "pos": {
+                        "x": 24.8601,
+                        "y": 17.2649
+                    },
+                    "uuid": "fee7a0bf-fca4-433b-b036-03277dfe6a1e"
+                }
+            ],
+            "severity": "warning",
+            "type": "via_dangling"
+        },
+        {
+            "description": "Silkscreen clearance",
+            "items": [
+                {
+                    "description": "R7 的参考字段",
+                    "pos": {
+                        "x": 23.3,
+                        "y": 19.43
+                    },
+                    "uuid": "1c9c26f1-b9a9-454c-8d31-4ee38b68a6b0"
+                },
+                {
+                    "description": "R8 的 线段, 位于 F.Silkscreen",
+                    "pos": {
+                        "x": 23.537258,
+                        "y": 18.9775
+                    },
+                    "uuid": "e011934a-66d7-4f24-aa43-a0815fc555f8"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        },
+        {
+            "description": "Silkscreen clearance",
+            "items": [
+                {
+                    "description": "R9 的 线段, 位于 F.Silkscreen",
+                    "pos": {
+                        "x": 1.762742,
+                        "y": 23.0225
+                    },
+                    "uuid": "c51e0dbf-4d2b-4c7e-acc1-dc73544168c6"
+                },
+                {
+                    "description": "U1 的参考字段",
+                    "pos": {
+                        "x": 1.5,
+                        "y": 23.13
+                    },
+                    "uuid": "ccbdf7e5-52ed-4bcc-a6fe-36c754f97c2a"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "R7 的参考字段",
+                    "pos": {
+                        "x": 23.3,
+                        "y": 19.43
+                    },
+                    "uuid": "1c9c26f1-b9a9-454c-8d31-4ee38b68a6b0"
+                },
+                {
+                    "description": "F.Cu 上 R8 的焊盘 2 [USB_DM]",
+                    "pos": {
+                        "x": 22.475,
+                        "y": 19.5
+                    },
+                    "uuid": "77b8708c-90e0-4dc8-b953-00e5948cc05c"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "C5 的参考字段",
+                    "pos": {
+                        "x": 2.0,
+                        "y": 14.93
+                    },
+                    "uuid": "d6acb77f-9f3a-41b7-9b1c-ac8a969970c9"
+                },
+                {
+                    "description": "F.Cu 上 U1 的焊盘 3 [SDA]",
+                    "pos": {
+                        "x": 3.25,
+                        "y": 15.0
+                    },
+                    "uuid": "f3e05b0f-baf7-455a-a013-8f821e26b7ae"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "R7 的参考字段",
+                    "pos": {
+                        "x": 23.3,
+                        "y": 19.43
+                    },
+                    "uuid": "1c9c26f1-b9a9-454c-8d31-4ee38b68a6b0"
+                },
+                {
+                    "description": "F.Cu 上 R8 的焊盘 1 [USB_DM_CONN]",
+                    "pos": {
+                        "x": 24.125,
+                        "y": 19.5
+                    },
+                    "uuid": "f0be4c7a-a25d-4642-95ee-17e8e672b54f"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "R9 的参考字段",
+                    "pos": {
+                        "x": 2.0,
+                        "y": 21.07
+                    },
+                    "uuid": "de390a72-ebc5-4b90-8c15-31677ee33dc3"
+                },
+                {
+                    "description": "F.Cu 上 U1 的焊盘 7 [<no net>]",
+                    "pos": {
+                        "x": 3.25,
+                        "y": 21.0
+                    },
+                    "uuid": "2b59e6f3-ddf0-44b7-b38b-8d676a724188"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "U1 的参考字段",
+                    "pos": {
+                        "x": 1.5,
+                        "y": 23.13
+                    },
+                    "uuid": "ccbdf7e5-52ed-4bcc-a6fe-36c754f97c2a"
+                },
+                {
+                    "description": "F.Cu 上 R9 的焊盘 1 [+3V3]",
+                    "pos": {
+                        "x": 1.175,
+                        "y": 22.5
+                    },
+                    "uuid": "2f57da8c-af0c-4d7a-9453-21f9b43e9260"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        }
+    ]
+}

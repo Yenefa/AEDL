@@ -41,6 +41,7 @@ try:
     from .make_jlc_cpl import generate_jlc_cpl
     from .schematic_semantics import REPORT_SCHEMA as SEMANTIC_REPORT_SCHEMA, evaluate_paths
     from .semantic_fault_injection import REPORT_SCHEMA as FAULT_REPORT_SCHEMA, generate_fault_injection_report
+    from .datasheet_contract import validate_datasheet_bundle
 except ImportError:  # direct ``py gates/run_gates.py`` execution
     from gate_core import (  # type: ignore
         count_drc_findings,
@@ -65,6 +66,7 @@ except ImportError:  # direct ``py gates/run_gates.py`` execution
     from make_jlc_cpl import generate_jlc_cpl  # type: ignore
     from schematic_semantics import REPORT_SCHEMA as SEMANTIC_REPORT_SCHEMA, evaluate_paths  # type: ignore
     from semantic_fault_injection import REPORT_SCHEMA as FAULT_REPORT_SCHEMA, generate_fault_injection_report  # type: ignore
+    from datasheet_contract import validate_datasheet_bundle  # type: ignore
 
 
 REQUIRED_ZIP_ENTRIES = set(EXPECTED_GERBER_FILES)
@@ -459,6 +461,29 @@ def evaluate_evidence(
             verdict["errors"],
         )
 
+    def _evaluate_datasheet_contract(root: Path) -> Dict[str, Any]:
+        """11th gate: datasheet truth layer (external world, not self-consistency).
+
+        ERC/DRC PASS can never override a BLOCK here: critical components stay
+        blocked until exact MPN binding, frozen datasheet copies, pin->net
+        assertions and explicit check evidence all exist.
+        """
+        manifest_path = root / "src" / "hardware" / "m2-board" / "evidence" / "datasheet_manifest.json"
+        contracts_path = root / "src" / "hardware" / "m2-board" / "evidence" / "contracts" / "m2_component_contracts.json"
+        bom_path = root / "gates" / "bom" / "bom_v1.json"
+        intent_path = root / "src" / "hardware" / "m2-board" / "intent_v1.json"
+        errors = validate_datasheet_bundle(manifest_path, contracts_path, bom_path, intent_path, root)
+        return _gate(
+            "datasheet_contract",
+            "pass" if not errors else "fail",
+            {
+                "manifest": str(manifest_path),
+                "contracts": str(contracts_path),
+                "block_count": len(errors),
+            },
+            errors,
+        )
+
     gates = [
         _safe_gate("erc", lambda: _evaluate_erc(Path(erc_report))),
         _safe_gate("drc", lambda: _evaluate_drc(Path(drc_report))),
@@ -470,6 +495,7 @@ def evaluate_evidence(
         _safe_gate("learning", lambda: _evaluate_learning(root, Path(learning_report))),
         _safe_gate("requirements_contract", lambda: _evaluate_requirements_contract(root)),
         _safe_gate("board_review", lambda: _evaluate_board_review(Path(board_review))),
+        _safe_gate("datasheet_contract", lambda: _evaluate_datasheet_contract(root)),
     ]
     passed = all(gate["status"] == "pass" for gate in gates)
     return {
