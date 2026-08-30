@@ -67,12 +67,12 @@
 - Create: `notes/m2-evidence-reset/generated/schematic_semantics_current.json`
 - Create: `notes/m2-evidence-reset/generated/learning_gate_current.json`
 
-- [ ] Add tests proving ops validation reads current M2 evidence, never the M1 proxy.
-- [ ] Add tests proving semantic and learning reports are mandatory and empty/malformed/unknown results fail.
-- [ ] Confirm focused RED.
-- [ ] Integrate both gates into the runner and manifest.
-- [ ] Keep release false as a deliberate final blocker after machine checks pass.
-- [ ] Confirm focused GREEN and commit.
+- [x] Add tests proving ops validation reads current M2 evidence, never the M1 proxy.
+- [x] Add tests proving semantic and learning reports are mandatory and empty/malformed/unknown results fail.
+- [x] Confirm focused RED.
+- [x] Integrate both gates into the runner and manifest.
+- [x] Keep release false as a deliberate final blocker after machine checks pass.
+- [x] Confirm focused GREEN and commit.
 
 ## Task 5: Repair intent and regenerate the source schematic
 

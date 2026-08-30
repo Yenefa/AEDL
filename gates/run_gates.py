@@ -29,6 +29,9 @@ try:
         validate_bom,
         zip_entry_names,
     )
+    from .learning_gate import validate_lessons_registry
+    from .schematic_semantics import REPORT_SCHEMA as SEMANTIC_REPORT_SCHEMA, evaluate_paths
+    from .semantic_fault_injection import REPORT_SCHEMA as FAULT_REPORT_SCHEMA, generate_fault_injection_report
 except ImportError:  # direct ``py gates/run_gates.py`` execution
     from gate_core import (  # type: ignore
         count_drc_findings,
@@ -41,6 +44,9 @@ except ImportError:  # direct ``py gates/run_gates.py`` execution
         validate_bom,
         zip_entry_names,
     )
+    from learning_gate import validate_lessons_registry  # type: ignore
+    from schematic_semantics import REPORT_SCHEMA as SEMANTIC_REPORT_SCHEMA, evaluate_paths  # type: ignore
+    from semantic_fault_injection import REPORT_SCHEMA as FAULT_REPORT_SCHEMA, generate_fault_injection_report  # type: ignore
 
 
 REQUIRED_ZIP_ENTRIES = {
@@ -50,6 +56,8 @@ REQUIRED_ZIP_ENTRIES = {
     "m2_board.drl",
     "m2_board-job.gbrjob",
 }
+OPS_EVIDENCE_SCHEMA = "https://aedl.local/schemas/m2-ops-validation.v1.json"
+LEARNING_REPORT_SCHEMA = "https://aedl.local/schemas/learning-gate-report.v1.json"
 
 
 def _utc_now() -> str:
@@ -162,17 +170,153 @@ def _evaluate_intent(root: Path) -> Dict[str, Any]:
 
 
 def _evaluate_ops(root: Path) -> Dict[str, Any]:
-    path = root / "notes" / "m1-evidence" / "ops_validate.json"
+    path = root / "notes" / "m2-evidence-reset" / "generated" / "ops_validate_current.json"
+    ops_path = root / "src" / "hardware" / "m2-board" / "ops_gen.json"
+    details: Dict[str, Any] = {"path": str(path), "ops_path": str(ops_path)}
+    errors: List[str] = []
     if not path.is_file():
-        return _gate("ops", "fail", {"path": str(path)}, [f"missing operations evidence: {path}"])
+        return _gate("ops", "fail", details, [f"missing current M2 operations evidence: {path}"])
+    if not ops_path.is_file():
+        return _gate("ops", "fail", details, [f"missing current M2 operations file: {ops_path}"])
     with path.open("r", encoding="utf-8-sig") as handle:
         data = json.load(handle)
-    errors = []
+    with ops_path.open("r", encoding="utf-8-sig") as handle:
+        ops_data = json.load(handle)
+    expected_fields = {
+        "$schema", "schema_version", "generated_at", "target", "ops_sha256",
+        "op_count", "valid", "errors", "generator", "validator",
+    }
+    if not isinstance(data, dict):
+        return _gate("ops", "fail", details, ["ops evidence root must be an object"])
+    missing = sorted(expected_fields - set(data))
+    unknown = sorted(set(data) - expected_fields)
+    if missing:
+        errors.append(f"ops evidence missing fields: {missing}")
+    if unknown:
+        errors.append(f"ops evidence has unknown fields: {unknown}")
+    if data.get("$schema") != OPS_EVIDENCE_SCHEMA or data.get("schema_version") != 1:
+        errors.append("ops evidence schema/version mismatch")
+    if data.get("target") != "src/hardware/m2-board/ops_gen.json":
+        errors.append("ops evidence target is not current M2 ops_gen.json")
     if data.get("valid") is not True:
-        errors.append("ops_validate.valid is not true")
+        errors.append("ops evidence valid is not true")
     if data.get("errors") != []:
-        errors.append("ops_validate.errors is not empty")
-    return _gate("ops", "pass" if not errors else "fail", {"path": str(path), "op_count": data.get("op_count")}, errors)
+        errors.append("ops evidence errors is not empty")
+    if not isinstance(ops_data, dict) or ops_data.get("protocol_version") != 2:
+        errors.append("current M2 ops protocol_version must be 2")
+        ops = []
+    else:
+        ops = ops_data.get("ops")
+        if not isinstance(ops, list) or not ops:
+            errors.append("current M2 ops must be a non-empty list")
+            ops = []
+    current_hash = sha256_file(ops_path)
+    details.update({"op_count": data.get("op_count"), "ops_sha256": current_hash})
+    if data.get("ops_sha256") != current_hash:
+        errors.append("ops evidence hash does not match current M2 ops_gen.json")
+    if data.get("op_count") != len(ops):
+        errors.append("ops evidence op_count does not match current M2 ops_gen.json")
+    for field in ("generator", "validator", "generated_at"):
+        if not isinstance(data.get(field), str) or not data[field].strip():
+            errors.append(f"ops evidence has no {field}")
+    return _gate("ops", "pass" if not errors else "fail", details, errors)
+
+
+def _evaluate_schematic_semantics(root: Path, path: Path) -> Dict[str, Any]:
+    details: Dict[str, Any] = {"path": str(path)}
+    if not path.is_file():
+        return _gate("schematic_semantics", "fail", details, [f"missing semantic report: {path}"])
+    with path.open("r", encoding="utf-8-sig") as handle:
+        data = json.load(handle)
+    errors: List[str] = []
+    required = {"$schema", "schema_version", "board_id", "generated_at", "status", "summary", "findings", "inputs"}
+    if not isinstance(data, dict):
+        return _gate("schematic_semantics", "fail", details, ["semantic report root must be an object"])
+    missing = sorted(required - set(data))
+    unknown = sorted(set(data) - required)
+    if missing:
+        errors.append(f"semantic report missing fields: {missing}")
+    if unknown:
+        errors.append(f"semantic report has unknown fields: {unknown}")
+    if data.get("$schema") != SEMANTIC_REPORT_SCHEMA or data.get("schema_version") != 1:
+        errors.append("semantic report schema/version mismatch")
+    findings = data.get("findings")
+    if not isinstance(findings, list) or not findings:
+        errors.append("semantic report findings must be a non-empty list")
+        findings = []
+    failed = 0
+    for index, finding in enumerate(findings):
+        if not isinstance(finding, dict):
+            errors.append(f"semantic finding {index} is malformed")
+            continue
+        if finding.get("status") not in ("pass", "fail"):
+            errors.append(f"semantic finding {index} has unknown status")
+        if finding.get("severity") not in ("critical", "major"):
+            errors.append(f"semantic finding {index} has unknown severity")
+        failed += finding.get("status") == "fail"
+    summary = data.get("summary")
+    if not isinstance(summary, dict) or summary.get("total") != len(findings) or summary.get("failed") != failed:
+        errors.append("semantic report summary is inconsistent")
+    if data.get("status") != ("fail" if failed else "pass"):
+        errors.append("semantic report status is inconsistent")
+    if data.get("status") != "pass":
+        errors.append("semantic contract findings are present")
+
+    input_targets = {
+        "contract": root / "gates" / "contracts" / "m2_schematic_contract_v1.json",
+        "intent": root / "src" / "hardware" / "m2-board" / "intent_v1.json",
+        "netlist": root / "notes" / "m2-evidence-reset" / "generated" / "m2_board_current.net.xml",
+        "pcb": root / "src" / "hardware" / "m2-board" / "m2_board.kicad_pcb",
+        "firmware": root / "src" / "firmware" / "include" / "sht30.h",
+    }
+    inputs = data.get("inputs")
+    if not isinstance(inputs, dict):
+        errors.append("semantic report inputs must be an object")
+    else:
+        for name, target in input_targets.items():
+            item = inputs.get(name)
+            if not target.is_file():
+                errors.append(f"semantic input is missing: {target}")
+            elif not isinstance(item, dict) or item.get("sha256") != sha256_file(target):
+                errors.append(f"semantic input hash mismatch: {name}")
+    details.update({"status": data.get("status"), "summary": summary})
+    return _gate("schematic_semantics", "pass" if not errors else "fail", details, errors)
+
+
+def _evaluate_learning(root: Path, path: Path) -> Dict[str, Any]:
+    details: Dict[str, Any] = {"path": str(path)}
+    if not path.is_file():
+        return _gate("learning", "fail", details, [f"missing learning report: {path}"])
+    with path.open("r", encoding="utf-8-sig") as handle:
+        data = json.load(handle)
+    errors: List[str] = []
+    required = {"$schema", "schema_version", "generated_at", "status", "lesson_count", "errors", "inputs"}
+    if not isinstance(data, dict):
+        return _gate("learning", "fail", details, ["learning report root must be an object"])
+    if set(data) != required:
+        errors.append("learning report fields do not match strict schema")
+    if data.get("$schema") != LEARNING_REPORT_SCHEMA or data.get("schema_version") != 1:
+        errors.append("learning report schema/version mismatch")
+    if data.get("status") != "pass" or data.get("errors") != []:
+        errors.append("learning report is not pass")
+    if not isinstance(data.get("lesson_count"), int) or data.get("lesson_count", 0) < 1:
+        errors.append("learning report has no lessons")
+    input_targets = {
+        "registry": root / "gates" / "lessons_registry_v1.json",
+        "fault_injection_proof": root / "notes" / "m2-evidence-reset" / "generated" / "semantic_fault_injection_current.json",
+    }
+    inputs = data.get("inputs")
+    if not isinstance(inputs, dict):
+        errors.append("learning report inputs must be an object")
+    else:
+        for name, target in input_targets.items():
+            item = inputs.get(name)
+            if not target.is_file():
+                errors.append(f"learning input is missing: {target}")
+            elif not isinstance(item, dict) or item.get("sha256") != sha256_file(target):
+                errors.append(f"learning input hash mismatch: {name}")
+    details.update({"lesson_count": data.get("lesson_count"), "status": data.get("status")})
+    return _gate("learning", "pass" if not errors else "fail", details, errors)
 
 
 def _evaluate_board_review(path: Path) -> Dict[str, Any]:
@@ -195,9 +339,18 @@ def _evaluate_board_review(path: Path) -> Dict[str, Any]:
     return _gate("board_review", "pass" if not errors else "fail", details, errors)
 
 
-def evaluate_evidence(root: Path, erc_report: Path, drc_report: Path, board_review: Path) -> Dict[str, Any]:
+def evaluate_evidence(
+    root: Path,
+    erc_report: Path,
+    drc_report: Path,
+    board_review: Path,
+    semantic_report: Optional[Path] = None,
+    learning_report: Optional[Path] = None,
+) -> Dict[str, Any]:
     """Evaluate all non-process evidence and return a serializable manifest."""
     root = Path(root).resolve()
+    semantic_report = semantic_report or root / "notes" / "m2-evidence-reset" / "generated" / "schematic_semantics_current.json"
+    learning_report = learning_report or root / "notes" / "m2-evidence-reset" / "generated" / "learning_gate_current.json"
     gates = [
         _safe_gate("erc", lambda: _evaluate_erc(Path(erc_report))),
         _safe_gate("drc", lambda: _evaluate_drc(Path(drc_report))),
@@ -205,6 +358,8 @@ def evaluate_evidence(root: Path, erc_report: Path, drc_report: Path, board_revi
         _safe_gate("delivery", lambda: _evaluate_delivery(root)),
         _safe_gate("intent", lambda: _evaluate_intent(root)),
         _safe_gate("ops", lambda: _evaluate_ops(root)),
+        _safe_gate("schematic_semantics", lambda: _evaluate_schematic_semantics(root, Path(semantic_report))),
+        _safe_gate("learning", lambda: _evaluate_learning(root, Path(learning_report))),
         _safe_gate("board_review", lambda: _evaluate_board_review(Path(board_review))),
     ]
     passed = all(gate["status"] == "pass" for gate in gates)
@@ -294,8 +449,13 @@ def run(
     evidence_dir = root / "notes" / "m2-evidence-reset" / "generated"
     erc_report = evidence_dir / "g2_erc_current.json"
     drc_report = evidence_dir / "g4_drc_current.json"
+    netlist_report = evidence_dir / "m2_board_current.net.xml"
+    semantic_report = evidence_dir / "schematic_semantics_current.json"
+    fault_report = evidence_dir / "semantic_fault_injection_current.json"
+    learning_report = evidence_dir / "learning_gate_current.json"
     tools: List[Dict[str, Any]] = []
     tool_errors: List[str] = []
+    netlist_fresh = False
 
     if skip_kicad:
         erc_report = root / "notes" / "m1-evidence" / "g2_erc_m2board.json"
@@ -309,20 +469,107 @@ def run(
             sch = root / "src" / "hardware" / "m2-board" / "m2_board.kicad_sch"
             board = root / "src" / "hardware" / "m2-board" / "m2_board.kicad_pcb"
             evidence_dir.mkdir(parents=True, exist_ok=True)
+            netlist_temp = netlist_report.with_name(netlist_report.name + ".tmp")
+            netlist_temp.unlink(missing_ok=True)
+            netlist_command = [str(cli), "sch", "export", "netlist", "--format", "kicadxml", "--output", str(netlist_temp), str(sch)]
             erc_command = [str(cli), "sch", "erc", "--format", "json", "--severity-all", "--exit-code-violations", "--output", str(erc_report), str(sch)]
             drc_command = [str(cli), "pcb", "drc", "--format", "json", "--severity-all", "--exit-code-violations", "--output", str(drc_report), str(board)]
+            netlist_run = {"name": "kicad_netlist", **_run_tool(netlist_command, root)}
+            tools.append(netlist_run)
+            if netlist_run.get("exit_code") == 0 and netlist_temp.is_file():
+                netlist_temp.replace(netlist_report)
+                netlist_fresh = True
             tools.append({"name": "kicad_erc", **_run_tool(erc_command, root)})
             tools.append({"name": "kicad_drc", **_run_tool(drc_command, root)})
 
+    generated_at = _utc_now()
+    if netlist_fresh:
+        semantic_data = evaluate_paths(
+            root / "gates" / "contracts" / "m2_schematic_contract_v1.json",
+            root / "src" / "hardware" / "m2-board" / "intent_v1.json",
+            netlist_report,
+            root / "src" / "hardware" / "m2-board" / "m2_board.kicad_pcb",
+            root / "src" / "firmware" / "include" / "sht30.h",
+        )
+        semantic_data["generated_at"] = generated_at
+    else:
+        semantic_data = {
+            "$schema": SEMANTIC_REPORT_SCHEMA,
+            "schema_version": 1,
+            "board_id": "project-027-m2-esp32c3-sht30",
+            "generated_at": generated_at,
+            "status": "fail",
+            "summary": {"passed": 0, "failed": 1, "total": 1},
+            "findings": [{
+                "rule_id": "INPUT_INVALID",
+                "severity": "critical",
+                "status": "fail",
+                "details": ["fresh KiCad XML netlist export did not complete in this run"],
+            }],
+            "inputs": {},
+        }
+    _write_json_atomic(semantic_report, semantic_data)
+
+    try:
+        fault_data = generate_fault_injection_report(
+            root / "gates" / "contracts" / "m2_schematic_contract_v1.json",
+            root / "tests" / "fixtures" / "schematic_semantics" / "good_observations.json",
+            sorted((root / "tests" / "fixtures" / "schematic_semantics").glob("fault_*.json")),
+            root=root,
+        )
+    except Exception as exc:
+        fault_data = {
+            "$schema": FAULT_REPORT_SCHEMA,
+            "schema_version": 1,
+            "generated_at": generated_at,
+            "status": "fail",
+            "baseline_status": "invalid",
+            "inputs": {},
+            "summary": {"caught": 0, "missed": 1, "total": 1},
+            "cases": [{"status": "missed", "error": f"{type(exc).__name__}: {exc}"}],
+        }
+    _write_json_atomic(fault_report, fault_data)
+
+    registry = root / "gates" / "lessons_registry_v1.json"
+    learning_errors = validate_lessons_registry(registry, root)
+    try:
+        lesson_data = json.loads(registry.read_text(encoding="utf-8-sig"))
+        lesson_count = len(lesson_data.get("lessons", [])) if isinstance(lesson_data, dict) else 0
+    except Exception:
+        lesson_count = 0
+    learning_inputs = {}
+    for name, path in {"registry": registry, "fault_injection_proof": fault_report}.items():
+        learning_inputs[name] = {
+            "path": str(path),
+            "sha256": sha256_file(path) if path.is_file() else None,
+        }
+    learning_data = {
+        "$schema": LEARNING_REPORT_SCHEMA,
+        "schema_version": 1,
+        "generated_at": generated_at,
+        "status": "pass" if not learning_errors else "fail",
+        "lesson_count": lesson_count,
+        "errors": learning_errors,
+        "inputs": learning_inputs,
+    }
+    _write_json_atomic(learning_report, learning_data)
+
     board_review = root / "gates" / "board_review_v1.json"
-    evidence = evaluate_evidence(root, erc_report, drc_report, board_review)
+    evidence = evaluate_evidence(
+        root,
+        erc_report,
+        drc_report,
+        board_review,
+        semantic_report,
+        learning_report,
+    )
     if tool_errors:
         evidence["gates"].append(_gate("kicad_tool", "fail", errors=tool_errors))
         evidence["status"] = "fail"
         evidence["exit_code"] = 1
     run_at = _utc_now()
     for gate in evidence["gates"]:
-        gate["evidence_grade"] = "C" if gate["name"] == "board_review" else "A"
+        gate["evidence_grade"] = "A"
     artifacts = _artifact_hashes(
         {
             "intent": root / "src" / "hardware" / "m2-board" / "intent_v1.json",
@@ -331,6 +578,11 @@ def run(
             "delivery_bom": root / "delivery" / "bom.csv",
             "gerber_zip": root / "delivery" / "jlc_gerber_upload.zip",
             "board_review": board_review,
+            "ops_evidence": evidence_dir / "ops_validate_current.json",
+            "semantic_netlist": netlist_report,
+            "semantic_report": semantic_report,
+            "fault_injection_report": fault_report,
+            "learning_report": learning_report,
             "erc_report": erc_report,
             "drc_report": drc_report,
         }
@@ -344,7 +596,14 @@ def run(
         "status": evidence["status"],
         "exit_code": evidence["exit_code"],
         "tool_runs": tools,
-        "reports": {"erc": str(erc_report), "drc": str(drc_report)},
+        "reports": {
+            "erc": str(erc_report),
+            "drc": str(drc_report),
+            "semantic": str(semantic_report),
+            "learning": str(learning_report),
+            "fault_injection": str(fault_report),
+            "netlist": str(netlist_report),
+        },
         "artifacts": artifacts,
         "gates": evidence["gates"],
     }

@@ -1,16 +1,33 @@
 {
   "schema_version": "m2-evidence-reset-run.v1",
-  "run_id": "m2-ae316d96996f4e8efed9e4091583ce90246c5134-2026-08-29T13:55:43Z",
-  "run_at": "2026-08-29T13:55:43Z",
+  "run_id": "m2-241d651c79c5166637726a7a6f1d69c159eef3c2-2026-08-30T05:00:13Z",
+  "run_at": "2026-08-30T05:00:13Z",
   "root": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent",
   "git": {
-    "commit": "ae316d96996f4e8efed9e4091583ce90246c5134",
+    "commit": "241d651c79c5166637726a7a6f1d69c159eef3c2",
     "dirty": true,
-    "status_porcelain": "M AGENTS.md\n M README.md\n M docs/HANDOFF.md\n M notes/m2-evidence-reset/generated/g2_erc_current.json\n M notes/m2-evidence-reset/generated/g4_drc_current.json\n M notes/m2-evidence-reset/run_manifest.json\n M tests/test_run_gates.py\n?? docs/compliance/\n?? docs/evidence/\n?? notes/m2-evidence-reset/generated/freerouting_run2.log\n?? notes/m2-evidence-reset/generated/freerouting_run3.log\n?? notes/m2-evidence-reset/generated/g4_drc_probe.json\n?? spike/\n?? spike_stage2/\n?? src/hardware/m2-board/m2_board_rerun.ses\n?? tests/fixtures/board_review_before_release.json\n?? tools/polish_routes.py\n?? tools/probe_pads.py"
+    "status_porcelain": "M gates/run_gates.py\n M notes/m2-evidence-reset/generated/g2_erc_current.json\n M notes/m2-evidence-reset/generated/g4_drc_current.json\n M notes/m2-evidence-reset/generated/semantic_fault_injection_current.json\n M notes/m2-evidence-reset/run_manifest.json\n M tests/test_run_gates.py\n?? notes/m2-evidence-reset/generated/g4_drc_probe.json\n?? notes/m2-evidence-reset/generated/learning_gate_current.json\n?? notes/m2-evidence-reset/generated/schematic_semantics_current.json\n?? spike/\n?? spike_stage2/\n?? src/hardware/m2-board/m2_board_rerun.ses\n?? tools/polish_routes.py\n?? tools/probe_pads.py"
   },
-  "status": "pass",
-  "exit_code": 0,
+  "status": "fail",
+  "exit_code": 1,
   "tool_runs": [
+    {
+      "name": "kicad_netlist",
+      "command": [
+        "C:\\Users\\fuker\\AppData\\Local\\Programs\\KiCad\\10.0\\bin\\kicad-cli.exe",
+        "sch",
+        "export",
+        "netlist",
+        "--format",
+        "kicadxml",
+        "--output",
+        "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\m2_board_current.net.xml.tmp",
+        "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\hardware\\m2-board\\m2_board.kicad_sch"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
     {
       "name": "kicad_erc",
       "command": [
@@ -50,7 +67,11 @@
   ],
   "reports": {
     "erc": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g2_erc_current.json",
-    "drc": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g4_drc_current.json"
+    "drc": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g4_drc_current.json",
+    "semantic": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\schematic_semantics_current.json",
+    "learning": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\learning_gate_current.json",
+    "fault_injection": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\semantic_fault_injection_current.json",
+    "netlist": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\m2_board_current.net.xml"
   },
   "artifacts": {
     "intent": {
@@ -80,17 +101,42 @@
     },
     "board_review": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\gates\\board_review_v1.json",
-      "sha256": "a1681ca910164397f27afdf0b9a2349cba7b040e9e2fc047b19217a97e9eb02f",
+      "sha256": "1baacb1342f02aab5e8ecfee2d2b0f32c16bef525d06090bfaee9d193844bec2",
+      "exists": true
+    },
+    "ops_evidence": {
+      "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\ops_validate_current.json",
+      "sha256": null,
+      "exists": false
+    },
+    "semantic_netlist": {
+      "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\m2_board_current.net.xml",
+      "sha256": "1d708360d39380421c39d4cad39b889ec7fa115c4124be0475447170526b9197",
+      "exists": true
+    },
+    "semantic_report": {
+      "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\schematic_semantics_current.json",
+      "sha256": "a41c15f1f879a8ab8b0c86f224a141a89148a99bbd46e857c264b877588f8bf3",
+      "exists": true
+    },
+    "fault_injection_report": {
+      "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\semantic_fault_injection_current.json",
+      "sha256": "f5f0059ee68552d0e5b34cf4ba7206e7c7d5e236ac0b5f1715af8e6ae72d9df0",
+      "exists": true
+    },
+    "learning_report": {
+      "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\learning_gate_current.json",
+      "sha256": "981a17c1fe93b503f30106f75f52a3d299a6d63817dec28bae4636abb8e899bd",
       "exists": true
     },
     "erc_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g2_erc_current.json",
-      "sha256": "dd9712bfd06ffc7628a2edc101169a5cb3a42c9121516b36f7f66fbdb43ae8d1",
+      "sha256": "30fc100c63fc4483623a119381cf0a447f81cbfe5ceadcf5fc0b75ff90061297",
       "exists": true
     },
     "drc_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g4_drc_current.json",
-      "sha256": "49e6a55ea5dcb8ece7fe5e6c6201cb3f347ed36d675471521e520322b243aac8",
+      "sha256": "e0a39ceb998b3023e64d55d548bc07a92e28053ae2d745390fc2a286dbb66235",
       "exists": true
     }
   },
@@ -158,27 +204,59 @@
     },
     {
       "name": "ops",
+      "status": "fail",
+      "details": {
+        "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\ops_validate_current.json",
+        "ops_path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\hardware\\m2-board\\ops_gen.json"
+      },
+      "errors": [
+        "missing current M2 operations evidence: C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\ops_validate_current.json"
+      ],
+      "evidence_grade": "A"
+    },
+    {
+      "name": "schematic_semantics",
+      "status": "fail",
+      "details": {
+        "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\schematic_semantics_current.json",
+        "status": "fail",
+        "summary": {
+          "passed": 0,
+          "failed": 5,
+          "total": 5
+        }
+      },
+      "errors": [
+        "semantic contract findings are present"
+      ],
+      "evidence_grade": "A"
+    },
+    {
+      "name": "learning",
       "status": "pass",
       "details": {
-        "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m1-evidence\\ops_validate.json",
-        "op_count": 6
+        "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\learning_gate_current.json",
+        "lesson_count": 1,
+        "status": "pass"
       },
       "errors": [],
       "evidence_grade": "A"
     },
     {
       "name": "board_review",
-      "status": "pass",
+      "status": "fail",
       "details": {
         "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\gates\\board_review_v1.json",
         "review_count": 8,
         "status_counts": {
           "pass": 8
         },
-        "manufacturing_release": true
+        "manufacturing_release": false
       },
-      "errors": [],
-      "evidence_grade": "C"
+      "errors": [
+        "manufacturing_release is false"
+      ],
+      "evidence_grade": "A"
     }
   ]
 }

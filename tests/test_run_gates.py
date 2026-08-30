@@ -1,9 +1,10 @@
 import json
+import hashlib
 from pathlib import Path
 import tempfile
 import unittest
 
-from gates.run_gates import _evaluate_intent, evaluate_evidence, run
+from gates.run_gates import _evaluate_intent, _evaluate_ops, evaluate_evidence, run
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -97,6 +98,58 @@ class RunGatesTests(unittest.TestCase):
             {"needs_physical": 8},
         )
 
+    def test_m1_ops_proxy_cannot_satisfy_current_m2_gate(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            proxy = root / "notes" / "m1-evidence" / "ops_validate.json"
+            proxy.parent.mkdir(parents=True)
+            proxy.write_text(
+                json.dumps({"protocol_version": 2, "valid": True, "op_count": 99, "errors": []}),
+                encoding="utf-8",
+            )
+
+            gate = _evaluate_ops(root)
+
+        self.assertEqual(gate["status"], "fail")
+        self.assertIn("m2-evidence-reset", gate["details"]["path"])
+        self.assertNotIn("m1-evidence", gate["details"]["path"])
+
+    def test_current_m2_ops_evidence_is_bound_to_ops_hash_and_count(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            ops_path = root / "src" / "hardware" / "m2-board" / "ops_gen.json"
+            evidence_path = root / "notes" / "m2-evidence-reset" / "generated" / "ops_validate_current.json"
+            ops_path.parent.mkdir(parents=True)
+            evidence_path.parent.mkdir(parents=True)
+            ops = {"protocol_version": 2, "target_format": "kicad", "ops": [{"op": "place_component"}]}
+            encoded = (json.dumps(ops) + "\n").encode("utf-8")
+            ops_path.write_bytes(encoded)
+            evidence_path.write_text(
+                json.dumps(
+                    {
+                        "$schema": "https://aedl.local/schemas/m2-ops-validation.v1.json",
+                        "schema_version": 1,
+                        "generated_at": "2026-08-30T00:00:00Z",
+                        "target": "src/hardware/m2-board/ops_gen.json",
+                        "ops_sha256": hashlib.sha256(encoded).hexdigest(),
+                        "op_count": 1,
+                        "valid": True,
+                        "errors": [],
+                        "generator": "akcli ops from-intent",
+                        "validator": "akcli ops validate",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(_evaluate_ops(root)["status"], "pass")
+            ops["ops"].append({"op": "add_net_label"})
+            ops_path.write_text(json.dumps(ops), encoding="utf-8")
+            stale = _evaluate_ops(root)
+
+        self.assertEqual(stale["status"], "fail")
+        self.assertTrue(any("hash" in error for error in stale["errors"]))
+
     def test_malformed_tool_reports_fail_closed(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -112,6 +165,10 @@ class RunGatesTests(unittest.TestCase):
         self.assertEqual(manifest["status"], "fail")
         self.assertTrue(all(gate["status"] == "fail" for gate in manifest["gates"]))
         self.assertTrue(any("invalid schema metadata" in error for error in manifest["gates"][0]["errors"]))
+        self.assertEqual(
+            {gate["name"] for gate in manifest["gates"]},
+            {"erc", "drc", "bom", "delivery", "intent", "ops", "schematic_semantics", "learning", "board_review"},
+        )
 
     def test_output_root_alias_writes_a_manifest(self):
         with tempfile.TemporaryDirectory() as temp_dir:
