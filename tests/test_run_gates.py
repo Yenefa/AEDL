@@ -3,14 +3,73 @@ import hashlib
 from pathlib import Path
 import tempfile
 import unittest
+import zipfile
 
-from gates.run_gates import _evaluate_intent, _evaluate_ops, evaluate_evidence, run
+from gates.run_gates import (
+    REQUIRED_ZIP_ENTRIES,
+    _evaluate_delivery,
+    _evaluate_intent,
+    _evaluate_ops,
+    evaluate_evidence,
+    run,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class RunGatesTests(unittest.TestCase):
+    def test_delivery_gate_rejects_cpl_that_differs_from_fresh_pcb_export(self):
+        current = (ROOT / "delivery/pos.csv").read_text(encoding="utf-8-sig")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            fresh = Path(temp_dir) / "fresh-cpl.csv"
+            fresh.write_text(
+                current.replace("C1,54.000000", "C1,55.000000", 1),
+                encoding="utf-8-sig",
+            )
+            result = _evaluate_delivery(ROOT, fresh)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertTrue(any("fresh" in error.lower() for error in result["errors"]))
+
+    def test_delivery_gate_rejects_stale_self_consistent_bom_and_pos(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "gates/bom").mkdir(parents=True)
+            (root / "delivery").mkdir()
+            (root / "src/hardware/m2-board").mkdir(parents=True)
+            (root / "gates/bom/bom_v1.json").write_text(
+                json.dumps({"items": [{"ref": "U1"}]}), encoding="utf-8"
+            )
+            (root / "delivery/pos.csv").write_text(
+                "Ref,PosX,PosY\nU1,0,0\n", encoding="utf-8"
+            )
+            (root / "delivery/bom.csv").write_text(
+                "Designator,Comment\nU1,part\n", encoding="utf-8"
+            )
+            (root / "src/hardware/m2-board/intent_v1.json").write_text(
+                json.dumps(
+                    {
+                        "protocol_version": 1,
+                        "components": {
+                            "U1": {"lib_id": "Device:R"},
+                            "U2": {"lib_id": "Device:R"},
+                            "#FLG01": {"lib_id": "power:PWR_FLAG", "virtual": True},
+                        },
+                        "nets": {"N": ["U1.1", "U2.1"]},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with zipfile.ZipFile(root / "delivery/jlc_gerber_upload.zip", "w") as archive:
+                for name in REQUIRED_ZIP_ENTRIES:
+                    archive.writestr(name, "data")
+
+            result = _evaluate_delivery(root)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertTrue(any("intent" in error.lower() for error in result["errors"]))
+
     def test_m2_intent_declares_two_virtual_power_flags(self):
         intent = json.loads(
             (ROOT / "src" / "hardware" / "m2-board" / "intent_v1.json").read_text(
@@ -198,8 +257,14 @@ class RunGatesTests(unittest.TestCase):
         self.assertTrue(any("invalid schema metadata" in error for error in manifest["gates"][0]["errors"]))
         self.assertEqual(
             {gate["name"] for gate in manifest["gates"]},
-            {"erc", "drc", "bom", "delivery", "intent", "ops", "schematic_semantics", "learning", "board_review"},
+            {"erc", "drc", "bom", "delivery", "intent", "ops", "schematic_semantics", "learning", "requirements_contract", "board_review"},
         )
+        # The 10th gate must also fail closed on an empty sandbox (missing
+        # contract file counts as unreadable evidence, never as a skip).
+        rc_gate = next(g for g in manifest["gates"] if g["name"] == "requirements_contract")
+        self.assertEqual(rc_gate["status"], "fail")
+        self.assertTrue(any("unreadable" in error or "missing" in error.lower()
+                            for error in rc_gate["errors"]), rc_gate["errors"])
 
     def test_output_root_alias_writes_a_manifest(self):
         with tempfile.TemporaryDirectory() as temp_dir:
