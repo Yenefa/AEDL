@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-30T18:10:10Z",
+  "generated_at": "2026-08-30T19:34:42Z",
   "pcb": "src\\hardware\\m2-board\\m2_board.kicad_pcb",
   "board_outline_mm": [
     0.0,
@@ -142,9 +142,9 @@
   },
   "note": "机器测量证据；朝向/阻抗/气流/瞬态等无法静态判定项已在 evidence 中标注，需具名评审人在 KiCad 中复核后签发 manufacturing_release。",
   "render_evidence": {
-    "pcb_sha256": "e938de66697a85692f2ca3f5cad73e458357f5ed783b5ec3d1af13ccc43783b4",
-    "top_png_sha256": "b00559da94d86327e5d3d9df635c07e642689b937488d5ee0939cec49a73c844",
-    "bottom_png_sha256": "8e2fcc020538bdad8370c72e4dd9c97c704623578ad791a2a2e017070ad16bc1",
-    "rendered_at": "2026-08-30T18:10:10Z"
+    "pcb_sha256": "f4db9d1205048e9b6dee64e5b760d98415638f015b9191b8959dae867aaec8e0",
+    "top_png_sha256": "a66b78a7525bef85bbd5a33494d4a94ea71ecea22dc36c8124fa446e4a0cec02",
+    "bottom_png_sha256": "052f353e61b200e9c826e413458d75aa1bee49fb7010feac41fb7ec3b1336df4",
+    "rendered_at": "2026-08-30T19:34:42Z"
   }
 }

@@ -1,0 +1,89 @@
+{
+  "$schema": "https://aedl.local/schemas/m2-delivery-manifest.v1.json",
+  "schema_version": 1,
+  "generated_at": "2026-08-30T19:33:39Z",
+  "generator": "gates/export_delivery.py",
+  "kicad_cli": "C:\\Users\\fuker\\AppData\\Local\\Programs\\KiCad\\10.0\\bin\\kicad-cli.exe",
+  "kicad_version": "10.0.5",
+  "settings": {
+    "gerber_layers": [
+      "F.Cu",
+      "B.Cu",
+      "F.Paste",
+      "B.Paste",
+      "F.Silkscreen",
+      "B.Silkscreen",
+      "F.Mask",
+      "B.Mask",
+      "Edge.Cuts"
+    ],
+    "gerber_x2": true,
+    "gerber_netlist_attributes": true,
+    "gerber_protel_extensions": true,
+    "position_units": "mm",
+    "position_sides": "both",
+    "bottom_x_negated": false,
+    "rotation_correction_applied": false,
+    "jlc_preview_orientation_review_required": true
+  },
+  "sources": {
+    "board": {
+      "path": "src/hardware/m2-board/m2_board.kicad_pcb",
+      "sha256": "f4db9d1205048e9b6dee64e5b760d98415638f015b9191b8959dae867aaec8e0"
+    },
+    "intent": {
+      "path": "src/hardware/m2-board/intent_v1.json",
+      "sha256": "f1703e228f7f145e1ecc54edec4f69a88aca144136f4ef01323dfa56c7538f56"
+    },
+    "bom": {
+      "path": "gates/bom/bom_v1.json",
+      "sha256": "3f58a42adb72329fdbf33782f33418beb0383103dd671737e4a0d1071b5f296c"
+    },
+    "bom_stock_evidence": {
+      "path": "notes/m2-evidence-reset/generated/bom_stock_current.json",
+      "sha256": "d05567f64a8c9983b27af52db2be530ec5bd1f74ac4650401f9898bd04f93e69"
+    }
+  },
+  "artifacts": {
+    "bom": {
+      "path": "delivery/bom.csv",
+      "sha256": "222f60b64faf20a266318da5d0c932b2e9fe76324498770ef808a14ffe9b20d6",
+      "rows": 21
+    },
+    "cpl": {
+      "path": "delivery/pos.csv",
+      "sha256": "4f11f7f3005f57f0ef091cdd672bf862d9d52f6885889a29e54f4dc491f511d9",
+      "rows": 21
+    },
+    "gerber_zip": {
+      "path": "delivery/jlc_gerber_upload.zip",
+      "sha256": "3fdb297521937cdd1c218c4b4e2fd152cff08043bfd14509cc9c67456f82a0a8",
+      "entries": [
+        "m2_board-B_Cu.gbl",
+        "m2_board-B_Mask.gbs",
+        "m2_board-B_Paste.gbp",
+        "m2_board-B_Silkscreen.gbo",
+        "m2_board-Edge_Cuts.gm1",
+        "m2_board-F_Cu.gtl",
+        "m2_board-F_Mask.gts",
+        "m2_board-F_Paste.gtp",
+        "m2_board-F_Silkscreen.gto",
+        "m2_board-job.gbrjob",
+        "m2_board.drl"
+      ]
+    },
+    "gerbers": {
+      "m2_board-B_Cu.gbl": "d7f3b2fba7a02965eef62414797ee4b9bc004d6f61921b0c18efce56b2096f82",
+      "m2_board-B_Mask.gbs": "09e1de488e359942a2cf00a5277977c869771b679cfc7d621b446f7ee352d8f7",
+      "m2_board-B_Paste.gbp": "9861f6451f56fe8045f73ac959ff943b9ab9aa7171744e345cdd40d16cde40dc",
+      "m2_board-B_Silkscreen.gbo": "2633797b2397e6de40ca5f36637f07b74f240b67dedda4e9196367a4edc90705",
+      "m2_board-Edge_Cuts.gm1": "5b8e1bea2b426dbccab9f22fa349954de75186ec0a8e55dc8e64c57a2d08082c",
+      "m2_board-F_Cu.gtl": "d59e7818a606f4075c47267c65b5975b60d8bfd2af4c74c971cdf3520ebe183b",
+      "m2_board-F_Mask.gts": "3c5785237e430597967697af7a5e465538d2ed4257723dc27ca0be4757d48544",
+      "m2_board-F_Paste.gtp": "705824a524ee28f5150f20bbec2f2f82357c55734024ee7c5d65e544538f3966",
+      "m2_board-F_Silkscreen.gto": "5f968c893b099f72b45dac7777322c236dfa5e0e45709d46fe9611148eb88505",
+      "m2_board-job.gbrjob": "e669e9b4357975d208da1d7a25fed49118a27b1e80071997d0be75bfa7763d9c",
+      "m2_board.drl": "6c0b2bf92f4ebca7c12e89e255a30ef3eec6c3c44dce7c906fba710f4048927f"
+    }
+  }
+}

@@ -2,7 +2,7 @@
 <export version="E">
   <design>
     <source>C:\Users\fuker\Desktop\workspace\project-027-autonomous-hardware-agent\src\hardware\m2-board\m2_board.kicad_sch</source>
-    <date>2026-08-30T14:14:47</date>
+    <date>2026-08-31T03:55:00</date>
     <tool>Eeschema 10.0.5</tool>
     <sheet number="1" name="/" tstamps="/">
       <title_block>
@@ -537,14 +537,14 @@
       </units>
     </comp>
     <comp ref="U3">
-      <value>ME6211C33M5G-N</value>
-      <footprint>Package_TO_SOT_SMD:SOT-23-5</footprint>
+      <value>ME6211C33R5G</value>
+      <footprint>Package_TO_SOT_SMD:SOT-353</footprint>
       <fields>
-        <field name="Footprint">Package_TO_SOT_SMD:SOT-23-5</field>
+        <field name="Footprint">Package_TO_SOT_SMD:SOT-353</field>
         <field name="Datasheet"/>
         <field name="Description"/>
       </fields>
-      <libsource lib="Regulator_Linear" part="ME6211C33M5" description="500mA low dropout linear regulator, shutdown pin, 6.5V max input voltage, 3.3V fixed positive output, SOT-23-5"/>
+      <libsource lib="Regulator_Linear" part="ME6211C33M5" description="500mA low dropout linear regulator, shutdown pin, 6.5V max input voltage, 3.3V fixed positive output, SOT-353"/>
       <property name="Sheetname" value="m2_board"/>
       <property name="Sheetfile" value="m2_board.kicad_sch"/>
       <property name="ki_keywords" value="linear regulator ldo fixed positive"/>
@@ -688,7 +688,7 @@
       </pins>
     </libpart>
     <libpart lib="Regulator_Linear" part="ME6211C33M5">
-      <description>500mA low dropout linear regulator, shutdown pin, 6.5V max input voltage, 3.3V fixed positive output, SOT-23-5</description>
+      <description>500mA low dropout linear regulator, shutdown pin, 6.5V max input voltage, 3.3V fixed positive output, SOT-353</description>
       <docs>https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_MICRONE-Nanjing-Micro-One-Elec-ME6211C33R5G_C235316.pdf</docs>
       <footprints>
         <fp>SOT?23?5*</fp>
@@ -696,9 +696,9 @@
       <fields>
         <field name="Reference">U</field>
         <field name="Value">ME6211C33M5</field>
-        <field name="Footprint">Package_TO_SOT_SMD:SOT-23-5</field>
+        <field name="Footprint">Package_TO_SOT_SMD:SOT-353</field>
         <field name="Datasheet">https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_MICRONE-Nanjing-Micro-One-Elec-ME6211C33R5G_C235316.pdf</field>
-        <field name="Description">500mA low dropout linear regulator, shutdown pin, 6.5V max input voltage, 3.3V fixed positive output, SOT-23-5</field>
+        <field name="Description">500mA low dropout linear regulator, shutdown pin, 6.5V max input voltage, 3.3V fixed positive output, SOT-353</field>
       </fields>
       <pins>
         <pin num="1" name="V_{IN}" type="power_in"/>
@@ -815,7 +815,7 @@
       <node ref="C3" pin="2" pintype="passive"/>
       <node ref="C4" pin="2" pintype="passive"/>
       <node ref="C5" pin="2" pintype="passive"/>
-      <node ref="D1" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="D1" pin="1" pinfunction="K_1" pintype="passive"/>
       <node ref="J1" pin="A1" pinfunction="GND_A1" pintype="passive"/>
       <node ref="J1" pin="A12" pinfunction="GND_A12" pintype="passive"/>
       <node ref="J1" pin="B1" pinfunction="GND_B1" pintype="passive"/>
@@ -834,7 +834,7 @@
       <node ref="U3" pin="2" pinfunction="V_{SS}_2" pintype="power_in"/>
     </net>
     <net code="8" name="/LED_A" class="Default">
-      <node ref="D1" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D1" pin="2" pinfunction="A_2" pintype="passive"/>
       <node ref="R4" pin="2" pintype="passive"/>
     </net>
     <net code="9" name="/LED_DRV" class="Default">

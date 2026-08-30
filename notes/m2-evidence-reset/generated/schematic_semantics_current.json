@@ -73,20 +73,20 @@
     },
     "intent": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\hardware\\m2-board\\intent_v1.json",
-      "sha256": "b793295ebfc8180a52d199114163ffc8452c789d4884f1768f9d4a760a878666"
+      "sha256": "f1703e228f7f145e1ecc54edec4f69a88aca144136f4ef01323dfa56c7538f56"
     },
     "netlist": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\m2_board_current.net.xml",
-      "sha256": "fa2cace544d9118265c8741bcfe63abe55b3bd1caea3265006e631b95aaaf94c"
+      "sha256": "f021ce27756ad62fcf2a44d39be8847f7c1b40a9424a37482368e558708eacd4"
     },
     "pcb": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\hardware\\m2-board\\m2_board.kicad_pcb",
-      "sha256": "3391afc05e8101420e590503761afe87e7488969defcb6e62446d1e9e4a48ca4"
+      "sha256": "f4db9d1205048e9b6dee64e5b760d98415638f015b9191b8959dae867aaec8e0"
     },
     "firmware": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\firmware\\include\\sht30.h",
       "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
     }
   },
-  "generated_at": "2026-08-30T06:14:57Z"
+  "generated_at": "2026-08-30T19:55:11Z"
 }
