@@ -82,7 +82,11 @@
 - 明早验收标准：neuroboard.md 六步齐全；两遗留各有证据定案或"无法确定"+已试路径清单；台账有条目。
 
 ### P8 进度日志
-- [07:01] 第1周期: `neuroboard.md` 六步完成（本地克隆 `_neuroboard_repo/` @ `d8e3248`；碰撞分析 §2.3/§2.4 逐项复核成立并补行号；新增 5 项发现：LICENSE 文件 MIT 与 README 法律声明块 CC BY-NC 4.0 双声明矛盾、`GlobalDRC` 恒 `return True`、`engines/` 零文件但被 `victory_lap.py` 依赖、`tests/` 仅 2 文件 307 行且无测试 CI、`__pycache__`/运行产物入库）；11 门禁能力对照表成文（erc/drc 有形态等价但 fail-open，其余 9 项无等价）；判决=零代码复用，只作反面教材；全量测试 127/127 绿。
+- [07:01] 第1周期: `neuroboard.md` 六步完成（本地克隆 `_neuroboard_repo/` @ `d8e3248`；碰撞分析 §2.3/§2.4 逐项复核成立并补行号；新增 5 项发现：LICENSE 文件 MIT 与 README 法律声明块 CC BY-NC 4.0 双声明矛盾、`GlobalDRC` 恒 `return True`、`engines/` 零文件但被 `victory_lap.py` 依赖、`tests/` 仅 2 文件 307 行且无测试 CI、`__pycache__`/运行产物入库）；11 门禁能力对照表成文（erc/drc 有形态等价但 fail-open，其余 9 项无等价）；判决=零代码复用，只作反面教材；全量测试 127/127 绿。已提交推送 `0f8f1f4`（信息带 `[AI-20260831-012]`——见下条撞号说明）。
+- [07:25] 第2周期: kicad-ai(amcolex) 定案——换路用 GitHub REST API 五层取证：仓库 404、账号存在（Alex Pabouctsidis，29 公开仓库全列，DSP/RF 画像零 KiCad 相关）、全网 `q=kicad-ai` 224 条无属主命中、事件流无创建/推送痕迹 → 判"公开仓库无存在证据/不可核实"，诚实注明 events API 90 天窗口限制；`kicadai.md` 补记小节写入。注：测试套件被并行会话增至 137 条，中途 1 次瞬态失败（并行写文件竞态），重跑 137/137 全绿，非我领地文件。
+- [07:40] 第3周期: Konnect license 细节取证完成——GitHub API license 字段 `agpl-3.0` 与 README 自声明双来源核实；README「free for the little guys」商业授权条款原文摘录 + `COMMERCIAL.md` 关键条款（内部使用免费、分发/网络服务化触发 §13、作者自释"仅交互代码为独立作品"系单方声明）写入 `THIRD_PARTY.md` §2.4 与 Konnect 行；红线不变。附带：THIRD_PARTY.md 中 NeuroBoard / kicad-ai 两行同步为本会话定案状态（该两行即 P8 产出的目录状态）。
+- [07:50] 第4周期: 收尾——README 目录/附属更新（含 `_neuroboard_repo` 勿提交警示 + .gitignore 待大统领补一行）、COLLABORATION.md P8 状态行更新、AI_USAGE_LOG 追加条目、全量回归后提交推送。待办池清空，P8 收尾。
+- 台账号撞号说明（如实记录）：本会话开工时查到最大号 011，按+1 规则用 `AI-20260831-012` 提交了 `0f8f1f4`；其后发现并行会话（P7）也用了 012（`ea5e944`）与 013（`266bb23`）。已推送提交不改写历史；本会话最终台账条目改用 **AI-20260831-014** 并在条目内注明此撞号经过，供人工核账。
 
 ## TASK-P9：board_review 特征化测试 + 可插拔协议预备（代码路，属主空缺待领）
 
@@ -104,6 +108,70 @@
   5. 每发现一个 bug（含"换封装后检查项静默消失"这类关键字盲区）即补一条对抗用例防回归。
 - 明早验收标准：新增用例 ≥15 条全绿；golden 冻结文件入库；协议观察小节成形；台账有条目。
 
+### P9 进度日志（属主 AI-20260831-012 已领）
+
+- [06:58] 开工前置：分支 `fix/m2-schematic-semantic-release`，HEAD `6baa669`（任务书写基线 `24b8eaa`，
+  实测已多出 `e51fa93`/`973f780`/`f395f6c`/`24b8eaa`/`6baa669`，按现状接手）。领号：grep 台账最大
+  `AI-20260831-011` → 本会话 **AI-20260831-012**（已核对未撞号）。基线全量 **127/127 OK**（81.6s），接手时是绿的。
+- [06:59] 第1周期（待办#1 函数盘点）：通读 `tools/board_review.py`（466 行），18 个公开函数输入/输出形状如下
+  （**即特征化测试的锁定对象**）：
+
+  | 函数 | 输入 | 输出 |
+  |---|---|---|
+  | `utc_now()` | — | `str`，ISO8601 UTC `YYYY-MM-DDTHH:MM:SSZ`（微秒清零） |
+  | `review_exit_code(reviews)` | `list[dict]` | `int`：全 `status=="pass"`→0；**空表→1**（fail-closed） |
+  | `parse_pcb(text)` | `str`（KiCad 10 s-expr） | `dict{footprints, edge, segments, vias:int, has_zone:bool, nets:list[str], pins:dict[str,`\|`None]}` |
+  | `dist(a,b)` | 两个含 `x`/`y` 的 dict | `float` |
+  | `edge_distance(fp,edge)` | `fp{x,y}`, `edge=(x1,y1,x2,y2)` | `float`，**可为负**（越界），未取 abs |
+  | `review_usb_edge(footprints,edge)` | `list[fp]`, `edge` | review dict `{id,status,evidence,measured}` |
+  | `review_antenna(footprints,edge)` | 同上 | review dict |
+  | `review_ground_return(pcb)` | pcb dict | review dict（判据仅 `vias>=4 and has_zone`） |
+  | `boundary_distance(cap,ic)` | 两个 fp | `float`：cap 质心到 **IC courtyard 边界**；IC 无 courtyard 退化为 `dist` |
+  | `review_decoupling(footprints)` | `list[fp]` | review dict |
+  | `review_usb_routing(segments,pins)` | `list[seg]`, `dict[pin→net]` | review dict |
+  | `review_thermal(footprints)` | `list[fp]` | review dict |
+  | `review_protection(sch_text,pcb)` | `str`, pcb dict | review dict —— **⚠️ bug-1：`pcb` 参数未使用，函数体直接读全局 `PCB_PATH`（L319-322）** |
+  | `review_assembly(footprints,pcb_text)` | `list[fp]`, `str` | review dict |
+  | `sha256_file(path)` | `Path` | `str` 64 hex |
+  | `find_kicad_cli()` | —（读 `os.environ`→`PATH`→**硬编码绝对路径**） | `Optional[Path]` |
+  | `render_board_views(cli,pcb_path,out_dir)` | 3×`Path` | `List[str]` 错误列表（空=成功） |
+  | `main()` | —（读全局 `PCB_PATH`/`SCH_PATH`/`OUT_PATH`） | `int` 0/1 |
+
+  模块常量：`USB_CHANNELS`（D+/D- 各含 `nets` 2 个 + `pins` 5 个）；阈值 `USB_EDGE_MAX_MM=1.0`、
+  `ANTENNA_KEEPOUT_MM=7.5`、`DECOUPLING_MAX_MM=8.0`、`USB_DIFF_MAX_SKEW_MM=1.0`、`THERMAL_MIN_DIST_MM=10.0`；
+  `RENDER_TARGETS`/`RENDER_WIDTH,HEIGHT=1600,900`。报告 schema（对齐 `board_review_auto.json`）：
+  `{generated_at, pcb, board_outline_mm, footprint_count, nets, reviews[8], summary, note, render_evidence?}`；
+  8 项 id=`USB_EDGE/ESP_ANTENNA/GROUND_RETURN/DECOUPLING/USB_ROUTING/SHT30_THERMAL/PROTECTION/ASSEMBLY`，
+  每项固定 `{id, status, evidence, measured}` 四键。
+- [07:00] 第1周期（可测性勘察，为待办#3 铺路）：① `parse_pcb` 在 `tools/`、`gates/` 内**无外部调用方**
+  （`gates/schematic_semantics.py` 有自己的 `_parse_pcb`，不共用）→ 扩展其返回键安全。
+  ② **kicad-cli 确实存在**（`C:\Users\fuker\AppData\Local\Programs\KiCad\10.0\bin\kicad-cli.exe`），
+  故 golden 端到端**必须打桩渲染**：否则单测跑 ~26s 且 PNG 字节不确定（哈希随渲染版本/抗锯齿漂移）→ golden 变 flaky。
+  做法：patch `find_kicad_cli`→`None`，`main()` 跳过 `render_evidence` 但**照常计算并写出 8 项 review**，
+  冻结这部分即稳定 golden。
+
+### P9 协议观察（待办#4，只写文档不动代码）
+
+> 供 ≥2 个真实实现后人工拍板插件加载形式。**本轮不建任何框架/接口类/抽象基类。**
+
+- **BoardReview 候选协议**（从 8 个 `review_*` 归纳，已是事实标准）：
+  `review(inputs) -> {id: str, status: "pass"|"fail", evidence: str, measured: dict}`
+  - `id` 常量；`status` 严格二值；`evidence` **必须是给人读的一句话，含实测数字并标注"需人工复核"项**；
+    `measured` 只放机器可比的数值/布尔。8 个函数已事实遵守，可直接固化。
+  - 汇总契约 `review_exit_code(reviews)`：**空表返回 1（fail-closed）**，这是必须继承的语义，不可改为"空=通过"。
+- **RouteRepair 候选协议**：本轮在 `tools/board_review.py` 内**没有任何 RouteRepair 实现**；仓库里
+  `tools/polish_routes.py`、`tools/probe_pads.py` 是两个未被门禁纳管、也未读实现的脚本（属他人领地）。
+  → **结论：受门禁约束的 RouteRepair 实现数 = 0，不足 2 个。按任务书"≥2 实现后才定形式"，本轮不定协议**，
+  仅登记待将来比对的候选形状：`(pcb_path, violations) -> {applied: list, skipped: list, errors: list}`。
+- **抽取阻塞项（协议化前必须先解决，均为只读发现，本轮未改）**：
+  1. **bug-1（全局读取破坏纯函数性）**：`review_protection(sch_text, pcb)` 不用传入的 `pcb`，
+     函数体直接 `Path(PCB_PATH).read_text(...)`（L319-322）。这使函数无法对任意输入求值，
+     直接违反 `review(inputs)->review dict` 的纯函数前提。修复见后续周期进度日志。
+  2. **硬编码路径副作用**：`find_kicad_cli()` 硬编码 `C:\Users\fuker\...` 用户专属路径；
+     `main()` 依赖模块级 `PCB_PATH/SCH_PATH/OUT_PATH` 常量。协议化时应改显式入参 + 依赖注入。
+  3. **`edge_distance` 可返回负值**：越界时是负数而非 0；`review_usb_edge` 用 `0 <= d <= MAX` 兜住了，
+     但这是隐式约定，协议文档须写明"距离可为负，判定端负责钳位"。
+
 ### TASK-P7 进度日志
 - [夜间] 周期1: 发现任务书背景已过时——finalize 缺口在 P1 会话后段已修（commit 1857db4 内含
   `intent_semantic_sha256` 写入，P5 报告针对的是修复前版本）。按验收标准改为实测：新建
@@ -112,3 +180,13 @@
   三条 fail-closed 报错路径、HTTP 层 4 项端点行为）。**附带修复真 bug**：`_route` 原先无任何
   try/except，`ValueError("malformed JSON body")` 等异常导致客户端连接重置而非 400 JSON——
   加 `_safe_route` 包装（ValueError→400 {"error"}）。全量回归 137/127+10 全绿。
+- [夜间] 周期2: `tests/test_requirements_runtime.py` 新建 18 用例（parse_llm_proposal 反脑补边界：
+  垃圾输入永不抛异常、prose 包 JSON 提取、LLM 给的 answer 一律丢弃、未知 kind 升 blocking、
+  id 改名两条路径特征化、超量截断、assumptions 强制 requires_human_confirmation）。
+  **发现死逻辑**（未代修，已钉现状 + 留人工）：返回 `"ok": not warnings or True` 恒为 True。
+  全量 155/155 绿，commit `266bb23`。
+- [夜间] 周期3: ① API 文档一致性核对——`docs/api/requirements_api.md` "服务端写语义哈希" 与实现
+  一致（周期1测试已钉）；文档仍无错误码章节（P2 遗留缺口，本卡领地外，建议人工补：
+  "4xx -> {\"error\": str}"，与 _safe_route 现行为对齐）。② web 只读检查——`web/api-client.js`
+  本就按 ApiError(400) 处理非 2xx，`_safe_route` 修复后 mock/真实两种传输层错误路径终于一致；
+  `web/verify-hash.js` 校验的是合同自哈希，与本修复无交集，无过期。待办池清空，收尾。
