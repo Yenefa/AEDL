@@ -72,12 +72,21 @@ def split_akcli_intent(intent: Mapping[str, Any]) -> Tuple[Dict[str, Any], Dict[
     if set(virtual) != set(POWER_FLAG_POSITIONS):
         raise ValueError(f"virtual PWR_FLAG set must be exactly {sorted(POWER_FLAG_POSITIONS)}")
 
-    result = copy.deepcopy(dict(intent))
-    result["components"] = {
-        ref: component for ref, component in result["components"].items() if ref not in virtual
+    result: Dict[str, Any] = {
+        "protocol_version": intent["protocol_version"],
+        "components": {
+            ref: copy.deepcopy(component)
+            for ref, component in components.items()
+            if ref not in virtual
+        },
     }
+    # akcli 0.21.0 rejects unknown top-level keys (e.g. the project
+    # requirements_contract lockfile), so only whitelisted fields pass through.
+    for key in ("layout", "mode"):
+        if key in intent:
+            result[key] = copy.deepcopy(intent[key])
     filtered_nets: Dict[str, List[str]] = {}
-    for net_name, members in result["nets"].items():
+    for net_name, members in intent["nets"].items():
         if not isinstance(members, list):
             raise ValueError(f"intent net {net_name} must be a list")
         filtered = [member for member in members if member.split(".", 1)[0] not in virtual]
