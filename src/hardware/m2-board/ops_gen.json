@@ -1,7 +1,7 @@
 {
   "protocol_version": 2,
   "target_format": "kicad",
-  "_generator": "akcli ops from-intent",
+  "_generator": "tools/generate_m2_ops.py: akcli 0.21.0 from-intent + controlled virtual PWR_FLAG compatibility",
   "ops": [
     {
       "op": "place_component",
@@ -16,7 +16,7 @@
       "op": "place_component",
       "lib_id": "Device:C",
       "designator": "C2",
-      "x_mil": 3550,
+      "x_mil": 3700,
       "y_mil": 1450,
       "value": "10uF",
       "footprint": "Capacitor_SMD:C_0805_2012Metric"
@@ -25,7 +25,7 @@
       "op": "place_component",
       "lib_id": "Device:C",
       "designator": "C3",
-      "x_mil": 5700,
+      "x_mil": 6000,
       "y_mil": 1450,
       "value": "100nF",
       "footprint": "Capacitor_SMD:C_0603_1608Metric"
@@ -34,17 +34,26 @@
       "op": "place_component",
       "lib_id": "Device:C",
       "designator": "C4",
-      "x_mil": 7850,
+      "x_mil": 8300,
       "y_mil": 1450,
       "value": "100nF",
       "footprint": "Capacitor_SMD:C_0603_1608Metric"
     },
     {
       "op": "place_component",
+      "lib_id": "Device:C",
+      "designator": "C5",
+      "x_mil": 10550,
+      "y_mil": 1450,
+      "value": "1uF",
+      "footprint": "Capacitor_SMD:C_0603_1608Metric"
+    },
+    {
+      "op": "place_component",
       "lib_id": "Device:LED",
       "designator": "D1",
-      "x_mil": 10150,
-      "y_mil": 1400,
+      "x_mil": 1550,
+      "y_mil": 4300,
       "value": "KT-0603R",
       "footprint": "LED_SMD:LED_0603_1608Metric"
     },
@@ -52,16 +61,16 @@
       "op": "place_component",
       "lib_id": "Connector:USB_C_Receptacle_USB2.0_16P",
       "designator": "J1",
-      "x_mil": 1800,
-      "y_mil": 4850,
+      "x_mil": 4350,
+      "y_mil": 5250,
       "value": "TYPE-C-31-M-12"
     },
     {
       "op": "place_component",
       "lib_id": "Device:R",
       "designator": "R1",
-      "x_mil": 3500,
-      "y_mil": 4200,
+      "x_mil": 5950,
+      "y_mil": 4350,
       "value": "4.7k",
       "footprint": "Resistor_SMD:R_0603_1608Metric"
     },
@@ -69,8 +78,8 @@
       "op": "place_component",
       "lib_id": "Device:R",
       "designator": "R2",
-      "x_mil": 5650,
-      "y_mil": 4200,
+      "x_mil": 8250,
+      "y_mil": 4350,
       "value": "4.7k",
       "footprint": "Resistor_SMD:R_0603_1608Metric"
     },
@@ -78,8 +87,8 @@
       "op": "place_component",
       "lib_id": "Device:R",
       "designator": "R3",
-      "x_mil": 7800,
-      "y_mil": 4200,
+      "x_mil": 10550,
+      "y_mil": 4350,
       "value": "10k",
       "footprint": "Resistor_SMD:R_0603_1608Metric"
     },
@@ -87,8 +96,8 @@
       "op": "place_component",
       "lib_id": "Device:R",
       "designator": "R4",
-      "x_mil": 10100,
-      "y_mil": 4350,
+      "x_mil": 1500,
+      "y_mil": 7400,
       "value": "1k",
       "footprint": "Resistor_SMD:R_0603_1608Metric"
     },
@@ -96,8 +105,8 @@
       "op": "place_component",
       "lib_id": "Device:R",
       "designator": "R5",
-      "x_mil": 1300,
-      "y_mil": 6950,
+      "x_mil": 3600,
+      "y_mil": 7250,
       "value": "5.1k",
       "footprint": "Resistor_SMD:R_0603_1608Metric"
     },
@@ -105,51 +114,94 @@
       "op": "place_component",
       "lib_id": "Device:R",
       "designator": "R6",
-      "x_mil": 3450,
-      "y_mil": 6950,
+      "x_mil": 5900,
+      "y_mil": 7250,
       "value": "5.1k",
+      "footprint": "Resistor_SMD:R_0603_1608Metric"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "Device:R",
+      "designator": "R7",
+      "x_mil": 8600,
+      "y_mil": 7600,
+      "value": "22R",
+      "footprint": "Resistor_SMD:R_0603_1608Metric"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "Device:R",
+      "designator": "R8",
+      "x_mil": 10900,
+      "y_mil": 7600,
+      "value": "22R",
+      "footprint": "Resistor_SMD:R_0603_1608Metric"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "Device:R",
+      "designator": "R9",
+      "x_mil": 1350,
+      "y_mil": 10150,
+      "value": "10k",
       "footprint": "Resistor_SMD:R_0603_1608Metric"
     },
     {
       "op": "place_component",
       "lib_id": "Switch:SW_Push",
       "designator": "SW1",
-      "x_mil": 5800,
-      "y_mil": 6900,
+      "x_mil": 3800,
+      "y_mil": 10100,
       "value": "TS-1088R-02026"
     },
     {
       "op": "place_component",
       "lib_id": "Switch:SW_Push",
       "designator": "SW2",
-      "x_mil": 7950,
-      "y_mil": 6950,
+      "x_mil": 6100,
+      "y_mil": 10150,
       "value": "TS-1088R-02026"
     },
     {
       "op": "place_component",
       "lib_id": "RF_Module:ESP32-C3-WROOM-02",
       "designator": "U1",
-      "x_mil": 10650,
-      "y_mil": 7850,
+      "x_mil": 8950,
+      "y_mil": 11050,
       "value": "ESP32-C3-WROOM-02-N4"
     },
     {
       "op": "place_component",
       "lib_id": "Sensor_Humidity:SHT30-DIS",
       "designator": "U2",
-      "x_mil": 1700,
-      "y_mil": 9850,
+      "x_mil": 10900,
+      "y_mil": 10300,
       "value": "SHT30-DIS-B10KS"
     },
     {
       "op": "place_component",
       "lib_id": "Regulator_Linear:ME6211C33M5",
       "designator": "U3",
-      "x_mil": 3750,
-      "y_mil": 9750,
+      "x_mil": 1600,
+      "y_mil": 13100,
       "value": "ME6211C33M5G-N",
       "footprint": "Package_TO_SOT_SMD:SOT-23-5"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "power:PWR_FLAG",
+      "designator": "#FLG01",
+      "x_mil": 600,
+      "y_mil": 600,
+      "value": "PWR_FLAG"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "power:PWR_FLAG",
+      "designator": "#FLG02",
+      "x_mil": 1800,
+      "y_mil": 600,
+      "value": "PWR_FLAG"
     },
     {
       "op": "add_net_label",
@@ -184,17 +236,17 @@
     {
       "op": "add_net_label",
       "name": "+3V3",
+      "at": "R9.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "+3V3",
       "at": "U1.1"
     },
     {
       "op": "add_net_label",
       "name": "+3V3",
       "at": "U2.5"
-    },
-    {
-      "op": "add_net_label",
-      "name": "+3V3",
-      "at": "U2.6"
     },
     {
       "op": "add_net_label",
@@ -239,6 +291,11 @@
     {
       "op": "add_net_label",
       "name": "BOOT",
+      "at": "R9.2"
+    },
+    {
+      "op": "add_net_label",
+      "name": "BOOT",
       "at": "SW2.1"
     },
     {
@@ -265,6 +322,11 @@
       "op": "add_net_label",
       "name": "CC2",
       "at": "R6.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "EN",
+      "at": "C5.1"
     },
     {
       "op": "add_net_label",
@@ -300,6 +362,11 @@
       "op": "add_net_label",
       "name": "GND",
       "at": "C4.2"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "C5.2"
     },
     {
       "op": "add_net_label",
@@ -360,6 +427,11 @@
       "op": "add_net_label",
       "name": "GND",
       "at": "U1.19"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "U2.2"
     },
     {
       "op": "add_net_label",
@@ -434,32 +506,62 @@
     {
       "op": "add_net_label",
       "name": "USB_DM",
+      "at": "R8.2"
+    },
+    {
+      "op": "add_net_label",
+      "name": "USB_DM",
+      "at": "U1.13"
+    },
+    {
+      "op": "add_net_label",
+      "name": "USB_DM_CONN",
       "at": "J1.A7"
     },
     {
       "op": "add_net_label",
-      "name": "USB_DM",
+      "name": "USB_DM_CONN",
       "at": "J1.B7"
     },
     {
       "op": "add_net_label",
-      "name": "USB_DM",
+      "name": "USB_DM_CONN",
+      "at": "R8.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "USB_DP",
+      "at": "R7.2"
+    },
+    {
+      "op": "add_net_label",
+      "name": "USB_DP",
       "at": "U1.14"
     },
     {
       "op": "add_net_label",
-      "name": "USB_DP",
+      "name": "USB_DP_CONN",
       "at": "J1.A6"
     },
     {
       "op": "add_net_label",
-      "name": "USB_DP",
+      "name": "USB_DP_CONN",
       "at": "J1.B6"
     },
     {
       "op": "add_net_label",
-      "name": "USB_DP",
-      "at": "U1.13"
+      "name": "USB_DP_CONN",
+      "at": "R7.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "+5V",
+      "at": "#FLG01.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "#FLG02.1"
     },
     {
       "op": "add_no_connect",
@@ -507,11 +609,11 @@
     },
     {
       "op": "add_no_connect",
-      "pin": "U2.2"
+      "pin": "U2.3"
     },
     {
       "op": "add_no_connect",
-      "pin": "U2.3"
+      "pin": "U2.6"
     },
     {
       "op": "add_no_connect",

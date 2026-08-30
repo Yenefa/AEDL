@@ -31,6 +31,37 @@ class RunGatesTests(unittest.TestCase):
         self.assertIn("#FLG01.1", intent["nets"]["+5V"])
         self.assertIn("#FLG02.1", intent["nets"]["GND"])
 
+    def test_m2_intent_encodes_repaired_datasheet_semantics(self):
+        intent = json.loads(
+            (ROOT / "src" / "hardware" / "m2-board" / "intent_v1.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            {ref for ref, component in intent["components"].items() if not component.get("virtual")},
+            {
+                "U1", "U2", "U3", "J1", "SW1", "SW2", "D1",
+                "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9",
+                "C1", "C2", "C3", "C4", "C5",
+            },
+        )
+        self.assertEqual(intent["components"]["R7"]["value"], "22R")
+        self.assertEqual(intent["components"]["R8"]["value"], "22R")
+        self.assertEqual(intent["components"]["R9"]["value"], "10k")
+        self.assertEqual(intent["components"]["C5"]["value"], "1uF")
+        self.assertEqual(intent["nets"]["USB_DP_CONN"], ["J1.A6", "J1.B6", "R7.1"])
+        self.assertEqual(intent["nets"]["USB_DP"], ["R7.2", "U1.14"])
+        self.assertEqual(intent["nets"]["USB_DM_CONN"], ["J1.A7", "J1.B7", "R8.1"])
+        self.assertEqual(intent["nets"]["USB_DM"], ["R8.2", "U1.13"])
+        self.assertIn("U2.2", intent["nets"]["GND"])
+        self.assertIn("C5.2", intent["nets"]["GND"])
+        self.assertIn("C5.1", intent["nets"]["EN"])
+        self.assertIn("R9.1", intent["nets"]["+3V3"])
+        self.assertIn("R9.2", intent["nets"]["BOOT"])
+        all_members = {member for members in intent["nets"].values() for member in members}
+        self.assertNotIn("U2.3", all_members)
+        self.assertNotIn("U2.6", all_members)
+
     def test_m2_schematic_declares_power_flags_at_their_power_labels(self):
         schematic = (
             ROOT / "src" / "hardware" / "m2-board" / "m2_board.kicad_sch"
@@ -39,8 +70,8 @@ class RunGatesTests(unittest.TestCase):
         self.assertIn('(symbol "power:PWR_FLAG"', schematic)
         self.assertIn('(lib_id "power:PWR_FLAG") (at 15.24 15.24 0)', schematic)
         self.assertIn('(lib_id "power:PWR_FLAG") (at 45.72 15.24 0)', schematic)
-        self.assertIn('(label "+5V" (at 15.24 15.24 90)', schematic)
-        self.assertIn('(label "GND" (at 45.72 15.24 90)', schematic)
+        self.assertRegex(schematic, r'\(label "\+5V" \(at 15\.24 15\.24 (?:90|270)\)')
+        self.assertRegex(schematic, r'\(label "GND" \(at 45\.72 15\.24 (?:90|270)\)')
 
     def test_intent_accepts_virtual_power_flags(self):
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://aedl.local/schemas/m2-ops-validation.v1.json",
+  "schema_version": 1,
+  "generated_at": "2026-08-30T05:07:23Z",
+  "target": "src/hardware/m2-board/ops_gen.json",
+  "ops_sha256": "661cb630a0c16d607968f19b6d590b0bb8e27b28158200d5b47891f0237f2237",
+  "op_count": 109,
+  "valid": true,
+  "errors": [],
+  "generator": "akcli 0.21.0 (protocol 2); tools/generate_m2_ops.py controlled virtual compatibility",
+  "validator": "akcli 0.21.0 (protocol 2); akcli ops validate --json"
+}

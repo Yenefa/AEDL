@@ -83,13 +83,13 @@
 - Create or update: `notes/m2-evidence-reset/generated/ops_validate_current.json`
 - Modify: `tests/test_run_gates.py`
 
-- [ ] Encode D+ -> `USB_DP_CONN` -> R7 22 ohm -> `USB_DP` -> U1.14 and D- -> `USB_DM_CONN` -> R8 22 ohm -> `USB_DM` -> U1.13.
-- [ ] Ground U2.2 ADDR for 0x44; leave U2.3 ALERT and U2.6 nRESET intentionally NC.
-- [ ] Add C5 1 uF from EN to GND and R9 10 kohm from +3V3 to GPIO9/BOOT.
-- [ ] Restore the locked akcli generator or implement a controlled, tested, reproducible compatibility step; do not hand-author final machine evidence.
-- [ ] Regenerate ops/schematic and verify PWR_FLAG intent is represented and loadable in KiCad.
-- [ ] Export a fresh netlist and run ERC with JSON/severity-all/exit-code-violations.
-- [ ] Run semantic tests against actual artifacts and commit.
+- [x] Encode D+ -> `USB_DP_CONN` -> R7 22 ohm -> `USB_DP` -> U1.14 and D- -> `USB_DM_CONN` -> R8 22 ohm -> `USB_DM` -> U1.13.
+- [x] Ground U2.2 ADDR for 0x44; leave U2.3 ALERT and U2.6 nRESET intentionally NC.
+- [x] Add C5 1 uF from EN to GND and R9 10 kohm from +3V3 to GPIO9/BOOT.
+- [x] Restore the locked akcli generator or implement a controlled, tested, reproducible compatibility step; do not hand-author final machine evidence.
+- [x] Regenerate ops/schematic and verify PWR_FLAG intent is represented and loadable in KiCad.
+- [x] Export a fresh netlist and run ERC with JSON/severity-all/exit-code-violations.
+- [x] Run semantic tests against actual artifacts and commit.
 
 ## Task 6: Repair PCB topology and routing
 
