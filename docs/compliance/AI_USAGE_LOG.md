@@ -1094,8 +1094,12 @@
 - 新增第三方资源：无（KiCad 10.0.5 kicad-cli、akcli 0.21.0 为既有登记资源）。
 
 - 已知限制（诚实边界）：
+  - **rev2 修订（人工复核采纳）**：`polarity-verification.md` 已按独立复核意见修订 4 处——
+    ①"ERC 强制"改为 pin↔pad 编号映射机制；②删除"3.3V 不损坏"死结论（须按 KENTO KT-0603R
+    数据手册反向耐压判定）；③U2 pin7 更正为 R（datasheet 要求接 VSS，已与官方符号交叉核对）；
+    ④删除"改符号方向可修复"与"镜像翻转"错误表述（符号旋转/镜像不改变 pin→net 映射）。
   - **不声称"LED 现在能亮"**：极性网络已按符号定义在数据级修正且三层一致，但电气功能正确性
-    属回件 C 级实实测范畴（任务书 §六明令）。
+    属回件 C 级实测范畴（任务书 §六明令）。
   - 本会话的渲染证据提交 `4e0922a` 的 AI ID 标签误写为 `[AI-20260831-001]`，与本台账 001（P1 会话）
     撞号；该工作实际对应本条 007。不改写已有提交，留人工审核时知悉。
   - 共享工作树有并行会话改动（docs/、lessons 等），本会话只动了上述清单文件；提交时请人工按清单甄别。
@@ -1110,3 +1114,168 @@
 
 - 最终状态：
   - `PENDING_HUMAN_REVIEW`
+
+## AI-20260831-008
+
+- 日期：2026-08-31
+- 任务名称：外部 datasheet 真值层落地——证据包核实 + DATASHEET_CONTRACT 第 11 门禁
+- 模块/路径：
+  - `src/hardware/m2-board/evidence/`（新建：`datasheet_manifest.json`、`contracts/m2_component_contracts.json`、`datasheets/` 三份冻结 PDF）
+  - `gates/datasheet_contract.py`（新）、`gates/run_gates.py`（挂载）、`tests/test_datasheet_contract.py`（新）、`tests/test_run_gates.py`（11 门禁断言）
+
+- AI 工具/平台：Qoder
+- 模型：`UNKNOWN`（当前会话未暴露可核验的精确模型 ID）
+
+- AI 参与类型：
+  - [ ] ADVISE
+  - [x] GENERATE_CODE
+  - [ ] REFACTOR
+  - [ ] DEBUG
+  - [x] GENERATE_TEST
+  - [x] RESEARCH
+  - [ ] DOCUMENT
+  - [ ] BENCHMARK
+  - [ ] MEDIA
+
+- 做了什么：
+  - 对外部证据包（M2_datasheet_evidence_pack）逐项核实，发现并记录三处出入：
+    ① 包内 `datasheets/`、`reference_designs/` 为空，PDF 只有链接；
+    ② 包内 D1/J1 视图过期（MPN 标 null），实际仓库 BOM 已绑定 D1=KENTO KT-0603R（C2286）、J1=Hropart TYPE-C-31-M-12（C165948），manifest 已按 BOM 真值修正；
+    ③ U3"400mA@SOT353"声明仅见于外部复核引用的 V20；本环境只取到 V14 镜像（stm32-base.org），V14 无按封装电流表、features 写 500mA@VIN=4.3V——两版冲突，已写入合同 `fact_verification` 且保持 BLOCK，须人工按最终版 datasheet 定案。
+  - 下载并冻结三份资料（均记录 sha256+retrieved_at）：U1 ESP32-C3-WROOM-02 官方 datasheet（2375b1be…）、U2 Sensirion SHT3x-DIS 官方 datasheet（095b1853…）、U3 ME6211 V14 镜像（7e33d665…，已逐页核对：SOT353 Pd absmax=250mW 成立）。
+  - 实现 `gates/datasheet_contract.py`（DS0 MPN 绑定对 BOM 精确匹配 / DS1 本地冻结副本 sha256 / DS2 pin→net 断言对 intent / DS3 BLOCK_UNTIL_REVIEWED 需已签复核证据 / DS4-6 每项 required_checks 需 verified check_evidence），fail-closed；作为第 11 门禁挂载进 `run_gates.py`。
+  - D1/J1 datasheet 本环境取不到（LCSC 直链 TLS 拦截、elecfans 仅得查看页），保持 BLOCK，已在 manifest/HANDOFF 标注由人工下载补齐。
+
+- 验证（全部真实运行）：
+  - `tests.test_datasheet_contract` 9/9 OK（含 fail-closed 各分支）。
+  - 全量回归 123/123 OK（114 既有 + 9 新增）。
+  - `py -3 gates/run_gates.py` → 原 9 门禁全 PASS；board_review 仅余 `manufacturing_release=false`；
+    datasheet_contract FAIL 且如实列出 34 项 BLOCK（U1/U2/U3 各项 check_evidence 未签、U3 电源复核未做、
+    D1/J1 无本地 datasheet 副本）。DS2 断言对修复后的 D1 网络零报错（证明三层修复与合同一致）。
+
+- 已知限制（诚实边界）：
+  - U3 输出电流按封装的权威数值未定案（V14/V20 冲突），在定案前电源结论保持 BLOCK；
+    5V→3.3V 压差 1.7V×150mA≈255mW 已触及 SOT-353 250mW absmax（absmax 不是工作点），
+    热复核或换 ≥1A 级 3.3V 电源方案（正式选型流程）前不得放行。
+  - D1 反向耐压未知（datasheet 缺失），不声称反偏安全。
+  - U1/U2 的 datasheet 级 check（ESR/strapping/天线净空的 datasheet 依据、SHT30 清洗/回流要求等）
+    均需工程师对照已冻结 PDF 逐项签发后，门禁才会转绿——机器不代签。
+
+- AIC Score Target：
+  - 创新性与方案设计（datasheet 外部真值层：验证从"生成物互洽"扩展到"生成物与物理世界一致"；是否立项待人工审）。
+
+- Commit / PR：
+  - 未提交（遵守协作协议），留人工统一审核。
+
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`
+
+## AI-20260831-009
+
+- 日期：2026-08-31
+- 任务名称：证据冻结 + check_evidence 状态机升级（人工裁决落地）
+- 模块/路径：
+  - `src/hardware/m2-board/evidence/datasheets/D1_KT-0603R/KT-0603R_KENTO_approval_spec_revA0.pdf`（新：人工提供原件，机器冻结，sha256 a3bac1cc…d4a1）
+  - `src/hardware/m2-board/evidence/datasheet_manifest.json`（D1 冻结+6 项机器预检/待签记录；J1 EVIDENCE_FOUND_NOT_FROZEN；U3 BLOCKED_POWER_THERMAL + 人工裁决）
+  - `src/hardware/m2-board/evidence/contracts/m2_component_contracts.json`（U3 400mA 裁决 + 路线 B 建议）
+  - `gates/datasheet_contract.py`（状态机：verified/decision/signed_by 三要素分离，机器最高 machine_prechecked 不得代签）
+  - `tests/test_datasheet_contract.py`（13 用例）
+  - `notes/m2-evidence-reset/polarity-verification.md`（rev3）
+
+- AI 参与类型：GENERATE_CODE / GENERATE_TEST / RESEARCH
+
+- 做了什么：
+  - 核实并冻结人工提供的 KT-0603R 承认书（Rev A.0，2018-12-06）：逐条对照
+    Pd 40mW / IFP 60mA / IF(DC) 25mA / VR 5V / IR≤5µA@5V / VF 1.8-2.4V@20mA / 回流 260C 10s，全部一致。
+  - 按人工裁决冻结 U3 结论：ME6211C33R5G/SOT-353 按 400mA（V20 按封装表优先于分销商 500mA 字段）；
+    V20 原件本环境未冻结（TLS 拦截），记录为人工声明待原件补签；θJA 缺失禁止代签，
+    热适用性保持 BLOCKED，人工倾向路线 B（正式 ECO/ADR 换 >=1A 级 3.3V 方案，换料前不改 BOM）。
+  - TYPE-C-31-M-12：HRO 官方页与 elecfans 镜像已定位（8.94x7.35x3.16mm/16-pin/20V5A/0.5mm pitch），
+    本环境无法冻结原始 PDF，状态 EVIDENCE_FOUND_NOT_FROZEN，须人工下载冻结；
+    明确不得因『用了 KiCad 官方 footprint』自动签 mechanical PASS（同名仿制件风险）。
+  - 门禁升级：check_evidence 状态机 missing→evidence_found→machine_prechecked→awaiting_engineer
+    →verified|rejected；转绿三要素 = status:verified + decision:pass + signed_by:human；
+    verified 无签名（含 agent 自签/旧格式）→ 拒；decision:blocked（人签）→ DESIGN-BLOCK 独立呈现；
+    blocked 未签 → 待工程师签阻塞决定。
+
+- 验证（全部真实运行）：
+  - `tests.test_datasheet_contract` 13/13 OK（含：agent 自签被拒、旧格式无签名被拒、
+    DESIGN-BLOCK 呈现、machine_prechecked 仍是 unsigned）。
+  - 全量回归 127/127 OK。
+  - `py -3 gates/run_gates.py` → 原 9 门禁全 PASS；board_review 仅余 manufacturing_release=false；
+    datasheet_contract 33 项：1×DS1（J1 无冻结副本）、1×DS3（U3 电源合同无已签复核记录）、
+    24×各项无记录（U1/U2/U3 待工程师逐项对 PDF 签发）、6×unsigned（D1 机器预检/待签）、
+    1×unsigned-design-block（U3 thermal）。DS0/DS2 零报错（MPN 绑定与 D1 网络断言全对）。
+
+- 已知限制：
+  - V20 原件、TYPE-C-31-M-12 原始 drawing 均未冻结，须人工下载后补录
+    （manifest documents 字段已留位，含 source_url；补录时记录 sha256+retrieved_at 并重跑门禁）。
+  - 34 项（现 33 项）签发一律人工逐条，机器不代签、不批量绿灯。
+
+- AIC Score Target：创新性与方案设计（『外部真值层 + 人机签发分离』机制成形；立项与否待人工审）。
+
+- Commit / PR：未提交（协作协议）。
+
+- 最终状态：`PENDING_HUMAN_REVIEW`
+
+## AI-20260831-010
+
+- 日期：2026-08-31
+- 任务名称：补取并冻结两份原件——ME6211 V20 原件 + TYPE-C-31-M-12 mechanical drawing
+- 模块/路径：
+  - `src/hardware/m2-board/evidence/datasheets/U3_ME6211C33R5G/ME6211_V20_lcsc_official.pdf`（新：865046 B，sha256 23084e9d…fae5e6）
+  - `src/hardware/m2-board/evidence/datasheets/J1_TYPE-C-31-M-12/TYPE-C-31-M-12_drawing_elecfans_mirror.pdf`（新：118108 B，sha256 ef0e00dd…0294b）
+  - `datasheet_manifest.json`、`contracts/m2_component_contracts.json`（同步更新）
+
+- 做了什么：
+  - V20 原件经 LCSC 直链取到（上一轮 TLS 拦截为瞬态），逐页核对为真：
+    p9『ME6211C33 (SOT343R, FBP1*1-4L, SOT353)』I_OUTMAX=400mA（同页标准封装表 500mA），
+    p5 Absolute Maximum Ratings SOT353 Pd=250mW——人工裁决的 400mA 获得冻结原件一手背书，
+    合同 fact_verification 升级为 verified_locally_from_frozen_original。
+  - TYPE-C drawing 从 elecfans 镜像页提取到 huaqiu CDN 原始 PDF（1 页工程图：16-pin、0.5mm pitch、
+    20V、-30~+80C、280C/10s、PCB EDGE + RECOMMEND P.C.B LAYOUT）。
+  - **发现并如实记录出处疑点**：该图纸水印/标题栏为 HIROSE，与 BOM 制造商 Korean Hroparts Elec（HRO）
+    不一致——疑似仿制厂文档或镜像站误标，正是此前预警的同名仿制风险。已冻结但标
+    FROZEN_PROVENANCE_QUESTIONABLE，只可作几何参考，签发必须取得 HRO 官方图纸。
+
+- 验证：门禁重跑——原 9 门禁全 PASS；board_review 仅余 manufacturing_release=false；
+  datasheet_contract 33→32 项（DS1 清零：两份冻结副本均过 sha256；其余 32 项全部为待人工签发类别）。
+
+- 已知限制：HIROSE 水印疑点未消；Espressif 供电建议仍为 URL-only。其余同 009。
+
+- Commit / PR：未提交（协作协议）。
+
+- 最终状态：`PENDING_HUMAN_REVIEW`
+
+## AI-20260831-011
+
+- 日期：2026-08-31
+- 任务名称：信息架构治理落地（TASK-INFO：HANDOFF 状态卡 + ID_MAP + RAG 决策记录）
+- 模块/路径：
+  - `docs/HANDOFF.md`（重构：顶部新增 ≤15 行项目状态卡；并行会话历史小节原位划入"归档区"，零删改）
+  - `docs/ID_MAP.md`（新：6 类 ID 体系真源表 + 按任务类型的按需加载路由）
+  - `docs/knowledge/RAG_DECISION.md`（新：暂不引入 RAG 的决策记录 + 4 条重启触发条件 + 不立 ADR 判定）
+  - 本台账（本条）
+
+- 做了什么：
+  - 核实发现 TASK-INFO 任务书（`docs/TASK_INFO_ARCHITECTURE.md`）此前仅写出、未被执行
+    （ID_MAP/RAG_DECISION 不存在，HANDOFF 无状态卡），本会话直接执行。
+  - HANDOFF 重构采用"纯插入"策略：状态卡与归档区标题为仅有的新增内容，旧 187 行
+    全部原位保留（脚本验证：旧文件每行均存在于新文件，丢失 0 行，187→204 行）。
+  - 状态卡全部字段实测取得：11 门禁 9 PASS + board_review FAIL + datasheet_contract
+    32 BLOCK（读 `notes/m2-evidence-reset/run_manifest.json`）；127/127 测试实测；
+    HEAD `e51fa93` 与 origin 同步（`git rev-parse` 双端核对）。
+  - ID_MAP 六类 ID 格式逐个与真源核对：AI 台账（最高 010，本条 011）、ADR-001~005
+    （DECISIONS.md grep 确认）、EVID/RES/PIT/TASK-PN 各抽 1-3 个在真源命中。
+  - RAG 决策：依据 14 万 token 规模 + ID 精确检索 + datasheet sha256 绑定三条理由判
+    暂不引入；ADR 判定按 AGENTS.md §6 清单核对后不立项，留人工复核。
+
+- 验证：HANDOFF 零丢失脚本验证通过；ID_MAP 抽查 ID 全部在真源 grep 命中；
+  未触碰其他会话未提交文件（gates/datasheet_contract.py 等仅备份对照，未修改）。
+
+- 已知限制：状态卡中"待大统领"事项随进展会过期，接手会话更新状态卡时须逐项重测，
+  不得沿用本条数字。
+
+- Commit / PR：未提交（协作协议，与第 11 门禁批次一并待人工决定）。
+
+- 最终状态：`PENDING_HUMAN_REVIEW`

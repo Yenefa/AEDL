@@ -10,6 +10,21 @@
 > 到具体会话；据此识别前任/并行会话的工作边界、未审改动和已知坑，避免并发写坏工作区。
 > 收尾时按 AGENTS.md 第 4 节为本次实质工作新增一条记录，默认 `PENDING_HUMAN_REVIEW`。
 
+## 项目状态卡（2026-08-31，AI-20260831-011 更新）
+
+- 板子：M2 ESP32-C3+SHT30；D1 极性已修、U3 已换料 C235316；待人工重签 board_review 后方可下单。
+- 门禁：11 个 = 9 PASS + board_review FAIL（仅 `manufacturing_release=false` 等重签）+ datasheet_contract FAIL（32 项 BLOCK，全部待人工签发类）。
+- 分支：`fix/m2-schematic-semantic-release` @ `e51fa93`，已推送（与 origin 同步）；master 未合并。
+- 测试：127/127 全绿（`py -3 -m unittest discover -s tests`，2026-08-31 实测）。
+- 待大统领：① 重签 board_review；② datasheet_contract 32 项签发（优先 U3 热复核、J1 需 HRO 官方图纸）；③ 未提交批次 commit 决定（第 11 门禁全套 + D1 修复证据）；④ master 合并。
+- 吸收：CircuitBot intake+实装（第 10/11 门禁）；KiCadAI / KiCad MCP intake 完成（Konnect AGPL 红线）；NeuroBoard 未开始；kicad-ai(amcolex) 404 待人工定案。
+- 检索：ID 引用地图见 `docs/ID_MAP.md`；协作任务卡见 `docs/COLLABORATION.md`；RAG 取舍见 `docs/knowledge/RAG_DECISION.md`。
+- 历史细节：见下方归档区（现状以上方状态卡为准）。
+
+## 归档：并行会话历史（截至 2026-08-31）
+
+> 历史会话记录，仅审计用，现状以上方状态卡为准。各小节原文保留、一个字未删。
+
 ## 并行会话状态（多 AI 协作，配套 `docs/COLLABORATION.md`）
 
 > 各会话只追加自己的小节，不改他人小节。领地规则见 COLLABORATION.md。
@@ -32,6 +47,13 @@
 - 验证：原缺口复现→堵住（塞 U9/换料 U3/删器件/改 nets 不重签均 FAIL）；只重指绑定或只改 protocol_version 仍 PASS；`tests.test_requirements_contract` 31/31；全量回归 114/114；`run_gates.py` 10 门禁 9 PASS + board_review FAIL（仍仅为 manufacturing_release=false，语义与接手时一致）；web 三项验证重跑全过。
 - 下一步：① **P1 领地连带缺口（最重要）**：`gates/requirements_runtime_server.py::finalize`（L128-136）只写 `contract_sha256` 不写 `intent_semantic_sha256`，已实测其产物被 C4 拒收——修法写在 TASK-P5 卡片，交 P1；② 候选 ADR-007（语义哈希绑定）待人工审立项；③ MOCK 前端无法替服务端算语义哈希，该限制已在 web README + UI 明示；④ 本会话环境（WorkBuddy sitecustomize safe-delete 钩子）拦截 unlink/rmtree，run_gates/export 需 `python -S` 或人工终端运行，非仓库代码问题。
 - （P6 会话观察，未代改他人章节）`web/` 的 4 个文件在 01:20 被本会话之外的并行会话同步过（intent_binding 已改 lockfile 单字段形状，与新 C4 语义恰好兼容），本会话只做了 index.html/README 的提示文案同步，未覆盖他人改动。
+
+### RENDER-PROOF + TASK-FIX-D1 + DATASHEET-GATE（AI-20260831-007/008，Qoder 会话，2026-08-31）
+- 做了什么：① 目检渲染证据门禁（kicad-cli 脚本化重渲 + `render_evidence` sha256 绑定 PCB，fail-closed）——渲染证据部分已提交 `4e0922a`，但提交信息误标 `[AI-20260831-001]` 与 P1 撞号，实际对应本条 007；② TASK-FIX-D1：D1 极性三层修复（intent/原理图/网标对调/PCB——PCB 因铜皮已物理连通，用 footprint 原地旋转 180° 使 pad1=K 落 GND 铜皮、pad2=A 落 LED_A 铜皮，走线零改动）+ 全链重导（ops 重放/需求合同重签 `82f8aa2f…`→自哈希 `a315effe…`/delivery 重导/网表/ERC/DRC/语义/故障注入/学习/重渲染），`polarity-verification.md` 升 rev2（采纳人工复核 4 处修正）；③ 外部证据包落地 + 第 11 门禁：`src/hardware/m2-board/evidence/`（manifest/contracts/3 份 datasheet PDF 冻结副本含 sha256：U1 Espressif 官方、U2 Sensirion 官方、U3 ME6211 V14 镜像），`gates/datasheet_contract.py`（DS0-DS6 fail-closed），当前如实报 34 项 BLOCK。
+- 文件清单：`tools/board_review.py`、`gates/gate_core.py`、`gates/run_gates.py`、`gates/datasheet_contract.py`、`tools/generate_m2_ops.py`（lockfile 字段泄漏修复）、`tests/test_board_review.py`、`tests/test_run_gates.py`、`tests/test_datasheet_contract.py`、`src/hardware/m2-board/{intent_v1.json,m2_board.kicad_sch,m2_board.kicad_pcb}`、`src/hardware/m2-board/evidence/**`、`gates/requirements/requirements_contract_v1.json`、`notes/m2-evidence-reset/generated/*`、`delivery/*`、`notes/m2-evidence-reset/polarity-verification.md`、`docs/compliance/AI_USAGE_LOG.md`（007/008）、本节。D1 修复及门禁改动**未 commit**（任务书铁律）。
+- 验证：123/123 单测全绿（114 既有 + 9 新增）；`run_gates.py` 原 9 门禁全 PASS、board_review 仅余 `manufacturing_release=false`、datasheet_contract 如实报 34 BLOCK；新导网表 `D1 pin1(K)→/GND、pin2(A)→/LED_A`；delivery `rows=21 zip_entries=11`。
+- 下一步（交人工）：① 按 datasheet_contract 34 项 BLOCK 逐项取证，优先 D1（KT-0603R/C2286 datasheet，反向耐压未知）与 J1（TYPE-C-31-M-12/C165948 mechanical drawing）——本环境 LCSC 直链 TLS 拦截，需人工下载后放入 `evidence/datasheets/` 并更新 manifest sha256；② U3 电源：400mA@SOT353 声明仅有 V20 出处（本地只取到 V14，V14 无按封装电流表且 features 写 500mA@4.3V），两版冲突须按最终版 datasheet 定案；5V→3.3V 压差 1.7V×150mA≈255mW 已触 SOT-353 250mW absmax，热复核或换 ≥1A 级电源方案（正式选型流程）前保持 BLOCK；③ U1/U2 各项 check_evidence 需工程师对照 datasheet 签发后才能转绿。
+- 补记（AI-20260831-010，同会话）：两份原件已补取冻结，上条①②的取证阻塞已消除大半——① ME6211 V20 原件经 LCSC 直链取到（上轮 TLS 拦截为瞬态），865046 B，sha256 23084e9d…fae5e6，逐页核对为真：p9『ME6211C33 (SOT343R, FBP1*1-4L, SOT353)』I_OUTMAX=400mA（同页标准封装表 500mA）、p5 SOT353 Pd=250mW，人工裁决获一手背书，合同 fact_verification 升级 verified_locally_from_frozen_original；② TYPE-C drawing 从 elecfans 镜像提取到原始 PDF，118108 B，sha256 ef0e00dd…0294b（16-pin/0.5mm pitch/20V/-30~+80C/280C 10s/PCB EDGE/RECOMMEND P.C.B LAYOUT），**但水印/标题栏为 HIROSE，与 BOM 制造商 Korean Hroparts Elec（HRO）不符**——疑似仿制厂文档或镜像站误标，已标 FROZEN_PROVENANCE_QUESTIONABLE，只作几何参考，签发须取得 HRO 官方图纸（此前预警的同名仿制风险在此具象化）。门禁重跑：DS1 清零，datasheet_contract 余 32 项，全部为待人工签发类别。
 
 ## 当前状态（2026-08-31，AI-20260831-002 会话末）
 
@@ -105,6 +127,8 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
    确认 SOT-23-5 热基线、降级过强主张）→ 整改后采纳；发现 V20/V24 数据手册版本热额定
    差异（SOT353 PD 250mW vs 450mW，TO_VERIFY）。经验沉淀为 ADR-005 +
    `docs/knowledge/IMPROVEMENT_SYSTEM.md` 方法论教训条目。
+
+## （归档区结束）以下为仍然生效的长期条目
 
 ## 关键文件
 
