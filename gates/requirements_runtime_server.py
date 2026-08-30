@@ -246,10 +246,20 @@ class _Handler(BaseHTTPRequestHandler):
         self._send_json(404, {"error": f"no such endpoint: {self.command} {self.path}"})
 
     def do_GET(self) -> None:
-        self._route()
+        self._safe_route()
 
     def do_POST(self) -> None:
-        self._route()
+        self._safe_route()
+
+    def _safe_route(self) -> None:
+        # Handler logic raises ValueError for every bad request (malformed
+        # body, failed finalize preconditions, ...). Those must reach the
+        # client as a 400 JSON error, never as a dropped connection - the
+        # frontend renders errors[] verbatim.
+        try:
+            self._route()
+        except ValueError as exc:
+            self._send_json(400, {"error": str(exc)})
 
     def do_OPTIONS(self) -> None:
         self._route()

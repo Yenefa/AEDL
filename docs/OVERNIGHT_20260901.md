@@ -103,3 +103,12 @@
      输入输出协议草案写进本卡片下方追加的「协议观察」小节，供 ≥2 实现后人工拍板。
   5. 每发现一个 bug（含"换封装后检查项静默消失"这类关键字盲区）即补一条对抗用例防回归。
 - 明早验收标准：新增用例 ≥15 条全绿；golden 冻结文件入库；协议观察小节成形；台账有条目。
+
+### TASK-P7 进度日志
+- [夜间] 周期1: 发现任务书背景已过时——finalize 缺口在 P1 会话后段已修（commit 1857db4 内含
+  `intent_semantic_sha256` 写入，P5 报告针对的是修复前版本）。按验收标准改为实测：新建
+  `tests/test_requirements_runtime_server.py` 10 用例（finalize 产物过 C1-C7 全绿、签约后 intent
+  电路变更被语义锁拒、未答 blocking 经 finalize 后仍被 gate 拒（锁定分层：server 组装/gate 权威）、
+  三条 fail-closed 报错路径、HTTP 层 4 项端点行为）。**附带修复真 bug**：`_route` 原先无任何
+  try/except，`ValueError("malformed JSON body")` 等异常导致客户端连接重置而非 400 JSON——
+  加 `_safe_route` 包装（ValueError→400 {"error"}）。全量回归 137/127+10 全绿。
