@@ -2107,7 +2107,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Package_TO_SOT_SMD:SOT-23-5"
+		(property "Footprint" "Package_TO_SOT_SMD:SOT-353"
 			(at -0.508 -13.462 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -2129,7 +2129,7 @@
 				)
 			)
 		)
-		(property "Description" "500mA low dropout linear regulator, shutdown pin, 6.5V max input voltage, 3.3V fixed positive output, SOT-23-5"
+		(property "Description" "500mA low dropout linear regulator, shutdown pin, 6.5V max input voltage, 3.3V fixed positive output, SOT-353"
 			(at 1.778 -15.24 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -2444,8 +2444,8 @@
 	(symbol (lib_id "Sensor_Humidity:SHT30-DIS") (at 276.86 261.62 0) (unit 1) (uuid "1ddc1bf4-2f8f-5287-bad0-0c22d699b10e") (pin "1" (uuid "842c9fb9-414d-57dc-86e6-bf4fef6fba42")) (pin "2" (uuid "3f899b82-9234-5fa2-aba7-bd3e3a88c77b")) (pin "3" (uuid "cefc397f-d24b-5928-b026-b0a8d7453a59")) (pin "4" (uuid "d7bd5797-e2a9-57ee-b05c-514f23a6f8ba")) (pin "5" (uuid "32b9b10d-c32e-5478-b4a2-b15f277adde3")) (pin "6" (uuid "adf8e142-0997-5ebe-bbe2-2bf5582c0adb")) (pin "7" (uuid "379e2083-0efe-50e2-b44b-fc5d51d8df85")) (pin "8" (uuid "bf40091e-84df-5b9d-9e67-8e64dc093d6a")) (pin "9" (uuid "191ac525-9d9f-52bf-b350-ab2e561c644d")) (property "Reference" "U2" (at 276.86 252.73 0) (effects (font (size 1.27 1.27)))) (instances (project "noname" (path "/a1dbe1c3-f1f0-496b-b2c7-2a432ea67147" (reference "U2") (unit 1))))
 	(property "Value" "SHT30-DIS-B10KS" (at 276.86 270.51 0) (effects (font (size 1.27 1.27)))))
 	(symbol (lib_id "Regulator_Linear:ME6211C33M5") (at 40.64 332.74 0) (unit 1) (uuid "8987d0c8-9836-5d66-b112-5bf9a6717187") (pin "1" (uuid "c199aa44-a2fd-5d2a-add9-e5acdcccd470")) (pin "2" (uuid "073d0c7a-2e7b-5c9c-8338-677b80fcc89b")) (pin "3" (uuid "4a31037d-7c04-585e-9e79-a643a0db0094")) (pin "4" (uuid "520922da-997c-5a45-918a-43af9a42b13d")) (pin "5" (uuid "458a9489-4ea6-5df2-9ce4-51c0d10ab5c7")) (property "Reference" "U3" (at 40.64 326.39 0) (effects (font (size 1.27 1.27)))) (instances (project "noname" (path "/a1dbe1c3-f1f0-496b-b2c7-2a432ea67147" (reference "U3") (unit 1))))
-	(property "Value" "ME6211C33M5G-N" (at 40.64 341.63 0) (effects (font (size 1.27 1.27))))
-	(property "Footprint" "Package_TO_SOT_SMD:SOT-23-5" (at 40.64 332.74 0) (effects (font (size 1.27 1.27)) (hide yes))))
+	(property "Value" "ME6211C33R5G" (at 40.64 341.63 0) (effects (font (size 1.27 1.27))))
+	(property "Footprint" "Package_TO_SOT_SMD:SOT-353" (at 40.64 332.74 0) (effects (font (size 1.27 1.27)) (hide yes))))
 	(symbol (lib_id "power:PWR_FLAG") (at 15.24 15.24 0) (unit 1) (uuid "d906bb33-da2d-5e29-a327-db4ef404011c") (pin "1" (uuid "cbb2959a-fa4e-5bad-b838-66b1152f0876")) (property "Reference" "#FLG01" (at 15.24 16.51 0) (effects (font (size 1.27 1.27)) (hide yes))) (instances (project "noname" (path "/a1dbe1c3-f1f0-496b-b2c7-2a432ea67147" (reference "#FLG01") (unit 1))))
 	(property "Value" "PWR_FLAG" (at 15.24 11.43 0) (effects (font (size 1.27 1.27)))))
 	(symbol (lib_id "power:PWR_FLAG") (at 45.72 15.24 0) (unit 1) (uuid "f7175e60-3216-55b8-89ae-cf30f65119fe") (pin "1" (uuid "5593eb95-6101-51a6-ab73-1fd75a575685")) (property "Reference" "#FLG02" (at 45.72 16.51 0) (effects (font (size 1.27 1.27)) (hide yes))) (instances (project "noname" (path "/a1dbe1c3-f1f0-496b-b2c7-2a432ea67147" (reference "#FLG02") (unit 1))))
@@ -2483,7 +2483,7 @@
 	(label "GND" (at 152.4 40.64 270) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "d2b017a4-7515-528e-9ada-fdc6659a09e8"))
 	(label "GND" (at 210.82 40.64 270) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "1fd9859f-90c8-5dff-ae66-fc65e2d429cf"))
 	(label "GND" (at 267.97 40.64 270) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "6fe7578b-aa59-5f66-b52a-dd35d71b5997"))
-	(label "GND" (at 43.18 109.22 0) (effects (font (size 1.27 1.27)) (justify left bottom)) (uuid "b721bcfc-938b-5a58-a0bf-715418619b8a"))
+	(label "LED_A" (at 43.18 109.22 0) (effects (font (size 1.27 1.27)) (justify left bottom)) (uuid "b721bcfc-938b-5a58-a0bf-715418619b8a"))
 	(label "GND" (at 110.49 156.21 270) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "3c1f2ddd-b116-5d15-8060-400d05b9d117"))
 	(label "GND" (at 110.49 156.21 270) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "acaba399-3673-51f8-8cd3-442f65419955"))
 	(label "GND" (at 110.49 156.21 270) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "9b0f470d-88a5-5752-83f8-ba31f8a5f15f"))
@@ -2500,7 +2500,7 @@
 	(label "GND" (at 276.86 269.24 270) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "503407c3-eea4-55c5-a209-ad4e95bc8672"))
 	(label "GND" (at 276.86 269.24 270) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "1b252b15-9cb3-55bd-b304-2b2ac828df1e"))
 	(label "GND" (at 40.64 340.36 270) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "c86b5969-5f4c-59a6-8462-cd4e365dcc83"))
-	(label "LED_A" (at 35.56 109.22 180) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "4612f4de-6a48-5420-8e6e-bcf16fe034c7"))
+	(label "GND" (at 35.56 109.22 180) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "4612f4de-6a48-5420-8e6e-bcf16fe034c7"))
 	(label "LED_A" (at 38.1 191.77 270) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "9c086402-f537-5546-a74a-4cce43617d57"))
 	(label "LED_DRV" (at 38.1 184.15 90) (effects (font (size 1.27 1.27)) (justify left bottom)) (uuid "bf3b5d68-f3a2-5426-958d-dd66300301e3"))
 	(label "LED_DRV" (at 212.09 275.59 180) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "d3909007-e97e-5ebc-a96a-40de24de44b0"))

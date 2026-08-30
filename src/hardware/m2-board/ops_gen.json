@@ -184,8 +184,8 @@
       "designator": "U3",
       "x_mil": 1600,
       "y_mil": 13100,
-      "value": "ME6211C33M5G-N",
-      "footprint": "Package_TO_SOT_SMD:SOT-23-5"
+      "value": "ME6211C33R5G",
+      "footprint": "Package_TO_SOT_SMD:SOT-353"
     },
     {
       "op": "place_component",
@@ -371,7 +371,7 @@
     {
       "op": "add_net_label",
       "name": "GND",
-      "at": "D1.2"
+      "at": "D1.1"
     },
     {
       "op": "add_net_label",
@@ -456,7 +456,7 @@
     {
       "op": "add_net_label",
       "name": "LED_A",
-      "at": "D1.1"
+      "at": "D1.2"
     },
     {
       "op": "add_net_label",
