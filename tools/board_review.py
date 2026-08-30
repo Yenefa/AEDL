@@ -32,9 +32,31 @@ DECOUPLING_MAX_MM = 8.0      # 去耦电容到对应 IC courtyard 边界的最�
 USB_DIFF_MAX_SKEW_MM = 1.0   # USB_DP/USB_DM 走线长度失配
 THERMAL_MIN_DIST_MM = 10.0   # SHT30 到最近潜在热源最小距离
 
+USB_CHANNELS = {
+    "D+": {
+        "nets": ("USB_DP_CONN", "USB_DP"),
+        "pins": {
+            "J1.A6": "USB_DP_CONN", "J1.B6": "USB_DP_CONN",
+            "R7.1": "USB_DP_CONN", "R7.2": "USB_DP", "U1.14": "USB_DP",
+        },
+    },
+    "D-": {
+        "nets": ("USB_DM_CONN", "USB_DM"),
+        "pins": {
+            "J1.A7": "USB_DM_CONN", "J1.B7": "USB_DM_CONN",
+            "R8.1": "USB_DM_CONN", "R8.2": "USB_DM", "U1.13": "USB_DM",
+        },
+    },
+}
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def review_exit_code(reviews) -> int:
+    """Fail closed unless every review explicitly reports pass."""
+    return 0 if reviews and all(review.get("status") == "pass" for review in reviews) else 1
 
 
 # ---------------------------------------------------------------- KiCad 10 解析
@@ -42,6 +64,7 @@ def utc_now() -> str:
 def parse_pcb(text: str) -> Dict[str, Any]:
     """footprint（lib/坐标/旋转）+ 板框（Edge.Cuts 包络）+ segment/via/zone。"""
     footprints: List[Dict[str, Any]] = []
+    pins: Dict[str, Optional[str]] = {}
     # footprint 块：从 "(footprint " 到下一个 "(footprint "/顶层对象；取块内第一个 (at ...) 为放置坐标
     starts = [m.start() for m in re.finditer(r'\(footprint "[^"]+"', text)]
     starts.append(len(text))
@@ -71,6 +94,17 @@ def parse_pcb(text: str) -> Dict[str, Any]:
             "x": float(at_m.group(1)), "y": float(at_m.group(2)),
             "rot": rot, "courtyard": courtyard,
         })
+        pad_matches = list(re.finditer(r'\(pad "([^"]*)"', block))
+        for pad_index, pad_match in enumerate(pad_matches):
+            pad_end = pad_matches[pad_index + 1].start() if pad_index + 1 < len(pad_matches) else len(block)
+            pad_block = block[pad_match.start():pad_end]
+            net_m = re.search(r'\(net "([^"]+)"\)', pad_block)
+            key = f"{ref_m.group(1)}.{pad_match.group(1)}"
+            observed = net_m.group(1) if net_m else None
+            if key in pins and pins[key] != observed:
+                pins[key] = "<conflicting duplicate pad nets>"
+            else:
+                pins[key] = observed
 
     # 板框：Edge.Cuts 上所有 gr_line/gr_rect 顶点的包络
     xs, ys = [], []
@@ -98,7 +132,7 @@ def parse_pcb(text: str) -> Dict[str, Any]:
     has_zone = bool(re.search(r'^\s*\(zone', text, re.M))
     nets = sorted({m.group(1) for m in re.finditer(r'\(net "([^"]+)"\)', text)})
     return {"footprints": footprints, "edge": edge, "segments": segments,
-            "vias": vias, "has_zone": has_zone, "nets": nets}
+            "vias": vias, "has_zone": has_zone, "nets": nets, "pins": pins}
 
 
 # ---------------------------------------------------------------- 评审项
@@ -203,25 +237,49 @@ def review_decoupling(footprints) -> Dict[str, Any]:
             "measured": {"worst_distance_mm": round(worst, 2), "ics": findings}}
 
 
-def review_usb_routing(segments) -> Dict[str, Any]:
+def review_usb_routing(segments, pins) -> Dict[str, Any]:
     net_len: Dict[str, float] = {}
     for s in segments:
-        if s["net"] in ("USB_DP", "USB_DM"):
+        if s["net"] in {net for channel in USB_CHANNELS.values() for net in channel["nets"]}:
             net_len[s["net"]] = net_len.get(s["net"], 0.0) + \
                 math.hypot(s["x2"] - s["x1"], s["y2"] - s["y1"])
-    if len(net_len) < 2:
-        return {"id": "USB_ROUTING", "status": "fail",
-                "evidence": f"USB_DP/USB_DM 走线不完整: {net_len}"}
-    lengths = sorted(net_len.values())
-    skew = lengths[-1] - lengths[0]
-    ok = skew <= USB_DIFF_MAX_SKEW_MM
+
+    endpoint_mismatches = []
+    missing_nets = []
+    logical_lengths: Dict[str, float] = {}
+    for channel_name, channel in USB_CHANNELS.items():
+        for pin, expected_net in channel["pins"].items():
+            observed = pins.get(pin, "<missing>")
+            if observed != expected_net:
+                endpoint_mismatches.append(
+                    f"{pin}: expected {expected_net}, observed {observed}"
+                )
+        for net in channel["nets"]:
+            if net not in net_len:
+                missing_nets.append(net)
+        if all(net in net_len for net in channel["nets"]):
+            logical_lengths[channel_name] = sum(net_len[net] for net in channel["nets"])
+
+    skew = None
+    if len(logical_lengths) == len(USB_CHANNELS):
+        lengths = sorted(logical_lengths.values())
+        skew = lengths[-1] - lengths[0]
+    ok = not endpoint_mismatches and not missing_nets and skew is not None and skew <= USB_DIFF_MAX_SKEW_MM
+    rounded_lengths = {k: round(v, 2) for k, v in logical_lengths.items()}
     return {"id": "USB_ROUTING", "status": "pass" if ok else "fail",
-            "evidence": f"USB 差分对走线长度(mm)："
-                        f"{ {k: round(v, 2) for k, v in net_len.items()} }；"
-                        f"skew={skew:.2f}mm（要求 <= {USB_DIFF_MAX_SKEW_MM}mm）；"
+            "evidence": f"USB 逻辑通道（连接器侧网络 + 串阻 + MCU 侧网络）铜长(mm)："
+                        f"{rounded_lengths}；endpoint_mismatches={endpoint_mismatches}；"
+                        f"missing_nets={sorted(set(missing_nets))}；"
+                        f"skew={None if skew is None else round(skew, 2)}mm"
+                        f"（要求 <= {USB_DIFF_MAX_SKEW_MM}mm）；"
                         f"90Ω 差分阻抗需按 1.6mm 双层板叠层计算复核",
-            "measured": {"lengths_mm": {k: round(v, 2) for k, v in net_len.items()},
-                         "skew_mm": round(skew, 2)}}
+            "measured": {
+                "net_lengths_mm": {k: round(v, 2) for k, v in net_len.items()},
+                "logical_channel_lengths_mm": rounded_lengths,
+                "endpoint_mismatches": endpoint_mismatches,
+                "missing_nets": sorted(set(missing_nets)),
+                "skew_mm": None if skew is None else round(skew, 2),
+            }}
 
 
 def review_thermal(footprints) -> Dict[str, Any]:
@@ -294,7 +352,7 @@ def main() -> int:
         review_antenna(pcb["footprints"], pcb["edge"]),
         review_ground_return(pcb),
         review_decoupling(pcb["footprints"]),
-        review_usb_routing(pcb["segments"]),
+        review_usb_routing(pcb["segments"], pcb["pins"]),
         review_thermal(pcb["footprints"]),
         review_protection(sch_text, pcb),
         review_assembly(pcb["footprints"], pcb_text),
@@ -320,7 +378,7 @@ def main() -> int:
     failed = [r["id"] for r in reviews if r["status"] != "pass"]
     print(f"RESULT: {len(reviews) - len(failed)}/{len(reviews)} pass"
           + (f"; failed: {failed}" if failed else ""))
-    return 0
+    return review_exit_code(reviews)
 
 
 if __name__ == "__main__":

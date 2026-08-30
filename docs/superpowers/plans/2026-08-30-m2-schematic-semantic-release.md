@@ -99,13 +99,13 @@
 - Modify or create: `tests/test_board_review.py`
 - Modify: `tools/board_review.py`
 
-- [ ] Add R7/R8/R9/C5 footprints and deterministic placement; place R7/R8 close to U1 USB pins.
-- [ ] Update connector fanout nets to `USB_DP_CONN`/`USB_DM_CONN`.
-- [ ] Add tests that USB review measures each complete logical channel across its series resistor and rejects crossed endpoint identities.
-- [ ] Regenerate PCB, export DSN, route with freerouting 2.3.0 telemetry blocked and `-mt 1`, then import SES.
-- [ ] Apply only controlled routing polish needed for DRC convergence.
-- [ ] Run KiCad DRC and require 0 violations / 0 unconnected.
-- [ ] Run semantic and board-review gates on the actual PCB and commit.
+- [x] Add R7/R8/R9/C5 footprints and deterministic placement; place R7/R8 close to U1 USB pins.
+- [x] Update connector fanout nets to `USB_DP_CONN`/`USB_DM_CONN`.
+- [x] Add tests that USB review measures each complete logical channel across its series resistor and rejects crossed endpoint identities.
+- [x] Regenerate PCB, export DSN, route with freerouting 2.3.0 telemetry blocked and `-mt 1`, then import SES.
+- [x] Apply only controlled routing polish needed for DRC convergence.
+- [x] Run KiCad DRC and require 0 violations / 0 unconnected.
+- [x] Run semantic and board-review gates on the actual PCB and commit.
 
 ## Task 7: Refresh BOM, placement, and delivery artifacts
 

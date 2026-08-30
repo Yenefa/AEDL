@@ -26,10 +26,14 @@ FP_MAP = {
     "R4": ("Resistor_SMD", "R_0603_1608Metric"),
     "R5": ("Resistor_SMD", "R_0603_1608Metric"),
     "R6": ("Resistor_SMD", "R_0603_1608Metric"),
+    "R7": ("Resistor_SMD", "R_0603_1608Metric"),
+    "R8": ("Resistor_SMD", "R_0603_1608Metric"),
+    "R9": ("Resistor_SMD", "R_0603_1608Metric"),
     "C1": ("Capacitor_SMD", "C_0805_2012Metric"),
     "C2": ("Capacitor_SMD", "C_0805_2012Metric"),
     "C3": ("Capacitor_SMD", "C_0603_1608Metric"),
     "C4": ("Capacitor_SMD", "C_0603_1608Metric"),
+    "C5": ("Capacitor_SMD", "C_0603_1608Metric"),
 }
 
 # 布局 v2 — 功能布局覆盖表（质心 mm，rot 度）。
@@ -50,12 +54,24 @@ PLACEMENT = {
     "R5": (40.0, 11.5, 0),    # CC1 下拉，J1 下方（避开 J1 courtyard）
     "R6": (44.0, 11.5, 0),    # CC2 下拉，J1 下方
     "R3": (23.5, 26.0, 0),    # EN 上拉，U1 右侧
+    "C5": (1.45, 13.5, 90),   # EN RC 电容，旋转后位于 U1 左侧 courtyard 外
+    "R7": (23.3, 18.0, 180),  # USB D+ 串阻，R7.2 朝向 U1.14
+    "R8": (23.3, 19.5, 180),  # USB D- 串阻，R8.2 朝向 U1.13
+    "R9": (1.45, 22.5, 90),   # GPIO9/BOOT 上拉，旋转后位于 U1 左侧 courtyard 外
     "R1": (23.0, 31.0, 0),    # I2C SDA 上拉，U1/U2 之间
     "R2": (23.0, 34.0, 0),    # I2C SCL 上拉
     "SW1": (29.0, 33.0, 0),   # EN 按键
     "SW2": (37.0, 36.0, 0),   # BOOT 按键
     "R4": (38.0, 26.0, 0),    # LED 限流
     "D1": (44.0, 26.0, 0),    # LED
+}
+
+# 自动布线后仍必须满足丝印 DRC；以下为绝对板坐标，避免默认字段落在相邻焊盘或板边。
+REFERENCE_PLACEMENT = {
+    "C5": (1.45, 10.0, 90),
+    "R7": (23.3, 16.2, 0),
+    "R9": (1.45, 27.0, 90),
+    "U1": (12.0, 27.0, 0),
 }
 
 W, H = 60.0, 40.0
@@ -91,6 +107,19 @@ def physical_components(components):
     }
 
 
+def apply_reference_placement(loaded, pcbnew):
+    """Apply the audited absolute silkscreen reference positions."""
+    missing = sorted(set(REFERENCE_PLACEMENT) - set(loaded))
+    if missing:
+        raise ValueError(f"reference placement targets missing from board: {missing}")
+    for ref, (ref_x, ref_y, ref_angle) in REFERENCE_PLACEMENT.items():
+        reference = loaded[ref].Reference()
+        reference.SetPosition(
+            pcbnew.VECTOR2I(pcbnew.FromMM(ref_x), pcbnew.FromMM(ref_y))
+        )
+        reference.SetTextAngleDegrees(ref_angle)
+
+
 def fp_bbox_mm(fp, pcbnew):
     """实测封装外廓（优先 Courtyard，退回 BoundingBox），返回 (w,h)。"""
     try:
@@ -108,6 +137,11 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root")
     parser.add_argument("--footprint-root")
+    parser.add_argument(
+        "--references-only",
+        action="store_true",
+        help="update audited silkscreen reference positions on the existing routed PCB",
+    )
     args = parser.parse_args(argv)
 
     root = resolve_root(args.root)
@@ -116,6 +150,16 @@ def main(argv=None):
     output_path = root / "src" / "hardware" / "m2-board" / "m2_board.kicad_pcb"
 
     import pcbnew
+
+    if args.references_only:
+        if not output_path.is_file():
+            raise FileNotFoundError(f"existing PCB not found: {output_path}")
+        board = pcbnew.LoadBoard(str(output_path))
+        existing = {fp.GetReference(): fp for fp in board.GetFootprints()}
+        apply_reference_placement(existing, pcbnew)
+        ok = pcbnew.SaveBoard(str(output_path), board)
+        print(f"references_only_saved={ok} targets={len(REFERENCE_PLACEMENT)}")
+        return 0 if ok else 5
 
     with intent_path.open("r", encoding="utf-8-sig") as handle:
         intent = json.load(handle)
@@ -174,8 +218,9 @@ def main(argv=None):
     pos_mm = {}
     for ref in order:
         if ref in PLACEMENT:
-            cx, cy, _rot = PLACEMENT[ref]
+            cx, cy, rotation = PLACEMENT[ref]
             pos_mm[ref] = (cx, cy)
+            loaded[ref].SetOrientationDegrees(rotation)
             loaded[ref].SetPosition(pcbnew.VECTOR2I(pcbnew.FromMM(cx), pcbnew.FromMM(cy)))
             board.Add(loaded[ref])
 
@@ -197,6 +242,8 @@ def main(argv=None):
         board.Add(loaded[ref])
         x += w + GAP
         row_h = max(row_h, h)
+
+    apply_reference_placement(loaded, pcbnew)
 
     assigned, unmatched = 0, []
     for net, members in intent["nets"].items():
@@ -222,7 +269,7 @@ def main(argv=None):
     # J1 手工扇出：0.5mm 舌片节距下 freerouting 无法自行逃逸的焊盘。
     # 几何依据（J1@45,5.3，舌片焊盘底边 y=1.98，定位 NPTH @ (42.11/47.89, 2.7) r=0.325，
     # 孔-铜净距约束 0.25 → 走线中心距孔心 >= 0.65）：
-    #   A6(USB_DP)/A7(USB_DM) 直下即可（相邻逃逸柱中心距 0.5，净距 0.3 >= 0.18）；
+    #   A6(USB_DP_CONN)/A7(USB_DM_CONN) 直下即可（相邻逃逸柱中心距 0.5，净距 0.3 >= 0.18）；
     #   A9(+5V) 与右 NPTH 水平距仅 0.65 → 0.15mm 细线贴净空边缘下钻 B.Cu 后交给 freerouting；
     #   B5(CC2) 过孔 (46.45, 3.15) 避开 A9 走廊与 USB_DP 汇合横线（净距 >=0.48）。
     # 2026-08-29 实测（freerouting 日志）：fanout 阶段 61 个 SMD 焊盘仅 A7 逃逸失败
@@ -252,17 +299,18 @@ def main(argv=None):
     # 全 F.Cu、0.5mm 节距）：0.6mm 过孔需与相邻走线中心距 >=0.58，走廊里放不下
     # → DM 两焊盘就近下 0.4/0.2 小过孔（环宽 0.1/孔径 0.2 = 约束下限）转 B.Cu 汇合；
     #   DP 在 F.Cu 于 y=2.8 汇合（A7 过孔底缘 y=2.5，净距 0.2）后中柱下行。
-    fanout("USB_DM", [(44.25, 1.9), (44.25, 2.3)], pcbnew.F_Cu, 0.2)
-    fanout_via("USB_DM", 44.25, 2.3, 0.4, 0.2)
-    fanout("USB_DM", [(45.25, 1.9), (45.25, 2.3)], pcbnew.F_Cu, 0.2)
-    fanout_via("USB_DM", 45.25, 2.3, 0.4, 0.2)
+    fanout("USB_DM_CONN", [(44.25, 1.9), (44.25, 2.3)], pcbnew.F_Cu, 0.2)
+    fanout_via("USB_DM_CONN", 44.25, 2.3, 0.4, 0.2)
+    fanout("USB_DM_CONN", [(45.25, 1.9), (45.25, 2.3)], pcbnew.F_Cu, 0.2)
+    fanout_via("USB_DM_CONN", 45.25, 2.3, 0.4, 0.2)
     # B.Cu 两小过孔直连（中心距 1.0，边缘净距 0.6），无悬空端；逃逸由 freerouting 从过孔续接
-    fanout("USB_DM", [(44.25, 2.3), (45.25, 2.3)], pcbnew.B_Cu, 0.2)
+    fanout("USB_DM_CONN", [(44.25, 2.3), (45.25, 2.3)], pcbnew.B_Cu, 0.2)
 
-    fanout("USB_DP", [(44.75, 1.9), (44.75, 2.8)], pcbnew.F_Cu, 0.2)
-    fanout("USB_DP", [(45.75, 1.9), (45.75, 2.8)], pcbnew.F_Cu, 0.2)
-    fanout("USB_DP", [(44.75, 2.8), (45.25, 2.8), (45.25, 5.2)], pcbnew.F_Cu, 0.2)
-    fanout("USB_DP", [(45.75, 2.8), (45.25, 2.8)], pcbnew.F_Cu, 0.2)
+    fanout("USB_DP_CONN", [(44.75, 1.9), (44.75, 2.8)], pcbnew.F_Cu, 0.2)
+    fanout("USB_DP_CONN", [(45.75, 1.9), (45.75, 2.8)], pcbnew.F_Cu, 0.2)
+    fanout("USB_DP_CONN", [(44.75, 2.8), (45.25, 2.8), (45.25, 5.2)], pcbnew.F_Cu, 0.2)
+    fanout("USB_DP_CONN", [(45.75, 2.8), (45.25, 2.8)], pcbnew.F_Cu, 0.2)
+    fanout_via("USB_DP_CONN", 45.25, 5.2)
 
     # A9/B4 +5V：贴 NPTH 净空边缘下钻 B.Cu，后续交给 freerouting
     fanout("+5V", [(47.2, 1.9), (47.2, 3.6)], pcbnew.F_Cu, 0.15)
