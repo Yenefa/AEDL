@@ -1310,3 +1310,51 @@
 - Commit / PR：ea5e944、266bb23（已推送 origin/fix/m2-schematic-semantic-release）。
 
 - 最终状态：`PENDING_HUMAN_REVIEW`
+
+## AI-20260831-015
+
+- 日期：2026-08-31（通宵自迭代，`docs/OVERNIGHT_20260901.md` TASK-P8）
+- 会话：Qoder（P8 研究路；属主认领）
+- 参与：RESEARCH / DOCUMENT
+- 任务：开源 Intake Phase 4（NeuroBoard）+ 两项遗留定案（kicad-ai(amcolex) / Konnect license）
+
+- 涉及文件（全部在 P8 领地内）：
+  - `notes/open_source_intake/neuroboard.md`（新：六步报告 + 11 门禁能力对照表 + 碰撞校准）
+  - `notes/open_source_intake/kicadai.md`（追加"补记"小节：kicad-ai 定案）
+  - `notes/open_source_intake/THIRD_PARTY.md`（仅 Konnect 行 + §2.4；另同步 NeuroBoard / kicad-ai 两行目录状态）
+  - `notes/open_source_intake/README.md`（目录状态 + `_neuroboard_repo/` 附属条目）
+  - `docs/OVERNIGHT_20260901.md`（P8 卡片进度日志）
+  - `docs/COLLABORATION.md`（TASK-P8 状态行）
+
+- 做了什么：
+  1. NeuroBoard 六步 intake：浅克隆 `_neuroboard_repo/` @ `d8e3248`（2026-08-26）；碰撞分析
+     §2.3/§2.4 结论逐项源码复核成立（位置级快照回滚、SI Freespace 回退、PDN mock、IPC 硬编码，
+     补行号）；新增 5 项发现：LICENSE 文件 MIT vs README 法律声明块 CC BY-NC 4.0 双声明矛盾、
+     `GlobalDRC` 恒 `return True`、`engines/` 零文件但被 `victory_lap.py` 依赖、`tests/` 仅 2 文件
+     307 行且无测试 CI、`__pycache__`/运行产物入库。判决：零代码复用（按最严解释），只作反面教材。
+     11 门禁能力对照表：仅 erc/drc 有形态等价且均 fail-open，其余 9 门禁无等价实现。
+  2. kicad-ai(amcolex) 定案：换路用 GitHub REST API 五层取证（仓库 404 / 账号存在且 29 公开仓库
+     全列、DSP/RF 画像零 KiCad 相关 / 全网搜索 224 条无属主命中 / 事件流无痕迹），判"公开仓库
+     无存在证据"；诚实注明 events API 90 天窗口限制。
+  3. Konnect license 取证：GitHub API license 字段 `agpl-3.0` 与 README 自声明双来源一致；
+     README「free for the little guys」商业条款原文摘录 + `COMMERCIAL.md` 关键条款（内部使用免费、
+     分发/网络服务化触发 §13、作者自释"仅交互代码为独立作品"系单方声明非法律意见）写入 §2.4；
+     AGPL 红线不变。
+  4. 流程改进：intake 规程新增"License 双声明预检"（README 目录已记）。
+
+- 验证：全量回归两次真实运行（开工 127/127 绿；周期中 137/137 绿——多出的 10 条为并行会话
+  P7 新增；中途 1 次瞬态失败系并行写文件竞态，重跑即绿）。所有远程取证均当日实测；
+  未触碰任何门禁/板级文件/签发字段。
+
+- 台账号撞号如实记录：开工查号得最大 011，按+1 用 `AI-20260831-012` 提交首个提交 `0f8f1f4`；
+  其后发现并行会话也用了 012（`ea5e944`）、013（`266bb23`）、014（其台账条目）。已推送提交
+  不改写历史，本条目改用 **015**；`0f8f1f4` 信息中的 [012] 与本条属同一会话。人工核账请按此映射。
+
+- 已知限制 / 待人工：
+  - NeuroBoard License 冲突的最终解释只有作者能定；AEDL 维持零接触直至澄清。
+  - `.gitignore` 缺 `_neuroboard_repo/` 排除条目（P8 领地外，未代改；克隆未提交入库）。
+  - kicad-ai 若未来出现可访问实体，按 `kicadai.md` 补记所列五条检索重跑即可推翻判决。
+
+- Commit / PR：`0f8f1f4`（第 1 周期，已推送）；本条目与其余收尾文件随后按通宵协议提交推送。
+
+- 最终状态：`PENDING_HUMAN_REVIEW`

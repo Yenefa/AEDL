@@ -152,3 +152,25 @@ KiCadAI capability assessment
 碰撞分析 §6.1 要求人工浏览器定案 `github.com/amcolex/kicad-ai` 真实性。本轮（2026-08-31）以 WebFetch 访问该 URL，返回的是 **GitHub 404 渲染页**（非网络故障：页面为完整导航的"找不到仓库"态，含登录回跳地址）。结合上轮会话两轮抓取 404：现有证据一致指向**该 URL 当前无公开仓库**。但仍不能排除"私有/改名/已删除"，"从未存在"的强结论维持 `待人工浏览器定案`。在其定案前，AEDL 材料中继续不引用 kicad-ai 的任何描述（findings ledger / waivers / done-gate / 4-4 USB case）。
 
 （本文件为内部工作分析，按 AGENTS.md 留痕规则，关联 AI-20260831-004，PENDING_HUMAN_REVIEW。）
+
+---
+
+## 补记（2026-08-31，P8 通宵会话）：kicad-ai（amcolex）换路复核定案
+
+上文"遗留未决项"当时卡在"待人工浏览器定案"。本轮（通宵任务书 TASK-P8 待办 #2）按指令换检索路径，用 **GitHub REST API** 逐层取证（全部 2026-08-31 实测）：
+
+| 检索路径 | 结果 |
+|---|---|
+| `GET api.github.com/repos/amcolex/kicad-ai` | **404 Not Found**（REST API，非渲染页） |
+| `GET api.github.com/users/amcolex` | 账号**存在**：Alex Pabouctsidis，user id 3976484，注册 2013-03-26，public_repos=29 |
+| `GET api.github.com/users/amcolex/repos?per_page=100` | 29 个公开仓库全列：autoencoder / ofdm-* / turbofec-arm / SGen / VexiiRiscv / rtl-viewer / sump-surfer 等，**画像为 DSP/RF/SDR/FPGA/通信，无任何 KiCad 或 EDA 相关仓库**，无 kicad-ai，无可疑改名候选 |
+| `GET api.github.com/search/repositories?q=kicad-ai` | 全网 224 条命中中**无一条属主为 amcolex**（相邻物：paul356/KiCad-AI-Assistant、mixelpixx/Konnect、dshills/KiCadAI 等，均另有属主） |
+| `GET api.github.com/users/amcolex/events?per_page=100` | 可查窗口内仅 1 条事件，涉及他人仓库 `drandyhaas/KiCadRoutingTools`；**无 kicad-ai 的创建/推送痕迹** |
+
+**定案**（按三假设逐一排除）：
+
+- "已删除/换名"：**无支持证据**。账号全量 29 仓可枚举、事件流无痕迹；若曾公开存在并删除，29 仓清单与事件流均无残迹（诚实限制：events API 仅保留约 90 天，更早的删除不可证伪——但结合下条，该假设已无必要）。
+- "从未存在（作为公开仓库）"：**证据一致指向此结论**。账号真实、可完整枚举、画像与 KiCad 无关、全网搜索无归属命中、事件流零痕迹。
+- **最终判决：`amcolex/kicad-ai` 作为公开 GitHub 仓库无存在证据，判定"不存在/不可核实"；外部转述的其能力描述（adversarial reviewer / findings ledger / waivers / done-gate / 4-4 USB case）不可挂到任何可辨识来源，AEDL 材料维持不引用。** 若未来有人提供该仓库的 raw 内容或可访问链接，推翻本判决只需重跑上表五条检索。
+
+（补记关联：通宵任务书 TASK-P8，台账条目见 `docs/compliance/AI_USAGE_LOG.md` 本会话条目，PENDING_HUMAN_REVIEW。）

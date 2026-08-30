@@ -14,9 +14,9 @@
 | **CircuitBot**（HiwarkhedePrasad） | `ff9b003`（2026-08-16） | MIT（源码核对） | **思想借鉴**：5 维澄清框架（mcu/sensor/power/connectivity/display）、每问 2-4 选项 + "No preference"、circuit_type 三分类、IC-based 电路剥离误加 MCU | 借思想重实现为 requirements_contract（语义反转：fail-open → fail-closed）；**零代码复制** | NO | CORE（第 10 门禁思想来源） | 其 clarify 的 fail-open 缺陷（5 分钟超时继续、No preference 静默丢弃、零测试）是 AEDL 重新设计的直接依据（`circuitbot.md` STEP 3/5） |
 | **KiCad MCP**（mixelpixx 深审 + 家族） | `aa53d52`（v2.7.0，2026-08-20） | MIT（源码核对） | **引用边界**：FTS5 连字符 MPN 字面化查询修复 → Adapt 为 AEDL 器件匹配对抗测试；ERC/DRC 错误语义分级 → 交叉验证 AEDL 封装；JLCPCB 三通道器件发现 → Direct Reuse 候选（M3+，**仅 discovery，不做 gating**） | 本轮零代码复制；FTS5 教训落 AEDL 测试计划 | NO | SUPPORT（工具层参考） | 判决体系不外包：工具可借，`run_drc` 的 raw JSON → AEDL 解析器 → 语义门禁 → 故障注入 → 制造决策（`kicad-mcp.md` STEP 5） |
 | **KiCadAI**（dshills） | `4f18765`（2026-08-24，depth=1） | MIT（源码核对） | **引用边界**：生成前能力评估（supported/experimental/unsupported）→ Adapt 机制形态；工具错误四分类 → Adapt；Checkpoint 单调性 → Adapt；RecordedProvider 录制回放 → Adapt（近期可落地）；MNA 仿真引擎 → Direct Reuse 候选（M3+，当前不需要） | 本轮零代码复制，仅机制借鉴 | NO | SUPPORT（机制模板） | 其 clarification 是单向拒绝非问答回路，反向验证 AEDL"对话式合同"差异化价值（`kicadai.md` STEP 5） |
-| **Konnect**（KiCad MCP 后继项目） | 未接触 | **AGPL-3.0**（README 声明） | **禁止吸收（红线）** | 不适用 | NO | BLOCKED | **AGPL 传染性，未过许可证审查并获人类明确授权前零接触**；AEDL 若吸收 KiCad MCP 能力只能走 MIT 版或独立实现（`kicad-mcp.md` STEP 4） |
-| **NeuroBoard**（Be-bibek） | 未开始 intake | MIT（碰撞分析记录） | 未复用（Phase 4 未开始） | 不适用 | NO | NONE | 碰撞分析已核：IPC/UI/事件流可吃，事务回滚为位置级快照（半实现）；intake 未开始 |
-| **kicad-ai**（amcolex） | 未核实 | 未核实 | 未引用 | 不适用 | NO | NONE | 仓库真实性待人工浏览器定案（2026-08-31 WebFetch 得 GitHub 404 渲染页）；定案前不引用其任何描述 |
+| **Konnect**（KiCad MCP 后继项目） | 未接触（2026-08-31 远程取证） | **AGPL-3.0**（GitHub API license 字段 `agpl-3.0` 与 README「## License: free for the little guys」自声明一致）+ 双授权商业渠道（`COMMERCIAL.md`） | **禁止吸收（红线）** | 不适用 | NO | BLOCKED | **AGPL 传染性，未过许可证审查并获人类明确授权前零接触**；AEDL 若吸收 KiCad MCP 能力只能走 MIT 版或独立实现（`kicad-mcp.md` STEP 4）。作者自释边界：内部使用免费、仅与 Konnect 交互的代码（MCP client/脚本）属独立作品不受 copyleft——系单方声明，非法律意见 |
+| **NeuroBoard**（Be-bibek） | `d8e3248`（2026-08-26，depth=1） | **License 冲突未定案**：LICENSE 文件 = MIT（Bibek Das）vs README 法律声明块 = CC BY-NC 4.0 禁商用 | 未复用（判决：零代码，仅反面教材） | 不适用 | NO | BLOCKED | 六步完成（`neuroboard.md`）：验证全链无 fail-closed（`GlobalDRC` 恒 True、SI/PDN 回退硬编码、验证失败进 self_correction 继续）、回滚仅位置级快照、`engines/` 零文件、测试/CI 形同虚设；按最严解释零接触 |
+| **kicad-ai**（amcolex） | 定案：公开仓库无存在证据（2026-08-31） | 不适用 | 未引用 | 不适用 | NO | NONE | GitHub API 五层取证定案（`kicadai.md` 补记）：账号存在（Alex Pabouctsidis，29 公开仓库，DSP/RF 画像）但无任何 KiCad 相关仓库、全网搜索无属主命中、事件流无痕迹 → 判"不存在/不可核实"；AEDL 维持不引用其任何转述描述 |
 
 ---
 
@@ -51,11 +51,20 @@
 
 ### 2.4 Konnect（AGPL 红线，禁止吸收）
 
-- **License**：**AGPL-3.0**（README 头部声明：个人与开源免费，商业需授权）。
+- **License（2026-08-31 双来源核实）**：
+  - GitHub API `repos/mixelpixx/Konnect` 的 license 字段 = `agpl-3.0`（GNU Affero General Public License v3.0）；
+  - README 自声明一致，且为 **AGPL + 商业双授权**结构（`COMMERCIAL.md`）。仓库状态：pushed 2026-08-30，367 stars，beta 自标。
+- **README 商业授权条款原文摘录**（`https://github.com/mixelpixx/Konnect` README.md「## License: free for the little guys」，2026-08-31 抓取）：
+
+  > Konnect is licensed under the **[GNU AGPL-3.0](LICENSE)**.
+  > If you're a hobbyist, student, freelancer, or open-source project: **use it freely, no strings attached.** Design boards, ship them, sell them.
+  > If you're a business: the AGPL requires that anything you build on or around Konnect — including software provided over a network — be open-sourced under the same license. If that doesn't work for you, **commercial licenses are available**: see [COMMERCIAL.md](COMMERCIAL.md).
+
+- **COMMERCIAL.md 关键条款**（同日抓取）：内部使用永久免费（设计板卡并售卖属"使用"非"分发"）；分发或网络服务化（AGPL §13）触发开源义务；作者自释"仅与 Konnect 交互的代码（MCP client/AI agent/脚本）属独立作品，copyleft 不跨该边界"——**此为作者单方解释，非法律意见**；商业许可通过邮件议价（去除 copyleft 全部条件，可附支持/赔偿条款）；贡献须接受贡献者条款以维持双授权。
 - **是否修改上游源码**：不适用（零接触）。
 - **是否再分发**：否。
-- **红线**：AGPL 传染性，未过许可证审查并获人类明确授权前，AEDL 任何代码/设计借鉴均不得来源于 Konnect。AEDL 若吸收 KiCad MCP 能力，只能走 MIT 版（mixelpixx）或独立实现。
-- **依据**：`notes/open_source_intake/kicad-mcp.md` STEP 4（"禁止接触"）+ README 头部声明。
+- **红线（不变）**：AGPL 传染性，未过许可证审查并获人类明确授权前，AEDL 任何代码/设计借鉴均不得来源于 Konnect；作者单方解释不能替代许可证审查。AEDL 若吸收 KiCad MCP 能力，只能走 MIT 版（mixelpixx KiCAD-MCP-Server，README 明确其仍 MIT 且维护中）或独立实现。
+- **依据**：`notes/open_source_intake/kicad-mcp.md` STEP 4（"禁止接触"）+ 本节 2026-08-31 GitHub API/README/COMMERCIAL.md 三方取证。
 
 ---
 

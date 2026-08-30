@@ -126,8 +126,10 @@
 ### TASK-P7：finalize 语义哈希缺口修复 + runtime server 测试补强 🔨 进行中（通宵自迭代）
 - 属主：ZCode 主会话。任务书全文（领地/待办池/验收标准）：`docs/OVERNIGHT_20260901.md` TASK-P7 卡。
 
-### TASK-P8：开源 Intake Phase 4（NeuroBoard）+ 遗留定案 🔨 进行中（通宵自迭代）
-- 属主：空缺待领（研究路，领地 `notes/open_source_intake/`）。任务书：`docs/OVERNIGHT_20260901.md` TASK-P8 卡。
+### TASK-P8：开源 Intake Phase 4（NeuroBoard）+ 遗留定案 ✅ done（AI-20260831-015，待人工审）
+- 属主：Qoder（通宵 P8 会话，研究路，领地 `notes/open_source_intake/`）。任务书：`docs/OVERNIGHT_20260901.md` TASK-P8 卡（含进度日志）。
+- 完成内容：① `neuroboard.md` 六步 intake（克隆 `_neuroboard_repo/` @ `d8e3248`；License 双声明矛盾 → 零代码复用判决；11 门禁能力对照表）；② kicad-ai(amcolex) GitHub API 五层取证定案"公开仓库无存在证据"（`kicadai.md` 补记）；③ Konnect license 双来源核实 + README 商业条款原文摘录（`THIRD_PARTY.md` §2.4，红线不变）；④ README 目录/附属同步。
+- 待人工审：三份取证结论；`.gitignore` 补 `_neuroboard_repo/` 排除（本次未越界改）；台账撞号说明（见 `docs/OVERNIGHT_20260901.md` P8 进度日志）。
 
 ### TASK-P9：board_review 特征化测试 + 可插拔协议预备 🔨 进行中（通宵自迭代）
 - 属主：空缺待领（代码路，领地 `tests/test_board_review_golden.py` 等）。任务书：`docs/OVERNIGHT_20260901.md` TASK-P9 卡。
