@@ -1,0 +1,53 @@
+{
+  "$schema": "https://aedl.local/schemas/lessons-registry.v1.json",
+  "schema_version": 1,
+  "project_id": "project-027-autonomous-hardware-agent",
+  "lessons": [
+    {
+      "id": "PIT-20260830-001",
+      "severity": "critical",
+      "title": "错误意图的多层一致性不是数据手册语义正确性",
+      "status": "active",
+      "root_cause": "USB 极性和 SHT30 管脚策略先被错误地写入 intent_v1.json，随后 akcli、原理图、PCB、ERC、DRC 和板级几何评审全部沿用同一错误源。系统只证明派生物彼此一致，没有用独立数据手册合同验证管脚含义，形成共同模式失效与循环举证。",
+      "escaped_controls": [
+        "akcli check 只验证原理图符合 intent，无法证明 intent 符合器件数据手册",
+        "KiCad ERC/DRC 只验证电气类型与几何规则，不理解 USB D+/D- 身份或 SHT30 地址语义",
+        "USB board review 只比较长度与 skew，没有核对连接器端点到 MCU 管脚身份",
+        "M2 测试报告中的 ADDR 已接地是人工文字，没有从网表生成，也没有一致性门禁",
+        "制造签发没有要求独立来源合同与故障注入证据"
+      ],
+      "failure_evidence": [
+        "notes/m2-semantic-repair/baseline_failure.json",
+        "notes/m2-semantic-repair/semantic_failure_before_repair.json"
+      ],
+      "failing_fixtures": [
+        "tests/fixtures/schematic_semantics/fault_firmware_address.json",
+        "tests/fixtures/schematic_semantics/fault_floating_addr.json",
+        "tests/fixtures/schematic_semantics/fault_missing_en_cap.json",
+        "tests/fixtures/schematic_semantics/fault_missing_gpio9_pullup.json",
+        "tests/fixtures/schematic_semantics/fault_reversed_usb.json"
+      ],
+      "regression_tests": [
+        "tests/test_schematic_semantics.py::SchematicSemanticsTests::test_common_mode_fault_injections_are_rejected",
+        "tests/test_learning_gate.py::LearningGateTests::test_fault_injection_runner_catches_all_five_reproductions"
+      ],
+      "fail_closed_controls": [
+        "gates/contracts/m2_schematic_contract_v1.json",
+        "gates/schematic_semantics.py",
+        "gates/semantic_fault_injection.py",
+        "gates/learning_gate.py"
+      ],
+      "fault_injection_proof": "notes/m2-evidence-reset/generated/semantic_fault_injection_current.json",
+      "optimization": {
+        "target": "AEDL 项目优化系统的硬件语义合同与经验晋级协议",
+        "state": "project_validated",
+        "promotion_criteria": [
+          "在 project-027 的修复后真实源文件上持续通过",
+          "五类故障注入持续 100% 被捕获且证据哈希可复核",
+          "在至少一个不同硬件载体上复用并发现或阻断真实缺陷",
+          "人工复核确认规则没有把软件静态证据冒充实体硬件验证"
+        ]
+      }
+    }
+  ]
+}

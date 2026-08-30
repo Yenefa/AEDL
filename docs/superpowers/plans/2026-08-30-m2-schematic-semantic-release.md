@@ -50,13 +50,13 @@
 - Create: `docs/knowledge/PROJECT_PITFALLS.md`
 - Create: `docs/knowledge/IMPROVEMENT_SYSTEM.md`
 
-- [ ] Add tests requiring every critical lesson to include root cause, escaped controls, failing fixture, regression test, fail-closed control, prior failure evidence, and passing fault-injection evidence.
-- [ ] Confirm RED before the gate exists.
-- [ ] Implement strict schema/content validation; missing or unknown fields fail.
-- [ ] Register `PIT-20260830-001` for common-mode intent validation and link it to Task 2 artifacts.
-- [ ] Document promotion criteria from project pitfall to reusable AEDL optimization rule.
-- [ ] Run focused tests and confirm GREEN.
-- [ ] Commit the learning loop.
+- [x] Add tests requiring every critical lesson to include root cause, escaped controls, failing fixture, regression test, fail-closed control, prior failure evidence, and passing fault-injection evidence.
+- [x] Confirm RED before the gate exists.
+- [x] Implement strict schema/content validation; missing or unknown fields fail.
+- [x] Register `PIT-20260830-001` for common-mode intent validation and link it to Task 2 artifacts.
+- [x] Document promotion criteria from project pitfall to reusable AEDL optimization rule.
+- [x] Run focused tests and confirm GREEN.
+- [x] Commit the learning loop.
 
 ## Task 4: Integrate gates and eliminate proxy evidence
 
