@@ -139,3 +139,64 @@ canonical_json = json.dumps(..., ensure_ascii=False, sort_keys=True,
   "warnings": []
 }
 ```
+
+## 请求/响应细节与错误码（v1.1 补全，P2 遗留 6 条缺口闭环）
+
+> 2026-08-31 AI-20260831-017 依据实装行为补全（全部由
+> `tests/test_requirements_runtime_server.py` 钉住，与代码不符以代码+测试为准）。
+> 服务端实装：`gates/requirements_runtime_server.py`；错误路径统一由 `_safe_route`
+> 把 `ValueError` 转成 `400 {"error": "…"}`（此前畸形请求会导致连接重置，已修）。
+
+### 各端点请求体（实装形状）
+
+```text
+POST /api/propose   {"request": "<NL 需求文本>"}
+                    → 200 {"questions": [...], "assumptions": [...], "warnings": [...]}
+                    注意：HTTP 层不返回 "ok" 字段（parse 层的 ok 只在模块内部使用）。
+
+POST /api/answer    {"question_id": "Q1", "answer": "USB-C 5V"}
+                    → 200 {"unanswered_blocking": ["Q2", ...]}   // 剩余未答 blocking id
+                    400：question_id 非非空字符串 / answer 非非空字符串
+                    （"unknown"、"No preference" 是合法显式答案；空白不行）
+
+POST /api/finalize  {"contract": <前端草稿>}
+                    草稿要求：intent_binding.intent_path 必填（repo 相对路径、正斜杠）；
+                    contract_sha256 会被服务端剥掉重算（前端永远不写自哈希）；
+                    intent_semantic_sha256 由服务端读 intent 计算写入（前端不许写）。
+                    → 200 <合同全文>
+                    400：contract 非对象 / intent_binding 非对象 / intent_path 空 /
+                    intent 文件读不到（error 前缀 "unable to read bound intent"）
+
+POST /api/validate  {"path": "<可选，合同路径>"}
+                    缺省 = gates/requirements/requirements_contract_v1.json
+                    → 200 {"status": "pass"|"fail", "errors": [...]}
+                    （路径指向不存在文件也是 200 + status=fail，不是 404——校验结果本身合法）
+```
+
+### 错误码（全集）
+
+| 状态码 | 触发 | 响应体 |
+|---|---|---|
+| 200 | 一切正常（含 validate 判 fail） | 各端点如上 |
+| 400 | 任何请求侧 ValueError（畸形 JSON、字段缺失、finalize 前置不满足） | `{"error": "<人话>"}` |
+| 404 | 未知端点；或 GET /api/contract 在 finalize 之前 | `{"error": "…"}`（finalize 前为 `"no contract yet (404)"`） |
+| 204 | OPTIONS 预检 | 无 body，带 CORS 头 |
+
+没有 5xx 语义：服务端逻辑异常会以连接异常暴露，前端按"服务不可用"处理即可。
+
+### 浏览器如何取得合同路径（P2 缺口④）
+
+三层分工，浏览器**不需要**读文件系统：
+
+1. 用户在前端配置里选择/填写 intent 路径（默认 `src/hardware/m2-board/intent_v1.json`），
+   前端把它写进草稿的 `intent_binding.intent_path`（repo 相对、正斜杠）。
+2. 服务端 `_read_intent(root, intent_path)` 以服务端仓库根为基准解析并读取；
+   读不到 → 400，前端原样展示 `error`。
+3. 合同落盘由人工/调用方完成（服务端只在内存持有，`GET /api/contract` 可取回最后一份）；
+   `/api/validate` 缺省校验仓库内正式合同路径。
+
+### 真实服务联调状态
+
+`py -3 gates/requirements_runtime_server.py`（默认 127.0.0.1:8787）。
+全部 5 端点已有 HTTP 层自动化测试（真端口、真 HTTPServer）；浏览器级 E2E（真实模式）
+仍标 `NOT_RUN`（需人工打开 web/ 页面点一遍，mock 模式演示已过）。

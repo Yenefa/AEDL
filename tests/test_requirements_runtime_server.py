@@ -226,3 +226,29 @@ class FinalizeEndpointTests(_HttpServerCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ValidateEndpointRealContractTests(_HttpServerCase):
+    """Live check against the real repo contract (the endpoint's production path)."""
+
+    def setUp(self) -> None:
+        _TempRepoCase.setUp(self)  # skip _HttpServerCase's temp intent setup
+        repo_root = Path(__file__).resolve().parents[1]
+        self.server = HTTPServer(("127.0.0.1", 0), _Handler)
+        _Handler.runtime = RequirementsRuntime()
+        _Handler.root = repo_root
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.url = f"http://127.0.0.1:{self.server.server_port}"
+        self.addCleanup(self._shutdown)
+
+    def test_validate_endpoint_passes_the_real_m2_contract(self):
+        status, body = self._post("/api/validate", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(body["status"], "pass", body["errors"])
+
+    def test_validate_endpoint_reports_missing_contract_file_as_fail(self):
+        status, body = self._post("/api/validate", {"path": "gates/requirements/nope.json"})
+        self.assertEqual(status, 200)
+        self.assertEqual(body["status"], "fail")
+        self.assertTrue(body["errors"])
