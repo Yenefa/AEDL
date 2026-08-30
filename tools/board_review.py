@@ -139,8 +139,21 @@ def parse_pcb(text: str) -> Dict[str, Any]:
     vias = len(re.findall(r'\(via\s', text))
     has_zone = bool(re.search(r'^\s*\(zone', text, re.M))
     nets = sorted({m.group(1) for m in re.finditer(r'\(net "([^"]+)"\)', text)})
+
+    # Bulk-capacitor count on +5V, computed here so review_protection stays a
+    # pure function of its inputs instead of re-reading the global PCB_PATH.
+    block_starts = [m.start() for m in re.finditer(r'\(footprint "[^"]+"', text)]
+    block_starts.append(len(text))
+    vbus_caps = 0
+    for i in range(len(block_starts) - 1):
+        block = text[block_starts[i]:block_starts[i + 1]]
+        if re.search(r'\(property "Reference" "C\d+"', block) and \
+           re.search(r'\(net "\+5V"\)', block):
+            vbus_caps += 1
+
     return {"footprints": footprints, "edge": edge, "segments": segments,
-            "vias": vias, "has_zone": has_zone, "nets": nets, "pins": pins}
+            "vias": vias, "has_zone": has_zone, "nets": nets, "pins": pins,
+            "vbus_caps": vbus_caps}
 
 
 # ---------------------------------------------------------------- 评审项
@@ -314,17 +327,10 @@ def review_protection(sch_text: str, pcb: Dict[str, Any]) -> Dict[str, Any]:
     if not sch_text:
         return {"id": "PROTECTION", "status": "fail", "evidence": "schematic not found"}
     has_tvs = bool(re.search(r'(TVS|ESD|USBLC|PESD|SP050)', sch_text, re.I))
-    # PCB 侧确认：+5V 网络上是否有电容（bulk）挂接
-    vbus_caps = 0
-    starts = [m.start() for m in re.finditer(r'\(footprint "[^"]+"',
-              Path(PCB_PATH).read_text(encoding="utf-8"))]
-    pcb_text = Path(PCB_PATH).read_text(encoding="utf-8")
-    starts.append(len(pcb_text))
-    for i in range(len(starts) - 1):
-        block = pcb_text[starts[i]:starts[i + 1]]
-        if re.search(r'\(property "Reference" "C\d+"', block) and \
-           re.search(r'\(net "\+5V"\)', block):
-            vbus_caps += 1
+    # PCB 侧确认：+5V 网络上是否有电容（bulk）挂接。
+    # 计数由 parse_pcb 完成（返回键 vbus_caps），这里只读入参、不再读文件——
+    # 否则传入"另一块板"的 parse 结果时会静默返回错误板子的结论（见 TASK-P9 进度日志 bug-1）。
+    vbus_caps = pcb.get("vbus_caps", 0)
     ok = vbus_caps >= 1
     return {"id": "PROTECTION", "status": "pass" if ok else "fail",
             "evidence": f"PCB 实测：挂接 +5V 的电容 {vbus_caps} 个（bulk 要求 >=1）；"

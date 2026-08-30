@@ -131,8 +131,14 @@
 - 完成内容：① `neuroboard.md` 六步 intake（克隆 `_neuroboard_repo/` @ `d8e3248`；License 双声明矛盾 → 零代码复用判决；11 门禁能力对照表）；② kicad-ai(amcolex) GitHub API 五层取证定案"公开仓库无存在证据"（`kicadai.md` 补记）；③ Konnect license 双来源核实 + README 商业条款原文摘录（`THIRD_PARTY.md` §2.4，红线不变）；④ README 目录/附属同步。
 - 待人工审：三份取证结论；`.gitignore` 补 `_neuroboard_repo/` 排除（本次未越界改）；台账撞号说明（见 `docs/OVERNIGHT_20260901.md` P8 进度日志）。
 
-### TASK-P9：board_review 特征化测试 + 可插拔协议预备 🔨 进行中（通宵自迭代）
-- 属主：空缺待领（代码路，领地 `tests/test_board_review_golden.py` 等）。任务书：`docs/OVERNIGHT_20260901.md` TASK-P9 卡。
+### TASK-P9：board_review 特征化测试 + 可插拔协议预备 ✅ done（AI-20260831-016，待人工审）
+- 属主：WorkBuddy（通宵 P9 会话，代码路）。任务书：`docs/OVERNIGHT_20260901.md` TASK-P9 卡（含进度日志与「P9 协议观察」小节）。
+- 完成内容：① `tests/test_board_review_golden.py` **新建 51 用例全绿**（纯函数特征化 10 / `parse_pcb` 6 / 8 项 review 特征化 9 / golden 端到端 5 / 对抗与盲区 21）；② 夹具 `tests/fixtures/board_review/`（`minimal.kicad_pcb` 按 8 项判据反推摆放的 60×40mm 最小板 + `minimal.kicad_sch` + `golden_minimal.json` 冻结）；③ **1 处最小 bug 修复**：`parse_pcb` 新增 `vbus_caps`，`review_protection` 不再读全局 `PCB_PATH`（修复前传入"另一块板"的 parse 结果会**静默返回错误板子的 PROTECTION 结论**）；④ 协议观察小节（BoardReview 事实标准已成形；**RouteRepair 受门禁约束的实现数 = 0，按"≥2 实现才定形式"本轮不定协议**）。
+- 关键取舍：golden **刻意打桩掉渲染**（真实 kicad-cli 存在但渲染 ~26s、PNG 字节不可复现会让 golden flaky），故 golden 无 `render_evidence` 且 `main()` 返回 1——渲染证据链另由 `tests/test_board_review.py::RenderEvidenceTests` 覆盖。**未**为规范化路径分隔符改生产代码（那会重写 `notes/m2-evidence-reset/` 已冻结证据），改在测试 `stable()` 里归一化。
+- 锁定但未修（待人工拍板）：4 处现状怪癖（① `edge_distance` 越界返回负值；② `boundary_distance` 在无 courtyard/旋转件时静默退化为质心距；③ `review_exit_code([])` 空表返回 1；④ `courtyard` 是 tuple）+ 1 处盲区（`review_decoupling` 按关键字选 IC，U3 改成实际封装 **SC-70-5** 后**静默消失**而总判定仍 pass）。
+- 验证：`tests.test_board_review_golden` 51/51；全量回归 **206/206 OK**（零回归）；bug 修复后真实 M2 板 PROTECTION 与已冻结证据**逐字节一致**；`run_gates.py` board_review 仍 `manufacturing_release is false`（接手前既有，非本次改动）。
+- 待人工审：① 该 bug 修复；② 51 条断言是否真反映"想要的现状"（怪癖与盲区目前是**锁定**而非认可）；③ RouteRepair 是否同意"实现数 0 → 本轮不定协议"；④ golden 刻意缺 `render_evidence` 是否可接受。
+- 领号说明：开工领 012，后发现并行会话撞号（013/014/015 亦被占），按任务书「撞号再 +1」改用 **016**，映射已记入任务书 P9 进度日志。
 
 ## 4. 大统领的职责（只有你能做的）
 

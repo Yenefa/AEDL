@@ -82,11 +82,11 @@
 - 明早验收标准：neuroboard.md 六步齐全；两遗留各有证据定案或"无法确定"+已试路径清单；台账有条目。
 
 ### P8 进度日志
-- [07:01] 第1周期: `neuroboard.md` 六步完成（本地克隆 `_neuroboard_repo/` @ `d8e3248`；碰撞分析 §2.3/§2.4 逐项复核成立并补行号；新增 5 项发现：LICENSE 文件 MIT 与 README 法律声明块 CC BY-NC 4.0 双声明矛盾、`GlobalDRC` 恒 `return True`、`engines/` 零文件但被 `victory_lap.py` 依赖、`tests/` 仅 2 文件 307 行且无测试 CI、`__pycache__`/运行产物入库）；11 门禁能力对照表成文（erc/drc 有形态等价但 fail-open，其余 9 项无等价）；判决=零代码复用，只作反面教材；全量测试 127/127 绿。已提交推送 `0f8f1f4`（信息带 `[AI-20260831-012]`——见下条撞号说明）。
+- [07:01] 第1周期: `neuroboard.md` 六步完成（本地克隆 `_neuroboard_repo/` @ `d8e3248`；碰撞分析 §2.3/§2.4 逐项复核成立并补行号；新增 5 项发现：LICENSE 文件 MIT 与 README 法律声明块 CC BY-NC 4.0 双声明矛盾、`GlobalDRC` 恒 `return True`、`engines/` 零文件但被 `victory_lap.py` 依赖、`tests/` 仅 2 文件 307 行且无测试 CI、`__pycache__`/运行产物入库）；11 门禁能力对照表成文（erc/drc 有形态等价但 fail-open，其余 9 项无等价）；判决=零代码复用，只作反面教材；全量测试 127/127 绿。已提交推送 `0f8f1f4`（信息带 `[AI-20260831-016]`——见下条撞号说明）。
 - [07:25] 第2周期: kicad-ai(amcolex) 定案——换路用 GitHub REST API 五层取证：仓库 404、账号存在（Alex Pabouctsidis，29 公开仓库全列，DSP/RF 画像零 KiCad 相关）、全网 `q=kicad-ai` 224 条无属主命中、事件流无创建/推送痕迹 → 判"公开仓库无存在证据/不可核实"，诚实注明 events API 90 天窗口限制；`kicadai.md` 补记小节写入。注：测试套件被并行会话增至 137 条，中途 1 次瞬态失败（并行写文件竞态），重跑 137/137 全绿，非我领地文件。
 - [07:40] 第3周期: Konnect license 细节取证完成——GitHub API license 字段 `agpl-3.0` 与 README 自声明双来源核实；README「free for the little guys」商业授权条款原文摘录 + `COMMERCIAL.md` 关键条款（内部使用免费、分发/网络服务化触发 §13、作者自释"仅交互代码为独立作品"系单方声明）写入 `THIRD_PARTY.md` §2.4 与 Konnect 行；红线不变。附带：THIRD_PARTY.md 中 NeuroBoard / kicad-ai 两行同步为本会话定案状态（该两行即 P8 产出的目录状态）。
 - [07:50] 第4周期: 收尾——README 目录/附属更新（含 `_neuroboard_repo` 勿提交警示 + .gitignore 待大统领补一行）、COLLABORATION.md P8 状态行更新、AI_USAGE_LOG 追加条目、全量回归后提交推送。待办池清空，P8 收尾。
-- 台账号撞号说明（如实记录）：本会话开工时查到最大号 011，按+1 规则用 `AI-20260831-012` 提交了 `0f8f1f4`；其后发现并行会话也用了 012（`ea5e944`）、013（`266bb23`）、014（P7 台账条目）。已推送提交不改写历史；本会话最终台账条目改用 **AI-20260831-015** 并在条目内注明此撞号经过（`0f8f1f4` 信息中的 [012] 与本条属同一会话），供人工核账。
+- 台账号撞号说明（如实记录）：本会话开工时查到最大号 011，按+1 规则用 `AI-20260831-016` 提交了 `0f8f1f4`；其后发现并行会话也用了 012（`ea5e944`）、013（`266bb23`）、014（P7 台账条目）。已推送提交不改写历史；本会话最终台账条目改用 **AI-20260831-015** 并在条目内注明此撞号经过（`0f8f1f4` 信息中的 [012] 与本条属同一会话），供人工核账。
 
 ## TASK-P9：board_review 特征化测试 + 可插拔协议预备（代码路，属主空缺待领）
 
@@ -108,11 +108,11 @@
   5. 每发现一个 bug（含"换封装后检查项静默消失"这类关键字盲区）即补一条对抗用例防回归。
 - 明早验收标准：新增用例 ≥15 条全绿；golden 冻结文件入库；协议观察小节成形；台账有条目。
 
-### P9 进度日志（属主 AI-20260831-012 已领）
+### P9 进度日志（属主 AI-20260831-016 已领）
 
 - [06:58] 开工前置：分支 `fix/m2-schematic-semantic-release`，HEAD `6baa669`（任务书写基线 `24b8eaa`，
   实测已多出 `e51fa93`/`973f780`/`f395f6c`/`24b8eaa`/`6baa669`，按现状接手）。领号：grep 台账最大
-  `AI-20260831-011` → 本会话 **AI-20260831-012**（已核对未撞号）。基线全量 **127/127 OK**（81.6s），接手时是绿的。
+  `AI-20260831-011` → 本会话 **AI-20260831-016**（已核对未撞号）。基线全量 **127/127 OK**（81.6s），接手时是绿的。
 - [06:59] 第1周期（待办#1 函数盘点）：通读 `tools/board_review.py`（466 行），18 个公开函数输入/输出形状如下
   （**即特征化测试的锁定对象**）：
 
@@ -149,6 +149,51 @@
   故 golden 端到端**必须打桩渲染**：否则单测跑 ~26s 且 PNG 字节不确定（哈希随渲染版本/抗锯齿漂移）→ golden 变 flaky。
   做法：patch `find_kicad_cli`→`None`，`main()` 跳过 `render_evidence` 但**照常计算并写出 8 项 review**，
   冻结这部分即稳定 golden。
+- [07:08] 第2周期（待办#2 夹具）：新建 `tests/fixtures/board_review/minimal.kicad_pcb` 与 `tests/fixtures/board_review/minimal.kicad_sch`
+  （最小 60x40mm 板，11 footprint / 5 via / 1 zone / 4 段 USB 走线）。几何是**按 8 项判据反推**摆放的：
+  J1(USB_C) courtyard 前沿距上板边 0.03mm；U1(ESP32) 质心 (30,15)、7.5mm 净空圈内无器件、rot=0 天线朝板边；
+  三颗去耦电容分别贴 U1/U2/U3 的 courtyard 边界（最差 3.9mm <= 8mm）；SHT30 距最近热源 36mm >= 10mm；
+  USB 两通道铜长 20.0/19.7mm（skew 0.3mm <= 1mm）；C4 挂 +5V 使 PROTECTION 有 bulk 电容。
+  实测 7 项全 pass（PROTECTION 单独验，因其当时读全局）。
+- [07:09] **bug-1 现场与修复理由（修复前先记录，遵守本卡"每处修必须先在进度日志写明"）**：
+  - **现场**：`review_protection(sch_text, pcb)`（L313-333）签名收了 `pcb: Dict` 却**完全没用它**，
+    函数体 L319-322 直接 `Path(PCB_PATH).read_text(encoding="utf-8")` 读**模块级全局常量**重新扫一遍 +5V 电容。
+  - **为什么算 bug 而不是风格问题**：`main()` 里 `pcb` 来自 `parse_pcb(PCB_PATH 文本)`，两条路径碰巧同源，
+    所以产物一直"看起来对"；但只要调用方传入**另一块板**的 parse 结果（golden 测试 patch 掉 `PCB_PATH` 时、
+    以及本卡目标"可插拔协议抽取"要求 `review(inputs)->verdict` 为纯函数时），该函数会
+    **静默返回错误板子的 PROTECTION 结论**——fail-closed 门禁里最危险的一类：不报错，只是判错。
+  - **修复（最小）**：把 +5V 电容计数下沉进 `parse_pcb`，新增返回键 `vbus_caps`；
+    `review_protection` 改为读 `pcb.get("vbus_caps", 0)`，不再读文件、不再依赖全局。
+  - **兼容性**：`parse_pcb` 仅在 `tools/board_review.py` 内被调用（`gates/schematic_semantics.py` 有自己的 `_parse_pcb`），
+    新增返回键是**纯加法**；`review_protection` 唯一调用方是 `main()`，传入的正是新 parse 结果。
+  - **不改的事**：阈值、判据、evidence 文案、`ok = vbus_caps >= 1` 全部保持原样；预期产物逐字节不变
+    （修复后已用真实 M2 板复跑比对，见下条）。
+- [07:20] 第3周期（待办#2+#3+#5）：新建 `tests/test_board_review_golden.py`，**51 用例全绿**（远超验收 >=15）。
+  分布：纯函数特征化 10 / parse_pcb 6 / 8 项 review 特征化 9 / golden 端到端 5 / 对抗与盲区 21。
+  golden 冻结于 `tests/fixtures/board_review/golden_minimal.json`（渲染打桩为 None，故报告中无 `render_evidence`，main 返回 1——这是有意的确定性状态）。
+- [07:20] **bug-1 修复已落地并验证产物不变**：`parse_pcb` 新增 `vbus_caps` 返回键，`review_protection` 改为读
+  `pcb.get("vbus_caps", 0)`。用真实 M2 板复跑比对：PROTECTION 的 `id`/`status`/`evidence`/`measured` 与磁盘上已冻结的
+  `board_review_auto.json` **逐字节一致**（vbus_caps=1, tvs=False, pass）。即：修复只改变了"这个函数从哪儿取数"，
+  没有改变任何判据或结论。回归用例 `test_protection_uses_the_parsed_pcb_not_the_global_path` 直接钉死该行为（全局指向有 bulk 电容的板、
+  入参说没有时，必须按入审判 fail）。
+- [07:21] 特征化测试额外锁定的 4 处现状怪癖（均写进用例 docstring，供协议化时决策）：
+  ① `edge_distance` 越界返回**负值**不取 abs（`review_usb_edge` 用 `0 <= d <= MAX` 兜底）；
+  ② `boundary_distance` 在 IC 无 courtyard（含**旋转件**，parse 时直接置 None）时静默退化为质心距；
+  ③ `review_exit_code([])` **空表返回 1**（fail-closed，必须继承）；
+  ④ `courtyard` 是 **tuple** 不是 list，且旋转件为 None。
+- [07:21] **盲区对抗用例（待办#5，只锁现状未修）**：`review_decoupling` 按 lib_id 关键字选 IC。
+  把 U3 从 SOT-353 改名为 **SC-70-5**（正是 M2 换料后 LDO 的实际封装）后，U3 **静默从去耦检查中消失**
+  而总判定仍是 pass——这就是任务书点名的"换封装后检查项静默消失"。已写用例
+  `test_decoupling_silently_drops_an_ic_whose_package_is_renamed` 冻结该行为；若将来关键字表扩了，这条会先红，提醒人工确认是有意修复还是回归。
+- [07:21] golden 可维护性：报告里 `pcb` 字段是 `Path.relative_to(...)` 的结果（Windows 下是反斜杠）。
+  **没有**改生产代码去规范化分隔符——那会重写 `notes/m2-evidence-reset/` 里已冻结的 M2 证据（该文件禁止改）。
+  改为在测试的 `stable()` 里归一化，golden 因此跨平台稳定。golden 重生命令：
+  `py -3 tests/test_board_review_golden.py --regen`。
+- [07:26] **台账号撞号更正（按任务书"发现撞号就再 +1"）**：本会话 06:58 查号时台账最大为 011，
+  故领用 `AI-20260831-012` 并已写入上面几条日志。现复核发现：并行会话同样领用了 012
+  （其台账 L1349-1351 如实记录了这次撞号，并把 013/014/015 也占掉了）。
+  当前台账实体条目最大为 `## AI-20260831-015`，且 016 在台账全文无引用 → **本会话改用
+  `AI-20260831-016`**，上面日志中的 012 一律按 016 理解（不改写他人日志，只在此留映射）。
 
 ### P9 协议观察（待办#4，只写文档不动代码）
 
