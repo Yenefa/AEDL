@@ -15,9 +15,9 @@
 - 板子：M2 ESP32-C3+SHT30；D1 极性已修、U3 已换料 C235316；待人工重签 board_review 后方可下单。
 - 门禁：11 个 = 9 PASS + board_review FAIL（仅 `manufacturing_release=false` 等重签）+ datasheet_contract FAIL（32 项 BLOCK，全部待人工签发类）。
 - 分支：`fix/m2-schematic-semantic-release`，已推送；master 未合并。
-- 测试：216/216 全绿（`py -3 -m unittest discover -s tests`，2026-08-31 深夜实测）。
+- 测试：269/269 全绿（`py -3 -m unittest discover -s tests`，2026-08-31 深夜实测）。
 - 通宵三卡：P7 runtime server 实测+31 新测试+400 JSON 修复；P8 NeuroBoard intake+kicad-ai 判"不存在"+Konnect license 取证；P9 board_review 51 条特征化/golden 测试。API 契约 6 条缺口已补（v1.1）。
-- 待大统领：① 重签 board_review（大统领 2026-08-31 指示：不急，最后再下单）；② datasheet_contract 32 项签发（U3 热复核倾向路线 B=换 ≥1A 方案，需你裁决）；③ master 合并；④ `ok` 死逻辑与 AI-012 撞号两处小裁决（见台账 017）。
+- 待大统领：① P12 批次 commit 授权（board_review 现仅余 manufacturing_release=false 一条报错，算法修订已绑定）；② 重签 board_review（大统领指示：不急，最后再下单）；② datasheet_contract 32 项签发（U3 热复核倾向路线 B=换 ≥1A 方案，需你裁决）；③ master 合并；④ `ok` 死逻辑与 AI-012 撞号两处小裁决（见台账 017）。
 - 吸收：CircuitBot/KiCadAI/KiCad MCP/NeuroBoard intake 全部完成；kicad-ai(amcolex) 判"不存在/不可核实"。
 - 检索：`docs/ID_MAP.md`；协作卡：`docs/COLLABORATION.md`；RAG 取舍：`docs/knowledge/RAG_DECISION.md`。
 

@@ -145,3 +145,19 @@
 - 审 M2 的 89 文件 + 重签 board_review + commit/push 授权（不变，仍是第一优先）
 - 审 P1 产物（合同 + 测试）后批准 P4 挂载
 - 多 AI 的成果统一由你审核提交（保持单一 commit 权限，历史干净）
+
+### TASK-P12-A：USB courtyard 任意边越界 FAIL（问题1）🔨 待领
+- 属主：待领。难度：中。领地（可写）：`tools/board_review.py`（仅 USB_EDGE 评审函数，约 220–224 行一带）、`tests/test_board_review.py`（追加自己的用例）、`docs/compliance/AI_USAGE_LOG.md`（自己条目）、本卡状态行。
+- 背景：`review_usb_edge`（或对应评审函数）只算 courtyard 前沿到板框上边的 Y 距离，不查 X 方向/其他边。已复现：板框 0..60 × 0..40，J1 x=-5、y=0.5、courtyard=(-1,-0.4,1,0.4)，仍 PASS。
+- 任务：带 courtyard 的 USB 连接器从**任意一边**（左/右/上/下）越出板框都必须 FAIL；只算"在板框内的距离"当 courtyard 全在板内时才成立，越界（任何方向出框）直接 FAIL。
+- 验收：四边参数化回归测试（至少左/右各一 + 既有上边用例保持）；修复后 `py -3 -m unittest tests.test_board_review` 全绿；不破坏既有 PASS 用例。
+- **协调（必读）**：`tools/board_review.py` 同时有 P12-B 在改天线函数、P12-C 在改报告生成处（只加 `algorithm_revision` 字段）。只动自己的函数体；开工前 `git status` 看现场；**不要重新生成 `board_review_auto.json`（P12-C 专属）**；不 commit 不 push。
+- 禁止：改 `gates/`、改几何算法之外的评审逻辑、设置 manufacturing_release、reset/checkout。
+
+### TASK-P12-B：U1 天线模块板外 FAIL（问题2）🔨 待领
+- 属主：待领。难度：中。领地（可写）：`tools/board_review.py`（仅 `review_antenna` 及其 edge 距离辅助，约 249、274–276 行一带）、`tests/test_board_review.py`（追加自己的用例）、`docs/compliance/AI_USAGE_LOG.md`（自己条目）、本卡状态行。
+- 背景：`edge_distance` 在板外返回负数，但 `review_antenna` 未先检查模块是否在板内。已复现：U1 x=12、y=-1、rot=0 → edge_distance=-1.0，总判定 PASS。
+- 任务：`review_antenna` 先判定模块 courtyard/主体在板框内，任意一边越界即 FAIL（负距离/出框都算越界）。
+- 验收：四边参数化测试（x<0、x>宽、y<0、y>高 至少各一，或等价参数化）；**保留现有 rot=0/180 朝向测试不动**；修复后 `py -3 -m unittest tests.test_board_review` 全绿。
+- **协调（必读）**：同 P12-A（同文件不同函数；不要重新生成 auto 报告；不 commit 不 push）。
+- 禁止：同 P12-A。
