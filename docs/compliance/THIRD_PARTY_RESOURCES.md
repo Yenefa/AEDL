@@ -126,9 +126,13 @@
 - 来源：Espressif ESP32-C3-WROOM-02、Sensirion SHT3x-DIS、MICRONE ME6211C33M5G-N、MICRONE ME6211C33R5G（C235316，V20 版数据手册，用于 U3 换料引脚兼容性核实）以及候选 TECH PUBLIC TP6211C33M5G 的原厂/LCSC 数据手册链接
 - License / 授权类型：各权利人版权；再分发权 `TO_VERIFY`
 - 用途：建立独立硬件语义合同，并评估零库存器件的候选替代
-- 使用方式：只提取管脚、电气和推荐外围约束；本仓库当前不复制 PDF
+- 使用方式：只提取管脚、电气和推荐外围约束
 - 是否修改上游源码：否
 - 是否随 AEDL 再分发：NO
+- **2026-08-31 人工决定（AI-20260831-025）**：本地冻结副本**保留**于
+  `src/hardware/m2-board/evidence/datasheets/`（6 份 PDF，manifest 记录 source_url/sha256/
+  retrieved_at 完整归因）；版权归原厂、仅作参考与本地复现、归因指向官方源的显式声明见
+  `NOTICE` 与 README「知识产权与许可合规」节。
 - 关键许可义务：引用来源，不复制未获授权全文
 - 使用限制：名称相似不代表引脚或电气兼容；缺失参数保持 UNKNOWN
 - AEDL 自主开发边界：数据手册是外部事实源；合同、交叉验证和取舍由 AEDL/人工完成
@@ -136,3 +140,15 @@
 - 最终开放方式：仅保留链接和必要事实引用
 - 对应模块：`gates/contracts/m2_schematic_contract_v1.json`、`docs/knowledge/PROJECT_PITFALLS.md`
 - 备注：候选替代尚未获人工制造签发。2026-08-30 AI-20260830-002 依据 ME6211C V20 数据手册核实 SOT-353 与 SOT-23-5 引脚序一致后执行 U3 换料（C82942 → C235316），换料全链改动仍处 `PENDING_HUMAN_REVIEW`。
+
+## RES-008
+
+- 名称：项目 License 选择——Apache License 2.0
+- 类型：治理决定（人工拍板）
+- 版本：Apache License 2.0（正文取自 apache.org 官方原版文本，2026-08-31）
+- 来源：大统领 2026-08-31 拍板（此前仓库无 LICENSE，默认保留所有权利）
+- License / 授权类型：Apache-2.0；第三方归因载体为 `NOTICE`
+- 用途：公开仓库的法律基础（含专利授权条款）；六份冻结 PDF 依 RES-007 补记保留并归因
+- 使用方式：见 LICENSE / NOTICE / README「知识产权与许可合规」节
+- 是否修改上游源码：否
+- 是否随 AEDL 再分发：是（本项目自身代码与文档；第三方文档归因除外）

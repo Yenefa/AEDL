@@ -1,0 +1,30 @@
+AEDL — Autonomous Hardware Engineering Agent
+project-027-autonomous-hardware-agent
+Copyright 2026 AEDL project contributors
+
+This product includes software and documentation developed within the AEDL
+project, licensed to the public under the Apache License, Version 2.0
+(see LICENSE).
+
+Third-party datasheets and manufacturer documents
+--------------------------------------------------
+
+The directory `src/hardware/m2-board/evidence/datasheets/` contains frozen
+local copies of manufacturer datasheets and one mechanical drawing. These
+documents remain the copyrighted property of their respective manufacturers:
+
+- ESP32-C3-WROOM-02 datasheet — Espressif Systems
+- SHT3x-DIS datasheet — Sensirion AG
+- ME6211 datasheet (V20) — MICRONE (南京微盟) Electronics
+- KT-0603R approval specification — KENTO
+- TYPE-C-31-M-12 mechanical drawing — provenance questionable
+  (watermarked HIROSE; recorded in the manifest as
+  FROZEN_PROVENANCE_QUESTIONABLE and used as geometry reference only)
+
+They are included solely as reference material and local reproduction for
+traceability of hardware-design verification. AEDL makes no claim of
+authorship over these documents. Authoritative provenance for every file
+(source URL, sha256, retrieved_at) is recorded in
+`src/hardware/m2-board/evidence/datasheet_manifest.json`, which points back
+to the official upstream sources. For any use beyond reference, consult the
+original manufacturers.

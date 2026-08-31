@@ -1836,3 +1836,31 @@
 
 - Commit / PR：未提交（未授权）。
 - 最终状态：`PENDING_HUMAN_REVIEW`
+
+## AI-20260831-025
+
+- 日期：2026-08-31
+- 任务名称：License 拍板落地——Apache-2.0 + 冻结 PDF 保留 + 显式归因声明
+- 模块/路径：`LICENSE`（新，apache.org 官方原版 202 行）、`NOTICE`（新，第三方归因载体）、
+  `README.md`（新增「知识产权与许可合规」节）、`docs/compliance/THIRD_PARTY_RESOURCES.md`
+  （RES-007 补记人工决定 + RES-008 登记）、本台账
+
+- 做了什么：落地大统领 2026-08-31 两项拍板——① 仓库此前无 LICENSE（默认保留所有权利），
+  现以 Apache-2.0 发布（正文用 curl 取官方原版文本，避免记忆转写法律文本的差错）；
+  ② 六份厂商 datasheet 冻结件保留不清零：manifest 的 source_url/sha256/retrieved_at
+  本身就是完整归因链，另在 NOTICE 与 README 显式声明"版权归原厂、仅作参考与本地冻结复现、
+  不声明为团队作品"（吻合赛题"知识产权与许可合规意识"要求）。J1 图纸在 NOTICE 中如实
+  标注 FROZEN_PROVENANCE_QUESTIONABLE（HIROSE 水印疑点），仅作几何参考。
+
+- 验证：LICENSE 头尾与 apache.org 原版一致（202 行）；NOTICE/README/RES 逐条落盘；
+  全量测试与本次改动无交集（纯文档），门禁不受影响。
+
+- 已知限制：① NOTICE 版权行暂署 "AEDL project contributors"，若需具名（个人/实体）
+  由大统领改定；② RES-001/003 的文档权属 `TO_VERIFY` 仍未消除（属另一问题，待人工确认
+  该两份文档的作者与再分发权）；③ 公开前 4 个含本机路径的已跟踪文件仍未脱敏
+  （git 历史是否含同样路径未审计）——public 化前必须处理；④ 若评审在意仓库体积，
+  PDF 总体积远小于单次大文件，暂不上 LFS（大统领已有预判）。
+
+- Commit / PR：随本条提交推送。
+
+- 最终状态：`PENDING_HUMAN_REVIEW`

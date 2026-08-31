@@ -74,6 +74,16 @@ BOM/POS/ZIP 结构检查、8 项板级评审（`manufacturing_release=true`）�
 1. 嘉立创下单（`delivery/jlc_gerber_upload.zip` + `bom.csv` + `pos.csv`，2026-08-29 重新导出）。
 2. 回件后执行 C 级实测：上电、功耗、BLE 距离、温湿度精度、USB 眼图、瞬态与 24/168 小时稳定性。
 
+## 知识产权与许可合规
+
+- 本项目代码与文档以 **Apache License 2.0** 发布（见 `LICENSE`；第三方归因见 `NOTICE`）。
+- `src/hardware/m2-board/evidence/datasheets/` 中冻结的厂商数据手册/图纸**版权归各原厂**：
+  本仓库仅作参考与本地冻结复现（追溯硬件验证依据）使用，逐份文件的 source_url / sha256 /
+  retrieved_at 记录于 `datasheet_manifest.json`，归因指向官方源，**不声明为团队作品**；
+  超出参考用途请咨询原厂。
+- 第三方开源组件的复用边界逐项登记于 `docs/compliance/THIRD_PARTY_RESOURCES.md`
+  （含 Konnect AGPL 零接触红线）。
+
 ## 备注
 
 大统领四项拍板（2026-08-24）：①先出完整调研报告；②KiCad 设计 + 嘉立创打板；③验证边界第一档 = 无实体板交付；④起步域 = MCU 最小系统 + 外设。
