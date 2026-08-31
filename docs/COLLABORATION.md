@@ -123,8 +123,8 @@
 - ⚠️ **留给 P1 的连带缺口（本会话领地外，未改动）**：`gates/requirements_runtime_server.py` 的 `finalize`（L128-136）只写 `contract_sha256`，**没有写 `intent_semantic_sha256`**。已实测：经它 finalize 的合同送 C4 会被拒（`intent_binding must contain exactly intent_path, intent_semantic_sha256` + `malformed`）。修法：在写自哈希前 `binding["intent_semantic_sha256"] = intent_semantic_sha256(json.loads(intent_path.read_text(...)))`。该文件属 P1 领地，本会话只记录不动手。
 - 遗留（非阻塞）：run_gates/export 在本会话环境里被 WorkBuddy 的 sitecustomize safe-delete 钩子拦截 `unlink`/`rmtree`（回收站不可用），需用 `python -S` 运行或人工在正常终端跑；这不是仓库代码问题。
 
-### TASK-P7：finalize 语义哈希缺口修复 + runtime server 测试补强 🔨 进行中（通宵自迭代）
-- 属主：ZCode 主会话。任务书全文（领地/待办池/验收标准）：`docs/OVERNIGHT_20260901.md` TASK-P7 卡。
+### TASK-P7：finalize 语义哈希缺口修复 + runtime server 测试补强 ✅ done（AI-20260831-012/013/014，待人工审）
+- 属主：ZCode 主会话。缺口实为 P1 后段已修，实测验收 + 31 新测试 + 400 JSON 修复 + RecordedProvider 回放（AI-018）。任务书全文（领地/待办池/验收标准）：`docs/OVERNIGHT_20260901.md` TASK-P7 卡。
 
 ### TASK-P8：开源 Intake Phase 4（NeuroBoard）+ 遗留定案 ✅ done（AI-20260831-015，待人工审）
 - 属主：Qoder（通宵 P8 会话，研究路，领地 `notes/open_source_intake/`）。任务书：`docs/OVERNIGHT_20260901.md` TASK-P8 卡（含进度日志）。
