@@ -22,6 +22,7 @@ Design rules (same as gates/requirements_contract.py):
 from __future__ import annotations
 
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -35,6 +36,7 @@ from gates.requirements_contract import (
     intent_semantic_sha256,
     validate_requirements_contract,
 )
+from gates.requirements_llm_replay import load_replay_provider
 from gates.requirements_runtime import build_proposal_prompt, parse_llm_proposal
 
 DEFAULT_PORT = 8787
@@ -271,11 +273,19 @@ class _Handler(BaseHTTPRequestHandler):
 
 def serve(port: int = DEFAULT_PORT, propose: Optional[Callable[[str], Dict[str, Any]]] = None) -> None:
     root = Path(__file__).resolve().parents[1]
+    if propose is None:
+        # Deterministic demo/test mode (KiCadAI-inspired replay, see
+        # gates/requirements_llm_replay.py): point AEDL_LLM_REPLAY at a
+        # fixture to serve recorded LLM outputs; unmatched requests fail
+        # closed instead of silently using the heuristic proposal.
+        replay = os.environ.get("AEDL_LLM_REPLAY")
+        if replay:
+            propose = load_replay_provider(Path(replay))
     _Handler.runtime = RequirementsRuntime(propose=propose)
     _Handler.root = root
     server = HTTPServer(("127.0.0.1", port), _Handler)
     print(f"AEDL requirements runtime listening on http://127.0.0.1:{port}")
-    print(f"  propose hook: {'configured' if propose else 'NOT configured (heuristic fallback)'}")
+    print(f"  propose hook: {'replay: ' + os.environ['AEDL_LLM_REPLAY'] if os.environ.get('AEDL_LLM_REPLAY') else ('configured' if propose else 'NOT configured (heuristic fallback)')}")
     print("  Ctrl+C to stop")
     try:
         server.serve_forever()

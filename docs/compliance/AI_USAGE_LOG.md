@@ -1497,3 +1497,30 @@
 - Commit / PR：81b0365（API v1.1）、证据刷新与本文档随本条提交；已推送。
 
 - 最终状态：`PENDING_HUMAN_REVIEW`
+
+## AI-20260831-018
+
+- 日期：2026-08-31（深夜）
+- 任务名称：KiCadAI 思想层 Adapt——RecordedProvider 确定性回放模式落地
+- 模块/路径：`gates/requirements_llm_replay.py`（新）、`tests/fixtures/llm_replay/proposal_fixture.json`（新）、
+  `tests/test_requirements_llm_replay.py`（新，8 用例）、`gates/requirements_runtime_server.py`（serve 接入
+  `AEDL_LLM_REPLAY` 环境变量 + 启动横幅显示回放源）、`notes/open_source_intake/kicadai.md`（补记落地）
+
+- 做了什么：
+  - 落地 kicadai.md「近期可落地建议」第 2 条（AI 输出录制回放测试模式），**思想层 Adapt、零代码复制**
+    （KiCadAI 为 Go 实现，AEDL 为标准库 Python，语义适配 AEDL 的 fail-closed 哲学）。
+  - fail-closed 三条：未命中请求 ValueError（绝不静默回落启发式提案）；fixture 畸形/空 records/
+    缺 matcher/缺 response 一律加载即拒；录制内容走真实 parse_llm_proposal 边界（垃圾录制照样降级为警告）。
+  - 回放链路端到端确定性验证：两个独立 provider 实例对同一请求产出逐字节一致的建议；
+    录制中 LLM 试图附带 answer 也被边界丢弃（answer 恒 None）。
+  - NeuroBoard STEP 4 复核：全部为 Reject/Idea Only，无可落地代码项（诚实记录：本轮零吸收）。
+
+- 验证：回放套件 8/8；全量回归 216/216 OK（本日 127→216，逐项：+10 server、+18 边界、
+  +51 P9 golden、+8 回放、+2 活体）。
+
+- 已知限制：回放仅支持 label 精确匹配与 contains 子串匹配，无正则/参数化模板（现无需求，
+  有需求再议）；live LLM hook 接真实模型的端到端仍 NOT_RUN。
+
+- Commit / PR：随本条提交，已推送。
+
+- 最终状态：`PENDING_HUMAN_REVIEW`

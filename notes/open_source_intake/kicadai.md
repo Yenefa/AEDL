@@ -174,3 +174,11 @@ KiCadAI capability assessment
 - **最终判决：`amcolex/kicad-ai` 作为公开 GitHub 仓库无存在证据，判定"不存在/不可核实"；外部转述的其能力描述（adversarial reviewer / findings ledger / waivers / done-gate / 4-4 USB case）不可挂到任何可辨识来源，AEDL 材料维持不引用。** 若未来有人提供该仓库的 raw 内容或可访问链接，推翻本判决只需重跑上表五条检索。
 
 （补记关联：通宵任务书 TASK-P8，台账条目见 `docs/compliance/AI_USAGE_LOG.md` 本会话条目，PENDING_HUMAN_REVIEW。）
+
+## 补记（AI-20260831-018，同日）：RecordedProvider 建议已落地
+
+- 「AI 输出录制回放测试模式」以思想层 Adapt 实现（零代码复制）：
+  `gates/requirements_llm_replay.py`（fail-closed 回放：未命中即 ValueError，畸形 fixture 加载即拒）
+  + `tests/fixtures/llm_replay/proposal_fixture.json` + `tests/test_requirements_llm_replay.py` 8 用例。
+- 服务端入口支持 `AEDL_LLM_REPLAY=<fixture路径>` 环境变量，未命中请求不会被启发式提案静默兜底。
+- 全量回归 216/216（本日从 127 起步：+10 server/validate、+18 边界、+51 P9 golden、+8 回放、+2 活体，实跑为准）。
