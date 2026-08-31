@@ -1864,3 +1864,30 @@
 - Commit / PR：随本条提交推送。
 
 - 最终状态：`PENDING_HUMAN_REVIEW`
+
+## AI-20260831-026
+
+- 日期：2026-08-31
+- 任务名称：U3 路线 B 选型提案——AMS1117-3.3（C6186）候选调研与热核算
+- 模块/路径：`docs/u3_route_b_selection_proposal_v1.md`（新，纯提案，未动 BOM/intent/PCB）
+
+- 做了什么：
+  - 大统领拍板路线 B（换 ≥1A 级 3.3V 方案）后执行选型调研。豆包搜索配额耗尽（500/月），
+    换 WebFetch 直查 LCSC/JLC 零件页核实候选，全部带来源。
+  - **核心工程结论：热问题解在封装（θJA）不在电流额定**——1A SOT-23-5 类候选在持续
+    350mA 工况下 Tj 仍 >200°C 不可行；只有 SOT-223（~90°C/W）双工况可行。
+  - 推荐 AMS1117-3.3（C6186）：JLC 基础库、支持装配、dropout 1.1V@800mA 满足 1.7V 压差、
+    LCSC 现货 109 万。θJA 与引脚序标 `TO_VERIFY`（ECO 冻结 datasheet 后核对）。
+  - 如实列出 ECO 影响面：封装不兼容（非逐脚替换，原理图/PCB/布线/courtyard 全重做）、
+    board_review.py 的 SOT-353 关键字陷阱需同步补 SOT-223（PIT 防复发）、全链同步清单。
+  - **未动 BOM/intent/PCB**——选型等人工批准。
+
+- 验证：C6186 参数经 LCSC 与 JLC 两页交叉核实；热核算按 ADR-005 θJA 法分档列示；
+  豆包配额耗尽已按换通道规矩处理并在提案中留痕。
+
+- 已知限制：θJA 90°C/W、U1 峰值电流 350mA 量级均为 `TO_VERIFY`（须冻结原件逐页核对）；
+  JLC 装配库存数未实时核（批准 ECO 后 refresh_bom_stock.py 零库存 fail-closed 把关）。
+
+- Commit / PR：随本条提交推送。
+
+- 最终状态：`PENDING_HUMAN_REVIEW`（等选型批准）
