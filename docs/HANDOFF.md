@@ -17,7 +17,7 @@
 - 分支：`fix/m2-schematic-semantic-release`，已推送；master 未合并。
 - 测试：216/216 全绿（`py -3 -m unittest discover -s tests`，2026-08-31 深夜实测）。
 - 通宵三卡：P7 runtime server 实测+31 新测试+400 JSON 修复；P8 NeuroBoard intake+kicad-ai 判"不存在"+Konnect license 取证；P9 board_review 51 条特征化/golden 测试。API 契约 6 条缺口已补（v1.1）。
-- 待大统领：① 重签 board_review；② datasheet_contract 32 项签发（U3 热复核倾向路线 B=换 ≥1A 方案，需你裁决）；③ master 合并；④ `ok` 死逻辑与 AI-012 撞号两处小裁决（见台账 017）。
+- 待大统领：① 重签 board_review（大统领 2026-08-31 指示：不急，最后再下单）；② datasheet_contract 32 项签发（U3 热复核倾向路线 B=换 ≥1A 方案，需你裁决）；③ master 合并；④ `ok` 死逻辑与 AI-012 撞号两处小裁决（见台账 017）。
 - 吸收：CircuitBot/KiCadAI/KiCad MCP/NeuroBoard intake 全部完成；kicad-ai(amcolex) 判"不存在/不可核实"。
 - 检索：`docs/ID_MAP.md`；协作卡：`docs/COLLABORATION.md`；RAG 取舍：`docs/knowledge/RAG_DECISION.md`。
 
@@ -198,7 +198,7 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
 - PowerShell 无 heredoc，git commit 用 `-F msgfile.txt` 方式。
 - akcli 0.21.0 位于
   `C:\Users\fuker\AppData\Local\hermes\hermes-agent\venv\Scripts\akcli.exe`（已恢复可用）。
-- 调试产物可删：`freerouting_run2/3.log`、`g4_drc_probe.json`、`m2_board_rerun.ses`、
-  `tools/polish_routes.py`、`tools/probe_pads.py`。
+- （2026-08-31 大统领批准清理）调试产物已删除：`m2_board_rerun.ses`、`tools/polish_routes.py`、
+  `tools/probe_pads.py`（freerouting_run2/3.log、g4_drc_probe.json 此前已不存在）。
 - （P3 会话补，2026-08-31）GitHub 克隆 KiCadAI 这类深路径仓库在 Windows 检出会因路径
   长度失败（exit 128），需 `git clone -c core.longpaths=true`。
