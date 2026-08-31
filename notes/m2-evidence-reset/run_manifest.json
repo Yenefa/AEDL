@@ -1,12 +1,12 @@
 {
   "schema_version": "m2-evidence-reset-run.v1",
-  "run_id": "m2-81b036552feb5a5c37b9531bb23f73e8e2fe2771-2026-08-30T23:53:58Z",
-  "run_at": "2026-08-30T23:53:58Z",
+  "run_id": "m2-e4eec636999c9de239cb11ab7abbc872d9c84aaf-2026-08-31T12:25:44Z",
+  "run_at": "2026-08-31T12:25:44Z",
   "root": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent",
   "git": {
-    "commit": "81b036552feb5a5c37b9531bb23f73e8e2fe2771",
+    "commit": "e4eec636999c9de239cb11ab7abbc872d9c84aaf",
     "dirty": true,
-    "status_porcelain": "M notes/m2-evidence-reset/generated/g2_erc_current.json\n M notes/m2-evidence-reset/generated/g4_drc_current.json\n M notes/m2-evidence-reset/generated/learning_gate_current.json\n M notes/m2-evidence-reset/generated/m2_board_current.net.xml\n M notes/m2-evidence-reset/generated/schematic_semantics_current.json\n M notes/m2-evidence-reset/generated/semantic_fault_injection_current.json\n M notes/m2-evidence-reset/run_manifest.json\n?? notes/open_source_intake/_neuroboard_repo/\n?? spike/\n?? spike_stage2/\n?? src/hardware/m2-board/m2_board_rerun.ses\n?? tools/polish_routes.py\n?? tools/probe_pads.py"
+    "status_porcelain": "M docs/COLLABORATION.md\n M docs/compliance/AI_USAGE_LOG.md\n M gates/gate_core.py\n M gates/run_gates.py\n M notes/m2-evidence-reset/generated/board_bottom.png\n M notes/m2-evidence-reset/generated/board_review_auto.json\n M notes/m2-evidence-reset/generated/board_top.png\n M notes/m2-evidence-reset/generated/g2_erc_current.json\n M notes/m2-evidence-reset/generated/g4_drc_current.json\n M notes/m2-evidence-reset/generated/learning_gate_current.json\n M notes/m2-evidence-reset/generated/m2_board_current.net.xml\n M notes/m2-evidence-reset/generated/schematic_semantics_current.json\n M notes/m2-evidence-reset/generated/semantic_fault_injection_current.json\n M notes/m2-evidence-reset/run_manifest.json\n M tests/fixtures/board_review/golden_minimal.json\n M tests/fixtures/board_review/minimal.kicad_pcb\n M tests/test_board_review.py\n M tests/test_board_review_golden.py\n M tests/test_gate_core_review.py\n M tests/test_run_gates.py\n M tools/board_review.py\n?? spike/\n?? spike_stage2/"
   },
   "status": "fail",
   "exit_code": 1,
@@ -134,7 +134,7 @@
     },
     "semantic_netlist": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\m2_board_current.net.xml",
-      "sha256": "730fa7e04a38087e90e20fe334eb13f1111707125bee3ef307effc7ac59d19df",
+      "sha256": "fafe76eb9cbe9d274583a99072bd16050113d6cc6b4f91ff8604a86cf34daea8",
       "exists": true
     },
     "cpl_current": {
@@ -144,27 +144,27 @@
     },
     "semantic_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\schematic_semantics_current.json",
-      "sha256": "7a8114069ccd208bd7d5fece73bc973e173c09a085dab63ba38149f3eb0667e6",
+      "sha256": "0ca3671b5ef2dfcc1f2a2899d1de9bd6cb8cfc7706c749cbefe7942171ef5978",
       "exists": true
     },
     "fault_injection_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\semantic_fault_injection_current.json",
-      "sha256": "14638f78f40d3fce7d804f3794bd97e6c0248ba83ab3961f34444361d8d4a012",
+      "sha256": "e8db3254dfe3b5f773385a5b783bb1d768a61635d5a63bdd025b8766326a554d",
       "exists": true
     },
     "learning_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\learning_gate_current.json",
-      "sha256": "00354bb287300d955cbed5d73c715c90eca97dbca0ee81f7d482d956dfb5a16e",
+      "sha256": "3adb2276428d2059f68d00f69a11d0a0e55ee27442f865a619469efedefa2b9e",
       "exists": true
     },
     "erc_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g2_erc_current.json",
-      "sha256": "05deaa5c3b35135b3e21d9dedf0a407982f1963624b45f2fdd7b8e7194cb9bbd",
+      "sha256": "08dba469ca7b525384e664c18444cbf4ebf4f03dc6a185132802b52946ba4798",
       "exists": true
     },
     "drc_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g4_drc_current.json",
-      "sha256": "73f59f0aaed5d6139ae77784e6e90991ab034f43257823629e403830bef4c204",
+      "sha256": "92dde8ba2e5020e6960b65b0b0937145db92bcebc677356ceb2e377f78ba839c",
       "exists": true
     }
   },
@@ -246,7 +246,20 @@
         "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\ops_validate_current.json",
         "ops_path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\hardware\\m2-board\\ops_gen.json",
         "op_count": 109,
-        "ops_sha256": "57bd61aa1e2c0a337de9c8a9e8a181db02d8fba7ba650e086d980f3df0fd28a4"
+        "ops_sha256": "57bd61aa1e2c0a337de9c8a9e8a181db02d8fba7ba650e086d980f3df0fd28a4",
+        "live_validation": {
+          "executable": "C:\\Users\\fuker\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\akcli.exe",
+          "expected_version": "akcli 0.21.0 (protocol 2)",
+          "version": "akcli 0.21.0 (protocol 2)",
+          "exit_code": 0,
+          "result": {
+            "protocol_version": 2,
+            "valid": true,
+            "ops_sha256": "57bd61aa1e2c0a337de9c8a9e8a181db02d8fba7ba650e086d980f3df0fd28a4",
+            "op_count": 109,
+            "errors": []
+          }
+        }
       },
       "errors": [],
       "evidence_grade": "A"

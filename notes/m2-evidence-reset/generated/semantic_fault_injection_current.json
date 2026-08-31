@@ -1,7 +1,7 @@
 {
   "$schema": "https://aedl.local/schemas/semantic-fault-injection-report.v1.json",
   "schema_version": 1,
-  "generated_at": "2026-08-30T23:53:58Z",
+  "generated_at": "2026-08-31T12:25:41Z",
   "status": "pass",
   "baseline_status": "pass",
   "inputs": {

@@ -1,5 +1,6 @@
 {
-  "generated_at": "2026-08-30T19:34:42Z",
+  "algorithm_revision": "sha256:b5e3d4ac0b3b4dd3bb2c80ed58300f598c1b78d779345b2bc495af850cb9354d",
+  "generated_at": "2026-08-31T11:43:18Z",
   "pcb": "src\\hardware\\m2-board\\m2_board.kicad_pcb",
   "board_outline_mm": [
     0.0,
@@ -37,7 +38,7 @@
     {
       "id": "ESP_ANTENNA",
       "status": "pass",
-      "evidence": "ESP32-C3 U1 (12.0,18.0) rot=0.0; 质心距板边 12.00mm；7.5mm 净空圈内器件: 无；天线端朝向=板边(正确)（按 WROOM-02 天线在 -Y 端、rot=0.0deg 推断）",
+      "evidence": "ESP32-C3 U1 (12.0,18.0) rot=0.0; 质心距板边 12.00mm；7.5mm 净空圈内器件: 无；天线端朝向=板边(正确)（按模组天线在本地 -Y 端、旋转后方向向量 (0.00,-1.00) 推断）",
       "measured": {
         "edge_distance_mm": 12.0,
         "keepout_intruders": [],
@@ -56,14 +57,14 @@
     {
       "id": "DECOUPLING",
       "status": "pass",
-      "evidence": "IC→最近去耦电容距离（courtyard 边界距，上限 8.0mm）：[{\"ic\": \"U3\", \"nearest_cap\": \"C1\", \"boundary_distance_mm\": 3.4}, {\"ic\": \"U2\", \"nearest_cap\": \"C4\", \"boundary_distance_mm\": 2.3}, {\"ic\": \"U1\", \"nearest_cap\": \"C3\", \"boundary_distance_mm\": 0.0}]",
+      "evidence": "预期 IC 角色集 ['U1', 'U2', 'U3']；IC→最近去耦电容距离（courtyard 边界距，电容须与该 IC 共享电源网络，上限 8.0mm）：[{\"ic\": \"U1\", \"nearest_cap\": \"C3\", \"boundary_distance_mm\": 0.0}, {\"ic\": \"U2\", \"nearest_cap\": \"C4\", \"boundary_distance_mm\": 2.3}, {\"ic\": \"U3\", \"nearest_cap\": \"C1\", \"boundary_distance_mm\": 3.4}]",
       "measured": {
         "worst_distance_mm": 3.4,
         "ics": [
           {
-            "ic": "U3",
-            "nearest_cap": "C1",
-            "boundary_distance_mm": 3.4
+            "ic": "U1",
+            "nearest_cap": "C3",
+            "boundary_distance_mm": 0.0
           },
           {
             "ic": "U2",
@@ -71,11 +72,12 @@
             "boundary_distance_mm": 2.3
           },
           {
-            "ic": "U1",
-            "nearest_cap": "C3",
-            "boundary_distance_mm": 0.0
+            "ic": "U3",
+            "nearest_cap": "C1",
+            "boundary_distance_mm": 3.4
           }
-        ]
+        ],
+        "problems": []
       }
     },
     {
@@ -101,7 +103,7 @@
     {
       "id": "SHT30_THERMAL",
       "status": "pass",
-      "evidence": "SHT30 U2 (10.0,35.0)；热源距离：[('U3', 49.2), ('J1', 45.9), ('D1', 35.2)]；最近 D1 @35.2mm（要求 >= 10.0mm）；外壳气流需实物复核",
+      "evidence": "SHT30 U2 (10.0,35.0)；热源角色集['U3', 'J1', 'D1'] 距离：[('U3', 49.2), ('J1', 45.9), ('D1', 35.2)]；最近 D1 @35.2mm（要求 >= 10.0mm）；外壳气流需实物复核",
       "measured": {
         "nearest_heat_source_mm": 35.2
       }
@@ -118,15 +120,16 @@
     {
       "id": "ASSEMBLY",
       "status": "pass",
-      "evidence": "丝印 Reference 覆盖 21/21；方向敏感件（pin1/极性）：['U3', 'J1', 'U2', 'D1']；装配方向与工艺备注由评审人在装配图上确认",
+      "evidence": "丝印 Reference 覆盖（须位于 F.SilkS/B.SilkS 且未隐藏）21/21；方向敏感件（pin1/极性）：['J1', 'U2', 'U3', 'D1']；装配方向与工艺备注由评审人在装配图上确认",
       "measured": {
         "silk_missing": [],
         "polarity_parts": [
-          "U3",
           "J1",
           "U2",
+          "U3",
           "D1"
-        ]
+        ],
+        "polarity_missing": []
       }
     }
   ],
@@ -143,8 +146,8 @@
   "note": "机器测量证据；朝向/阻抗/气流/瞬态等无法静态判定项已在 evidence 中标注，需具名评审人在 KiCad 中复核后签发 manufacturing_release。",
   "render_evidence": {
     "pcb_sha256": "f4db9d1205048e9b6dee64e5b760d98415638f015b9191b8959dae867aaec8e0",
-    "top_png_sha256": "a66b78a7525bef85bbd5a33494d4a94ea71ecea22dc36c8124fa446e4a0cec02",
-    "bottom_png_sha256": "052f353e61b200e9c826e413458d75aa1bee49fb7010feac41fb7ec3b1336df4",
-    "rendered_at": "2026-08-30T19:34:42Z"
+    "top_png_sha256": "a9a18646cbe8d141b78f913f1f44c7f4e155cbda8ff7bca5151b52fb35e8288e",
+    "bottom_png_sha256": "fd51ca641b63061929e6ea22df07814f657d429822ccf8134e02429fedf8d333",
+    "rendered_at": "2026-08-31T11:43:18Z"
   }
 }
