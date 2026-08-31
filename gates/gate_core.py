@@ -38,6 +38,88 @@ BOARD_REVIEW_IDS = (
     "ASSEMBLY",
 )
 
+# Board-review algorithm contract (single source of truth).
+# tools/board_review.py imports these constants; the gate below binds every
+# auto report to the revision derived from them. Changing any role set or
+# threshold changes BOARD_REVIEW_ALGORITHM_REVISION, which fail-closes every
+# report produced by the previous algorithm version (stale reports can never
+# be re-signed as if the current algorithm had produced them).
+ANTENNA_MODULE_REF = "U1"                  # ESP32-C3-WROOM-02 module (antenna)
+SENSOR_REF = "U2"                          # SHT30 temperature/humidity sensor
+EXPECTED_IC_REFS = ("U1", "U2", "U3")      # ICs requiring decoupling caps
+HEAT_SOURCE_REFS = ("U3", "J1", "D1")      # SHT30 heat sources: LDO/USB/LED
+POLARITY_REFS = ("J1", "U2", "U3", "D1")   # assembly orientation-sensitive parts
+POWER_NET_PREFIX = "+"                     # KiCad power-net naming convention
+USB_EDGE_MAX_MM = 1.0
+ANTENNA_KEEPOUT_MM = 7.5
+DECOUPLING_MAX_MM = 8.0
+USB_DIFF_MAX_SKEW_MM = 1.0
+THERMAL_MIN_DIST_MM = 10.0
+
+BOARD_REVIEW_ALGORITHM_CONTRACT = {
+    "review_ids": BOARD_REVIEW_IDS,
+    "role_sets": {
+        "antenna_module": ANTENNA_MODULE_REF,
+        "sensor": SENSOR_REF,
+        "expected_ics": EXPECTED_IC_REFS,
+        "heat_sources": HEAT_SOURCE_REFS,
+        "polarity_parts": POLARITY_REFS,
+    },
+    "power_net_prefix": POWER_NET_PREFIX,
+    "thresholds_mm": {
+        "usb_edge_max": USB_EDGE_MAX_MM,
+        "antenna_keepout": ANTENNA_KEEPOUT_MM,
+        "decoupling_max": DECOUPLING_MAX_MM,
+        "usb_diff_max_skew": USB_DIFF_MAX_SKEW_MM,
+        "thermal_min_dist": THERMAL_MIN_DIST_MM,
+    },
+}
+
+def board_review_implementation_sha256() -> str:
+    """SHA-256 of the tools/board_review.py source bytes.
+
+    The algorithm revision must bind the ACTUAL judgement implementation, not
+    just the role-set/threshold contract: editing review logic (USB off-board
+    check, rotated courtyard, antenna orientation, decoupling, assembly)
+    without touching a constant would otherwise leave the revision unchanged
+    and let a stale report keep passing. Whole-file hashing is deliberately
+    simple, deterministic and reproducible - even a comment edit bumps the
+    revision (conservative fail-closed), which is preferred over a fragile AST
+    summary that might miss a verdict-affecting code path.
+    """
+    impl_path = Path(__file__).resolve().parents[1] / "tools" / "board_review.py"
+    digest = hashlib.sha256()
+    with impl_path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def compute_board_review_algorithm_revision(
+    contract: Any, implementation_sha256: str
+) -> str:
+    """Deterministic revision = canonical contract + implementation digest.
+
+    Single source of truth for both the generator (tools/board_review.py, which
+    writes the report) and the validator (validate_board_review_auto_report).
+    Both consume BOARD_REVIEW_ALGORITHM_REVISION below; this function only
+    factors the computation so tests can derive a revision from an arbitrary
+    implementation digest without duplicating the logic.
+    """
+    payload = {
+        "contract": contract,
+        "implementation_sha256": implementation_sha256,
+    }
+    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True,
+                           separators=(",", ":"))
+    return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+BOARD_REVIEW_ALGORITHM_REVISION = compute_board_review_algorithm_revision(
+    BOARD_REVIEW_ALGORITHM_CONTRACT,
+    board_review_implementation_sha256(),
+)
+
 
 def _read_json(path: Path) -> Dict[str, Any]:
     with Path(path).open("r", encoding="utf-8-sig") as handle:
@@ -841,4 +923,124 @@ def validate_render_evidence(auto_evidence_path: Path, pcb_path: Path) -> List[s
             errors.append(f"render_evidence has a malformed {key}")
         elif recorded != sha256_file(image_path):
             errors.append(f"render_evidence {key} does not match {filename}")
+    return errors
+
+
+def validate_board_review_auto_report(auto_evidence_path: Path) -> List[str]:
+    """Strict machine-report checks: exactly the 8 known reviews, all pass, summary honest.
+
+    The manual sign-off and valid render hashes can never paper over a failing
+    (or silently trimmed / duplicated / unknown-id) machine report: the
+    board_review gate fails on any of these, independent of manufacturing_release.
+    """
+    auto_evidence_path = Path(auto_evidence_path)
+    if not auto_evidence_path.is_file():
+        return [f"missing board review auto evidence: {auto_evidence_path}"]
+    try:
+        data = _read_json(auto_evidence_path)
+    except (OSError, ValueError) as exc:
+        return [f"board review auto evidence is unreadable: {type(exc).__name__}: {exc}"]
+
+    errors: List[str] = []
+    revision = data.get("algorithm_revision")
+    if revision != BOARD_REVIEW_ALGORITHM_REVISION:
+        errors.append(
+            "auto report algorithm revision "
+            f"{revision if isinstance(revision, str) else repr(revision)} does not match "
+            f"the current board-review algorithm revision {BOARD_REVIEW_ALGORITHM_REVISION!r} "
+            "(the report predates the current review algorithm; rerun tools/board_review.py)"
+        )
+    reviews = data.get("reviews")
+    if not isinstance(reviews, list):
+        return ["board review auto evidence has no reviews list"]
+
+    seen: Dict[str, str] = {}
+    for index, review in enumerate(reviews):
+        if not isinstance(review, dict):
+            errors.append(f"auto reviews[{index}] must be an object")
+            continue
+        review_id = review.get("id")
+        if not isinstance(review_id, str) or not review_id:
+            errors.append(f"auto reviews[{index}] has no id")
+            continue
+        if review_id in seen:
+            errors.append(f"auto report has duplicate review id {review_id}")
+            continue
+        if review_id not in BOARD_REVIEW_IDS:
+            errors.append(f"auto report has unknown review id {review_id!r}")
+            continue
+        status = review.get("status")
+        if status != "pass":
+            errors.append(f"auto review {review_id} is not pass (status={status!r})")
+        seen[review_id] = status if isinstance(status, str) else "<invalid>"
+
+    for required_id in BOARD_REVIEW_IDS:
+        if required_id not in seen:
+            errors.append(f"auto report is missing review id {required_id}")
+
+    summary = data.get("summary")
+    expected = {rid: "pass" for rid in BOARD_REVIEW_IDS}
+    if not isinstance(summary, dict):
+        errors.append("auto report summary must be an object")
+    elif summary != expected:
+        errors.append(
+            "auto report summary does not match its reviews "
+            f"(summary={summary!r}, reviews say {seen!r})"
+        )
+    return errors
+
+
+def validate_board_review_signoff_binding(
+    data: Dict[str, Any],
+    auto_evidence_path: Path,
+    pcb_path: Path,
+    schematic_path: Path,
+) -> List[str]:
+    """A manufacturing release must be pinned to exact evidence versions.
+
+    The manual _meta must carry the sha256 of the exact auto report it signed
+    (a path alone can be repointed after the fact) plus the measured hashes of
+    the signed inputs (PCB and schematic). Any drift between the signed
+    version and the files on disk fails the gate: stale sign-offs must not
+    survive a circuit change. Checked only when manufacturing_release is true,
+    so the pre-signoff state keeps its honest "release is false" error.
+    """
+    errors: List[str] = []
+    meta = data.get("_meta") if isinstance(data.get("_meta"), dict) else {}
+    if meta.get("manufacturing_release") is not True:
+        return errors
+
+    declared_auto = meta.get("auto_evidence_sha256")
+    if not isinstance(declared_auto, str) or not _SHA256_RE.fullmatch(declared_auto):
+        errors.append(
+            "released board review _meta.auto_evidence_sha256 is malformed "
+            "(the sign-off must pin the exact auto report version, not just a path)"
+        )
+    elif Path(auto_evidence_path).is_file():
+        actual_auto = sha256_file(auto_evidence_path)
+        if actual_auto != declared_auto:
+            errors.append(
+                "released board review signed a different auto report than the one on disk "
+                f"(signed {declared_auto[:12]}…, current {actual_auto[:12]}…); re-run "
+                "tools/board_review.py and re-sign"
+            )
+
+    bindings = meta.get("signoff_inputs_sha256")
+    if not isinstance(bindings, dict) or set(bindings) != {"pcb", "schematic"}:
+        errors.append(
+            "released board review _meta.signoff_inputs_sha256 must be an object with "
+            "exactly 'pcb' and 'schematic' sha256 keys"
+        )
+        return errors
+    for name, target in (("pcb", pcb_path), ("schematic", schematic_path)):
+        declared = bindings.get(name)
+        if not isinstance(declared, str) or not _SHA256_RE.fullmatch(declared):
+            errors.append(f"signoff_inputs_sha256.{name} is malformed")
+        elif not Path(target).is_file():
+            errors.append(f"signoff input is missing: {target}")
+        elif sha256_file(target) != declared:
+            errors.append(
+                f"signoff_inputs_sha256.{name} does not match the current file "
+                "(the signed circuit changed; re-run tools/board_review.py and re-sign)"
+            )
     return errors

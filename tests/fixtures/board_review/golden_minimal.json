@@ -1,4 +1,5 @@
 {
+  "algorithm_revision": "sha256:b5e3d4ac0b3b4dd3bb2c80ed58300f598c1b78d779345b2bc495af850cb9354d",
   "pcb": "tests/fixtures/board_review/minimal.kicad_pcb",
   "board_outline_mm": [
     0.0,
@@ -8,6 +9,7 @@
   ],
   "footprint_count": 11,
   "nets": [
+    "+3V3",
     "+5V",
     "GND",
     "USB_DM",
@@ -27,7 +29,7 @@
     {
       "id": "ESP_ANTENNA",
       "status": "pass",
-      "evidence": "ESP32-C3 U1 (30.0,15.0) rot=0.0; 质心距板边 15.00mm；7.5mm 净空圈内器件: 无；天线端朝向=板边(正确)（按 WROOM-02 天线在 -Y 端、rot=0.0deg 推断）",
+      "evidence": "ESP32-C3 U1 (30.0,15.0) rot=0.0; 质心距板边 15.00mm；7.5mm 净空圈内器件: 无；天线端朝向=板边(正确)（按模组天线在本地 -Y 端、旋转后方向向量 (0.00,-1.00) 推断）",
       "measured": {
         "edge_distance_mm": 15.0,
         "keepout_intruders": [],
@@ -46,7 +48,7 @@
     {
       "id": "DECOUPLING",
       "status": "pass",
-      "evidence": "IC→最近去耦电容距离（courtyard 边界距，上限 8.0mm）：[{\"ic\": \"U1\", \"nearest_cap\": \"C1\", \"boundary_distance_mm\": 2.3}, {\"ic\": \"U2\", \"nearest_cap\": \"C2\", \"boundary_distance_mm\": 3.75}, {\"ic\": \"U3\", \"nearest_cap\": \"C3\", \"boundary_distance_mm\": 3.9}]",
+      "evidence": "预期 IC 角色集 ['U1', 'U2', 'U3']；IC→最近去耦电容距离（courtyard 边界距，电容须与该 IC 共享电源网络，上限 8.0mm）：[{\"ic\": \"U1\", \"nearest_cap\": \"C1\", \"boundary_distance_mm\": 2.3}, {\"ic\": \"U2\", \"nearest_cap\": \"C2\", \"boundary_distance_mm\": 3.75}, {\"ic\": \"U3\", \"nearest_cap\": \"C3\", \"boundary_distance_mm\": 3.9}]",
       "measured": {
         "worst_distance_mm": 3.9,
         "ics": [
@@ -65,7 +67,8 @@
             "nearest_cap": "C3",
             "boundary_distance_mm": 3.9
           }
-        ]
+        ],
+        "problems": []
       }
     },
     {
@@ -91,7 +94,7 @@
     {
       "id": "SHT30_THERMAL",
       "status": "pass",
-      "evidence": "SHT30 U2 (12.0,34.0)；热源距离：[('J1', 43.7), ('U3', 36.0), ('D1', 47.7)]；最近 U3 @36.0mm（要求 >= 10.0mm）；外壳气流需实物复核",
+      "evidence": "SHT30 U2 (12.0,34.0)；热源角色集['U3', 'J1', 'D1'] 距离：[('U3', 36.0), ('J1', 43.7), ('D1', 47.7)]；最近 U3 @36.0mm（要求 >= 10.0mm）；外壳气流需实物复核",
       "measured": {
         "nearest_heat_source_mm": 36.0
       }
@@ -108,7 +111,7 @@
     {
       "id": "ASSEMBLY",
       "status": "pass",
-      "evidence": "丝印 Reference 覆盖 11/11；方向敏感件（pin1/极性）：['J1', 'U2', 'U3', 'D1']；装配方向与工艺备注由评审人在装配图上确认",
+      "evidence": "丝印 Reference 覆盖（须位于 F.SilkS/B.SilkS 且未隐藏）11/11；方向敏感件（pin1/极性）：['J1', 'U2', 'U3', 'D1']；装配方向与工艺备注由评审人在装配图上确认",
       "measured": {
         "silk_missing": [],
         "polarity_parts": [
@@ -116,7 +119,8 @@
           "U2",
           "U3",
           "D1"
-        ]
+        ],
+        "polarity_missing": []
       }
     }
   ],

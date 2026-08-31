@@ -27,6 +27,8 @@ try:
         read_pos_refs,
         sha256_file,
         validate_board_review,
+        validate_board_review_auto_report,
+        validate_board_review_signoff_binding,
         validate_bom,
         validate_bom_freshness,
         validate_bom_stock_evidence,
@@ -52,6 +54,8 @@ except ImportError:  # direct ``py gates/run_gates.py`` execution
         read_pos_refs,
         sha256_file,
         validate_board_review,
+        validate_board_review_auto_report,
+        validate_board_review_signoff_binding,
         validate_bom,
         validate_bom_freshness,
         validate_bom_stock_evidence,
@@ -72,6 +76,14 @@ except ImportError:  # direct ``py gates/run_gates.py`` execution
 REQUIRED_ZIP_ENTRIES = set(EXPECTED_GERBER_FILES)
 OPS_EVIDENCE_SCHEMA = "https://aedl.local/schemas/m2-ops-validation.v1.json"
 LEARNING_REPORT_SCHEMA = "https://aedl.local/schemas/learning-gate-report.v1.json"
+EXPECTED_AKCLI_VERSION = "akcli 0.21.0 (protocol 2)"
+DEFAULT_AKCLI = Path(
+    r"C:\Users\fuker\AppData\Local\hermes\hermes-agent\venv\Scripts\akcli.exe"
+)
+EXPECTED_OPS_GENERATOR = (
+    f"{EXPECTED_AKCLI_VERSION}; tools/generate_m2_ops.py controlled virtual compatibility"
+)
+EXPECTED_OPS_VALIDATOR = f"{EXPECTED_AKCLI_VERSION}; akcli ops validate --json"
 
 
 def _utc_now() -> str:
@@ -241,8 +253,89 @@ def _evaluate_intent(root: Path) -> Dict[str, Any]:
     return _gate("intent", "pass" if not errors else "fail", details, errors)
 
 
-def _evaluate_ops(root: Path) -> Dict[str, Any]:
-    path = root / "notes" / "m2-evidence-reset" / "generated" / "ops_validate_current.json"
+def _find_akcli() -> Optional[Path]:
+    candidates: List[Path] = []
+    env_value = __import__("os").environ.get("AKCLI")
+    if env_value:
+        candidates.append(Path(env_value))
+    found = shutil.which("akcli")
+    if found:
+        candidates.append(Path(found))
+    candidates.append(DEFAULT_AKCLI)
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve()
+    return None
+
+
+def _validate_ops_with_live_akcli(
+    root: Path,
+    ops_path: Path,
+    expected_hash: str,
+    expected_count: int,
+) -> tuple[Dict[str, Any], List[str]]:
+    """Run the locked external validator; evidence text is never proof of execution."""
+    cli = _find_akcli()
+    details: Dict[str, Any] = {
+        "executable": str(cli) if cli else None,
+        "expected_version": EXPECTED_AKCLI_VERSION,
+    }
+    if cli is None:
+        return details, ["live akcli validator is unavailable"]
+
+    version_run = _run_tool([str(cli), "--version"], root)
+    observed_version = version_run["stdout"].strip()
+    details["version"] = observed_version
+    if version_run["exit_code"] != 0:
+        return details, [
+            "live akcli validator version check failed: "
+            f"{version_run['stderr'].strip() or 'non-zero exit'}"
+        ]
+    if observed_version != EXPECTED_AKCLI_VERSION:
+        return details, [
+            "live akcli validator version mismatch: "
+            f"expected {EXPECTED_AKCLI_VERSION!r}, observed {observed_version!r}"
+        ]
+
+    validation_run = _run_tool(
+        [str(cli), "ops", "validate", str(ops_path), "--json"], root
+    )
+    details["exit_code"] = validation_run["exit_code"]
+    if validation_run["exit_code"] != 0:
+        return details, [
+            "live akcli ops validation failed: "
+            f"{validation_run['stderr'].strip() or validation_run['stdout'].strip() or 'non-zero exit'}"
+        ]
+    try:
+        result = json.loads(validation_run["stdout"])
+    except (TypeError, ValueError) as exc:
+        return details, [f"live akcli validator returned invalid JSON: {exc}"]
+    if not isinstance(result, dict):
+        return details, ["live akcli validator result must be an object"]
+
+    details["result"] = result
+    errors: List[str] = []
+    expected_fields = {"protocol_version", "valid", "ops_sha256", "op_count", "errors"}
+    if set(result) != expected_fields:
+        errors.append(
+            "live akcli validator result fields mismatch: "
+            f"expected {sorted(expected_fields)}, observed {sorted(result)}"
+        )
+    if result.get("protocol_version") != 2:
+        errors.append("live akcli validator protocol_version is not 2")
+    if result.get("valid") is not True:
+        errors.append("live akcli validator valid is not true")
+    if result.get("errors") != []:
+        errors.append("live akcli validator errors is not empty")
+    if result.get("ops_sha256") != expected_hash:
+        errors.append("live akcli validator hash does not match current M2 ops_gen.json")
+    if result.get("op_count") != expected_count:
+        errors.append("live akcli validator op_count does not match current M2 ops_gen.json")
+    return details, errors
+
+
+def _evaluate_ops(root: Path, path: Optional[Path] = None) -> Dict[str, Any]:
+    path = path or root / "notes" / "m2-evidence-reset" / "generated" / "ops_validate_current.json"
     ops_path = root / "src" / "hardware" / "m2-board" / "ops_gen.json"
     details: Dict[str, Any] = {"path": str(path), "ops_path": str(ops_path)}
     errors: List[str] = []
@@ -291,10 +384,24 @@ def _evaluate_ops(root: Path) -> Dict[str, Any]:
     for field in ("generator", "validator", "generated_at"):
         if not isinstance(data.get(field), str) or not data[field].strip():
             errors.append(f"ops evidence has no {field}")
+
+    # These exact strings keep the stored evidence format deterministic, but
+    # they are not trusted as proof that akcli actually ran. A successful gate
+    # also requires a fresh subprocess validation below.
+    if data.get("generator") != EXPECTED_OPS_GENERATOR:
+        errors.append("ops evidence generator does not match the locked generator contract")
+    if data.get("validator") != EXPECTED_OPS_VALIDATOR:
+        errors.append("ops evidence validator does not match the locked validator contract")
+
+    live_details, live_errors = _validate_ops_with_live_akcli(
+        root, ops_path, current_hash, len(ops)
+    )
+    details["live_validation"] = live_details
+    errors.extend(live_errors)
     return _gate("ops", "pass" if not errors else "fail", details, errors)
 
 
-def _evaluate_schematic_semantics(root: Path, path: Path) -> Dict[str, Any]:
+def _evaluate_schematic_semantics(root: Path, path: Path, netlist_report: Optional[Path] = None) -> Dict[str, Any]:
     details: Dict[str, Any] = {"path": str(path)}
     if not path.is_file():
         return _gate("schematic_semantics", "fail", details, [f"missing semantic report: {path}"])
@@ -337,7 +444,7 @@ def _evaluate_schematic_semantics(root: Path, path: Path) -> Dict[str, Any]:
     input_targets = {
         "contract": root / "gates" / "contracts" / "m2_schematic_contract_v1.json",
         "intent": root / "src" / "hardware" / "m2-board" / "intent_v1.json",
-        "netlist": root / "notes" / "m2-evidence-reset" / "generated" / "m2_board_current.net.xml",
+        "netlist": netlist_report or root / "notes" / "m2-evidence-reset" / "generated" / "m2_board_current.net.xml",
         "pcb": root / "src" / "hardware" / "m2-board" / "m2_board.kicad_pcb",
         "firmware": root / "src" / "firmware" / "include" / "sht30.h",
     }
@@ -355,7 +462,7 @@ def _evaluate_schematic_semantics(root: Path, path: Path) -> Dict[str, Any]:
     return _gate("schematic_semantics", "pass" if not errors else "fail", details, errors)
 
 
-def _evaluate_learning(root: Path, path: Path) -> Dict[str, Any]:
+def _evaluate_learning(root: Path, path: Path, fault_report: Optional[Path] = None) -> Dict[str, Any]:
     details: Dict[str, Any] = {"path": str(path)}
     if not path.is_file():
         return _gate("learning", "fail", details, [f"missing learning report: {path}"])
@@ -375,7 +482,7 @@ def _evaluate_learning(root: Path, path: Path) -> Dict[str, Any]:
         errors.append("learning report has no lessons")
     input_targets = {
         "registry": root / "gates" / "lessons_registry_v1.json",
-        "fault_injection_proof": root / "notes" / "m2-evidence-reset" / "generated" / "semantic_fault_injection_current.json",
+        "fault_injection_proof": fault_report or root / "notes" / "m2-evidence-reset" / "generated" / "semantic_fault_injection_current.json",
     }
     inputs = data.get("inputs")
     if not isinstance(inputs, dict):
@@ -414,6 +521,19 @@ def _evaluate_board_review(path: Path) -> Dict[str, Any]:
             auto_evidence_path,
             root / "src" / "hardware" / "m2-board" / "m2_board.kicad_pcb",
         ))
+        # Machine-report strictness and sign-off version pinning: a manual
+        # PASS + manufacturing_release=true can never override a failing,
+        # trimmed, duplicated or summary-inconsistent auto report, and a
+        # release must be pinned to the exact auto report and signed inputs.
+        errors.extend(validate_board_review_auto_report(auto_evidence_path))
+        with path.open("r", encoding="utf-8-sig") as handle:
+            manual_data = json.load(handle)
+        errors.extend(validate_board_review_signoff_binding(
+            manual_data,
+            auto_evidence_path,
+            root / "src" / "hardware" / "m2-board" / "m2_board.kicad_pcb",
+            root / "src" / "hardware" / "m2-board" / "m2_board.kicad_sch",
+        ))
     details = {
         "path": str(path),
         "review_count": len(reviews),
@@ -432,8 +552,17 @@ def evaluate_evidence(
     semantic_report: Optional[Path] = None,
     learning_report: Optional[Path] = None,
     fresh_cpl: Optional[Path] = None,
+    netlist_report: Optional[Path] = None,
+    fault_report: Optional[Path] = None,
+    ops_evidence: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    """Evaluate all non-process evidence and return a serializable manifest."""
+    """Evaluate all non-process evidence and return a serializable manifest.
+
+    The report paths (netlist / fault report / ops evidence) must be threaded
+    through generation, validation and the manifest: an isolated run with an
+    injected evidence_dir validates exactly what it generated, never the
+    repository's formal copies.
+    """
     root = Path(root).resolve()
     semantic_report = semantic_report or root / "notes" / "m2-evidence-reset" / "generated" / "schematic_semantics_current.json"
     learning_report = learning_report or root / "notes" / "m2-evidence-reset" / "generated" / "learning_gate_current.json"
@@ -490,9 +619,9 @@ def evaluate_evidence(
         _safe_gate("bom", lambda: _evaluate_bom(root)),
         _safe_gate("delivery", lambda: _evaluate_delivery(root, fresh_cpl)),
         _safe_gate("intent", lambda: _evaluate_intent(root)),
-        _safe_gate("ops", lambda: _evaluate_ops(root)),
-        _safe_gate("schematic_semantics", lambda: _evaluate_schematic_semantics(root, Path(semantic_report))),
-        _safe_gate("learning", lambda: _evaluate_learning(root, Path(learning_report))),
+        _safe_gate("ops", lambda: _evaluate_ops(root, ops_evidence)),
+        _safe_gate("schematic_semantics", lambda: _evaluate_schematic_semantics(root, Path(semantic_report), netlist_report)),
+        _safe_gate("learning", lambda: _evaluate_learning(root, Path(learning_report), fault_report)),
         _safe_gate("requirements_contract", lambda: _evaluate_requirements_contract(root)),
         _safe_gate("board_review", lambda: _evaluate_board_review(Path(board_review))),
         _safe_gate("datasheet_contract", lambda: _evaluate_datasheet_contract(root)),
@@ -577,11 +706,17 @@ def run(
     manifest_path: Optional[Path] = None,
     skip_kicad: bool = False,
     output_root: Optional[Path] = None,
+    evidence_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
     root = Path(root).resolve()
     # Snapshot repository state before the runner rewrites its own reports.
     git = _git_snapshot(root)
-    evidence_dir = root / "notes" / "m2-evidence-reset" / "generated"
+    # Injectable so tests (and any future out-of-tree run) can keep the
+    # runner's rewritten reports out of the repository evidence directory;
+    # output_root only isolates the manifest, not these reports.
+    if evidence_dir is None:
+        evidence_dir = root / "notes" / "m2-evidence-reset" / "generated"
+    evidence_dir = Path(evidence_dir).resolve()
     erc_report = evidence_dir / "g2_erc_current.json"
     drc_report = evidence_dir / "g4_drc_current.json"
     netlist_report = evidence_dir / "m2_board_current.net.xml"
@@ -711,6 +846,21 @@ def run(
     }
     _write_json_atomic(learning_report, learning_data)
 
+    # OPS evidence is produced by the independent verifier (akcli 0.21.0 /
+    # tools/generate_m2_ops.py), never by this runner (P1-1). In an isolated
+    # run the runner only reproduces a verbatim copy of the formal evidence;
+    # _evaluate_ops then re-verifies that copy against the current ops_gen.json
+    # hash, op_count and independent provenance. If the formal evidence is
+    # absent, no file is written and the ops gate fails closed (missing
+    # evidence), consistent with the manifest recording exists=false. The runner
+    # never fabricates valid=true.
+    formal_ops_evidence = root / "notes" / "m2-evidence-reset" / "generated" / "ops_validate_current.json"
+    ops_evidence_path = evidence_dir / "ops_validate_current.json"
+    if formal_ops_evidence.resolve() != ops_evidence_path.resolve():
+        if formal_ops_evidence.is_file():
+            evidence_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(formal_ops_evidence, ops_evidence_path)
+
     board_review = root / "gates" / "board_review_v1.json"
     evidence = evaluate_evidence(
         root,
@@ -720,6 +870,9 @@ def run(
         semantic_report,
         learning_report,
         cpl_report if not skip_kicad else None,
+        netlist_report=netlist_report,
+        fault_report=fault_report,
+        ops_evidence=evidence_dir / "ops_validate_current.json",
     )
     if tool_errors:
         evidence["gates"].append(_gate("kicad_tool", "fail", errors=tool_errors))

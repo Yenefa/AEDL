@@ -25,6 +25,31 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:  # 允许 `py tools/board_review.py` 直接运行
+    sys.path.insert(0, str(ROOT))
+
+# 评审合同单一真源在 gates.gate_core（BOARD_REVIEW_ALGORITHM_CONTRACT）：
+# 角色集/阈值/算法修订号都在那里定义，报告生成端与门禁校验端永不漂移。
+# 改动任何一项都会改变 BOARD_REVIEW_ALGORITHM_REVISION，门禁随即失败关闭
+# 所有旧算法产出的报告，防止人工重签哈希时把旧算法证据当成当前算法证据
+# 钉进制造签发。
+from gates.gate_core import (  # noqa: E402
+    ANTENNA_KEEPOUT_MM,
+    ANTENNA_MODULE_REF,
+    BOARD_REVIEW_ALGORITHM_REVISION,
+    DECOUPLING_MAX_MM,
+    EXPECTED_IC_REFS,
+    HEAT_SOURCE_REFS,
+    POLARITY_REFS,
+    POWER_NET_PREFIX,
+    SENSOR_REF,
+    THERMAL_MIN_DIST_MM,
+    USB_DIFF_MAX_SKEW_MM,
+    USB_EDGE_MAX_MM,
+)
+
+ALGORITHM_REVISION = BOARD_REVIEW_ALGORITHM_REVISION  # 报告里的算法修订号
+
 PCB_PATH = ROOT / "src" / "hardware" / "m2-board" / "m2_board.kicad_pcb"
 SCH_PATH = ROOT / "src" / "hardware" / "m2-board" / "m2_board.kicad_sch"
 OUT_PATH = ROOT / "notes" / "m2-evidence-reset" / "generated" / "board_review_auto.json"
@@ -32,13 +57,6 @@ OUT_PATH = ROOT / "notes" / "m2-evidence-reset" / "generated" / "board_review_au
 # 目检渲染图固定输出（3D 视图，1600x900 high；约 12-13s/张，低频工具可接受）
 RENDER_TARGETS = (("top", "board_top.png"), ("bottom", "board_bottom.png"))
 RENDER_WIDTH, RENDER_HEIGHT = 1600, 900
-
-# mm 阈值（依据：ESP32-C3-WROOM-02 硬件设计指南 / USB-C 板边连接器惯例 / SHT30 数据手册）
-USB_EDGE_MAX_MM = 1.0        # USB-C courtyard 前沿（壳体侧）距板边：贴边安装要求
-ANTENNA_KEEPOUT_MM = 7.5     # 模组天线端净空圈内不得有其他器件
-DECOUPLING_MAX_MM = 8.0      # 去耦电容到对应 IC courtyard 边界的最大距离
-USB_DIFF_MAX_SKEW_MM = 1.0   # USB_DP/USB_DM 走线长度失配
-THERMAL_MIN_DIST_MM = 10.0   # SHT30 到最近潜在热源最小距离
 
 USB_CHANNELS = {
     "D+": {
@@ -56,6 +74,10 @@ USB_CHANNELS = {
         },
     },
 }
+
+# 评审对象一律按预期 ref 认定——禁止用封装/库名关键字识别器件：
+# 换封装（如 U3 的 SOT-353 → SC-70-5）或改库名都不得让检查项静默消失；
+# 板上缺了预期 ref 必须失败关闭，而不是缩小检查范围继续"通过"。
 
 
 def utc_now() -> str:
@@ -87,20 +109,36 @@ def parse_pcb(text: str) -> Dict[str, Any]:
         lib = lib_m.group(1)
         lib_id = lib.split(":")[-1]
         rot = float(at_m.group(3) or 0)
-        # courtyard bbox（相对原点、未旋转坐标；rot!=0 时退回 None）
+        # courtyard：F.CrtYd 端点按文件旋转角变换（KiCad 旋转：x'=x·cosθ−y·sinθ,
+        # y'=x·sinθ+y·cosθ）后取包络。旋转件不得静默丢掉 courtyard——
+        # 无 courtyard 可测时保持 None，由评审侧失败关闭（不退回质心距）。
+        rot_rad = math.radians(rot)
+        cos_r, sin_r = math.cos(rot_rad), math.sin(rot_rad)
         cxs, cys = [], []
         for fm in re.finditer(
                 r'\(fp_line\s*\(start (-?[\d.]+) (-?[\d.]+)\)\s*\(end (-?[\d.]+) (-?[\d.]+)\)'
                 r'(?:(?!\(fp_line).)*?\(layer "F\.CrtYd"\)', block, re.S):
-            cxs += [float(fm.group(1)), float(fm.group(3))]
-            cys += [float(fm.group(2)), float(fm.group(4))]
+            for px, py in ((float(fm.group(1)), float(fm.group(2))),
+                           (float(fm.group(3)), float(fm.group(4)))):
+                cxs.append(px * cos_r - py * sin_r)
+                cys.append(px * sin_r + py * cos_r)
         courtyard = None
-        if cxs and rot == 0:
+        if cxs:
             courtyard = (min(cxs), min(cys), max(cxs), max(cys))
+        # Reference 丝印属性：所在层 + 是否隐藏（装配评审只认 F.SilkS/B.SilkS 且未隐藏）
+        ref_layer: Optional[str] = None
+        ref_hidden = False
+        next_prop = block.find("(property", ref_m.end())
+        ref_scope = block[ref_m.start(): next_prop if next_prop != -1 else len(block)]
+        layer_m = re.search(r'\(layer "([^"]+)"\)', ref_scope)
+        if layer_m:
+            ref_layer = layer_m.group(1)
+        ref_hidden = bool(re.search(r'\(hide yes\)', ref_scope))
         footprints.append({
             "ref": ref_m.group(1), "lib_id": lib_id,
             "x": float(at_m.group(1)), "y": float(at_m.group(2)),
             "rot": rot, "courtyard": courtyard,
+            "ref_layer": ref_layer, "ref_hidden": ref_hidden,
         })
         pad_matches = list(re.finditer(r'\(pad "([^"]*)"', block))
         for pad_index, pad_match in enumerate(pad_matches):
@@ -163,8 +201,23 @@ def dist(a: Dict[str, Any], b: Dict[str, Any]) -> float:
 
 
 def edge_distance(fp: Dict[str, Any], edge: Tuple[float, ...]) -> float:
+    """质心到最近板边的有符号间距：板内非负，板外为负。
+    调用方必须先判定板内/板外（inside_edge），不得直接拿负值当距离用。"""
     x1, y1, x2, y2 = edge
     return min(fp["x"] - x1, x2 - fp["x"], fp["y"] - y1, y2 - fp["y"])
+
+
+def inside_edge(x: float, y: float, edge: Tuple[float, ...]) -> bool:
+    x1, y1, x2, y2 = edge
+    return x1 <= x <= x2 and y1 <= y <= y2
+
+
+def point_to_rect_distance(x: float, y: float, edge: Tuple[float, ...]) -> float:
+    """点到板框矩形的非负距离（板内为 0，板外为到矩形边界的欧氏距离）。"""
+    x1, y1, x2, y2 = edge
+    dx = max(x1 - x, 0.0, x - x2)
+    dy = max(y1 - y, 0.0, y - y2)
+    return math.hypot(dx, dy)
 
 
 def review_usb_edge(footprints, edge) -> Dict[str, Any]:
@@ -177,42 +230,89 @@ def review_usb_edge(footprints, edge) -> Dict[str, Any]:
     x1, y1, x2, y2 = edge
     if usb.get("courtyard"):
         cx1, cy1, cx2, cy2 = usb["courtyard"]
-        front_y = usb["y"] + cy1  # rot=0 时 -Y 为壳体前沿
+        gx1, gy1 = usb["x"] + cx1, usb["y"] + cy1
+        gx2, gy2 = usb["x"] + cx2, usb["y"] + cy2
+        # 先判板框合法性：courtyard 包络任意边越界都失败关闭
+        # （旧实现只看前沿 Y 距，横向/整体越界的连接器会静默 PASS）。
+        over = [side for side, violated in (
+            ("left", gx1 < x1), ("right", gx2 > x2),
+            ("top", gy1 < y1), ("bottom", gy2 > y2)) if violated]
+        if over:
+            return {"id": "USB_EDGE", "status": "fail",
+                    "evidence": (f"USB-C {usb['ref']} 质心 ({usb['x']},{usb['y']})，"
+                                 f"courtyard 包络越出板框：{over}——布局不成立，失败关闭"),
+                    "measured": {"courtyard_outside_outline": over}}
+        front_y = gy1  # 壳体前沿（全局坐标）
         d = front_y - y1
         ok = 0 <= d <= USB_EDGE_MAX_MM
         evidence = (f"USB-C {usb['ref']} 质心 ({usb['x']},{usb['y']})，"
                     f"courtyard 前沿距上板边 {d:.2f}mm（板边贴装要求 0~{USB_EDGE_MAX_MM}mm）；"
                     f"外形/禁布区与外壳配合需评审人在 PCB 渲染中目检")
         measured = {"courtyard_front_to_edge_mm": round(d, 2)}
-    else:
-        d = edge_distance(usb, edge)
+    elif inside_edge(usb["x"], usb["y"], edge):
+        d = edge_distance(usb, edge)  # 板内必为非负
         ok = d <= USB_EDGE_MAX_MM
-        evidence = (f"USB-C {usb['ref']} 无 courtyard，质心距最近板边 {d:.2f}mm（近似判据）")
+        evidence = (f"USB-C {usb['ref']} 无 courtyard，质心在板内、距最近板边 {d:.2f}mm（近似判据）")
         measured = {"centroid_to_edge_mm": round(d, 2)}
+    else:
+        d = point_to_rect_distance(usb["x"], usb["y"], edge)
+        ok = False
+        evidence = (f"USB-C {usb['ref']} 无 courtyard 且质心位于板框之外"
+                    f"（出界距离 {d:.2f}mm）——布局不成立，失败关闭")
+        measured = {"centroid_outside_outline_mm": round(d, 2)}
     return {"id": "USB_EDGE", "status": "pass" if ok else "fail",
             "evidence": evidence, "measured": measured}
 
 
-def review_antenna(footprints, edge) -> Dict[str, Any]:
-    esp = next((f for f in footprints if "ESP32" in f["lib_id"]), None)
+def review_antenna(footprints, edge, module_ref: str = ANTENNA_MODULE_REF) -> Dict[str, Any]:
+    esp = next((f for f in footprints if f["ref"] == module_ref), None)
     if not esp or not edge:
         return {"id": "ESP_ANTENNA", "status": "fail",
-                "evidence": "ESP32 module or board edge not found"}
+                "evidence": f"antenna module {module_ref} or board edge not found"}
+    # 先判板内/板外：模组越出板框（任意边）布局不成立，失败关闭。
+    # 旧实现拿板外为负的 edge_distance 继续判朝向，板外模组会静默 PASS。
+    if not inside_edge(esp["x"], esp["y"], edge):
+        d = point_to_rect_distance(esp["x"], esp["y"], edge)
+        return {"id": "ESP_ANTENNA", "status": "fail",
+                "evidence": (f"ESP32-C3 {esp['ref']} ({esp['x']},{esp['y']}) rot={esp['rot']}；"
+                             f"质心位于板框之外（出界距离 {d:.2f}mm）——布局不成立，失败关闭"),
+                "measured": {"edge_distance_mm": round(-d, 2),
+                             "centroid_outside_outline_mm": round(d, 2),
+                             "keepout_intruders": [],
+                             "antenna_facing_edge": False}}
     d = edge_distance(esp, edge)
     near = [(f["ref"], round(dist(esp, f), 1)) for f in footprints
             if f is not esp and dist(esp, f) < ANTENNA_KEEPOUT_MM]
-    # 朝向判定：WROOM-02 天线在模组 -Y 端（footprint 库内建 KEEP-OUT ZONE 注释位于 at -16）。
-    # rot=0 时天线端朝 -Y。板框 y1 是最近边时（d == y - y1）且 rot 为 0/180 才判朝外。
+    # 朝向判定：WROOM-02 天线在模组本地 -Y 端，随文件旋转角变换到板坐标：
+    # 方向向量 = (sinθ, -cosθ)。rot=0 朝 -Y（上）；rot=180 朝 +Y（下）——
+    # （旧实现把 rot=0 与 rot=180 混为一谈，模组靠上板边且旋转 180° 时会误判朝外。）
+    # 判据：沿天线方向到对应板边的距离 < 反方向到对面板边的距离，才判"朝外"；
+    # 不能要求射线穿过"最近"板边——天线指向次近板边同样是合法朝外布局。
     x1, y1, x2, y2 = edge
     rot = esp["rot"] % 360
-    antenna_out = (rot in (0, 180) and abs(esp["y"] - y1) < abs(esp["y"] - y2)) or \
-                  (rot in (90, 270) and abs(esp["x"] - x1) < abs(esp["x"] - x2))
+    theta = math.radians(rot)
+    dx, dy = math.sin(theta), -math.cos(theta)
+
+    def ray_exit(px, py, vx, vy) -> float:
+        candidates = []
+        if vx > 0:
+            candidates.append((x2 - px) / vx)
+        elif vx < 0:
+            candidates.append((x1 - px) / vx)
+        if vy > 0:
+            candidates.append((y2 - py) / vy)
+        elif vy < 0:
+            candidates.append((y1 - py) / vy)
+        return min(candidates) if candidates else float("inf")
+
+    antenna_out = ray_exit(esp["x"], esp["y"], dx, dy) < \
+        ray_exit(esp["x"], esp["y"], -dx, -dy)
     ok = not near and antenna_out
     return {"id": "ESP_ANTENNA", "status": "pass" if ok else "fail",
             "evidence": f"ESP32-C3 {esp['ref']} ({esp['x']},{esp['y']}) rot={esp['rot']}; "
                         f"质心距板边 {d:.2f}mm；{ANTENNA_KEEPOUT_MM}mm 净空圈内器件: "
                         f"{near if near else '无'}；天线端朝向={'板边(正确)' if antenna_out else '板内(错误)'}"
-                        f"（按 WROOM-02 天线在 -Y 端、rot={esp['rot']}deg 推断）",
+                        f"（按模组天线在本地 -Y 端、旋转后方向向量 ({dx:.2f},{dy:.2f}) 推断）",
             "measured": {"edge_distance_mm": round(d, 2),
                          "keepout_intruders": near,
                          "antenna_facing_edge": antenna_out}}
@@ -227,35 +327,59 @@ def review_ground_return(pcb) -> Dict[str, Any]:
 
 
 def boundary_distance(cap: Dict[str, Any], ic: Dict[str, Any]) -> Optional[float]:
-    """电容质心到 IC courtyard 边界的距离；无 courtyard（或旋转件）时退回质心距离。"""
-    if ic.get("courtyard"):
-        cx1, cy1, cx2, cy2 = ic["courtyard"]
-        gx1, gy1 = ic["x"] + cx1, ic["y"] + cy1
-        gx2, gy2 = ic["x"] + cx2, ic["y"] + cy2
-        dx = max(gx1 - cap["x"], 0.0, cap["x"] - gx2)
-        dy = max(gy1 - cap["y"], 0.0, cap["y"] - gy2)
-        return math.hypot(dx, dy)
-    return dist(cap, ic)
+    """电容质心到 IC courtyard 边界的距离。
+    courtyard 缺失/不可测时返回 None——调用方必须失败关闭，
+    禁止静默退化成质心距（那是更弱的判据，会把远电容读成近的）。"""
+    if not ic.get("courtyard"):
+        return None
+    cx1, cy1, cx2, cy2 = ic["courtyard"]
+    gx1, gy1 = ic["x"] + cx1, ic["y"] + cy1
+    gx2, gy2 = ic["x"] + cx2, ic["y"] + cy2
+    dx = max(gx1 - cap["x"], 0.0, cap["x"] - gx2)
+    dy = max(gy1 - cap["y"], 0.0, cap["y"] - gy2)
+    return math.hypot(dx, dy)
 
 
-def review_decoupling(footprints) -> Dict[str, Any]:
+def review_decoupling(footprints, pins, expected_ics=EXPECTED_IC_REFS) -> Dict[str, Any]:
+    """IC 按评审合同的预期 ref 集合认定（不认封装关键字）；
+    电容必须与该 IC 共享至少一条电源网络才算它的去耦电容。"""
+    by_ref = {f["ref"]: f for f in footprints}
     caps = [f for f in footprints if f["lib_id"].startswith("C_")]
-    ics = [f for f in footprints if any(k in f["lib_id"]
-            for k in ("ESP32", "SOT-23", "SOT-353", "Sensirion", "DFN-8"))]
-    if not caps or not ics:
-        return {"id": "DECOUPLING", "status": "fail",
-                "evidence": f"caps={len(caps)} ics={len(ics)} 未找齐"}
+    problems: List[str] = []
+    if not caps:
+        problems.append("板上没有任何电容")
     findings, worst = [], 0.0
-    for ic in ics:
-        dd, ref = min((boundary_distance(c, ic), c["ref"]) for c in caps)
+    for ref in expected_ics:
+        ic = by_ref.get(ref)
+        if ic is None:
+            problems.append(f"预期 IC {ref} 未在板上找到")
+            continue
+        ic_power_nets = {net for pad, net in pins.items()
+                         if pad.startswith(ref + ".") and net and net.startswith(POWER_NET_PREFIX)}
+        eligible = [c for c in caps
+                    if any(net in ic_power_nets for pad, net in pins.items()
+                           if pad.startswith(c["ref"] + ".") and net)]
+        if not eligible:
+            problems.append(
+                f"{ref}: 没有共享其电源网络 {sorted(ic_power_nets) or '(未检出电源网络)'} 的电容"
+                f"——任意无关电容不得冒充去耦电容")
+            continue
+        distances = [(boundary_distance(c, ic), c["ref"]) for c in eligible]
+        if all(dd is None for dd, _ in distances):
+            problems.append(f"{ref}: courtyard 缺失，边界距离不可测（失败关闭，不退质心距）")
+            continue
+        dd, nearest_cap = min((dd, ref_c) for dd, ref_c in distances if dd is not None)
         worst = max(worst, dd)
-        findings.append({"ic": ic["ref"], "nearest_cap": ref,
+        findings.append({"ic": ref, "nearest_cap": nearest_cap,
                          "boundary_distance_mm": round(dd, 2)})
-    ok = worst <= DECOUPLING_MAX_MM and len(findings) == len(ics)
+    ok = not problems and worst <= DECOUPLING_MAX_MM and len(findings) == len(expected_ics)
     return {"id": "DECOUPLING", "status": "pass" if ok else "fail",
-            "evidence": f"IC→最近去耦电容距离（courtyard 边界距，上限 {DECOUPLING_MAX_MM}mm）："
-                        f"{json.dumps(findings, ensure_ascii=False)}",
-            "measured": {"worst_distance_mm": round(worst, 2), "ics": findings}}
+            "evidence": f"预期 IC 角色集 {list(expected_ics)}；IC→最近去耦电容距离"
+                        f"（courtyard 边界距，电容须与该 IC 共享电源网络，上限 {DECOUPLING_MAX_MM}mm）："
+                        f"{json.dumps(findings, ensure_ascii=False)}"
+                        + (f"；问题：{problems}" if problems else ""),
+            "measured": {"worst_distance_mm": round(worst, 2), "ics": findings,
+                         "problems": problems}}
 
 
 def review_usb_routing(segments, pins) -> Dict[str, Any]:
@@ -303,12 +427,26 @@ def review_usb_routing(segments, pins) -> Dict[str, Any]:
             }}
 
 
-def review_thermal(footprints) -> Dict[str, Any]:
-    sht = next((f for f in footprints if "Sensirion" in f["lib_id"] or "DFN-8" in f["lib_id"]), None)
+def review_thermal(footprints, sensor_ref: str = SENSOR_REF,
+                   heat_source_refs=HEAT_SOURCE_REFS) -> Dict[str, Any]:
+    """传感器与热源均按评审合同的预期 ref 认定（不认封装关键字）；
+    预期热源在板上缺失时失败关闭，而不是缩小热源集合继续"通过"。"""
+    by_ref = {f["ref"]: f for f in footprints}
+    sht = by_ref.get(sensor_ref)
     if not sht:
-        return {"id": "SHT30_THERMAL", "status": "fail", "evidence": "SHT30 footprint not found"}
-    sources = [(f["ref"], dist(sht, f)) for f in footprints
-               if any(k in f["lib_id"] for k in ("USB_C", "SOT-23", "SOT-353", "LED"))]
+        return {"id": "SHT30_THERMAL", "status": "fail",
+                "evidence": f"SHT30 {sensor_ref} footprint not found"}
+    sources, problems = [], []
+    for ref in heat_source_refs:
+        f = by_ref.get(ref)
+        if f is None:
+            problems.append(f"预期热源 {ref} 未在板上找到")
+        elif ref != sensor_ref:
+            sources.append((ref, dist(sht, f)))
+    if problems:
+        return {"id": "SHT30_THERMAL", "status": "fail",
+                "evidence": f"热源角色集不完整（失败关闭）：{problems}",
+                "measured": {"nearest_heat_source_mm": None, "problems": problems}}
     if not sources:
         return {"id": "SHT30_THERMAL", "status": "pass",
                 "evidence": "板上无 USB/LDO/LED 热源",
@@ -316,7 +454,8 @@ def review_thermal(footprints) -> Dict[str, Any]:
     nearest = min(sources, key=lambda t: t[1])
     ok = nearest[1] >= THERMAL_MIN_DIST_MM
     return {"id": "SHT30_THERMAL", "status": "pass" if ok else "fail",
-            "evidence": f"SHT30 {sht['ref']} ({sht['x']},{sht['y']})；热源距离："
+            "evidence": f"SHT30 {sht['ref']} ({sht['x']},{sht['y']})；热源角色集"
+                        f"{list(heat_source_refs)} 距离："
                         f"{[(r, round(d, 1)) for r, d in sources]}；最近 {nearest[0]} "
                         f"@{nearest[1]:.1f}mm（要求 >= {THERMAL_MIN_DIST_MM}mm）；"
                         f"外壳气流需实物复核",
@@ -339,19 +478,28 @@ def review_protection(sch_text: str, pcb: Dict[str, Any]) -> Dict[str, Any]:
             "measured": {"vbus_caps": vbus_caps, "tvs": has_tvs}}
 
 
-def review_assembly(footprints, pcb_text: str) -> Dict[str, Any]:
+def review_assembly(footprints, polarity_refs=POLARITY_REFS) -> Dict[str, Any]:
+    """丝印检查逐件验证 Reference 属性：必须位于 F.SilkS/B.SilkS 且未隐藏
+    （旧实现只做全局字符串搜索，属性被移层/隐藏/挪进其他对象都会漏判）。
+    方向敏感件按评审合同的预期 ref 角色集认定（不认封装关键字）。"""
+    by_ref = {f["ref"] for f in footprints}
     silk_missing = [f["ref"] for f in footprints
-                    if f'"{f["ref"]}"' not in pcb_text]
-    polarity_parts = [f["ref"] for f in footprints
-                      if any(k in f["lib_id"]
-                             for k in ("LED", "Sensirion", "USB_C", "SOT-23", "SOT-353"))]
-    ok = not silk_missing and len(footprints) > 0
+                    if f.get("ref_hidden")
+                    or f.get("ref_layer") not in ("F.SilkS", "B.SilkS")]
+    polarity_parts = [r for r in polarity_refs if r in by_ref]
+    polarity_missing = [r for r in polarity_refs if r not in by_ref]
+    ok = not silk_missing and not polarity_missing and len(footprints) > 0
+    evidence = (f"丝印 Reference 覆盖（须位于 F.SilkS/B.SilkS 且未隐藏）"
+                f"{len(footprints) - len(silk_missing)}/{len(footprints)}"
+                + (f"；缺失/不合格: {silk_missing}" if silk_missing else "")
+                + f"；方向敏感件（pin1/极性）：{polarity_parts}"
+                + (f"；缺失方向敏感件：{polarity_missing}" if polarity_missing else "")
+                + "；装配方向与工艺备注由评审人在装配图上确认")
     return {"id": "ASSEMBLY", "status": "pass" if ok else "fail",
-            "evidence": f"丝印 Reference 覆盖 {len(footprints) - len(silk_missing)}"
-                        f"/{len(footprints)}；方向敏感件（pin1/极性）：{polarity_parts}；"
-                        f"装配方向与工艺备注由评审人在装配图上确认",
+            "evidence": evidence,
             "measured": {"silk_missing": silk_missing,
-                         "polarity_parts": polarity_parts}}
+                         "polarity_parts": polarity_parts,
+                         "polarity_missing": polarity_missing}}
 
 
 # ---------------------------------------------------------------- 目检渲染（kicad-cli）
@@ -413,11 +561,11 @@ def main() -> int:
         review_usb_edge(pcb["footprints"], pcb["edge"]),
         review_antenna(pcb["footprints"], pcb["edge"]),
         review_ground_return(pcb),
-        review_decoupling(pcb["footprints"]),
+        review_decoupling(pcb["footprints"], pcb["pins"]),
         review_usb_routing(pcb["segments"], pcb["pins"]),
         review_thermal(pcb["footprints"]),
         review_protection(sch_text, pcb),
-        review_assembly(pcb["footprints"], pcb_text),
+        review_assembly(pcb["footprints"]),
     ]
 
     render_errors: List[str] = []
@@ -432,6 +580,10 @@ def main() -> int:
         render_errors = render_board_views(kicad_cli, PCB_PATH, OUT_PATH.parent)
 
     report = {
+        # Stable revision of the review algorithm itself. The gate refuses any
+        # auto report whose revision differs, so a human re-signing hashes can
+        # never pin evidence produced by an older (or unknown) algorithm.
+        "algorithm_revision": ALGORITHM_REVISION,
         "generated_at": utc_now(),
         "pcb": str(PCB_PATH.relative_to(ROOT)),
         "board_outline_mm": list(pcb["edge"]) if pcb["edge"] else None,
