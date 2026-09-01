@@ -354,8 +354,8 @@
 ## ADR-011 — 控制面最小切片：Task Envelope + Admission + 单一 Development Gate + Escalation
 
 - 日期：2026-09-01
-- 状态：Proposed（分支 `feat/control-plane-minimal-slice`，未 commit/push；已按 Run 001
-  Review REQUEST_CHANGES 三项整改收敛为最终 candidate 语义；待 Yenefa + Percy Review）
+- 状态：**Accepted**（2026-09-01 经 PR #21 merge 至 master @ `084fb92`，Run 001 晋升完成；
+  双平台 CI 全绿，EVID-20260901-003 = YES）
 
 - 问题：
   - AEDL 已有完整规范文本（AGENTS.md 开工确认、Change Budget、越界 STOP、PENDING_HUMAN_REVIEW）与正式 Evidence Gate（`gates/run_gates.py`），但"开发验证"入口不统一：CI 跑过滤后的单测（`-k` 排除 3 个 CRLF-pinned 测试）、本地 Windows 跑全量、正式 Evidence 跑另一套。2026-09-01 实测：同一 HEAD 上主仓库 269 个测试有 2 个失败、sandbox 272 个有 8 个失败（全部为 Windows CRLF 检出 vs LF 声明哈希失配），而远端 CI 全绿——同一候选在不同环境有不同"验证通过"语义。
