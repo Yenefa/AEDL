@@ -15,7 +15,7 @@
 - Git/GitHub：private 正式仓库为 `https://github.com/Yenefa/AEDL`；本地 `origin` 已改为正式地址。协作冻结点为 `fix/m2-schematic-semantic-release` @ `e7ff3c1`，当时与同名 origin `0/0`；默认 `master` 当时落后 44 个提交，尚未合并。
 - 当前治理：GitHub Issue #1 / Draft PR #6，任务分支 `codex/collaboration-onboarding`，已请求正式团队成员 `la4876949-bot` Review；AI 不 merge。Issue/PR 模板只有合入默认 `master` 后才会在 GitHub 新建界面自动生效，之前仅作手工规范。
 - 双仓库：`Yenefa/AEDL` 是集成与技术主张真源；当前 private 的 `Yenefa/AEDL-spike` 是实验/过程 Evidence 卫星。卫星治理为 Issue #1 / Draft PR #2，分支 `codex/spike-governance`，同样请求 `la4876949-bot` Review。回流必须引用 exact spike commit/path 并经主仓 PR 复验，见 ADR-010 与 `docs/COLLABORATION.md` §0.7。
-- README：已移除“门禁全绿、`manufacturing_release=true`、已授权下单”等过期现状叙述；稳定入口改为指向本状态卡、Evidence Index 和结构化门禁真源。该文档治理没有重写硬件或原始 Evidence。
+- README：提交 `d1c625a` 已移除“门禁全绿、`manufacturing_release=true`、已授权下单”等过期现状叙述；稳定入口改为指向本状态卡、Evidence Index 和结构化门禁真源。该文档治理没有重写硬件或原始 Evidence。
 - 后续任务：W4B Issue #3 已指派给第二名真人协作者 `la4876949-bot`；W4A Issue #2、W4C Issue #4、Sandbox V3 Issue #5 仍为 `TO_ASSIGN`。
 - 协作者边界：项目负责人已确认 `la4876949-bot` 是第二名真人协作者，贡献分类为 `AEDL_TEAM`（正式团队成员）；当前尚未发生可登记贡献，成员身份本身不写入 `TEAM_CONTRIBUTIONS.md`。另有一条 `invitee=null` 的未过期 write 邀请，接收人 `UNKNOWN`。
 - 软件基线（2026-09-01 顺序实测）：Sandbox 272/272 OK（1 skip、1 expectedFailure）；主仓库 269/269 OK。该结果不是实体硬件验证。
