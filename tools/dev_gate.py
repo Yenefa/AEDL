@@ -181,16 +181,34 @@ def _secret_scan_targets(root) -> list:
     targets = []
     for extra in ([], ["--others", "--exclude-standard"]):
         cmd = ["git", "ls-files", "-z"] + extra
-        proc = subprocess.run(cmd, cwd=root, capture_output=True)
-        if proc.returncode == 0 and proc.stdout:
-            targets.extend(p for p in proc.stdout.decode("utf-8", errors="ignore").split(chr(0)) if p)
+        try:
+            proc = subprocess.run(cmd, cwd=root, capture_output=True)
+        except OSError as exc:
+            raise RuntimeError(f"secret_scan cannot execute git: {exc}") from exc
+        if proc.returncode != 0:
+            stderr = proc.stderr.decode("utf-8", errors="replace").strip()
+            raise RuntimeError(
+                f"secret_scan git ls-files failed (exit={proc.returncode}): {stderr}"
+            )
+        targets.extend(
+            p for p in proc.stdout.decode("utf-8", errors="surrogateescape").split(chr(0)) if p
+        )
     return [Path(root) / p for p in targets if p]
 
 
 def check_secret_scan(root) -> dict:
     started = time.monotonic()
     hits, scanned = [], 0
-    for path in _secret_scan_targets(root):
+    try:
+        targets = _secret_scan_targets(root)
+    except RuntimeError as exc:
+        return {
+            "status": "fail",
+            "exit_code": 1,
+            "detail": f"secret scan target enumeration failed: {exc}",
+            "duration_s": round(time.monotonic() - started, 1),
+        }
+    for path in targets:
         try:
             if path.stat().st_size > 1_000_000:
                 continue
