@@ -201,3 +201,54 @@
 
 - 后续复查条件：
   - 下一次真实替代料审核按本协议执行并回检；或热分析结构化为机器可校验合同时复查。
+
+## ADR-008 — AEDL Engineering Design Sandbox 三层隔离与状态控制平面
+
+- 日期：2026-09-01
+- 状态：Accepted（总体定义经项目负责人批准；V1/V2 运行时已实现——2026-09-01 三 Agent 交付并通过人工审核 CHANGES_REQUIRED 复审修复，见 AI-20260901-001/002/003/004）
+
+- 问题：
+  - AEDL 已从一次性生成转向内部 Agent 多轮设计—验证—修复循环，但“沙盒”若只表示代码执行隔离，仍无法约束器件、拓扑、引脚、参数、证据来源、冻结状态和制造权限。
+  - 当前 EDD-001 已人工收敛 CORE、POWER、USB 与 CORE_BASE，运行时必须保护该有限设计域，不能让 Agent 重新扩张选型空间或把缺失资料解释为通过。
+  - 多轮工作流还需解决副作用重复、候选污染冻结基线、同源自证、无限修复和 Agent 自行批准等问题。
+
+- 候选方案：
+  1. 只做传统进程/文件系统执行沙盒。
+  2. 直接用 LangGraph 节点承载全部硬件判断与修复逻辑。
+  3. 建立 Design、Execution、Trust 三层隔离，加跨层状态控制平面；LangGraph 只负责外层编排，工程判决由确定性 AEDL 模块执行。
+
+- 决策：
+  - 采用方案 3。
+  - Sandbox 默认拒绝，只有显式声明才允许；统一输出 `ALLOW`、`DENY`、`BLOCKED`，不得将未知降级为允许。
+  - 正式 EDD-001 运行时默认离线；外部资料检索、下载、许可证核验和证据摄取在 Sandbox 外完成。
+  - 所有变更进入 content-addressed candidate；冻结 baseline 不原地修改，候选内容改变即使旧 evidence receipt 失效。
+  - compiler 产物必须被独立解析器重新读取后验证，不能只对共同 HIR 做循环自证。
+  - 修复循环设上限、finding fingerprint 重复检测和停滞熔断；checkpoint 恢复必须幂等。
+  - 新器件、设计域扩张、替换已验证块、候选晋升和制造签发保留人工权限。
+  - 首轮实现按高中低三块分工：H 独占公共协议/编排/最终适配，M 独占策略内核，L 独占信任证据；先冻结接口，再并行实现，最后由 H 单点接线。
+
+- 理由：
+  - 三层分别回答“能设计什么”“能怎么动手”“什么值得相信”，状态控制平面防止各层状态被一个笼统 `VERIFIED` 覆盖。
+  - LangGraph 的 checkpoint、条件路由、interrupt/resume 适合外层循环，但不应成为硬件事实源或验证器。
+  - 冻结接口与独占路径使三个 Agent 能并行工作而不抢文件；最终适配器单点接线降低公共接口漂移。
+
+- AI 参与：
+  - AI 将项目负责人提出的九类隔离对象收敛为三层 Sandbox、三态判定、状态控制平面和可手工分发的三 Agent 实施计划，并核对当前 EDD-001 合同/缺口与 LangGraph 运行条件。
+
+- 团队自主判断：
+  - 项目负责人明确批准该 Sandbox 定义，并决定下一步按工程难度高、中、低拆给三个 Agent；项目目标保持为人工审查下的创客级快速原型，实体可制造性仍是后续追求而非当前主张。
+
+- Evidence / Reference：
+  - `docs/superpowers/specs/2026-09-01-edd001-engineering-design-sandbox-design.md`
+  - `docs/superpowers/plans/2026-09-01-edd001-sandbox-runtime-v1.md`
+  - `gates/contracts/edd001_core_base_contract_v1.json`
+  - `gates/contracts/edd001_pin_constraints_v1.json`
+  - `gates/contracts/edd001_usb_contract_v1.json`
+
+- 影响：
+  - 当前真实 EDD-001 因缺 POWER 合同、本地 datasheet、compiler 与独立 verifier coverage 必须保持 `BLOCKED`。
+  - V1 只用确定性 RepairPort fixture 证明多轮机制；不宣称已具备 LLM 自主修复、KiCad 工程生成、系统级网络隔离或制造能力。
+  - LangGraph 与 SQLite checkpoint 依赖只有在实现阶段实际加入后，才登记为已使用第三方资源并更新融合图；本 ADR 不把计划写成已实现事实。
+
+- 后续复查条件：
+  - V1 运行时完成并产生真实集成测试；首个 KiCad compiler/read-back verifier 接入；Sandbox 扩展到 EDD-001 之外；或引入 OS/容器级强隔离时复查。

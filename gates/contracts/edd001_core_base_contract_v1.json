@@ -1,0 +1,278 @@
+{
+  "$schema": "https://aedl.local/schemas/edd001-core-base.v1.json",
+  "schema_version": 1,
+  "board_id": "project-027-edd001",
+  "block": "EDD-001.CORE_BASE",
+  "version": "v0.1",
+  "status": "FROZEN",
+  "created_at": "2026-09-01T00:00:00+00:00",
+  "author": "human+ai (定案，PENDING_HUMAN_REVIEW)",
+  "sources": {
+    "WROOM1_DATASHEET": "https://documentation.espressif.com/esp32-s3-wroom-1_wroom-1u_datasheet_en.pdf",
+    "S3_DATASHEET": "https://documentation.espressif.com/esp32_s3_datasheet_en.pdf",
+    "SCHEMATIC_CHECKLIST": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32s3/schematic-checklist.html",
+    "LAYOUT_GUIDE": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32s3/pcb-layout-design.html",
+    "HW_DESIGN_GUIDELINES_PDF": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32s3/esp-hardware-design-guidelines-en-master-esp32s3.pdf"
+  },
+  "device": {
+    "mpn": "ESP32-S3-WROOM-1-N8R8",
+    "core": { "voltage": "3.3V" },
+    "flash": { "type": "in_package", "size": "8MB" },
+    "psram": { "type": "octal_spi", "size": "8MB" }
+  },
+  "power_entry": {
+    "rail": "3V3",
+    "decoupling": {
+      "C_CORE_BULK": { "value": "22uF", "placement": "near_module_3v3_gnd" },
+      "C_CORE_HF": { "value": "100nF", "placement": "near_module_3v3_gnd" }
+    },
+    "notes": "Module-local storage/decoupling at VDD33 per official typical peripheral circuit. Must not be removed because AP63203 has its own output caps."
+  },
+  "reset": {
+    "en_pullup": "10k",
+    "en_cap": "1uF",
+    "reset_button": "EN_to_GND",
+    "verified_infrastructure": true,
+    "agent_forbidden": ["modify", "remove_rc", "use_en_as_gpio"]
+  },
+  "boot": {
+    "gpio0_external_pullup": "10k",
+    "boot_button": "GPIO0_to_GND",
+    "notes": "10k is AEDL baseline choice; official requirement is external pull-up recommended (value not pinned). GPIO0 must not have large capacitance (risk of false Download Mode)."
+  },
+  "pin_policy": {
+    "policy_version": "v0.1: all four strapping pins forbidden for agent. Future EDD expansion may introduce conditionally_available requiring proof that external circuit does not alter power-up sampling state.",
+    "fixed_pins": {
+      "GPIO19": "USB_D-",
+      "GPIO20": "USB_D+",
+      "GPIO0": "BOOT"
+    },
+    "hard_forbidden": {
+      "GPIO35": { "reason": "octal_psram", "source": "WROOM1_DATASHEET" },
+      "GPIO36": { "reason": "octal_psram", "source": "WROOM1_DATASHEET" },
+      "GPIO37": { "reason": "octal_psram", "source": "WROOM1_DATASHEET" }
+    },
+    "strapping": {
+      "GPIO0": { "default": "HIGH", "protected": true },
+      "GPIO3": { "protected": true, "default": "UNKNOWN" },
+      "GPIO45": { "protected": true },
+      "GPIO46": { "default": "LOW", "protected": true }
+    },
+    "core_reserved": {
+      "GPIO0": "BOOT",
+      "GPIO3": "STRAPPING",
+      "GPIO45": "STRAPPING",
+      "GPIO46": "STRAPPING",
+      "GPIO19": "USB_D-",
+      "GPIO20": "USB_D+"
+    },
+    "soft_reserved": {
+      "GPIO43": { "preferred_function": "U0TXD", "series_resistor": "499ohm" },
+      "GPIO44": { "preferred_function": "U0RXD" }
+    },
+    "agent_gpio_pool": [
+      "GPIO1", "GPIO2", "GPIO4", "GPIO5", "GPIO6", "GPIO7", "GPIO8", "GPIO9",
+      "GPIO10", "GPIO11", "GPIO12", "GPIO13", "GPIO14", "GPIO15", "GPIO16",
+      "GPIO17", "GPIO18", "GPIO21", "GPIO38", "GPIO39", "GPIO40", "GPIO41",
+      "GPIO42", "GPIO47", "GPIO48"
+    ]
+  },
+  "antenna": {
+    "placement": { "preferred": "overhang_board_edge" },
+    "copper_under_antenna": "forbidden",
+    "traces_under_antenna": "forbidden",
+    "components_under_antenna": "forbidden",
+    "clearance_mm": 15,
+    "rf_verification": ["throughput", "range"],
+    "notes": "If mechanical constraints prevent overhang, fall back to official keepout-zone rules. RF is encapsulated by the module; we verify the integrator did not break the pre-designed antenna."
+  },
+  "epad": {
+    "net": "GND",
+    "soldered": true,
+    "land_pattern": "espressif_recommended",
+    "notes": "EPAD 41 = GND. Soldering not mandatory but improves thermal performance; baseline is soldered."
+  },
+  "to_verify": [
+    "GPIO26/27/28 are broken out on WROOM-1 but excluded from agent pool; confirm intent against module datasheet.",
+    "GPIO29-32 / GPIO33 / GPIO34 breakout status on WROOM-1 (in-package flash/PSRAM); confirm against module datasheet.",
+    "GPIO3 strapping default state (official not explicit); confirm against S3 datasheet / boot log."
+  ],
+  "rules": [
+    {
+      "id": "PIN_PSRAM_HARD_FORBIDDEN",
+      "kind": "pin_constraint",
+      "severity": "critical",
+      "title": "GPIO35/36/37 are physically unavailable on N8R8 (octal PSRAM); any assignment is DENIED",
+      "deny": {
+        "pins": ["GPIO35", "GPIO36", "GPIO37"],
+        "reason": "OCTAL_PSRAM",
+        "status": "HARD_FORBIDDEN",
+        "source": "WROOM1_DATASHEET"
+      }
+    },
+    {
+      "id": "PIN_CORE_RESERVED",
+      "kind": "pin_constraint",
+      "severity": "critical",
+      "title": "GPIO0/3/19/20/45/46 are core-reserved; agent assignment is DENIED in v0.1",
+      "deny": {
+        "pins": ["GPIO0", "GPIO3", "GPIO19", "GPIO20", "GPIO45", "GPIO46"],
+        "status": "CORE_RESERVED"
+      }
+    },
+    {
+      "id": "PIN_SOFT_RESERVED",
+      "kind": "pin_constraint",
+      "severity": "major",
+      "title": "GPIO43/44 soft-reserved for UART0; agent may use only with explicit override",
+      "deny": {
+        "pins": ["GPIO43", "GPIO44"],
+        "status": "SOFT_RESERVED",
+        "override": "requires_human_approval"
+      }
+    },
+    {
+      "id": "POWER_ENTRY_DECOUPLING",
+      "kind": "power",
+      "severity": "critical",
+      "title": "Module-local 3V3 decoupling: 22uF bulk + 100nF HF near module 3V3/GND",
+      "checks": {
+        "intent": {
+          "components": {
+            "C_CORE_BULK": { "value": "22uF", "net1": "3V3", "net2": "GND" },
+            "C_CORE_HF": { "value": "100nF", "net1": "3V3", "net2": "GND" }
+          }
+        },
+        "netlist": {
+          "components": {
+            "C_CORE_BULK": { "value": "22uF", "net1": "3V3", "net2": "GND" },
+            "C_CORE_HF": { "value": "100nF", "net1": "3V3", "net2": "GND" }
+          }
+        },
+        "pcb": {
+          "components": {
+            "C_CORE_BULK": { "value": "22uF", "net1": "3V3", "net2": "GND" },
+            "C_CORE_HF": { "value": "100nF", "net1": "3V3", "net2": "GND" }
+          }
+        }
+      }
+    },
+    {
+      "id": "EN_RESET_NETWORK",
+      "kind": "connectivity",
+      "severity": "critical",
+      "title": "EN/CHIP_PU must not float; 10k pull-up to 3V3 + 1uF to GND + reset button EN->GND",
+      "checks": {
+        "intent": {
+          "pins": {
+            "R_EN.1": { "net": "+3V3" },
+            "R_EN.2": { "net": "EN" },
+            "C_EN.1": { "net": "EN" },
+            "C_EN.2": { "net": "GND" },
+            "SW_RESET.1": { "net": "EN" },
+            "SW_RESET.2": { "net": "GND" }
+          },
+          "components": {
+            "R_EN": { "value": "10k" },
+            "C_EN": { "value": "1uF" }
+          }
+        },
+        "netlist": {
+          "pins": {
+            "R_EN.1": { "net": "+3V3" },
+            "R_EN.2": { "net": "EN" },
+            "C_EN.1": { "net": "EN" },
+            "C_EN.2": { "net": "GND" },
+            "SW_RESET.1": { "net": "EN" },
+            "SW_RESET.2": { "net": "GND" }
+          },
+          "components": {
+            "R_EN": { "value": "10k" },
+            "C_EN": { "value": "1uF" }
+          }
+        },
+        "pcb": {
+          "pins": {
+            "R_EN.1": { "net": "+3V3" },
+            "R_EN.2": { "net": "EN" },
+            "C_EN.1": { "net": "EN" },
+            "C_EN.2": { "net": "GND" },
+            "SW_RESET.1": { "net": "EN" },
+            "SW_RESET.2": { "net": "GND" }
+          },
+          "components": {
+            "R_EN": { "value": "10k" },
+            "C_EN": { "value": "1uF" }
+          }
+        }
+      }
+    },
+    {
+      "id": "BOOT_NETWORK",
+      "kind": "connectivity",
+      "severity": "critical",
+      "title": "GPIO0 10k external pull-up to 3V3 + BOOT button GPIO0->GND",
+      "checks": {
+        "intent": {
+          "pins": {
+            "R_BOOT.1": { "net": "+3V3" },
+            "R_BOOT.2": { "net": "GPIO0" },
+            "SW_BOOT.1": { "net": "GPIO0" },
+            "SW_BOOT.2": { "net": "GND" }
+          },
+          "components": {
+            "R_BOOT": { "value": "10k" }
+          }
+        },
+        "netlist": {
+          "pins": {
+            "R_BOOT.1": { "net": "+3V3" },
+            "R_BOOT.2": { "net": "GPIO0" },
+            "SW_BOOT.1": { "net": "GPIO0" },
+            "SW_BOOT.2": { "net": "GND" }
+          },
+          "components": {
+            "R_BOOT": { "value": "10k" }
+          }
+        },
+        "pcb": {
+          "pins": {
+            "R_BOOT.1": { "net": "+3V3" },
+            "R_BOOT.2": { "net": "GPIO0" },
+            "SW_BOOT.1": { "net": "GPIO0" },
+            "SW_BOOT.2": { "net": "GND" }
+          },
+          "components": {
+            "R_BOOT": { "value": "10k" }
+          }
+        }
+      }
+    },
+    {
+      "id": "ANTENNA_OVERHANG",
+      "kind": "layout",
+      "severity": "major",
+      "title": "Antenna overhangs board edge; no copper/traces/components under antenna; ~15mm clearance; RF verification required",
+      "constraint": {
+        "placement": "overhang_board_edge",
+        "copper_under_antenna": "forbidden",
+        "traces_under_antenna": "forbidden",
+        "components_under_antenna": "forbidden",
+        "clearance_mm": 15,
+        "rf_verification": ["throughput", "range"],
+        "fallback": "official_keepout_zone_rules_if_no_overhang"
+      }
+    },
+    {
+      "id": "EPAD_GND",
+      "kind": "connectivity",
+      "severity": "major",
+      "title": "EPAD 41 = GND, soldered, Espressif recommended land pattern",
+      "constraint": {
+        "epad": "GND",
+        "soldered": true,
+        "land_pattern": "espressif_recommended"
+      }
+    }
+  ]
+}

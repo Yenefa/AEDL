@@ -1,0 +1,267 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aedl.local/schemas/domain-policy.v1.json",
+  "title": "AEDL Sandbox normalized domain policy document (EDD-001)",
+  "description": "Normative schema for the normalized policy document consumed by SandboxPolicyEngine.from_document. Owner: Agent M. This file is the single source of truth; document.py enforces it with a stdlib-only JSON Schema subset evaluator and never falls back to permissive defaults.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "domain_id",
+    "board_id",
+    "allowed_components",
+    "pins",
+    "parameters",
+    "file_policy",
+    "network_policy",
+    "shell_policy",
+    "tools",
+    "compilers",
+    "verifiers",
+    "prerequisites",
+    "available",
+    "active_rules"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "domain_id": { "const": "EDD-001" },
+    "board_id": { "const": "project-027-edd001" },
+    "allowed_components": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/component_record" }
+    },
+    "pins": { "$ref": "#/$defs/pin_policy" },
+    "parameters": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/parameter_record" }
+    },
+    "file_policy": { "$ref": "#/$defs/file_policy" },
+    "network_policy": { "$ref": "#/$defs/network_policy" },
+    "shell_policy": { "$ref": "#/$defs/shell_policy" },
+    "tools": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/tool_record" }
+    },
+    "compilers": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/compiler_record" }
+    },
+    "verifiers": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/verifier_record" }
+    },
+    "prerequisites": { "$ref": "#/$defs/prerequisites" },
+    "available": { "$ref": "#/$defs/available" },
+    "active_rules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/active_rule" }
+    }
+  },
+  "$defs": {
+    "identifier": { "type": "string", "minLength": 1 },
+    "identifier_list": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/identifier" }
+    },
+    "component_record": {
+      "type": "object",
+      "required": ["mpn", "role", "required_evidence_ids"],
+      "additionalProperties": false,
+      "properties": {
+        "mpn": { "$ref": "#/$defs/identifier" },
+        "role": { "$ref": "#/$defs/identifier" },
+        "required_evidence_ids": { "$ref": "#/$defs/identifier_list" },
+        "requires_resolution": {
+          "type": "boolean",
+          "description": "True for GENERIC symbols that are admissible at HIR level but must be resolved to an exact component before COMPILE_HIR."
+        }
+      }
+    },
+    "pin_policy": {
+      "type": "object",
+      "required": ["allowed", "core_reserved", "hard_forbidden", "soft_reserved"],
+      "additionalProperties": false,
+      "properties": {
+        "allowed": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" },
+          "description": "Agent GPIO pool. Materialized from CORE_BASE pin_policy.agent_gpio_pool."
+        },
+        "core_reserved": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "hard_forbidden": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "soft_reserved": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "rule_sources": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/identifier" },
+          "description": "Optional pin -> authoritative rule id map, used as Finding.source."
+        }
+      }
+    },
+    "parameter_record": {
+      "type": "object",
+      "required": ["parameter_id", "value_type", "unit", "required_evidence_ids"],
+      "additionalProperties": false,
+      "anyOf": [
+        { "required": ["allowed_values"] },
+        { "required": ["minimum"] },
+        { "required": ["maximum"] }
+      ],
+      "properties": {
+        "parameter_id": { "$ref": "#/$defs/identifier" },
+        "value_type": { "enum": ["number", "string"] },
+        "unit": { "$ref": "#/$defs/identifier" },
+        "minimum": { "type": "number" },
+        "maximum": { "type": "number" },
+        "allowed_values": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "anyOf": [
+              { "type": "number" },
+              { "type": "string" }
+            ]
+          }
+        },
+        "required_evidence_ids": { "$ref": "#/$defs/identifier_list" }
+      }
+    },
+    "file_policy": {
+      "type": "object",
+      "required": [
+        "candidate_root_only",
+        "direct_kicad_write",
+        "allowed_artifact_kinds",
+        "agent_forbidden_artifact_kinds"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "candidate_root_only": { "const": true },
+        "direct_kicad_write": { "const": false },
+        "allowed_artifact_kinds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "agent_forbidden_artifact_kinds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        }
+      }
+    },
+    "network_policy": {
+      "type": "object",
+      "required": ["runtime_access"],
+      "additionalProperties": false,
+      "properties": {
+        "runtime_access": {
+          "const": false,
+          "description": "Formal EDD-001 runtime is offline. True is not expressible."
+        }
+      }
+    },
+    "shell_policy": {
+      "type": "object",
+      "required": ["arbitrary_shell"],
+      "additionalProperties": false,
+      "properties": {
+        "arbitrary_shell": { "const": false }
+      }
+    },
+    "tool_record": {
+      "type": "object",
+      "required": ["tool_id", "tool_version", "capability"],
+      "additionalProperties": false,
+      "properties": {
+        "tool_id": { "$ref": "#/$defs/identifier" },
+        "tool_version": { "$ref": "#/$defs/identifier" },
+        "capability": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "compiler_record": {
+      "type": "object",
+      "required": ["compiler_id", "compiler_version", "output_kind", "required_coverage_ids"],
+      "additionalProperties": false,
+      "properties": {
+        "compiler_id": { "$ref": "#/$defs/identifier" },
+        "compiler_version": { "$ref": "#/$defs/identifier" },
+        "output_kind": { "$ref": "#/$defs/identifier" },
+        "required_coverage_ids": { "$ref": "#/$defs/identifier_list" }
+      }
+    },
+    "verifier_record": {
+      "type": "object",
+      "required": ["verifier_id", "verifier_version", "artifact_kind", "coverage_ids"],
+      "additionalProperties": false,
+      "properties": {
+        "verifier_id": { "$ref": "#/$defs/identifier" },
+        "verifier_version": { "$ref": "#/$defs/identifier" },
+        "artifact_kind": { "$ref": "#/$defs/identifier" },
+        "coverage_ids": { "$ref": "#/$defs/identifier_list" }
+      }
+    },
+    "prerequisites": {
+      "type": "object",
+      "required": [
+        "required_contract_ids",
+        "required_evidence_ids",
+        "required_component_resolutions"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "required_contract_ids": { "$ref": "#/$defs/identifier_list" },
+        "required_evidence_ids": { "$ref": "#/$defs/identifier_list" },
+        "required_component_resolutions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/identifier" },
+          "description": "GENERIC symbols that must be resolved to exact components before COMPILE_HIR."
+        }
+      }
+    },
+    "available": {
+      "type": "object",
+      "required": ["contract_ids", "evidence_ids"],
+      "additionalProperties": false,
+      "properties": {
+        "contract_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" },
+          "description": "Contract ids actually loaded and verified from the repository."
+        },
+        "evidence_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" },
+          "description": "Evidence ids with a local, hash-bound artifact. Source URLs never appear here."
+        }
+      }
+    },
+    "active_rule": {
+      "type": "object",
+      "required": ["rule_id", "source_contract_id", "kind", "fingerprint"],
+      "additionalProperties": false,
+      "properties": {
+        "rule_id": { "$ref": "#/$defs/identifier" },
+        "source_contract_id": { "$ref": "#/$defs/identifier" },
+        "kind": { "$ref": "#/$defs/identifier" },
+        "fingerprint": { "$ref": "#/$defs/identifier" }
+      }
+    }
+  }
+}

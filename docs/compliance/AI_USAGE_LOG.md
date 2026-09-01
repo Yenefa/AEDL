@@ -1928,7 +1928,7 @@
 - 最终状态：`PENDING_HUMAN_REVIEW`
 
 
-## AI-20260831-028
+## AI-20260831-029
 
 - 日期：2026-08-31
 - 任务名称：U3 路线 B 候选资料冻结入库（纯资料冻结，未执行 ECO，未改硬件设计）
@@ -1954,6 +1954,10 @@
   validate_datasheet_bundle 对真实 manifest 只读验证前后错误集合一致、未新增 DS0/DS1/SHA 错误；git diff --check 通过。
 - 已知限制：未做热实测/输出电容稳定性实测/最低输入与瞬态实测；未执行 ECO；未做人工制造签发；AMS1117 未进 BOM；
   电源链 V_IN,min/max、整板 I_OUT,min/max、精确 Cout MPN、本板 SOT-223 θJA 均待 B1 闭环核算。
+- 编号纠错（2026-08-31 审计后补记）：本工作单元最初误记为 AI-20260831-028，与 spike 独立仓库打包
+  任务编号碰撞，现更正为新的唯一编号 AI-20260831-029。f169018 只顺带提交过误编号台账文字
+  （其提交信息仅把 028 绑定给 spike 打包任务）；实际候选证据文件（U3_CANDIDATE 目录、U1 供电
+  指南 HTML）及本轮纠错仍未提交、未推送。已共享历史不改写，后续使用新的独立纠错/证据提交承接。
 - Commit / PR：未提交、未推送（未获授权）。
 - 最终状态：PENDING_HUMAN_REVIEW
 
@@ -1981,5 +1985,73 @@
   （待独立仓库推送验收后再决定是否从主仓库移除/改 .gitignore）。
 
 - Commit / PR：本地仓库 1 commit；主仓库仅台账追加，随下批提交。
+
+- 最终状态：`PENDING_HUMAN_REVIEW`
+
+## AI-20260901-001
+
+- 日期：2026-09-01
+- 任务名称：EDD-001 Engineering Design Sandbox 定义冻结与三 Agent 无冲突执行计划
+- 模块/路径：
+  - `docs/superpowers/specs/2026-09-01-edd001-engineering-design-sandbox-design.md`
+  - `docs/superpowers/plans/2026-09-01-edd001-sandbox-runtime-v1.md`
+  - `docs/compliance/DECISIONS.md`（ADR-008）
+  - 本台账本条目
+
+- 做了什么：
+  - 将项目负责人批准的 Sandbox 收敛为 Design Domain Isolation、Execution Isolation、Trust Isolation 与跨层状态控制平面；冻结 closed-world、deny-by-default、`ALLOW/DENY/BLOCKED`、候选不可变、独立 read-back 验证、有限修复与人工晋升边界。
+  - 基于当前 EDD-001 三份合同与空 datasheet 目录，明确真实 bundle 因缺 POWER 合同、本地资料、compiler 和 verifier coverage 必须保持 `BLOCKED`。
+  - 编写可手工分发给三个 Agent 的实施计划：高难度 H 独占公共协议/LangGraph 编排/最终适配；中难度 M 独占确定性策略内核；低难度 L 独占哈希/证据/晋升门禁。通过 Wave 0 接口冻结、Wave 1 独占目录并行、Wave 2 H 单点接线避免文件冲突。
+  - 为每块写明精确文件所有权、公共 API、测试先行顺序、reason code、禁改区、交接模板与最终 14 个集成场景；TEST_ONLY 完整夹具与真实 EDD evidence 严格分开。
+  - 规划隔离的 uv Python 3.11 运行时，并冻结待实现依赖为 LangGraph 1.2.11 与 SQLite checkpoint 3.1.1；当前仅为计划，未安装、未集成、未登记成已使用成果。
+
+- 验证：
+  - 重新读取三份当前 EDD-001 合同，核对 CORE_BASE 对旧 pin 规则的 supersession、GPIO35/36/37、GPIO19/20、USB 精确器件与当前缺失资料边界。
+  - 检查三个任务包的写路径互不重叠；共享 EDD 合同、M2、delivery、合规台账和 spike 均列为 worker 禁改区。
+  - 计划文档扫描未发现占位式 `TBD/TODO/implement later/fill in`；Markdown 与仓库 diff 检查结果见本轮交接。
+
+- 已知限制：
+  - 本轮只完成设计与执行计划，没有创建 `sandbox_runtime/`、安装依赖、运行 LangGraph、生成 KiCad、下载 datasheet 或执行任何工程/物理验证。
+  - 当前主机系统 Python 为 3.9；计划中的 Python 3.11 环境须由 H 在实现阶段通过 uv 隔离创建。
+  - `docs/competition/AIC_STANDARD.md` 与 `docs/competition/SCORING_MAP.md` 当前不存在，未能按项目规则读取；本轮不制作正式赛事材料。
+  - 第三方资源台账与 `FUSION_MAP` 未把 LangGraph 写成已集成，待实现阶段实际加入依赖并通过测试后更新。
+
+- Commit / PR：随本条提交；未推送。
+- 最终状态：`PENDING_HUMAN_REVIEW`
+
+## AI-20260901-002
+
+- 日期：2026-09-01
+- 任务名称：EDD-001 Sandbox 实现（H/M/L 三 Agent）+ 人工审核 CHANGES_REQUIRED 复审修复
+- 模块/路径：`sandbox_runtime/`（全部）、`src/hardware/edd001-board/`、`gates/contracts/edd001_*`、`notes/edd001-sandbox/`
+
+- 做了什么（三 Agent 分工，均为 AI 实质贡献）：
+  - **H（编排）**：公共协议冻结（V1 `f053aae2…` → 人工审核后 V2 `f7d44732…`）、CandidateWorkspace
+    （路径/junction 逃逸拒绝、候选哈希含隐藏文件、.actions.jsonl 簿记）、LangGraph 编排
+    （preflight→execute→verify→stall/repair→human interrupt→promote）、CLI、state.py actor_id 传播。
+  - **M（策略）**：三态判定引擎（NaN/±inf 拒绝、ParameterRecord 双层防线）、capability grants
+    （writer=compiler 不再自报）、manifest 绑定加载（策略只消费 validate_bundle 通过的合同字节，
+    INVALID/漂移 fail-closed）、空目录不算证据。
+  - **L（信任）**：FileTrustStore（canonical JSON/bundle 校验/append-only receipt O_EXCL 原子写/
+    消费前全量复验）、promotion 真值表、V2 审批 receipt 绑定校验（绑错候选/跨 run/匿名 → DENY）、
+    真实 EDD manifest（如实 PARTIAL，六文件哈希实测）。
+  - 人工审核 5 项 P1 全部修复且反例固化回归；自洽伪造向量（无密码学锚时原理性不可闭合）
+    保持 expectedFailure 如实标记，上报为 V3 候选。
+
+- 验证（统一验收轮，全部真实运行）：
+  - sandbox 全量 272/272 OK（1 skip=Windows symlink 权限，1 expectedFailure=上述已上报向量）
+  - 主仓库全量 269/269 OK；隔离副本（cp 全树、剔除 .git/克隆仓库）双套件复跑全绿
+  - protocol.py 哈希零漂移（V2 `f7d44732785d17a20283f3a18fde7689eebfee78f10a93ae899e1dd116383cad`）
+  - 真实 EDD-001 preflight：BLOCKED / 7 findings / exit 1（如实，无假 PASS）
+  - M2 gates：9 PASS + board_review FAIL（仅 manufacturing_release=false）+ datasheet_contract 32 项
+    待人工签发——与交接基线语义一致，零回归
+
+- 已知限制：V2 审批 receipt 无密码学锚（自洽伪造需 V3 带外签名）；orchestrator 侧
+  actor/grants/verified-bundle 灌注为 H 后续工作（灌注前真实链路一律 fail-closed，方向保守）；
+  capability 词汇映射（approval_status=APPROVED 等 key=value 串）需 H 灌注侧采用同一字符串。
+
+- Commit / PR：本批 Sandbox 文件单独分组提交（排除 M2 U3/NOTICE/spike 等混杂改动），随本条推送。
+
+- AIC Score Target：创新性与方案设计（ADR-008 三层沙盒 + 人工审核对抗闭环）
 
 - 最终状态：`PENDING_HUMAN_REVIEW`

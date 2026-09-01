@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "domain_id": "EDD-001",
+  "board_id": "project-027-edd001",
+  "scope_status": "FROZEN",
+  "evidence_status": "PARTIAL",
+  "execution_status": "NOT_READY",
+  "verification_status": "NOT_RUN",
+  "approval_status": "PENDING",
+  "files": [
+    {
+      "role": "gate_contract",
+      "repo_path": "gates/contracts/edd001_core_base_contract_v1.json",
+      "size_bytes": 10058,
+      "sha256": "d7dd6982fb82367c5f3516e67e91b8cf65da20c44621c47fd59d526e411d9473",
+      "source_class": "VERIFIED_SOURCE",
+      "required": true
+    },
+    {
+      "role": "evidence_contract",
+      "repo_path": "src/hardware/edd001-board/evidence/contracts/edd001_core_base_contract_v1.json",
+      "size_bytes": 10058,
+      "sha256": "d7dd6982fb82367c5f3516e67e91b8cf65da20c44621c47fd59d526e411d9473",
+      "source_class": "VERIFIED_SOURCE",
+      "required": true
+    },
+    {
+      "role": "gate_contract",
+      "repo_path": "gates/contracts/edd001_pin_constraints_v1.json",
+      "size_bytes": 8610,
+      "sha256": "e3b75e74860aa43df3fe5f3e5dad4f61d3b80cd9879b32215ae447718e8fd569",
+      "source_class": "VERIFIED_SOURCE",
+      "required": true
+    },
+    {
+      "role": "evidence_contract",
+      "repo_path": "src/hardware/edd001-board/evidence/contracts/edd001_pin_constraints_v1.json",
+      "size_bytes": 8610,
+      "sha256": "e3b75e74860aa43df3fe5f3e5dad4f61d3b80cd9879b32215ae447718e8fd569",
+      "source_class": "VERIFIED_SOURCE",
+      "required": true
+    },
+    {
+      "role": "gate_contract",
+      "repo_path": "gates/contracts/edd001_usb_contract_v1.json",
+      "size_bytes": 6038,
+      "sha256": "0094292e2340b7a7d058c1b7fb4d1ff0b0f4457c9093dec2c1b146eb56e8c911",
+      "source_class": "VERIFIED_SOURCE",
+      "required": true
+    },
+    {
+      "role": "evidence_contract",
+      "repo_path": "src/hardware/edd001-board/evidence/contracts/edd001_usb_contract_v1.json",
+      "size_bytes": 6038,
+      "sha256": "0094292e2340b7a7d058c1b7fb4d1ff0b0f4457c9093dec2c1b146eb56e8c911",
+      "source_class": "VERIFIED_SOURCE",
+      "required": true
+    }
+  ],
+  "mirror_sets": [
+    {
+      "authoritative_path": "gates/contracts/edd001_core_base_contract_v1.json",
+      "mirror_path": "src/hardware/edd001-board/evidence/contracts/edd001_core_base_contract_v1.json",
+      "expected_equal": true
+    },
+    {
+      "authoritative_path": "gates/contracts/edd001_pin_constraints_v1.json",
+      "mirror_path": "src/hardware/edd001-board/evidence/contracts/edd001_pin_constraints_v1.json",
+      "expected_equal": true
+    },
+    {
+      "authoritative_path": "gates/contracts/edd001_usb_contract_v1.json",
+      "mirror_path": "src/hardware/edd001-board/evidence/contracts/edd001_usb_contract_v1.json",
+      "expected_equal": true
+    }
+  ],
+  "missing_requirements": [
+    {
+      "id": "EDD001_POWER_CONTRACT",
+      "kind": "contract",
+      "reason_code": "EVIDENCE_MISSING",
+      "description": "EDD-001 power contract has not been authored; the +5V/+3V3 power tree is unconstrained by a frozen contract"
+    },
+    {
+      "id": "ESP32_S3_WROOM_1_N8R8_DATASHEET",
+      "kind": "datasheet",
+      "reason_code": "EVIDENCE_MISSING",
+      "description": "ESP32-S3-WROOM-1-N8R8 datasheet not frozen as local evidence; MCU pin/electrical constraints unverifiable"
+    },
+    {
+      "id": "AP63203WU_7_DATASHEET",
+      "kind": "datasheet",
+      "reason_code": "EVIDENCE_MISSING",
+      "description": "AP63203WU-7 buck regulator datasheet not frozen as local evidence; power-stage constraints unverifiable"
+    },
+    {
+      "id": "TYPE_C_31_M_12_DRAWING",
+      "kind": "mechanical_drawing",
+      "reason_code": "EVIDENCE_MISSING",
+      "description": "TYPE-C-31-M-12 mechanical drawing not frozen as local evidence; connector footprint constraints unverifiable"
+    },
+    {
+      "id": "USBLC6_2SC6_DATASHEET",
+      "kind": "datasheet",
+      "reason_code": "EVIDENCE_MISSING",
+      "description": "USBLC6-2SC6 ESD protector datasheet not frozen as local evidence; USB protection constraints unverifiable"
+    }
+  ],
+  "tool_coverage": {
+    "compilers": [],
+    "verifiers": []
+  },
+  "notes": [
+    "Truthful manifest for the six current EDD-001 contract files (three gates/contracts authoritative, three evidence/contracts mirrors).",
+    "source URLs inside the contract files are references only, not frozen local evidence; no datasheet has been frozen for EDD-001 yet.",
+    "evidence_status PARTIAL is the honest state: contract bundle present and hash-verified, engineering sources missing; no example data is used to manufacture COMPLETE.",
+    "generated_at intentionally omitted: no caller-supplied deterministic time value is available and a wall-clock timestamp would break reproducibility.",
+    "V2 protocol frozen 2026-09-01 (sha256 f7d44732785d17a20283f3a18fde7689eebfee78f10a93ae899e1dd116383cad): approval authority now requires a candidate-bound HumanApprovalReceipt; this manifest's approval_status=PENDING remains truthful - no human approval receipt exists for EDD-001."
+  ]
+}

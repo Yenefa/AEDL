@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aedl.local/schemas/edd001-sandbox/evidence-event-v1.json",
+  "title": "EDD-001 sandbox evidence event v1",
+  "description": "Agent L ownership. An EvidenceEvent is serialized with canonical JSON (sorted keys, tight separators, ensure_ascii=False, allow_nan=False) and content-addressed as sha256(canonical bytes) under receipt_root/<run_id>/<event_hash>.json. verification and promotion events must carry candidate_sha256 in input_hashes. Recording is append-only and idempotent: an existing event_hash path with identical bytes yields the same valid receipt; different bytes yield valid=false and the existing file is preserved.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["run_id", "candidate_id", "event_type", "input_hashes", "payload"],
+  "properties": {
+    "run_id": { "type": "string", "minLength": 1 },
+    "candidate_id": { "type": "string", "minLength": 1 },
+    "event_type": { "type": "string", "minLength": 1 },
+    "input_hashes": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+    },
+    "payload": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "event_type": { "enum": ["verification", "promotion"] } } },
+      "then": {
+        "required": ["input_hashes"],
+        "properties": {
+          "input_hashes": { "required": ["candidate_sha256"] }
+        }
+      }
+    }
+  ]
+}

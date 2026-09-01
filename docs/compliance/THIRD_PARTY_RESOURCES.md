@@ -140,6 +140,16 @@
 - 最终开放方式：仅保留链接和必要事实引用
 - 对应模块：`gates/contracts/m2_schematic_contract_v1.json`、`docs/knowledge/PROJECT_PITFALLS.md`
 - 备注：候选替代尚未获人工制造签发。2026-08-30 AI-20260830-002 依据 ME6211C V20 数据手册核实 SOT-353 与 SOT-23-5 引脚序一致后执行 U3 换料（C82942 → C235316），换料全链改动仍处 `PENDING_HUMAN_REVIEW`。
+- **2026-08-31 候选资料冻结（AI-20260831-029，状态 PENDING_HUMAN_REVIEW）**：
+  - **AMS1117-3.3 / C6186**：原厂 Advanced Monolithic Systems 数据手册、LCSC 托管的 8 页 PDF 副本（本地冻结于
+    `src/hardware/m2-board/evidence/datasheets/U3_CANDIDATE_AMS1117-3.3_C6186/`，sha256 189a2651…，UTC 2026-08-31T14:35:47Z）。
+    **候选件，尚未进入 BOM**，`candidate_status = CANDIDATE_ONLY_NOT_BOM_BOUND`，`decision = BLOCKED_PENDING_THERMAL_COUT_INPUT`；
+    不替换主 manifest 的 ME6211C33R5G/C235316。仅作事实核对与本地复现，版权归原厂商。
+  - **Espressif ESP32-C3 官方供电指南**：官方硬件设计指南 checkpoint 页面本地 HTML 快照
+    （`src/hardware/m2-board/evidence/datasheets/U1_ESP32-C3-WROOM-02/esp32c3_schematic_checklist_power_supply_2026-08-31.html`，
+    sha256 6a6355…，UTC 2026-08-31T14:36:46Z），已更新进 `datasheet_manifest.json` 的 U1 hardware_design_guidelines 记录。
+    仅作事实核对与本地复现，版权归原权利人（Espressif）。两项均未进入再分发。
+  - 再分发权对上述两项保持 `TO_VERIFY`；不把 LCSC 托管说成厂商官方网站，准确表述为"原厂数据手册的 LCSC 托管副本"。
 
 ## RES-008
 
@@ -152,3 +162,17 @@
 - 使用方式：见 LICENSE / NOTICE / README「知识产权与许可合规」节
 - 是否修改上游源码：否
 - 是否随 AEDL 再分发：是（本项目自身代码与文档；第三方文档归因除外）
+
+## RES-009
+
+- 名称：LangGraph + langgraph-checkpoint-sqlite（EDD-001 Sandbox 编排层）
+- 类型：第三方库（Python）
+- 版本：langgraph==1.2.11、langgraph-checkpoint-sqlite==3.1.1（sandbox_runtime/pyproject.toml 锁定）
+- 来源：pypi（langchain-ai/langgraph，MIT）
+- License / 授权类型：MIT（`TO_VERIFY`：以随包 LICENSE 文件为准，未逐字核对）
+- 融合角色：CORE（Sandbox 外层编排：状态图/条件路由/interrupt-resume/checkpoint，ADR-008 方案 3）
+- 用途与使用方式：仅承担编排与人工中断恢复；硬件判决/验证/信任判定均在 AEDL 确定性模块（设计边界见 ADR-008）
+- 是否修改上游源码：否
+- 是否再分发：否（依赖声明，不随仓库分发源码）
+- AEDL 自研边界：三层沙盒（Design/Execution/Trust）、协议 V2、策略引擎、信任存储、promotion 真值表全部自研；LangGraph 仅为外层循环载体
+- 关联模块：sandbox_runtime/

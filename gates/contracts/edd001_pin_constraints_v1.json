@@ -1,0 +1,216 @@
+{
+  "$schema": "https://aedl.local/schemas/edd001-pin-constraints.v1.json",
+  "schema_version": 1,
+  "board_id": "project-027-edd001",
+  "created_at": "2026-09-01T00:00:00+00:00",
+  "author": "human+ai (定案草案，PENDING_HUMAN_REVIEW)",
+  "superseded_by": {
+    "pin_policy": "gates/contracts/edd001_core_base_contract_v1.json",
+    "note": "CORE_BASE v0.1 freeze supersedes the pin-policy rules in this file (PIN_STRAP_*, EN_RESET_NETWORK, BOOT_BUTTON_GPIO0, POWER_3V3_DECOUPLING, ANTENNA_KEEPOUT). USB_DIFFERENTIAL and POWER_SOURCE_SEPARATION remain valid here."
+  },
+  "sources": {
+    "ESP32_S3_SCHEMATIC_CHECKLIST": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32s3/schematic-checklist.html",
+    "ESP32_S3_LAYOUT_GUIDE": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32s3/pcb-layout-design.html",
+    "ESP32_S3_GPIO_DOC": "https://docs.espressif.com/projects/esp-idf/en/v5.1/esp32s3/api-reference/peripherals/gpio.html",
+    "ESPTOOL_BOOT_MODE": "https://docs.espressif.com/projects/esptool/en/latest/esp32s3/advanced-topics/boot-mode-selection.html",
+    "ESP32_S3_TECHPEDIA": "https://docs.espressif.com/projects/esp-techpedia/zh_CN/latest/esp-friends/get-started/try-firmware/try-firmware-hardware/esp32s3.html"
+  },
+  "rules": [
+    {
+      "id": "PIN_STRAP_GPIO0",
+      "kind": "pin_constraint",
+      "severity": "critical",
+      "title": "GPIO0 is a boot-mode strapping pin; must not be assigned to peripheral functions",
+      "source_ids": ["ESP32_S3_SCHEMATIC_CHECKLIST", "ESPTOOL_BOOT_MODE"],
+      "constraint": {
+        "pin": "GPIO0",
+        "role": "strapping",
+        "default_state": "internal_pullup",
+        "forbidden_assignments": ["peripheral_function", "external_drive_conflict"],
+        "notes": "Reset low enters ROM serial bootloader; high/floating boots from flash. BOOT button may pull low via >=10k to GND to overcome ~45k internal pullup."
+      }
+    },
+    {
+      "id": "PIN_STRAP_GPIO3",
+      "kind": "pin_constraint",
+      "severity": "critical",
+      "title": "GPIO3 is a strapping pin; must not be assigned to peripheral functions",
+      "source_ids": ["ESP32_S3_GPIO_DOC"],
+      "constraint": {
+        "pin": "GPIO3",
+        "role": "strapping",
+        "default_state": "UNKNOWN",
+        "forbidden_assignments": ["peripheral_function"],
+        "notes": "Official default pull state not confirmed; verify against datasheet/boot log before any use."
+      }
+    },
+    {
+      "id": "PIN_STRAP_GPIO45",
+      "kind": "pin_constraint",
+      "severity": "critical",
+      "title": "GPIO45 controls VDD_SPI voltage; must not be assigned to peripheral functions",
+      "source_ids": ["ESP32_S3_SCHEMATIC_CHECKLIST", "ESP32_S3_TECHPEDIA"],
+      "constraint": {
+        "pin": "GPIO45",
+        "role": "strapping",
+        "default_state": "vdd_spi_control",
+        "forbidden_assignments": ["peripheral_function"],
+        "notes": "1.8V VDD_SPI requires high at power-up, 3.3V requires low. WROOM-1 is in-package flash; if VDD_SPI_FORCE eFuse configured, GPIO45 no longer affects voltage and R1 is optional."
+      }
+    },
+    {
+      "id": "PIN_STRAP_GPIO46",
+      "kind": "pin_constraint",
+      "severity": "critical",
+      "title": "GPIO46 is a boot-mode strapping pin; must not be assigned to peripheral functions",
+      "source_ids": ["ESP32_S3_SCHEMATIC_CHECKLIST", "ESPTOOL_BOOT_MODE"],
+      "constraint": {
+        "pin": "GPIO46",
+        "role": "strapping",
+        "default_state": "internal_pulldown",
+        "forbidden_assignments": ["peripheral_function"],
+        "notes": "Joint download boot requires GPIO0=0 and GPIO46=0; normal SPI boot ignores GPIO46."
+      }
+    },
+    {
+      "id": "EN_RESET_NETWORK",
+      "kind": "connectivity",
+      "severity": "critical",
+      "title": "EN/CHIP_PU must not float; approved reset network is 10k pull-up to 3V3 and 1uF to GND",
+      "source_ids": ["ESP32_S3_TECHPEDIA", "ESP32_S3_SCHEMATIC_CHECKLIST"],
+      "checks": {
+        "intent": {
+          "pins": {
+            "R_EN.1": { "net": "+3V3" },
+            "R_EN.2": { "net": "EN" },
+            "C_EN.1": { "net": "EN" },
+            "C_EN.2": { "net": "GND" }
+          },
+          "components": {
+            "R_EN": { "value": "10k" },
+            "C_EN": { "value": "1uF" }
+          }
+        },
+        "netlist": {
+          "pins": {
+            "R_EN.1": { "net": "+3V3" },
+            "R_EN.2": { "net": "EN" },
+            "C_EN.1": { "net": "EN" },
+            "C_EN.2": { "net": "GND" }
+          },
+          "components": {
+            "R_EN": { "value": "10k" },
+            "C_EN": { "value": "1uF" }
+          }
+        },
+        "pcb": {
+          "pins": {
+            "R_EN.1": { "net": "+3V3" },
+            "R_EN.2": { "net": "EN" },
+            "C_EN.1": { "net": "EN" },
+            "C_EN.2": { "net": "GND" }
+          },
+          "components": {
+            "R_EN": { "value": "10k" },
+            "C_EN": { "value": "1uF" }
+          }
+        }
+      }
+    },
+    {
+      "id": "BOOT_BUTTON_GPIO0",
+      "kind": "connectivity",
+      "severity": "major",
+      "title": "BOOT button pulls GPIO0 low with pull strength >=10k to GND",
+      "source_ids": ["ESPTOOL_BOOT_MODE"],
+      "checks": {
+        "intent": {
+          "pins": {
+            "SW_BOOT.1": { "net": "GPIO0" },
+            "SW_BOOT.2": { "net": "GND" }
+          }
+        },
+        "netlist": {
+          "pins": {
+            "SW_BOOT.1": { "net": "GPIO0" },
+            "SW_BOOT.2": { "net": "GND" }
+          }
+        },
+        "pcb": {
+          "pins": {
+            "SW_BOOT.1": { "net": "GPIO0" },
+            "SW_BOOT.2": { "net": "GND" }
+          }
+        }
+      }
+    },
+    {
+      "id": "POWER_3V3_DECOUPLING",
+      "kind": "power",
+      "severity": "critical",
+      "title": "Module-local 3V3 decoupling at VDD33: 22uF bulk + 100nF HF, near module 3V3/GND",
+      "source_ids": ["WROOM1_DATASHEET"],
+      "constraint": {
+        "rail": "3V3",
+        "decoupling": { "C_CORE_BULK": "22uF", "C_CORE_HF": "100nF" },
+        "placement": "near_module_3v3_gnd",
+        "current_capability_min": "500mA",
+        "notes": "Supersedes earlier 10uF+1uF draft per CORE_BASE v0.1 freeze (2026-09-01). Module-local storage/decoupling; must not be removed because AP63203 has its own output caps."
+      }
+    },
+    {
+      "id": "POWER_SOURCE_SEPARATION",
+      "kind": "power",
+      "severity": "critical",
+      "title": "USB source capability and 3V3 regulator capability must be modeled as separate layers, never merged into one budget",
+      "source_ids": ["ESP32_S3_TECHPEDIA"],
+      "constraint": {
+        "type": "cross_component",
+        "usb_power_profile": {
+          "mode": "conservative",
+          "source_capability": "externally_constrained"
+        },
+        "regulator_3v3": {
+          "device": "AP63203WU-7",
+          "rated_output": "2A",
+          "notes": "Rated output is not board-level available current; bottleneck may be USB source."
+        },
+        "notes": "Cannot infer whole-board 2A from regulator datasheet 2A rating. High-power peripherals require CC current detection or USB-PD Sink Controller as a new Verified Block."
+      }
+    },
+    {
+      "id": "ANTENNA_KEEPOUT",
+      "kind": "layout",
+      "severity": "major",
+      "title": "Module antenna requires keepout: extend to board edge, cut substrate below/sides, module not at board center",
+      "source_ids": ["ESP32_S3_LAYOUT_GUIDE"],
+      "constraint": {
+        "type": "keepout",
+        "requirements": [
+          "antenna_extend_to_board_edge_or_feed_near_edge",
+          "cut_substrate_below_and_sides_of_antenna",
+          "sufficient_clearance_area",
+          "module_not_at_board_center"
+        ],
+        "exact_dimensions": "UNKNOWN (per module datasheet / reference layout)"
+      }
+    },
+    {
+      "id": "USB_DIFFERENTIAL",
+      "kind": "layout",
+      "severity": "major",
+      "title": "USB D+/D- differential pair: 90 ohm +/-10%, parallel, equal length, continuous GND reference, minimize vias, GND surround",
+      "source_ids": ["ESP32_S3_LAYOUT_GUIDE"],
+      "constraint": {
+        "type": "differential_pair",
+        "dp_pin": "GPIO20",
+        "dm_pin": "GPIO19",
+        "series_resistor": { "value": "22ohm", "placement": "near_mcu" },
+        "differential_impedance": { "nominal": "90ohm", "tolerance": "10%" },
+        "reference_plane": { "required": true },
+        "via_transitions": { "minimize": true },
+        "gnd_surround": { "required": true }
+      }
+    }
+  ]
+}

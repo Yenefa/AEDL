@@ -1,0 +1,16 @@
+[project]
+name = "aedl-sandbox"
+version = "0.1.0"
+description = "AEDL EDD-001 sandbox runtime orchestration (runtime skeleton, not a production PCB generator)"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "langgraph==1.2.11",
+    "langgraph-checkpoint-sqlite==3.1.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aedl_sandbox"]
