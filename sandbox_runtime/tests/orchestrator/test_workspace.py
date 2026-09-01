@@ -20,7 +20,10 @@ class CandidateWorkspaceTests(unittest.TestCase):
     def test_creates_only_the_documented_candidate_layout(self):
         candidate = self.ws.create_candidate("run-1", "cand-1")
         expected = self.base / "ws" / "run" / "run-1" / "candidate" / "cand-1"
-        self.assertEqual(candidate, expected)
+        # Compare at the same resolution level: the module resolves paths and
+        # Windows runners may canonicalize TEMP to an 8.3 short name
+        # (RUNNER~1), so an unresolved expectation would false-fail.
+        self.assertEqual(candidate.resolve(), expected.resolve())
         self.assertTrue(candidate.is_dir())
 
     def test_rejects_traversal_identifiers(self):
@@ -96,8 +99,8 @@ class CandidateWorkspaceTests(unittest.TestCase):
         target = self.ws.write_candidate_bytes("run-1", "cand-1", "artifacts/a.json", b"{}")
         self.assertTrue(target.exists())
         self.assertEqual(
-            target,
-            self.base / "ws" / "run" / "run-1" / "candidate" / "cand-1" / "artifacts" / "a.json",
+            target.resolve(),
+            (self.base / "ws" / "run" / "run-1" / "candidate" / "cand-1" / "artifacts" / "a.json").resolve(),
         )
 
     def test_action_ledger_returns_first_recorded_result(self):
