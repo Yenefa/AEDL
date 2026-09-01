@@ -256,7 +256,7 @@
 ## ADR-009 — 两人协作采用 Issue-first、独立 clone 与临时集成基线
 
 - 日期：2026-09-01
-- 状态：Proposed（项目负责人已授权实施；Draft PR 仍待另一名真人 Review）
+- 状态：Proposed（已实施于 Draft PR #6；仍待另一名真人 Review）
 
 - 问题：
   - AEDL 从单人多 AI 会话进入两名真人开发者协作，但 2026-09-01 现场审计发现：默认 `master` 比当前完整工作线落后 44 个提交；GitHub 无开放 PR/Issue/模板；当前 private 套餐不能启用 branch protection/rulesets；第二名协作者的 GitHub 账号与正式/外部身份尚未核实。

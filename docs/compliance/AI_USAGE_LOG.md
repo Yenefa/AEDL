@@ -2125,7 +2125,7 @@
   - 最终提交前验证：Prettier check 通过；`git diff --check` exit 0；高置信 secret pattern 0 命中；AI-005 与 ADR-009 标题均恰好 1 条；Issue #1–#5 均 OPEN，#3 assignee 为 `la4876949-bot`；CODEOWNERS 基础语法与 Issue template frontmatter 检查通过。
   - 修改后顺序复跑：Sandbox `272/272 OK`（1 skip、1 expectedFailure）；主仓库 `269/269 OK`。
   - 真实 EDD-001 preflight：`BLOCKED` / 7 findings / exit 1（资料、POWER、compiler、verifier 缺口保持失败关闭）。
-  - commit / push / Draft PR：`PENDING_AFTER_COMMIT`。
+  - Git：首个提交 `e8ca7c5` 已通过全局 pre-commit hook，并成功推送 `origin/codex/collaboration-onboarding`；Draft PR #6 已创建，base 为 `fix/m2-schematic-semantic-release`，已请求 `la4876949-bot` Review。
 
 - 已知限制：
   - `la4876949-bot` 已确认为第二名真人协作者，但其 `AEDL_TEAM / EXTERNAL_CONTRIBUTOR` 身份仍为 `TO_VERIFY`；另有一条 `invitee=null` 的未过期 write 邀请，接收人 `UNKNOWN`。本批不更新 `TEAM_CONTRIBUTIONS.md`；除已领取的 W4B 外，其余 W4/Sandbox Issues 不指派。
@@ -2133,6 +2133,6 @@
   - GitHub 官方文档确认 Issue/PR 模板只有位于默认分支才会自动显示；当前默认 `master` 尚未包含本批，所以稳定化合入 `master` 前只能手工引用模板内容。
   - 本批不修改硬件设计、BOM、原理图、PCB、制造文件或 Evidence 字节；不重跑会改写 Evidence 的完整 gate runner；不构成制造签发或实体 C 级验证。
 
-- Commit / PR：Issue #1；分支 `codex/collaboration-onboarding`；commit / push / Draft PR 均待最终验证后执行。
+- Commit / PR：首个提交 `e8ca7c5`；分支 `codex/collaboration-onboarding` 已推送；Draft PR #6（base=`fix/m2-schematic-semantic-release`）；本回写随第二个小提交推送。
 - AIC Score Target：`NONE`（内部协作治理，不强行关联评分项）
 - 最终状态：`PENDING_HUMAN_REVIEW`

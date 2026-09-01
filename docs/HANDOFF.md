@@ -13,7 +13,7 @@
 ## 项目状态卡（2026-09-01，AI-20260901-005 协作治理批次）
 
 - Git/GitHub：private 正式仓库为 `https://github.com/Yenefa/AEDL`；本地 `origin` 已改为正式地址。协作冻结点为 `fix/m2-schematic-semantic-release` @ `e7ff3c1`，当时与同名 origin `0/0`；默认 `master` 当时落后 44 个提交，尚未合并。
-- 当前治理：GitHub Issue #1，任务分支 `codex/collaboration-onboarding`；目标是补齐两人协作模板、任务入口与 v3 协议，完成后只开 Draft PR，不由 AI merge。Issue/PR 模板只有合入默认 `master` 后才会在 GitHub 新建界面自动生效，之前仅作手工规范。
+- 当前治理：GitHub Issue #1 / Draft PR #6，任务分支 `codex/collaboration-onboarding`，首个提交 `e8ca7c5` 已推送并请求 `la4876949-bot` Review；AI 不 merge。Issue/PR 模板只有合入默认 `master` 后才会在 GitHub 新建界面自动生效，之前仅作手工规范。
 - 后续任务：W4B Issue #3 已指派给第二名真人协作者 `la4876949-bot`；W4A Issue #2、W4C Issue #4、Sandbox V3 Issue #5 仍为 `TO_ASSIGN`。
 - 协作者边界：项目负责人已确认 `la4876949-bot` 是第二名真人协作者；其 `AEDL_TEAM / EXTERNAL_CONTRIBUTOR` 分类仍为 `TO_VERIFY`，尚未发生可登记贡献。另有一条 `invitee=null` 的未过期 write 邀请，接收人 `UNKNOWN`。
 - 软件基线（2026-09-01 顺序实测）：Sandbox 272/272 OK（1 skip、1 expectedFailure）；主仓库 269/269 OK。该结果不是实体硬件验证。
