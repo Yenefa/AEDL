@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.9" # matches local dev env (py -3 = 3.9.13); sandbox uses 3.11
       - name: Syntax check
         run: python -m compileall -q gates tools tests
       - name: Unit tests (isolated stdlib, no third-party deps)
