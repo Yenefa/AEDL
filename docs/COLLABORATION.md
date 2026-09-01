@@ -24,12 +24,12 @@
 
 每个任务有**唯一属主**。属主外的一切文件只读。需要跨领地改动时，在 TASKS 看板留言请求，不擅自动手。
 
-| 任务 ID | 领地（可写） | 依赖他人的部分 |
-|---|---|---|
-| P1-CONTRACT | `gates/requirements_contract.py`、`gates/requirements_runtime.py`、`tests/test_requirements_*.py`、`tests/fixtures/requirements/`、`gates/requirements/` | 前端 API 形状可先 mock |
-| P2-FRONTEND | `web/` 整个目录（新建） | 只依赖 P1 在 `docs/api/requirements_api.md` 声明的接口形状 |
-| P3-INTAKE | `notes/open_source_intake/*.md`（四份项目报告） | 无依赖，纯研究 |
-| P4-GATES | `gates/run_gates.py`（挂载第 10 门禁） | **必须等 P1 测试全绿 + 大统领确认后才动** |
+| 任务 ID     | 领地（可写）                                                                                                                                             | 依赖他人的部分                                             |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| P1-CONTRACT | `gates/requirements_contract.py`、`gates/requirements_runtime.py`、`tests/test_requirements_*.py`、`tests/fixtures/requirements/`、`gates/requirements/` | 前端 API 形状可先 mock                                     |
+| P2-FRONTEND | `web/` 整个目录（新建）                                                                                                                                  | 只依赖 P1 在 `docs/api/requirements_api.md` 声明的接口形状 |
+| P3-INTAKE   | `notes/open_source_intake/*.md`（四份项目报告）                                                                                                          | 无依赖，纯研究                                             |
+| P4-GATES    | `gates/run_gates.py`（挂载第 10 门禁）                                                                                                                   | **必须等 P1 测试全绿 + 大统领确认后才动**                  |
 
 **共享只读区**（谁都不许写，除非大统领指令）：`src/`、`delivery/`、`docs/compliance/` 台账（追加自己那条除外）、既有 9 门禁代码、`notes/m2-*`。
 
@@ -99,6 +99,16 @@ GitHub 模板：`.github/ISSUE_TEMPLATE/task.md`、`.github/PULL_REQUEST_TEMPLAT
 6. **架构与许可证边界**：卫星仓不单独改变主仓架构、比赛主张、制造签发、公开范围或许可证。需要公开或再分发时，先核对 `THIRD_PARTY_RESOURCES.md`、`NOTICE` 和 `OPEN_OUTPUTS.md`，由人类裁决。
 7. **不在两仓重复开发同一任务**：同一工作单元必须指定主仓或卫星仓为 Owner；跨仓修改可以共享一个 AI Usage ID，但每个仓都保留自己的 commit、PR 和 Handoff。
 
+## 0.8 权限语义：OWNED / SHARED / FOREIGN
+
+三个文件分工：`CODEOWNERS` = Who（review 路由）；本文件 = 权限语义（Policy）；`AGENTS.md` = Agent 执行规则（Execution）。
+
+- **OWNED**：列明的 Owner 主导修改；正常 PR 流程。
+- **SHARED**（contracts/schemas、核心状态、Evidence 语义、`.github/workflows`）：任何实质修改必须 Yenefa + Percy 双人确认。
+- **FOREIGN**：对当前任务负责人默认只读；确需修改必须扩 Scope + Impact Analysis，获得相应 Owner 确认。
+
+**CODEOWNERS 是路由器不是警察**：它自动请求相关 Owner 的 Review，但当前 GitHub 套餐无法强制 gate；SHARED 双人确认由本规范规定，并由成员在 Merge 前人工执行。
+
 ## 2. 交接规范
 
 1. **开工**：`git status` 确认自己领地内没有别人未提交的改动（有 -> 停，按 §0.3 仲裁）。
@@ -115,31 +125,33 @@ GitHub 模板：`.github/ISSUE_TEMPLATE/task.md`、`.github/PULL_REQUEST_TEMPLAT
 状态：`open`（可领） / `claimed`（某 AI 领取中） / `blocked`（等依赖） / `done`
 
 ### TASK-P1：Requirements Contract 实装 ✅ done（AI-20260831-002，待人工审）
+
 - 属主：ZCode/GLM
 - 完成内容：`gates/requirements_contract.py`（C1-C7）+ `gates/requirements_runtime.py`（LLM 建议层）+ 18 测试全绿 + M2 补录合同（决策 A）+ 第 10 门禁挂载（10 gate：9 PASS + board_review 待重签）+ 95/95 回归通过
 - 待人工审：单向绑定修复、补录合同内容、挂载、COLLABORATION.md 本身
 
 ### TASK-P2：简易前端（需求澄清工作台）✅ done（AI-20260831-003，待人工审）
+
 - 属主：WorkBuddy（本次会话）
 - 内容：`web/` 下静态单页（纯 HTML+JS，零构建，双击可开）。功能：输入 NL 需求 -> 展示 LLM 建议的问题清单（从 mock/真实 runtime 来）-> 人工逐题作答 -> 生成合同 JSON 预览 + 下载 -> 展示 gate 校验结果。**接口契约见 `docs/api/requirements_api.md`（P1 已备好）**。
 - 验收：浏览器打开能用；mock 模式演示完整闭环；真实 API 接入点预留（配置项/baseURL）。
 
 **实际改动文件清单**（全部在 `web/` 领地内，新增，无越界）：
 
-| 文件 | 说明 |
-|---|---|
-| `web/index.html` | 页面结构，5 步工作流；普通 `<script>` 非 ES module（`file://` 下 module 会被 CORS 拦） |
-| `web/styles.css` | 浅色主题样式，无框架 |
-| `web/sha256.js` | 纯 JS SHA-256，仅 mock 传输层用于模拟服务端自哈希 |
-| `web/canonical-json.js` | 复刻 Python `json.dumps(ensure_ascii=False, sort_keys=True, separators=(",",":"))` |
-| `web/contract-builder.js` | 组装合同草稿，无 DOM 依赖，UI 与测试共用同一条代码路径 |
-| `web/mock-data.js` | 契约文档「Mock 数据」原样照抄 + mock 端预检 |
-| `web/api-client.js` | 传输层：mock / http 双实现，按契约定义 5 个端点 |
-| `web/app.js` | UI 逻辑 |
-| `web/verify-hash.js` | Node：校验 JS 自哈希与 Python 门禁一致 |
-| `web/smoke-test.js` | Node：无头闭环测试（无 DOM） |
-| `web/e2e-browser.js` | 真实浏览器端到端驱动（`index.html?e2e=1`） |
-| `web/README.md` | 运行方式、验证方式、契约缺口与诚实边界 |
+| 文件                      | 说明                                                                                   |
+| ------------------------- | -------------------------------------------------------------------------------------- |
+| `web/index.html`          | 页面结构，5 步工作流；普通 `<script>` 非 ES module（`file://` 下 module 会被 CORS 拦） |
+| `web/styles.css`          | 浅色主题样式，无框架                                                                   |
+| `web/sha256.js`           | 纯 JS SHA-256，仅 mock 传输层用于模拟服务端自哈希                                      |
+| `web/canonical-json.js`   | 复刻 Python `json.dumps(ensure_ascii=False, sort_keys=True, separators=(",",":"))`     |
+| `web/contract-builder.js` | 组装合同草稿，无 DOM 依赖，UI 与测试共用同一条代码路径                                 |
+| `web/mock-data.js`        | 契约文档「Mock 数据」原样照抄 + mock 端预检                                            |
+| `web/api-client.js`       | 传输层：mock / http 双实现，按契约定义 5 个端点                                        |
+| `web/app.js`              | UI 逻辑                                                                                |
+| `web/verify-hash.js`      | Node：校验 JS 自哈希与 Python 门禁一致                                                 |
+| `web/smoke-test.js`       | Node：无头闭环测试（无 DOM）                                                           |
+| `web/e2e-browser.js`      | 真实浏览器端到端驱动（`index.html?e2e=1`）                                             |
+| `web/README.md`           | 运行方式、验证方式、契约缺口与诚实边界                                                 |
 
 领地外仅按大统领指令追加：`docs/COLLABORATION.md`（本卡片）、`docs/compliance/AI_USAGE_LOG.md`（新增一条）。
 未 commit、未 push、未建 PR。
@@ -171,6 +183,7 @@ GitHub 模板：`.github/ISSUE_TEMPLATE/task.md`、`.github/PULL_REQUEST_TEMPLAT
 **诚实边界（避免误读验收结果）**：MOCK 模式下第 5 步的 `PASS` 是**前端本地预检**，只覆盖契约文档明文规定的规则，**不是** `gates/requirements_contract.py` 的 C1-C7 结果，也不能替代它。结果面板已显式标注来源。
 
 ### TASK-P3：开源 Intake Phase 2-3（KiCad MCP + KiCadAI 研究）✅ done（AI-20260831-004，待人工审）
+
 - 属主：ZCode/GLM（P3 会话）
 - 完成内容：`notes/open_source_intake/kicadai.md` + `kicad-mcp.md` 六步协议完成；本地浅克隆双仓库做源码级核实（`_kicadai_repo/` @ `4f18765`、`_kicad_mcp_repo/` @ `aa53d52`，均含 .git 勿提交）；intake README 目录状态同步。
 - 关键校准：碰撞分析 §6.2"KiCadAI 的 KiCad 生成链路未见源码"经本地克隆复核**判为误判**（writer/ERC-DRC subprocess/MNA 仿真源码俱在；kicadai.md 附节有逐项对照与误判归因——其会话当时抓不到仓库内容，与其 §5 自我教训同型）；§6.1 kicad-ai(amcolex) 本轮 WebFetch 取得 GitHub 404 渲染页（非网络故障），"从未存在"的强结论仍待人工浏览器定案。
@@ -178,10 +191,12 @@ GitHub 模板：`.github/ISSUE_TEMPLATE/task.md`、`.github/PULL_REQUEST_TEMPLAT
 - 待人工审：两份 intake 报告；碰撞分析校准结论是否回写 `notes/competitor-collision-analysis-2026-08-30.md`（该文件非 P3 领地，本轮**未改动**，仅在 kicadai.md 内对照）；两个克隆目录是否预先加入 .gitignore 排除。
 
 ### TASK-P4：第 10 门禁挂载 ✅ done（与 P1 同会话完成）
+
 - 已挂载：`gates/run_gates.py` gates 列表追加 `_safe_gate("requirements_contract", ...)`，纯增量。
 - 注意：test_run_gates.py 的 gate 集合断言已同步 9->10（预期契约变更）。
 
 ### TASK-P5：C 方案——intent 语义哈希绑定 ✅ done（AI-20260831-006，待人工审）
+
 - 属主：WorkBuddy（大统领直接指派，领地：`gates/requirements_contract.py`、`gates/requirements/`、`gates/requirements_runtime.py`、`tests/test_requirements_contract.py`、`docs/api/requirements_api.md`）
 - 解决的缺口：单向 lockfile 绑定抓不到"改电路不重签"——**已实测**：往 intent 塞一个 U9 电阻、保留旧合同引用，gate 仍 PASS（合同描述一块它从没见过的板子）。
 - 实现要点：
@@ -198,14 +213,17 @@ GitHub 模板：`.github/ISSUE_TEMPLATE/task.md`、`.github/PULL_REQUEST_TEMPLAT
 - 遗留（非阻塞）：run_gates/export 在本会话环境里被 WorkBuddy 的 sitecustomize safe-delete 钩子拦截 `unlink`/`rmtree`（回收站不可用），需用 `python -S` 运行或人工在正常终端跑；这不是仓库代码问题。
 
 ### TASK-P7：finalize 语义哈希缺口修复 + runtime server 测试补强 ✅ done（AI-20260831-012/013/014，待人工审）
+
 - 属主：ZCode 主会话。缺口实为 P1 后段已修，实测验收 + 31 新测试 + 400 JSON 修复 + RecordedProvider 回放（AI-018）。任务书全文（领地/待办池/验收标准）：`docs/OVERNIGHT_20260901.md` TASK-P7 卡。
 
 ### TASK-P8：开源 Intake Phase 4（NeuroBoard）+ 遗留定案 ✅ done（AI-20260831-015，待人工审）
+
 - 属主：Qoder（通宵 P8 会话，研究路，领地 `notes/open_source_intake/`）。任务书：`docs/OVERNIGHT_20260901.md` TASK-P8 卡（含进度日志）。
 - 完成内容：① `neuroboard.md` 六步 intake（克隆 `_neuroboard_repo/` @ `d8e3248`；License 双声明矛盾 → 零代码复用判决；11 门禁能力对照表）；② kicad-ai(amcolex) GitHub API 五层取证定案"公开仓库无存在证据"（`kicadai.md` 补记）；③ Konnect license 双来源核实 + README 商业条款原文摘录（`THIRD_PARTY.md` §2.4，红线不变）；④ README 目录/附属同步。
 - 待人工审：三份取证结论；`.gitignore` 补 `_neuroboard_repo/` 排除（本次未越界改）；台账撞号说明（见 `docs/OVERNIGHT_20260901.md` P8 进度日志）。
 
 ### TASK-P9：board_review 特征化测试 + 可插拔协议预备 ✅ done（AI-20260831-016，待人工审）
+
 - 属主：WorkBuddy（通宵 P9 会话，代码路）。任务书：`docs/OVERNIGHT_20260901.md` TASK-P9 卡（含进度日志与「P9 协议观察」小节）。
 - 完成内容：① `tests/test_board_review_golden.py` **新建 51 用例全绿**（纯函数特征化 10 / `parse_pcb` 6 / 8 项 review 特征化 9 / golden 端到端 5 / 对抗与盲区 21）；② 夹具 `tests/fixtures/board_review/`（`minimal.kicad_pcb` 按 8 项判据反推摆放的 60×40mm 最小板 + `minimal.kicad_sch` + `golden_minimal.json` 冻结）；③ **1 处最小 bug 修复**：`parse_pcb` 新增 `vbus_caps`，`review_protection` 不再读全局 `PCB_PATH`（修复前传入"另一块板"的 parse 结果会**静默返回错误板子的 PROTECTION 结论**）；④ 协议观察小节（BoardReview 事实标准已成形；**RouteRepair 受门禁约束的实现数 = 0，按"≥2 实现才定形式"本轮不定协议**）。
 - 关键取舍：golden **刻意打桩掉渲染**（真实 kicad-cli 存在但渲染 ~26s、PNG 字节不可复现会让 golden flaky），故 golden 无 `render_evidence` 且 `main()` 返回 1——渲染证据链另由 `tests/test_board_review.py::RenderEvidenceTests` 覆盖。**未**为规范化路径分隔符改生产代码（那会重写 `notes/m2-evidence-reset/` 已冻结证据），改在测试 `stable()` 里归一化。
@@ -221,6 +239,7 @@ GitHub 模板：`.github/ISSUE_TEMPLATE/task.md`、`.github/PULL_REQUEST_TEMPLAT
 - 多 AI 的成果统一由你审核提交（保持单一 commit 权限，历史干净）
 
 ### TASK-P12-A：USB courtyard 任意边越界 FAIL（问题1）🔨 待领
+
 - 属主：待领。难度：中。领地（可写）：`tools/board_review.py`（仅 USB_EDGE 评审函数，约 220–224 行一带）、`tests/test_board_review.py`（追加自己的用例）、`docs/compliance/AI_USAGE_LOG.md`（自己条目）、本卡状态行。
 - 背景：`review_usb_edge`（或对应评审函数）只算 courtyard 前沿到板框上边的 Y 距离，不查 X 方向/其他边。已复现：板框 0..60 × 0..40，J1 x=-5、y=0.5、courtyard=(-1,-0.4,1,0.4)，仍 PASS。
 - 任务：带 courtyard 的 USB 连接器从**任意一边**（左/右/上/下）越出板框都必须 FAIL；只算"在板框内的距离"当 courtyard 全在板内时才成立，越界（任何方向出框）直接 FAIL。
@@ -229,6 +248,7 @@ GitHub 模板：`.github/ISSUE_TEMPLATE/task.md`、`.github/PULL_REQUEST_TEMPLAT
 - 禁止：改 `gates/`、改几何算法之外的评审逻辑、设置 manufacturing_release、reset/checkout。
 
 ### TASK-P12-B：U1 天线模块板外 FAIL（问题2）🔨 待领
+
 - 属主：待领。难度：中。领地（可写）：`tools/board_review.py`（仅 `review_antenna` 及其 edge 距离辅助，约 249、274–276 行一带）、`tests/test_board_review.py`（追加自己的用例）、`docs/compliance/AI_USAGE_LOG.md`（自己条目）、本卡状态行。
 - 背景：`edge_distance` 在板外返回负数，但 `review_antenna` 未先检查模块是否在板内。已复现：U1 x=12、y=-1、rot=0 → edge_distance=-1.0，总判定 PASS。
 - 任务：`review_antenna` 先判定模块 courtyard/主体在板框内，任意一边越界即 FAIL（负距离/出框都算越界）。

@@ -494,7 +494,7 @@
   - 终审结论：换料方案经项目负责人 2026-08-30 采纳（初审 CONDITIONAL APPROVE → 三项
     整改 → 采纳），并指示将方法论教训沉淀为项目经验。已执行：ADR-005（替代料换料
     审核协议：θJA 结温法、结论精度、主张纪律、版本交叉核对）+ `docs/knowledge/
-    IMPROVEMENT_SYSTEM.md` 新增"换料审核方法论教训"条目（按准入标准如实标注
+IMPROVEMENT_SYSTEM.md` 新增"换料审核方法论教训"条目（按准入标准如实标注
     当前无可执行控制、不算完成经验积累）。
   - 仍待人工：全部改动 diff 审核、board_review 人工重签、commit/push 授权。
 
@@ -792,7 +792,6 @@
 - 最终状态：
   - `PENDING_HUMAN_REVIEW`
 
-
 ---
 
 ## AI-20260831-004
@@ -824,10 +823,10 @@
 - AI 实际产出：
   - **KiCadAI（dshills，MIT，HEAD `4f18765` 2026-08-24）源码级六步 intake**：
     - 已验证：capabilitygate 三态分类（supported/experimental/unsupported）+ Evidence 四状态
-      + SHA-256 封印 + 仅 supported 才 FabricationReadyEligible；ERC/DRC 子进程链路
-      （kicad_checks.go 的 fail-closed 语义 + ToolError 四分类）；kicadfiles 93 个 Go 文件
-      的直接 writer + round-trip 验证；simmodel 纯 Go MNA 仿真引擎（solver/非线性/瞬态/热/电热）；
-      824 测试文件 vs 809 源文件；capability-eval 系列 os.Exit(1)。
+      - SHA-256 封印 + 仅 supported 才 FabricationReadyEligible；ERC/DRC 子进程链路
+        （kicad_checks.go 的 fail-closed 语义 + ToolError 四分类）；kicadfiles 93 个 Go 文件
+        的直接 writer + round-trip 验证；simmodel 纯 Go MNA 仿真引擎（solver/非线性/瞬态/热/电热）；
+        824 测试文件 vs 809 源文件；capability-eval 系列 os.Exit(1)。
     - **碰撞分析校准（重要）**：2026-08-30 碰撞分析判"KiCad 生成、ERC/DRC subprocess、simulation
       未见源码调用链"经本轮本地克隆复核**判为误判**——上述全部有源码；误判原因与该分析 §5
       自我教训同型（当时工具抓不到仓库内容）。碰撞分析文件非本任务领地，未改动，校准对照
@@ -882,7 +881,6 @@
 
 - 最终状态：
   - `PENDING_HUMAN_REVIEW`
-
 
 ## AI-20260831-005
 
@@ -944,7 +942,6 @@
 
 - 最终状态：
   - `PENDING_HUMAN_REVIEW`
-
 
 ## AI-20260831-006
 
@@ -1218,7 +1215,6 @@
 
 - 最终状态：`PENDING_HUMAN_REVIEW`
 
-
 ## AI-20260831-010
 
 - 日期：2026-08-31
@@ -1359,7 +1355,6 @@
 - Commit / PR：`0f8f1f4`（第 1 周期，已推送）；本条目与其余收尾文件随后按通宵协议提交推送。
 
 - 最终状态：`PENDING_HUMAN_REVIEW`
-
 
 ## AI-20260831-016
 
@@ -1568,7 +1563,7 @@
 
 - 边界遵守：未改 gates/run_gates.py / gates/gate_core.py；未建 RouteRepair 或插件框架；
   未设 manufacturing_release；未 commit/push（任务要求未授权不提交）。工作区中
-  其他并行会话的未提交改动（gates/*、tests/test_board_review.py、generated/*）未触碰。
+  其他并行会话的未提交改动（gates/_、tests/test_board_review.py、generated/_）未触碰。
 
 - 已知影响（留人工决策）：新算法的 evidence 文案与冻结的 board_review_auto.json 不同，
   且板级哈希绑定（board_review_v1.json 的 auto_evidence_sha256）在下次真机重跑后会失配——
@@ -1614,7 +1609,7 @@
 - 验证（全部真实运行）：
   - 失败测试先行：隔离自洽与修订绑定用例先确认以正确理由失败再修。
   - 全量 251/251 OK（本会话接手时 223；+2 修订用例、+1 隔离回归，其余为对方会话新增）。
-  - **字节级隔离副本全量**：robocopy 复制工作树（除 .git/__pycache__/spike）到临时目录，
+  - **字节级隔离副本全量**：robocopy 复制工作树（除 .git/**pycache**/spike）到临时目录，
     251/251 OK；正式证据 5 个关键文件 sha256 前后一致（字节不变验证通过）；隔离副本已清理。
   - `git diff --check` 干净（仅 git CRLF 提示，无空白错误）。
   - 未重新生成 `board_review_auto.json`：当前正式报告仍缺 `algorithm_revision` 字段，
@@ -1633,7 +1628,6 @@
 - Commit / PR：未提交（未授权）。
 
 - 最终状态：`PENDING_HUMAN_REVIEW`
-
 
 ## AI-20260831-021
 
@@ -1683,7 +1677,6 @@
 
 - 最终状态：`PENDING_HUMAN_REVIEW`
 
-
 ## AI-20260831-022
 
 - 日期：2026-08-31
@@ -1707,7 +1700,7 @@
 
 - 验证（本会话全部真实运行，作为对 4 项修复 + 报告重生成的验收确认）：
   - 相关测试 `tests.test_board_review + test_board_review_golden + test_gate_core_review +
-    test_run_gates`：**115/115 OK**（覆盖问题 1 courtyard 四边越界、问题 2 天线板外、
+test_run_gates`：**115/115 OK**（覆盖问题 1 courtyard 四边越界、问题 2 天线板外、
     问题 3 修订号绑定、问题 4 隔离自洽）。
   - 全量回归（原仓库）`unittest discover -s tests`：**251/251 OK**。
   - 字节级隔离副本（工作树排除 .git/intake 克隆/tools/bin/firmware 后 tar 拷贝到临时目录）：
@@ -1743,7 +1736,6 @@
 
 - 最终状态：`PENDING_HUMAN_REVIEW`
 
-
 ## AI-20260831-023
 
 - 日期：2026-08-31
@@ -1761,7 +1753,7 @@
     `_evaluate_ops` 增加独立来源校验——generator/validator 引用 run_gates.py 即拒、不引用 akcli 即拒）
   - `gates/gate_core.py`（P1-2：新增 `board_review_implementation_sha256()` 与
     `compute_board_review_algorithm_revision(contract, impl_digest)`；revision = 合同 canonical JSON
-    + 实现文件 sha256 的再哈希，单一真源，生成端/校验端共用）
+    - 实现文件 sha256 的再哈希，单一真源，生成端/校验端共用）
   - `tests/test_run_gates.py`（+8 `OpsIndependenceTests`：无独立证据 FAIL / runner 不自造 / akcli 一致 PASS /
     runner 来源 FAIL / 无 akcli 来源 FAIL / valid 或 errors 不符 FAIL / 隔离 PASS artifact 存在且保留
     独立来源 / 隔离不覆盖正式证据）
@@ -1801,7 +1793,6 @@
 - Commit / PR：未提交（未授权）。
 
 - 最终状态：`PENDING_HUMAN_REVIEW`
-
 
 ## AI-20260831-024
 
@@ -1927,7 +1918,6 @@
 
 - 最终状态：`PENDING_HUMAN_REVIEW`
 
-
 ## AI-20260831-029
 
 - 日期：2026-08-31
@@ -1942,10 +1932,10 @@
   - 本台账本条目
 - 做了什么：① 用 curl.exe -L --fail 冻结 AMS1117-3.3（C6186）原厂数据手册的 LCSC 托管副本，8 页，逐页核实
   固定 3.3V/SOT-223、pin 1=GND 2=VOUT 3=VIN tab=VOUT、dropout typ1.1/max1.3V@800mA、Iq max11mA、
-  连续负载 Tj≤125°C、SOT-223 名义 θJA=90°C/W（表1 55~65°C/W）与 22µF 固体钽稳定保证；
+  连续负载 Tj≤125°C、SOT-223 名义 θJA=90°C/W（表1 55~~65°C/W）与 22µF 固体钽稳定保证；
   candidate_status=CANDIDATE_ONLY_NOT_BOM_BOUND、decision=BLOCKED_PENDING_THERMAL_COUT_INPUT
   （未替换主 manifest 的 ME6211C33R5G/C235316，activation_rule 明确需人工批 B1+正式 ECO 改 BOM 后才能提升）。
-  ② 冻结 Espressif ESP32-C3 官方供电指南 checkpoint HTML 快照，核实单电源 3.3V/≥500mA、3.0~3.6V、主入口 ≥10µF、
+  ② 冻结 Espressif ESP32-C3 官方供电指南 checkpoint HTML 快照，核实单电源 3.3V/≥500mA、3.0~~3.6V、主入口 ≥10µF、
   TX 突发电流致电源轨塌陷提示；更新 U1 manifest 该记录（source_url/local_file/sha256/retrieved_at/note），
   保留历史与人工裁决，未设 signed_by=human。
 - 验证：AMS1117 文件头 %PDF + pdfinfo 8 页 + sha256 189a2651…（95151B）；HTML 非登录/404/挑战页，
@@ -2072,7 +2062,7 @@
     （θJA 随铺铜 46~90°C/W 浮动）。v2 的数字按保守原则视为粗筛。
   - **候选件取证**：AMS1117-3.3（C6186）datasheet LCSC 版冻结（sha256 189a2651…，8 页，
     PDF 元数据核对为 AMS 原厂件），candidate_source_record 标 CANDIDATE_ONLY_NOT_BOM_BOUND
-    + BLOCKED_PENDING_THERMAL_COUT_INPUT——**未绑 BOM，等人工批准**。
+    - BLOCKED_PENDING_THERMAL_COUT_INPUT——**未绑 BOM，等人工批准**。
   - **U1 供电指南**：Espressif schematic-checklist 从 URL-only 升级本地快照（sha256 记录），
     页面事实入 manifest：3.3V≥500mA、VDD 工作域 3.0~3.6V、入口 ≥10µF、TX 突增建议
     10µF+0.1µF 并用。
@@ -2202,6 +2192,11 @@
 - 日期：2026-09-01
 - 任务名称：Issue 模板扩展 Allowed/Forbidden/Change Budget/Verification Policy Change（Issue #10）
 - 模块/路径：`.github/ISSUE_TEMPLATE/task.md`、本台账
+## AI-20260901-009
+
+- 日期：2026-09-01
+- 任务名称：权限模型落地 OWNED/SHARED/FOREIGN（Issue #11）
+- 模块/路径：`.github/CODEOWNERS`、`docs/COLLABORATION.md`（§0.8）、`AGENTS.md`（§2.2 FOREIGN 句）、本台账
 - AI 工具/平台：DeepSeek Harness（DSH Web）
 - 模型：`deepseek-v4-flash`（运行环境提供）
 
@@ -2231,6 +2226,21 @@
   - 文档结构检查：Markdown 表格渲染正常；`git diff --check` 无空白错误。
   - 未修改任何代码、硬件、Evidence 或门禁文件。
   - `git diff --check` 通过；模板字段与 AGENTS.md §2.2 一致。
+  - 落地三层权限语义：CODEOWNERS = Who（路由）、COLLABORATION §0.8 = Policy、AGENTS §2.2 = Execution；明确 CODEOWNERS 是路由器不是警察。
+
+- AI 实际产出：
+  - `CODEOWNERS` 增加 SHARED 区（contracts/、sandbox contracts、workflows、evidence、lessons_registry）+ 语义注释；
+  - `COLLABORATION.md` 新增 §0.8 权限语义（OWNED/SHARED/FOREIGN 定义与三文件分工）；
+  - `AGENTS.md` §2.2 增加 FOREIGN 默认只读句（与 §0.8 交叉引用）。
+
+- 团队自主部分：
+  - 项目负责人批准 Issue #11 与权限模型方案（此前已定稿讨论）。
+
+- 人工审核：
+  - 状态：`PENDING_HUMAN_REVIEW`（SHARED 级，需 Yenefa + Percy 双人确认）
+
+- 验证：
+  - `git diff --check` 通过；CODEOWNERS 语法与 §0.8 引用一致。
 
 - 最终状态：
   - `PENDING_HUMAN_REVIEW`

@@ -127,6 +127,8 @@ STOP
 
 禁止"顺手"继续扩大范围（目标优先级：正确性 > 范围控制 > 可验证性 > 可追溯性 > 最小改动）。
 
+- 任务未声明可写的路径视为 **FOREIGN（默认只读）**；确需修改先扩 Scope 并获对应 Owner 确认（权限语义见 `docs/COLLABORATION.md` §0.8）。
+
 ---
 
 # 3. Git / GitHub 规则
@@ -495,14 +497,14 @@ UNKNOWN
 
 AIC「AI+开源」开发记录必须服务于以下评分方向：
 
-| 评分项 | 主要证据资产 | Agent 触发条件 |
-|---|---|---|
-| 问题与场景价值 | `docs/competition/PROBLEM_EVIDENCE.md` | 任务产生真实用户/场景/痛点/需求证据 |
-| 创新性与方案设计 | `docs/compliance/DECISIONS.md` + Baseline | 关键机制、架构、方案取舍、对照设计发生变化 |
-| AI 与开源融合 | `docs/competition/FUSION_MAP.md` + `THIRD_PARTY_RESOURCES.md` | 核心 AI/开源资源/自研模块的关系发生变化 |
-| 实现完成度与可验证效果 | `docs/evidence/EVIDENCE_INDEX.md` | 产生测试、Benchmark、故障注入、性能或稳定性结果 |
-| 开放成果与复用价值 | `docs/competition/OPEN_OUTPUTS.md` | 新增/改变准备公开复用的协议、接口、工具链、测试、示例等 |
-| 材料规范与表达 | `docs/competition/SUBMISSION_CHECKLIST.md` | 进入报告、PPT、视频、正式提交或 Release 阶段 |
+| 评分项                 | 主要证据资产                                                  | Agent 触发条件                                          |
+| ---------------------- | ------------------------------------------------------------- | ------------------------------------------------------- |
+| 问题与场景价值         | `docs/competition/PROBLEM_EVIDENCE.md`                        | 任务产生真实用户/场景/痛点/需求证据                     |
+| 创新性与方案设计       | `docs/compliance/DECISIONS.md` + Baseline                     | 关键机制、架构、方案取舍、对照设计发生变化              |
+| AI 与开源融合          | `docs/competition/FUSION_MAP.md` + `THIRD_PARTY_RESOURCES.md` | 核心 AI/开源资源/自研模块的关系发生变化                 |
+| 实现完成度与可验证效果 | `docs/evidence/EVIDENCE_INDEX.md`                             | 产生测试、Benchmark、故障注入、性能或稳定性结果         |
+| 开放成果与复用价值     | `docs/competition/OPEN_OUTPUTS.md`                            | 新增/改变准备公开复用的协议、接口、工具链、测试、示例等 |
+| 材料规范与表达         | `docs/competition/SUBMISSION_CHECKLIST.md`                    | 进入报告、PPT、视频、正式提交或 Release 阶段            |
 
 Issue / PR 若与比赛核心能力相关，应标记：
 
@@ -676,7 +678,6 @@ Evidence 索引版本
 无证据声称“首创 / 首次 / 行业空白 / 行业领先”
 ```
 
-
 # 9. Secrets
 
 任何仓库文件、日志、Evidence、PR、示例、截图、比赛材料中禁止写入：
@@ -739,14 +740,14 @@ UNKNOWN / TO_VERIFY / NOT_RUN / PENDING
 
 按触发器更新即可：
 
-| 发生的事 | 更新 |
-|---|---|
-| AI 实质参与 | `AI_USAGE_LOG.md` |
-| 新增/改变第三方资源 | `THIRD_PARTY_RESOURCES.md` |
-| 重大工程决策 | `DECISIONS.md` |
-| 实际产生比赛技术证据 | `EVIDENCE_INDEX.md` |
-| 核心 AI+开源融合关系改变 | `FUSION_MAP.md` |
-| 准备开放的可复用成果改变 | `OPEN_OUTPUTS.md` |
+| 发生的事                  | 更新                                 |
+| ------------------------- | ------------------------------------ |
+| AI 实质参与               | `AI_USAGE_LOG.md`                    |
+| 新增/改变第三方资源       | `THIRD_PARTY_RESOURCES.md`           |
+| 重大工程决策              | `DECISIONS.md`                       |
+| 实际产生比赛技术证据      | `EVIDENCE_INDEX.md`                  |
+| 核心 AI+开源融合关系改变  | `FUSION_MAP.md`                      |
+| 准备开放的可复用成果改变  | `OPEN_OUTPUTS.md`                    |
 | 进入正式提交/Release 阶段 | `SUBMISSION_CHECKLIST.md` + 版本冻结 |
 
 避免重复复制描述，优先交叉引用：
@@ -769,6 +770,7 @@ EVID-...
 实质任务结束前必须确认：
 
 ### Engineering
+
 - [ ] Goal / Acceptance Criteria 已完成或缺口明确
 - [ ] Scope 未无故扩大
 - [ ] 已查看 `git status`
@@ -776,6 +778,7 @@ EVID-...
 - [ ] 无无关修改
 
 ### Verification
+
 - [ ] 实际运行的测试和结果如实记录
 - [ ] 未运行的重要测试标记 `NOT_RUN`
 - [ ] 无虚假 Evidence / Benchmark
@@ -783,6 +786,7 @@ EVID-...
 - [ ] BOM 库存已按精确料号即时复核；零库存/未知库存失败关闭且未自动换料
 
 ### Compliance
+
 - [ ] AI Usage：按需更新
 - [ ] Third-party：按需更新
 - [ ] ADR：按需更新
@@ -795,6 +799,7 @@ EVID-...
 - [ ] 若处于正式提交阶段，已执行 `SUBMISSION_CHECKLIST` / FAIRNESS_CHECK / 版本冻结
 
 ### Git / Review
+
 - [ ] 分支使用符合规则
 - [ ] Commit / Push 状态如实报告
 - [ ] PR/Handoff 足够人工审核
