@@ -57,7 +57,7 @@
 
 1. **一人一份 clone**：两名真人不得共用同一个工作目录、index 或未提交工作树。AI 可以在其所属真人的 clone 内工作，但必须服从该任务 Issue 的 Owner 与领地。
 2. **身份先核实再归因**：项目负责人已确认 GitHub 账号 `la4876949-bot` 是第二名真人协作者，当前具有 write 权限；另有一条 `invitee=null` 的未过期 write 邀请，接收人仍为 `UNKNOWN`，不得据此推断第三人身份。
-3. **贡献分类**：`la4876949-bot` 的 `AEDL_TEAM / EXTERNAL_CONTRIBUTOR` 分类仍为 `TO_VERIFY`。发生首个实际贡献前由项目负责人确认；实际贡献发生后才写入 `TEAM_CONTRIBUTIONS.md`。外部贡献必须保留来源、授权、使用边界，不得包装成正式团队自主成果。
+3. **贡献分类**：项目负责人已确认 `la4876949-bot` 为 `AEDL_TEAM`（正式团队成员）。成员身份不等于已经产生贡献；只有实际贡献发生后才写入 `TEAM_CONTRIBUTIONS.md`。未来如接收外部贡献，仍须保留来源、授权、使用边界，不得包装成正式团队自主成果。
 4. **正式 clone 地址**：只使用 `https://github.com/Yenefa/AEDL.git`。旧 owner URL 仅为历史重定向，不再写入新文档或命令。
 5. **当前协作基线**：`fix/m2-schematic-semantic-release` @ `e7ff3c1` 是 2026-09-01 治理启动前冻结点。治理 PR 合入后，以该远端分支最新提交为任务分支起点；不要从当时落后 44 个提交的默认 `master` 开工。
 
@@ -229,7 +229,7 @@ GitHub 模板：`.github/ISSUE_TEMPLATE/task.md`、`.github/PULL_REQUEST_TEMPLAT
 
 - **COLLAB-BASELINE**：两人协作入口 → GitHub Issue #1 / Draft PR #6；分支 `codex/collaboration-onboarding`；已请求 `la4876949-bot` Review，状态 `PENDING_HUMAN_REVIEW`。
 - **TASK-W4A**：EDD-001 证据冻结 + POWER 合同草案 → GitHub Issue #2；`TO_ASSIGN`，身份核实前不得领取（难度★★）。
-- **TASK-W4B**：kicad-happy 六步 intake + 吸收方案 → GitHub Issue #3；Owner `la4876949-bot`，贡献分类 `TO_VERIFY`（难度★★★）。
+- **TASK-W4B**：kicad-happy 六步 intake + 吸收方案 → GitHub Issue #3；Owner `la4876949-bot`，贡献分类 `AEDL_TEAM`（难度★★★）。
 - **TASK-W4C**：U3 ECO 准备 + 治理杂项 → GitHub Issue #4；旧文档属主为 ZCode 主会话，GitHub 真人 Owner `TO_ASSIGN`。
 - **SANDBOX-V3**：外部信任锚 + orchestrator 注入闭环 → GitHub Issue #5；与 Wave 4 硬件任务独立领取。
 - 任务书全文（领地/待办/验收/禁止）：`docs/WAVE4_TASKS_20260901.md`

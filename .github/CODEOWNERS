@@ -1,7 +1,7 @@
 # Advisory ownership only. GitHub branch protection/rulesets are unavailable on
 # the current private-repository plan, so the Issue owner and human PR review
-# remain authoritative. The second collaborator handle is verified; their
-# AEDL-team/external-contributor classification remains TO_VERIFY.
+# remain authoritative. The second collaborator is verified as an AEDL formal
+# team member.
 
 * @Yenefa @la4876949-bot
 /.github/ @Yenefa

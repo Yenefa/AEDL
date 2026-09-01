@@ -2115,7 +2115,7 @@
 - 做了什么：
   - 现场复核本地/远端 Git、GitHub private 仓库、默认分支、协作者、邀请、PR/Issue 与 branch protection/rulesets 能力，确认当前工作线已同步而默认 `master` 落后 44 个提交。
   - 将本地 `origin` 从历史重定向地址更新为 `https://github.com/Yenefa/AEDL.git`。
-  - 建立 GitHub Issue #1（本治理任务）、#2（W4A）、#3（W4B）、#4（W4C）、#5（Sandbox V3）；项目负责人确认 `la4876949-bot` 是第二名真人协作者后，将 #3 指派给该账号，#2/#4/#5 保持 `TO_ASSIGN`。
+  - 建立 GitHub Issue #1（本治理任务）、#2（W4A）、#3（W4B）、#4（W4C）、#5（Sandbox V3）；项目负责人确认 `la4876949-bot` 是第二名真人协作者并将其分类为 `AEDL_TEAM` 后，将 #3 指派给该账号，#2/#4/#5 保持 `TO_ASSIGN`。
   - 新增 Issue/PR 模板与 advisory CODEOWNERS；将两名真人的一人一 clone、唯一 Owner、文件领地、禁止直推、另一人 Review、精确暂存和冲突串行化固化为协作协议 v3。
   - 新增 ADR-009，记录“临时完整工作线作为过渡基线，稳定化后回归 master”的最小协作决策；没有引入长期 develop/Git Flow。
 
@@ -2128,11 +2128,11 @@
   - Git：首个提交 `e8ca7c5` 已通过全局 pre-commit hook，并成功推送 `origin/codex/collaboration-onboarding`；Draft PR #6 已创建，base 为 `fix/m2-schematic-semantic-release`，已请求 `la4876949-bot` Review。
 
 - 已知限制：
-  - `la4876949-bot` 已确认为第二名真人协作者，但其 `AEDL_TEAM / EXTERNAL_CONTRIBUTOR` 身份仍为 `TO_VERIFY`；另有一条 `invitee=null` 的未过期 write 邀请，接收人 `UNKNOWN`。本批不更新 `TEAM_CONTRIBUTIONS.md`；除已领取的 W4B 外，其余 W4/Sandbox Issues 不指派。
+  - `la4876949-bot` 已确认为第二名真人协作者，贡献分类为 `AEDL_TEAM`；成员身份不等于实际贡献，因此本批不更新 `TEAM_CONTRIBUTIONS.md`。另有一条 `invitee=null` 的未过期 write 邀请，接收人 `UNKNOWN`；除已领取的 W4B 外，其余 W4/Sandbox Issues 不指派。
   - 当前 private 仓库套餐无法启用 branch protection/rulesets；禁止直推与另一人 Review 目前是程序性约束，不是 GitHub 技术强制。
   - GitHub 官方文档确认 Issue/PR 模板只有位于默认分支才会自动显示；当前默认 `master` 尚未包含本批，所以稳定化合入 `master` 前只能手工引用模板内容。
   - 本批不修改硬件设计、BOM、原理图、PCB、制造文件或 Evidence 字节；不重跑会改写 Evidence 的完整 gate runner；不构成制造签发或实体 C 级验证。
 
-- Commit / PR：首个提交 `e8ca7c5`；分支 `codex/collaboration-onboarding` 已推送；Draft PR #6（base=`fix/m2-schematic-semantic-release`）；本回写随第二个小提交推送。
+- Commit / PR：首个提交 `e8ca7c5`；Handoff 回写提交 `4c8df18`；分支 `codex/collaboration-onboarding` 已推送；Draft PR #6（base=`fix/m2-schematic-semantic-release`）；正式团队成员分类同步随当前提交推送。
 - AIC Score Target：`NONE`（内部协作治理，不强行关联评分项）
 - 最终状态：`PENDING_HUMAN_REVIEW`
