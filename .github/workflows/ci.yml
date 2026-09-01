@@ -2,8 +2,11 @@
 # Scope: lint-level syntax check + main repo unit tests + sandbox unit tests + secret scan.
 # Explicitly NOT run here: run_gates.py, KiCad, ESP-IDF, hardware flows,
 # anything that generates or rewrites formal Evidence.
-# Note: main/sandbox tests run on windows-latest because frozen golden/hash
-# evidence was generated on the Windows dev machine (path separators etc.).
+# Platform notes (frozen hashes are platform-sensitive):
+# - main-tests: frozen golden/BOM/manifest hashes were generated from the
+#   Windows CRLF worktree -> must run on windows-latest.
+# - sandbox-tests: sandbox bundle manifest pins repo blob (LF) hashes ->
+#   must run on ubuntu-latest.
 name: minimal-ci
 
 on:
@@ -15,6 +18,8 @@ jobs:
   main-tests:
     name: Main repo unit tests
     runs-on: windows-latest
+    env:
+      PYTHONIOENCODING: "utf-8" # avoid charmap errors on Windows CI for CJK output
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,7 +32,7 @@ jobs:
 
   sandbox-tests:
     name: Sandbox runtime unit tests
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
