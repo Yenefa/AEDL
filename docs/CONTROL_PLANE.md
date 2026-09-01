@@ -333,10 +333,19 @@ authority 模糊 → Exception contract → 发现 hash representation 模糊 �
 
 ### 使用方法（写给 AI 审查者与人工审查者）
 
-1. **生成（自动）**：本机 post-commit 钩子（`scripts/post-commit.bundle.sh`）在每次
+1. **生成（自动）**：post-commit 钩子（`scripts/post-commit.bundle.sh`）在每次
    commit 后自动生成；交付时也可手动执行 `python -m tools.make_review_bundle`
    （产物含状态 / SHARED 推导 / receipt 摘要 / 变更统计 / 新文件全内容 / 真实 hunks）。
    Delta 复审一律用**真实 hunks**（.patch），不用摘要冒充补丁。
+   **一次性安装（每台新机器）**——git 钩子不随 clone 传播：
+
+   ```bash
+   cp scripts/post-commit.bundle.sh "$(git config core.hooksPath || echo .git/hooks)/post-commit"
+   ```
+
+   装完后 commit 即自动生成；未安装也能手动触发（命令同上）。bundle 永远落在仓库外的
+   本地独立文件夹（`<repo 父目录>/review-bundles/<run>/`），不进 git、不随推送传播；
+   跨机器/跨人共享靠手动发送（如 run-001 的 bundle 用法）。
 2. **发送**：整包（或按需单文件）手动发送给对话式 AI 进行外部 Review——
    **选用高质量 AI 模型，思考强度调高**（例如 GPT 5.6 Sol，思考强度：高）。
 3. **Review 重点**（给 AI 的指令骨架）：
