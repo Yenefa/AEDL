@@ -1,0 +1,79 @@
+{
+  "$schema": "https://aedl.local/schemas/semantic-fault-injection-report.v1.json",
+  "schema_version": 1,
+  "generated_at": "2026-08-31T12:25:41Z",
+  "status": "pass",
+  "baseline_status": "pass",
+  "inputs": {
+    "contract": {
+      "path": "gates/contracts/m2_schematic_contract_v1.json",
+      "sha256": "5802cbace183161361e1f3e5be868650f84ab336d53a7f30475de4d5af6fb2f6"
+    },
+    "good_observations": {
+      "path": "tests/fixtures/schematic_semantics/good_observations.json",
+      "sha256": "eb384901b0b49be3dc9d69bfffb872251b9436272e72f01718fdc5bd55a0d7c0"
+    }
+  },
+  "summary": {
+    "caught": 5,
+    "missed": 0,
+    "total": 5
+  },
+  "cases": [
+    {
+      "id": "FAULT_FIRMWARE_ADDRESS_MISMATCH",
+      "fixture": "tests/fixtures/schematic_semantics/fault_firmware_address.json",
+      "fixture_sha256": "67bae9c6779badd453d8393eb3e7077d05378ba4256c96374a86a537de67c2ab",
+      "expected_rule": "SHT30_ADDRESS",
+      "semantic_status": "fail",
+      "detected_rules": [
+        "SHT30_ADDRESS"
+      ],
+      "status": "caught"
+    },
+    {
+      "id": "FAULT_FLOATING_SHT30_ADDR_COMMON_MODE",
+      "fixture": "tests/fixtures/schematic_semantics/fault_floating_addr.json",
+      "fixture_sha256": "6a51c10f589aa971cd6400aeda567cd43013248b81ec6bdc4978a42282327fb7",
+      "expected_rule": "SHT30_ADDRESS",
+      "semantic_status": "fail",
+      "detected_rules": [
+        "SHT30_ADDRESS"
+      ],
+      "status": "caught"
+    },
+    {
+      "id": "FAULT_MISSING_EN_CAP_COMMON_MODE",
+      "fixture": "tests/fixtures/schematic_semantics/fault_missing_en_cap.json",
+      "fixture_sha256": "593cf67157b52268c7e8d478dcfe1217be0d9a5bbe537ee3733b44bafe9a0de8",
+      "expected_rule": "ESP32_EN_RC",
+      "semantic_status": "fail",
+      "detected_rules": [
+        "ESP32_EN_RC"
+      ],
+      "status": "caught"
+    },
+    {
+      "id": "FAULT_MISSING_GPIO9_PULLUP_COMMON_MODE",
+      "fixture": "tests/fixtures/schematic_semantics/fault_missing_gpio9_pullup.json",
+      "fixture_sha256": "92e61ca456078bacc449233176fa00beb35882afe8bfd696dca36d275cfb05fd",
+      "expected_rule": "ESP32_GPIO9_PULLUP",
+      "semantic_status": "fail",
+      "detected_rules": [
+        "ESP32_GPIO9_PULLUP"
+      ],
+      "status": "caught"
+    },
+    {
+      "id": "FAULT_REVERSED_USB_COMMON_MODE",
+      "fixture": "tests/fixtures/schematic_semantics/fault_reversed_usb.json",
+      "fixture_sha256": "b9b8ab04a5a0ef1375e86ef09de2b8a359a3990aadb8dba50ded2cf55e49a346",
+      "expected_rule": "USB_POLARITY_AND_SERIES",
+      "semantic_status": "fail",
+      "detected_rules": [
+        "USB_POLARITY_AND_SERIES"
+      ],
+      "status": "caught"
+    }
+  ]
+}

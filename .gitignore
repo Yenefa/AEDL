@@ -8,6 +8,7 @@ __pycache__/
 tools/bin/
 *.elf.tmp
 delivery/*.zip
+!delivery/jlc_gerber_upload.zip
 
 # Secrets and machine-local configuration
 .env
@@ -26,3 +27,12 @@ dist/
 .DS_Store
 Thumbs.db
 *.log
+
+# 开源项目本地克隆（研究素材，含独立 .git 或虚拟环境，不入 AEDL 仓库）
+notes/open_source_intake/_circuitbot_repo/
+notes/open_source_intake/_kicadai_repo/
+notes/open_source_intake/_kicad_mcp_repo/
+notes/open_source_intake/_circuitbot_venv/
+notes/open_source_intake/_neuroboard_repo/
+spike/
+spike_stage2/

@@ -1,0 +1,92 @@
+{
+  "$schema": "https://aedl.local/schemas/schematic-semantics-report.v1.json",
+  "schema_version": 1,
+  "board_id": "project-027-m2-esp32c3-sht30",
+  "status": "pass",
+  "summary": {
+    "passed": 5,
+    "failed": 0,
+    "total": 5
+  },
+  "findings": [
+    {
+      "rule_id": "USB_POLARITY_AND_SERIES",
+      "kind": "connectivity",
+      "severity": "critical",
+      "status": "pass",
+      "title": "USB D+/D- polarity and 22 ohm series termination",
+      "source_ids": [
+        "ESP32_C3_WROOM_02_DATASHEET",
+        "ESP32_C3_SCHEMATIC_CHECKLIST"
+      ],
+      "details": []
+    },
+    {
+      "rule_id": "SHT30_ADDRESS",
+      "kind": "connectivity",
+      "severity": "critical",
+      "status": "pass",
+      "title": "SHT30 ADDR is tied low and firmware uses 0x44",
+      "source_ids": [
+        "SHT3X_DIS_DATASHEET"
+      ],
+      "details": []
+    },
+    {
+      "rule_id": "SHT30_UNUSED_PINS",
+      "kind": "connectivity",
+      "severity": "major",
+      "status": "pass",
+      "title": "Unused SHT30 ALERT and nRESET are intentionally unconnected",
+      "source_ids": [
+        "SHT3X_DIS_DATASHEET"
+      ],
+      "details": []
+    },
+    {
+      "rule_id": "ESP32_EN_RC",
+      "kind": "connectivity",
+      "severity": "major",
+      "status": "pass",
+      "title": "ESP32-C3 EN has the approved 10 kohm and 1 uF reset network",
+      "source_ids": [
+        "ESP32_C3_SCHEMATIC_CHECKLIST"
+      ],
+      "details": []
+    },
+    {
+      "rule_id": "ESP32_GPIO9_PULLUP",
+      "kind": "connectivity",
+      "severity": "major",
+      "status": "pass",
+      "title": "ESP32-C3 GPIO9 boot strap has an external 10 kohm pull-up",
+      "source_ids": [
+        "ESP32_C3_SCHEMATIC_CHECKLIST"
+      ],
+      "details": []
+    }
+  ],
+  "inputs": {
+    "contract": {
+      "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\gates\\contracts\\m2_schematic_contract_v1.json",
+      "sha256": "5802cbace183161361e1f3e5be868650f84ab336d53a7f30475de4d5af6fb2f6"
+    },
+    "intent": {
+      "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\hardware\\m2-board\\intent_v1.json",
+      "sha256": "f1703e228f7f145e1ecc54edec4f69a88aca144136f4ef01323dfa56c7538f56"
+    },
+    "netlist": {
+      "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\m2_board_current.net.xml",
+      "sha256": "fafe76eb9cbe9d274583a99072bd16050113d6cc6b4f91ff8604a86cf34daea8"
+    },
+    "pcb": {
+      "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\hardware\\m2-board\\m2_board.kicad_pcb",
+      "sha256": "f4db9d1205048e9b6dee64e5b760d98415638f015b9191b8959dae867aaec8e0"
+    },
+    "firmware": {
+      "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\firmware\\include\\sht30.h",
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    }
+  },
+  "generated_at": "2026-08-31T12:25:41Z"
+}

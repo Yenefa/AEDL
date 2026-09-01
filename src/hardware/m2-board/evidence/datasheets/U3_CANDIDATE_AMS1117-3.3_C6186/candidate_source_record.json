@@ -1,0 +1,47 @@
+{
+  "candidate_refdes": "U3",
+  "candidate_status": "CANDIDATE_ONLY_NOT_BOM_BOUND",
+  "decision": "BLOCKED_PENDING_THERMAL_COUT_INPUT",
+  "manufacturer": "Advanced Monolithic Systems",
+  "mpn": "AMS1117-3.3",
+  "lcsc": "C6186",
+  "source_url": "https://datasheet.lcsc.com/datasheet/pdf/e6935943fc6b1bbf350a1a0f3e90dc4a.pdf?productCode=C6186",
+  "local_file": "src/hardware/m2-board/evidence/datasheets/U3_CANDIDATE_AMS1117-3.3_C6186/AMS1117_Advanced_Monolithic_Systems_C6186.pdf",
+  "sha256": "189a2651878a87d590b768eaa9b44217a3fdf460352ce6ecaff127221282a3f0",
+  "file_size_bytes": 95151,
+  "pdf_pages": 8,
+  "retrieved_at": "2026-08-31T14:35:47Z",
+  "verified_identity": {
+    "file_header": "%PDF-1.4",
+    "pages": 8,
+    "title": "Microsoft Word - DS1117",
+    "producer": "GPL Ghostscript 8.15",
+    "p1_contains": ["Advanced Monolithic Systems", "AMS1117", "1A LOW DROPOUT VOLTAGE REGULATOR"]
+  },
+  "verified_facts": {
+    "fixed_3v3_and_sot223": {"page": 1, "text": "Three Terminal Adjustable or Fixed Voltages 1.5V, 1.8V, 2.5V, 2.85V, 3.3V and 5.0V; SOT-223, TO-252 and SO-8 package available; Ordering: AMS1117-3.3 (SOT-223)"},
+    "pinout": {"page": 1, "text": "SOT-223 Top View: 1-Ground/Adjust, 2-VOUT, 3-VIN; TAB IS OUTPUT"},
+    "dropout": {"page": 3, "text": "Dropout Voltage (VIN-VOUT), IOUT=0.8A (Note 4): typ 1.1V / max 1.3V"},
+    "quiescent_current": {"page": 3, "text": "Quiescent Current: typ 5 / max 11 mA"},
+    "tjunction_max_125": {"page": 5, "text": "maximum junction temperature ratings of 125°C should not be exceeded under continuous normal load conditions"},
+    "theta_ja_sot223": {
+      "page": 2,
+      "nominal": "SOT-223 package θJA = 90°C/W",
+      "variation": "with package soldering to copper area over backside ground plane or internal power plane θJA can vary from 46°C/W to >90°C/W depending on mounting technique and copper size"
+    },
+    "theta_ja_table1": {
+      "page": 5,
+      "text": "Table 1 (SOT-223, 1/16in FR-4, 1oz copper): θJA values 55/55/65/80/60/65°C/W across copper area variants (2500..100 sq mm, tab on topside); total junction-to-ambient can be as low as 45°C/W",
+      "note": "Table 1 is a rough guideline, actual value requires experimentation on the specific board layout (thermal interactions with other components)"
+    },
+    "cout_22uf_tantalum": {
+      "page": 4,
+      "text": "Stability: The addition of 22µF solid tantalum on the output will ensure stability for all operating conditions. Without bypassing the adjustment terminal smaller capacitors can be used. Larger values further improve stability/transient."
+    }
+  },
+  "activation_rule": "只有人工批准 B1 且正式 ECO 同步修改 BOM 中 U3 的 manufacturer/MPN/LCSC 后，才能把该候选提升到主 datasheet_manifest.json；当前不得替换主 manifest 中的 ME6211C33R5G/C235316。",
+  "capture": {
+    "method": "curl.exe -L --fail --show-error",
+    "notes": "原厂 datasheet 的 LCSC 托管副本；非厂商官方网站"
+  }
+}

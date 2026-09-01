@@ -1,79 +1,129 @@
-# 单 Agent 自主嵌入式研发系统
+# AEDL
 
-> 📅 创建日期：2026-08-24
-> 🔢 项目编号：project-027
-> 🏷️ 状态：M2 完成（8/8 板级评审签发，7/7 门禁全绿 exit 0，授权嘉立创下单；回件实测待做）
+**Autonomous Engineering Design Loop · 自主嵌入式工程研发闭环**
 
-## 概述
+AEDL 探索如何在明确的人类审批边界内，把自然语言需求转化为可审计的嵌入式设计候选，并让需求合同、EDA 产物、固件、验证器和 Evidence 保持可追溯。
 
-做一个单 Agent 自主嵌入式研发系统：用户只描述想做什么，Agent 自动完成技术调研、器件选型、电路设计、原理图、PCB、仿真、固件开发、调试和自动验证。本仓库当前以 ESP32-C3/SHT30 板为 M2 载体，重点验证可复现的门禁与证据链。当前 KiCad G2 ERC=0、G4 DRC=0/0、8 项板级评审基于机器实测证据全部签发（`manufacturing_release=true`），一键 runner exit 0，生产文件已授权嘉立创下单；实体板级验证（上电/BLE/温湿度精度/瞬态）待回件后执行。
+本仓库是 AEDL 的**集成与技术主张真源**。当前已经具备确定性合同、失败关闭门禁、候选/证据隔离、M2 硬件载体和软件验证基线；它仍不是一个已经完成、可以无人监督下单的通用硬件 Agent。
 
-## AI 开发必读
+## 当前真实状态
 
-任何 AI Agent 在本仓库产生实质贡献前，必须完整读取根目录 `AGENTS.md`。该文件是
-AEDL 当前 v1.4 Agent 执行层唯一规范；项目实时状态另见 `docs/HANDOFF.md`，合规台账按
-`AGENTS.md` 的触发条件更新。`docs/compliance/AEDL_开发记录与AI使用规范_v1.0.md`
-保留为历史基线与格式参考，不再作为与根 `AGENTS.md` 并列的当前执行规范。
+> README 只描述稳定边界，不复制会过期的门禁计数。每次接手请以 [HANDOFF](docs/HANDOFF.md)、[Evidence Index](docs/evidence/EVIDENCE_INDEX.md) 和当前结构化门禁结果为准。
 
-## AI 使用披露
+| 范围 | 当前边界 | 权威入口 |
+| --- | --- | --- |
+| M2 ESP32-C3/SHT30 设计 | 已有原理图、PCB、制造导出物和机器/静态验证记录 | [M2 硬件目录](src/hardware/m2-board/)、[HANDOFF](docs/HANDOFF.md) |
+| 制造放行 | **BLOCKED**；`manufacturing_release=false`，尚未重新人工签发，不得据旧记录下单 | [board_review_v1.json](gates/board_review_v1.json) |
+| 数据手册合同 | 仍有人工签发项；自动检查不能替代具名工程复核 | [硬件 Evidence](src/hardware/m2-board/evidence/)、[HANDOFF](docs/HANDOFF.md) |
+| 实体板验证 | **NOT_RUN**；上电、功耗、BLE、传感器精度、USB 眼图、瞬态与长期稳定性仍待回件 | [Evidence Index](docs/evidence/EVIDENCE_INDEX.md) |
+| EDD-001 自主设计闭环 | Sandbox 运行时已实现；真实 preflight 对缺失资料、POWER 合同、compiler 和独立 verifier 保持失败关闭 | [Sandbox 设计规格](docs/superpowers/specs/2026-09-01-edd001-engineering-design-sandbox-design.md)、[HANDOFF](docs/HANDOFF.md) |
 
-- 截至 2026-08-29，仓库中已登记、可审计的 AI 贡献使用 **OpenAI Codex desktop**；具体任务、产出与审核状态见 `docs/compliance/AI_USAGE_LOG.md`。
-- `AI-20260829-001` 至 `AI-20260829-004` 的运行环境未提供可核验的精确模型 ID，因此模型如实记为 `UNKNOWN`；不得根据客户端名称反推具体模型版本。
-- 当前 `AI-20260829-005` 运行上下文只确认该 Codex Agent **基于 GPT-5**，精确部署型号/版本仍为 `UNKNOWN`。
-- `OpenCode / Claude Code` 是本项目计划支持的 Agent 底座，不等于本阶段实际使用记录；合规台账建立前的历史工作使用了哪些 AI 仍为 `UNKNOWN`，不做倒推回填。
-- GitHub CLI 是仓库操作工具，不是 AI 模型或 AI Agent。
+没有当前 Evidence 支撑的性能、可制造性或自主能力，不应从历史 PASS、文件存在或工具清单中推导。
 
-## 技术栈
+## 系统边界
 
-- Agent 底座：OpenCode / Claude Code（skills + MCP）
-- EDA 自动化：KiCad 9/10 + freerouting（DSN/SES 循环）+ kicad-cli（ERC/DRC/Gerber/POS headless）+ pcbnew Python（建板/扇出/蛇形调谐）
-- 电路仿真：ngspice（KiCad 内置）
-- 固件与验证：ESP-IDF/PlatformIO/Zephyr + Wokwi CLI / Renode
-- 器件数据：yaqwsx/jlcparts + jlcpcb-mcp（LCSC/JLCPCB 目录与实时库存）
-- 交付物生成：python-docx（报告）、嘉立创 Gerber/BOM 规范
-
-## 快速开始
-
-```powershell
-# 阅读调研报告（正式交付物为 Word）
-docs\单Agent自主嵌入式研发系统可行性调研报告.docx
-# 重新生成 Word
-python tools\md2docx.py docs\report-draft.md "docs\单Agent自主嵌入式研发系统可行性调研报告.docx"
+```text
+自然语言需求
+  → 可签发需求合同
+  → 受约束的设计候选
+  → EDA / firmware compiler
+  → 独立 read-back verifier
+  → content-addressed Evidence
+  → 人工 Review / 晋升 / 制造决策
 ```
 
-## 目录说明
+核心原则：
 
-| 目录      | 说明                                          |
-| --------- | --------------------------------------------- |
-| `src/`    | 硬件（m2-board 原理图/PCB/intent）与固件源码   |
-| `docs/`   | 调研报告、HANDOFF.md、M2 测试报告、板级工程评审 |
-| `docs/compliance/` | AEDL AI 使用规范、AI/第三方资源/决策/团队贡献台账 |
-| `docs/evidence/` | 可验证主张与原始 evidence 的索引 |
-| `notes/`  | 各里程碑证据（ERC/DRC/评审/manifest，机器生成）|
-| `assets/` | 静态资源（架构图等）                          |
-| `gates/`  | 失败关闭门禁（run_gates.py + gate_core.py + bom/board_review 真源）|
-| `tools/`  | 建板/布线/评审工具（build_board、dsn_ses、board_review 等）+ md2docx |
-| `delivery/` | 嘉立创下单包（Gerber ZIP + bom.csv + pos.csv）|
+- **失败关闭**：`UNKNOWN`、缺资料或证据失配不能降级为 PASS。
+- **候选不污染基线**：设计变更先进入 candidate，冻结 baseline 不原地改写。
+- **验证器独立**：生成器自报成功不能代替独立解析与对抗性验证。
+- **人机权限分离**：Agent 可以生成、诊断和验证；人工保留候选晋升、制造签发、下单和最终 Review。
+- **证据分级**：静态检查、仿真、软件 loopback 与实体硬件结果分别记录，不能互相冒充。
 
-## 当前门禁与下一步
+## 从这里开始
 
-在仓库根目录运行：
+### 人类开发者
+
+1. 阅读 [HANDOFF](docs/HANDOFF.md) 获取最新分支、阻塞项和验证状态。
+2. 阅读 [协作协议](docs/COLLABORATION.md)，从当前协作基线创建 Issue 对应的任务分支。
+3. 一个 Issue 只设一个 Owner 和一组独占写路径；通过 Draft PR 交接给另一名真人 Review。
+
+不要仅凭 GitHub 默认分支名判断当前完整工作线；协作基线以 HANDOFF 为准。
+
+### AI Agent
+
+在产生任何实质贡献前，必须依次完整读取：
+
+1. 根目录 [AGENTS.md](AGENTS.md)；
+2. [docs/HANDOFF.md](docs/HANDOFF.md)；
+3. [docs/COLLABORATION.md](docs/COLLABORATION.md)；
+4. 当前 Issue / PR 的 Goal、Scope、Owned paths 和 Acceptance Criteria。
+
+硬件发布、BOM、原理图、PCB 或制造任务还必须读取 [PROJECT_PITFALLS](docs/knowledge/PROJECT_PITFALLS.md) 与 [IMPROVEMENT_SYSTEM](docs/knowledge/IMPROVEMENT_SYSTEM.md)。
+
+## 安全验证入口
+
+以下命令不会被 README 宣称为实体硬件验证：
+
+```powershell
+# 主仓库确定性单元/集成测试
+py -3 -S -m unittest discover -s tests
+
+# Sandbox 运行时测试
+uv run --frozen --project sandbox_runtime python -m unittest discover -s sandbox_runtime/tests -p "test_*.py"
+
+# 真实 EDD-001 preflight；存在资料/覆盖缺口时应返回 BLOCKED
+uv run --frozen --project sandbox_runtime python -m aedl_sandbox.cli preflight --repo-root . --domain EDD-001
+```
+
+完整 M2 runner 会刷新 `notes/m2-evidence-reset/` 下的运行证据。只有在 Issue 明确拥有 Evidence 写路径、已保存旧批次并准备记录新运行时，才执行：
 
 ```powershell
 py -3 gates\run_gates.py
 ```
 
-runner 会调用 KiCad 10.0.5、解析结构化 ERC/DRC JSON，并写入
-`notes/m2-evidence-reset/run_manifest.json`。当前预期退出码 `0`：ERC=0、DRC=0/0、
-BOM/POS/ZIP 结构检查、8 项板级评审（`manufacturing_release=true`）全部通过。
-板级评审的机器实测证据由 `py -3 tools\board_review.py` 生成
-（`notes/m2-evidence-reset/generated/board_review_auto.json`）。
+不得为了得到绿色输出，在普通文档或协作任务中原地重跑并覆盖证据。
 
-下一步按顺序完成：
+## 双仓库结构
 
-1. 嘉立创下单（`delivery/jlc_gerber_upload.zip` + `bom.csv` + `pos.csv`，2026-08-29 重新导出）。
-2. 回件后执行 C 级实测：上电、功耗、BLE 距离、温湿度精度、USB 眼图、瞬态与 24/168 小时稳定性。
+| 仓库 | 责任 | 不承担的责任 |
+| --- | --- | --- |
+| [`Yenefa/AEDL`](https://github.com/Yenefa/AEDL) | 集成代码、工程合同、ADR、合规台账、比赛主张与正式 Evidence 索引 | 不把未经晋升的实验结果直接包装成产品能力 |
+| [`Yenefa/AEDL-spike`](https://github.com/Yenefa/AEDL-spike) | 协议执行器实验、故障注入样例和过程 Evidence 卫星 | 不单独决定主仓架构、制造放行或比赛技术主张 |
 
-## 备注
+卫星成果回流主仓时，必须引用精确 spike commit、文件路径、限制和复现方法，并通过主仓 Issue 与另一名真人 Review 的 PR。当前卫星治理见 [`AEDL-spike` Draft PR #2](https://github.com/Yenefa/AEDL-spike/pull/2)。
 
-大统领四项拍板（2026-08-24）：①先出完整调研报告；②KiCad 设计 + 嘉立创打板；③验证边界第一档 = 无实体板交付；④起步域 = MCU 最小系统 + 外设。
+## 项目结构
+
+| 路径 | 内容 |
+| --- | --- |
+| `src/hardware/m2-board/` | M2 intent、KiCad 原理图/PCB、硬件 Evidence 合同 |
+| `src/firmware/` | 固件源码 |
+| `gates/` | 失败关闭门禁、合同与制造放行真源 |
+| `sandbox_runtime/` | Design / Execution / Trust 三层 Sandbox 运行时 |
+| `tests/` | 主仓库确定性测试与对抗性夹具 |
+| `notes/` | 机器生成的运行批次、manifest 与原始证据 |
+| `delivery/` | 当前制造导出物；存在不等于获准下单 |
+| `docs/evidence/` | 可验证主张与原始证据索引 |
+| `docs/compliance/` | AI 使用、第三方资源、ADR 与贡献边界 |
+| `docs/competition/` | 融合图、开放成果和提交检查资产 |
+| `web/` | 需求澄清工作台 |
+| `tools/` | 建板、布线、导出、评审和文档工具 |
+
+## 协作与审计
+
+标准路径是：
+
+```text
+Issue → task branch → exact-path staging → tests → Draft PR
+      → another human review → merge decision
+```
+
+- 正式团队成员、AI 贡献和第三方资源分别登记，不能混写成“全部团队自研”。
+- AI 的实质贡献记录在 [AI Usage Log](docs/compliance/AI_USAGE_LOG.md)，审核状态保持 `PENDING_HUMAN_REVIEW`。
+- 关键决策见 [DECISIONS](docs/compliance/DECISIONS.md)，第三方与许可证边界见 [THIRD_PARTY_RESOURCES](docs/compliance/THIRD_PARTY_RESOURCES.md)。
+- 仓库当前的具体分支策略与 GitHub 强制能力边界见 [协作协议](docs/COLLABORATION.md)。
+
+## 许可
+
+AEDL 自研代码与文档按 [Apache License 2.0](LICENSE) 发布；第三方归因与再分发边界见 [NOTICE](NOTICE) 和 [THIRD_PARTY_RESOURCES](docs/compliance/THIRD_PARTY_RESOURCES.md)。冻结的数据手册、图纸和其他外部资料版权归各权利人，本仓库不将其声明为团队作品。

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://aedl.local/schemas/requirements-contract.v1.json",
+  "schema_version": 1,
+  "board_id": "smoke-test-board",
+  "created_at": "2026-08-31T03:00:43+08:00",
+  "author": "human+ai",
+  "user_goal": "ESP32-C3 + SHT30 温湿度载板，USB-C 供电，BLE 上报",
+  "source_statements": [
+    {
+      "id": "S1",
+      "text": "ESP32-C3 + SHT30 温湿度载板",
+      "type": "other"
+    }
+  ],
+  "resolved_requirements": [],
+  "open_questions": [
+    {
+      "id": "Q1",
+      "question": "板子如何供电？",
+      "answer": "USB-C 5V",
+      "kind": "blocking",
+      "source_ids": []
+    },
+    {
+      "id": "Q2",
+      "question": "需要板载调试器吗？",
+      "answer": "No preference",
+      "kind": "blocking",
+      "source_ids": []
+    },
+    {
+      "id": "Q3",
+      "question": "工作温度范围？",
+      "answer": "unknown",
+      "kind": "nonblocking",
+      "source_ids": []
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "A1",
+      "text": "默认单面板两层布线",
+      "source_ids": [],
+      "status": "recorded"
+    }
+  ],
+  "forbidden_assumptions": [
+    "禁止在未询问用户的情况下增加 Wi-Fi 模块"
+  ],
+  "intent_binding": {
+    "intent_path": "src/hardware/m2-board/intent_v1.json"
+  },
+  "contract_sha256": "05e5709cac4409bd55d4dc6fbea3ba1cd49248d4352c0925767370a41db8085a"
+}

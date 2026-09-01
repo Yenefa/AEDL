@@ -1,0 +1,429 @@
+{
+    "$schema": "https://schemas.kicad.org/drc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-08-29T14:39:39",
+    "ignored_checks": [
+        {
+            "description": "Footprint has no courtyard defined",
+            "key": "missing_courtyard"
+        },
+        {
+            "description": "Track endpoint not centered on via",
+            "key": "track_not_centered_on_via"
+        },
+        {
+            "description": "Tuning profile track geometries",
+            "key": "tuning_profile_track_geometries"
+        },
+        {
+            "description": "Footprint doesn't match symbol's footprint filters",
+            "key": "footprint_filters_mismatch"
+        },
+        {
+            "description": "Footprint component type doesn't match footprint pads",
+            "key": "footprint_type_mismatch"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning",
+        "exclusion"
+    ],
+    "kicad_version": "10.0.5",
+    "schematic_parity": [],
+    "source": "m2_board.kicad_pcb",
+    "unconnected_items": [],
+    "violations": [
+        {
+            "description": "电路板边缘间距违规 (<电路板配置> 中的 \"板边\" 约束 间距 0.5000 mm; 实际 0.4300 mm)",
+            "items": [
+                {
+                    "description": "Edge.Cuts 上的 线段",
+                    "pos": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "uuid": "4dcd3d5b-1703-4a27-bafb-10ec1c0aa2e8"
+                },
+                {
+                    "description": "F.Cu 上 J1 的焊盘 A1 [GND]",
+                    "pos": {
+                        "x": 41.75,
+                        "y": 1.155
+                    },
+                    "uuid": "bb82f801-0029-479a-a018-8dd35ea8555b"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "电路板边缘间距违规 (<电路板配置> 中的 \"板边\" 约束 间距 0.5000 mm; 实际 0.4300 mm)",
+            "items": [
+                {
+                    "description": "Edge.Cuts 上的 线段",
+                    "pos": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "uuid": "4dcd3d5b-1703-4a27-bafb-10ec1c0aa2e8"
+                },
+                {
+                    "description": "F.Cu 上 J1 的焊盘 A4 [+5V]",
+                    "pos": {
+                        "x": 42.55,
+                        "y": 1.155
+                    },
+                    "uuid": "f7e13b96-88c2-4dc2-ac42-50762cf0256a"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "电路板边缘间距违规 (<电路板配置> 中的 \"板边\" 约束 间距 0.5000 mm; 实际 0.4300 mm)",
+            "items": [
+                {
+                    "description": "Edge.Cuts 上的 线段",
+                    "pos": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "uuid": "4dcd3d5b-1703-4a27-bafb-10ec1c0aa2e8"
+                },
+                {
+                    "description": "F.Cu 上 J1 的焊盘 A5 [CC1]",
+                    "pos": {
+                        "x": 43.75,
+                        "y": 1.155
+                    },
+                    "uuid": "3e506198-97e4-4680-a03b-9dade6c706fb"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "电路板边缘间距违规 (<电路板配置> 中的 \"板边\" 约束 间距 0.5000 mm; 实际 0.4300 mm)",
+            "items": [
+                {
+                    "description": "Edge.Cuts 上的 线段",
+                    "pos": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "uuid": "4dcd3d5b-1703-4a27-bafb-10ec1c0aa2e8"
+                },
+                {
+                    "description": "F.Cu 上 J1 的焊盘 A6 [USB_DP]",
+                    "pos": {
+                        "x": 44.75,
+                        "y": 1.155
+                    },
+                    "uuid": "e3be345c-64b8-45b7-a21b-3ea69a9dc47e"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "电路板边缘间距违规 (<电路板配置> 中的 \"板边\" 约束 间距 0.5000 mm; 实际 0.4300 mm)",
+            "items": [
+                {
+                    "description": "Edge.Cuts 上的 线段",
+                    "pos": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "uuid": "4dcd3d5b-1703-4a27-bafb-10ec1c0aa2e8"
+                },
+                {
+                    "description": "F.Cu 上 J1 的焊盘 A7 [USB_DM]",
+                    "pos": {
+                        "x": 45.25,
+                        "y": 1.155
+                    },
+                    "uuid": "0143034b-e893-44cb-8ef5-1294c3fa7c70"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "电路板边缘间距违规 (<电路板配置> 中的 \"板边\" 约束 间距 0.5000 mm; 实际 0.4300 mm)",
+            "items": [
+                {
+                    "description": "Edge.Cuts 上的 线段",
+                    "pos": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "uuid": "4dcd3d5b-1703-4a27-bafb-10ec1c0aa2e8"
+                },
+                {
+                    "description": "F.Cu 上 J1 的焊盘 A8 [<no net>]",
+                    "pos": {
+                        "x": 46.25,
+                        "y": 1.155
+                    },
+                    "uuid": "5adc582f-851f-4674-b0ff-748eac97f395"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "电路板边缘间距违规 (<电路板配置> 中的 \"板边\" 约束 间距 0.5000 mm; 实际 0.4300 mm)",
+            "items": [
+                {
+                    "description": "Edge.Cuts 上的 线段",
+                    "pos": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "uuid": "4dcd3d5b-1703-4a27-bafb-10ec1c0aa2e8"
+                },
+                {
+                    "description": "F.Cu 上 J1 的焊盘 A9 [+5V]",
+                    "pos": {
+                        "x": 47.45,
+                        "y": 1.155
+                    },
+                    "uuid": "eb1773cf-0cda-457b-99a6-5968b05b5612"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "电路板边缘间距违规 (<电路板配置> 中的 \"板边\" 约束 间距 0.5000 mm; 实际 0.4300 mm)",
+            "items": [
+                {
+                    "description": "Edge.Cuts 上的 线段",
+                    "pos": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "uuid": "4dcd3d5b-1703-4a27-bafb-10ec1c0aa2e8"
+                },
+                {
+                    "description": "F.Cu 上 J1 的焊盘 A12 [GND]",
+                    "pos": {
+                        "x": 48.25,
+                        "y": 1.155
+                    },
+                    "uuid": "1487f380-5b7a-4c7e-9157-9adc727356b0"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "电路板边缘间距违规 (<电路板配置> 中的 \"板边\" 约束 间距 0.5000 mm; 实际 0.4300 mm)",
+            "items": [
+                {
+                    "description": "Edge.Cuts 上的 线段",
+                    "pos": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "uuid": "4dcd3d5b-1703-4a27-bafb-10ec1c0aa2e8"
+                },
+                {
+                    "description": "F.Cu 上 J1 的焊盘 B1 [GND]",
+                    "pos": {
+                        "x": 48.25,
+                        "y": 1.155
+                    },
+                    "uuid": "0a952d5c-5492-408d-9089-8486dd0bf639"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "电路板边缘间距违规 (<电路板配置> 中的 \"板边\" 约束 间距 0.5000 mm; 实际 0.4300 mm)",
+            "items": [
+                {
+                    "description": "Edge.Cuts 上的 线段",
+                    "pos": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "uuid": "4dcd3d5b-1703-4a27-bafb-10ec1c0aa2e8"
+                },
+                {
+                    "description": "F.Cu 上 J1 的焊盘 B4 [+5V]",
+                    "pos": {
+                        "x": 47.45,
+                        "y": 1.155
+                    },
+                    "uuid": "a3702210-ecb9-41cb-a6ab-515e22eed766"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "电路板边缘间距违规 (<电路板配置> 中的 \"板边\" 约束 间距 0.5000 mm; 实际 0.4300 mm)",
+            "items": [
+                {
+                    "description": "Edge.Cuts 上的 线段",
+                    "pos": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "uuid": "4dcd3d5b-1703-4a27-bafb-10ec1c0aa2e8"
+                },
+                {
+                    "description": "F.Cu 上 J1 的焊盘 B5 [CC2]",
+                    "pos": {
+                        "x": 46.75,
+                        "y": 1.155
+                    },
+                    "uuid": "1a608318-86f5-4cec-9357-401fb688fe56"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "电路板边缘间距违规 (<电路板配置> 中的 \"板边\" 约束 间距 0.5000 mm; 实际 0.4300 mm)",
+            "items": [
+                {
+                    "description": "Edge.Cuts 上的 线段",
+                    "pos": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "uuid": "4dcd3d5b-1703-4a27-bafb-10ec1c0aa2e8"
+                },
+                {
+                    "description": "F.Cu 上 J1 的焊盘 B6 [USB_DP]",
+                    "pos": {
+                        "x": 45.75,
+                        "y": 1.155
+                    },
+                    "uuid": "5478f07d-9172-4766-ac61-689a673a5166"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "电路板边缘间距违规 (<电路板配置> 中的 \"板边\" 约束 间距 0.5000 mm; 实际 0.4300 mm)",
+            "items": [
+                {
+                    "description": "Edge.Cuts 上的 线段",
+                    "pos": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "uuid": "4dcd3d5b-1703-4a27-bafb-10ec1c0aa2e8"
+                },
+                {
+                    "description": "F.Cu 上 J1 的焊盘 B7 [USB_DM]",
+                    "pos": {
+                        "x": 44.25,
+                        "y": 1.155
+                    },
+                    "uuid": "cf4f22e1-732a-49e3-b737-aac4a5390b0b"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "电路板边缘间距违规 (<电路板配置> 中的 \"板边\" 约束 间距 0.5000 mm; 实际 0.4300 mm)",
+            "items": [
+                {
+                    "description": "Edge.Cuts 上的 线段",
+                    "pos": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "uuid": "4dcd3d5b-1703-4a27-bafb-10ec1c0aa2e8"
+                },
+                {
+                    "description": "F.Cu 上 J1 的焊盘 B8 [<no net>]",
+                    "pos": {
+                        "x": 43.25,
+                        "y": 1.155
+                    },
+                    "uuid": "a2bc805c-f788-447e-9bf1-7fa877b89bf3"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "电路板边缘间距违规 (<电路板配置> 中的 \"板边\" 约束 间距 0.5000 mm; 实际 0.4300 mm)",
+            "items": [
+                {
+                    "description": "Edge.Cuts 上的 线段",
+                    "pos": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "uuid": "4dcd3d5b-1703-4a27-bafb-10ec1c0aa2e8"
+                },
+                {
+                    "description": "F.Cu 上 J1 的焊盘 B9 [+5V]",
+                    "pos": {
+                        "x": 42.55,
+                        "y": 1.155
+                    },
+                    "uuid": "1a601873-77d0-4e4f-8d2d-9475d2a3d0b5"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "电路板边缘间距违规 (<电路板配置> 中的 \"板边\" 约束 间距 0.5000 mm; 实际 0.4300 mm)",
+            "items": [
+                {
+                    "description": "Edge.Cuts 上的 线段",
+                    "pos": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "uuid": "4dcd3d5b-1703-4a27-bafb-10ec1c0aa2e8"
+                },
+                {
+                    "description": "F.Cu 上 J1 的焊盘 B12 [GND]",
+                    "pos": {
+                        "x": 41.75,
+                        "y": 1.155
+                    },
+                    "uuid": "78bc0fe8-ea8f-4483-9aca-05b15ba95207"
+                }
+            ],
+            "severity": "error",
+            "type": "copper_edge_clearance"
+        },
+        {
+            "description": "Silkscreen clipped by board edge",
+            "items": [
+                {
+                    "description": "Edge.Cuts 上的 线段",
+                    "pos": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "uuid": "4dcd3d5b-1703-4a27-bafb-10ec1c0aa2e8"
+                },
+                {
+                    "description": "J1 的参考字段",
+                    "pos": {
+                        "x": 45.0,
+                        "y": -0.445
+                    },
+                    "uuid": "021202f8-cf9b-4b02-8e81-1af22e87cc35"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_edge_clearance"
+        }
+    ]
+}

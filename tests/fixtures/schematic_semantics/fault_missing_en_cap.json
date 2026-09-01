@@ -1,0 +1,15 @@
+{
+  "id": "FAULT_MISSING_EN_CAP_COMMON_MODE",
+  "expected_rule": "ESP32_EN_RC",
+  "mutations": [
+    { "op": "delete", "path": ["views", "intent", "pins", "C5.1"] },
+    { "op": "delete", "path": ["views", "intent", "pins", "C5.2"] },
+    { "op": "delete", "path": ["views", "intent", "components", "C5"] },
+    { "op": "delete", "path": ["views", "netlist", "pins", "C5.1"] },
+    { "op": "delete", "path": ["views", "netlist", "pins", "C5.2"] },
+    { "op": "delete", "path": ["views", "netlist", "components", "C5"] },
+    { "op": "delete", "path": ["views", "pcb", "pins", "C5.1"] },
+    { "op": "delete", "path": ["views", "pcb", "pins", "C5.2"] },
+    { "op": "delete", "path": ["views", "pcb", "components", "C5"] }
+  ]
+}

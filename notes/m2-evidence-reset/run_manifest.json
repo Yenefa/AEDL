@@ -1,16 +1,33 @@
 {
   "schema_version": "m2-evidence-reset-run.v1",
-  "run_id": "m2-ae316d96996f4e8efed9e4091583ce90246c5134-2026-08-29T13:55:43Z",
-  "run_at": "2026-08-29T13:55:43Z",
+  "run_id": "m2-e4eec636999c9de239cb11ab7abbc872d9c84aaf-2026-08-31T12:25:44Z",
+  "run_at": "2026-08-31T12:25:44Z",
   "root": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent",
   "git": {
-    "commit": "ae316d96996f4e8efed9e4091583ce90246c5134",
+    "commit": "e4eec636999c9de239cb11ab7abbc872d9c84aaf",
     "dirty": true,
-    "status_porcelain": "M AGENTS.md\n M README.md\n M docs/HANDOFF.md\n M notes/m2-evidence-reset/generated/g2_erc_current.json\n M notes/m2-evidence-reset/generated/g4_drc_current.json\n M notes/m2-evidence-reset/run_manifest.json\n M tests/test_run_gates.py\n?? docs/compliance/\n?? docs/evidence/\n?? notes/m2-evidence-reset/generated/freerouting_run2.log\n?? notes/m2-evidence-reset/generated/freerouting_run3.log\n?? notes/m2-evidence-reset/generated/g4_drc_probe.json\n?? spike/\n?? spike_stage2/\n?? src/hardware/m2-board/m2_board_rerun.ses\n?? tests/fixtures/board_review_before_release.json\n?? tools/polish_routes.py\n?? tools/probe_pads.py"
+    "status_porcelain": "M docs/COLLABORATION.md\n M docs/compliance/AI_USAGE_LOG.md\n M gates/gate_core.py\n M gates/run_gates.py\n M notes/m2-evidence-reset/generated/board_bottom.png\n M notes/m2-evidence-reset/generated/board_review_auto.json\n M notes/m2-evidence-reset/generated/board_top.png\n M notes/m2-evidence-reset/generated/g2_erc_current.json\n M notes/m2-evidence-reset/generated/g4_drc_current.json\n M notes/m2-evidence-reset/generated/learning_gate_current.json\n M notes/m2-evidence-reset/generated/m2_board_current.net.xml\n M notes/m2-evidence-reset/generated/schematic_semantics_current.json\n M notes/m2-evidence-reset/generated/semantic_fault_injection_current.json\n M notes/m2-evidence-reset/run_manifest.json\n M tests/fixtures/board_review/golden_minimal.json\n M tests/fixtures/board_review/minimal.kicad_pcb\n M tests/test_board_review.py\n M tests/test_board_review_golden.py\n M tests/test_gate_core_review.py\n M tests/test_run_gates.py\n M tools/board_review.py\n?? spike/\n?? spike_stage2/"
   },
-  "status": "pass",
-  "exit_code": 0,
+  "status": "fail",
+  "exit_code": 1,
   "tool_runs": [
+    {
+      "name": "kicad_netlist",
+      "command": [
+        "C:\\Users\\fuker\\AppData\\Local\\Programs\\KiCad\\10.0\\bin\\kicad-cli.exe",
+        "sch",
+        "export",
+        "netlist",
+        "--format",
+        "kicadxml",
+        "--output",
+        "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\m2_board_current.net.xml.tmp",
+        "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\hardware\\m2-board\\m2_board.kicad_sch"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
     {
       "name": "kicad_erc",
       "command": [
@@ -25,8 +42,8 @@
         "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g2_erc_current.json",
         "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\hardware\\m2-board\\m2_board.kicad_sch"
       ],
-      "exit_code": 0,
-      "stdout": "发现 0 条违规项\r\n已将 ERC 报告保存到文件 C:/Users/fuker/Desktop/workspace/project-027-autonomous-hardware-agent/notes/m2-evidence-reset/generated/g2_erc_current.json\r\n",
+      "exit_code": 5,
+      "stdout": "发现 2 条违规项\r\n已将 ERC 报告保存到文件 C:/Users/fuker/Desktop/workspace/project-027-autonomous-hardware-agent/notes/m2-evidence-reset/generated/g2_erc_current.json\r\n",
       "stderr": ""
     },
     {
@@ -46,51 +63,108 @@
       "exit_code": 0,
       "stdout": "发现 0 条违规项\r\n发现 0 个未连接的项目\r\n保存 DRC 报告到 C:/Users/fuker/Desktop/workspace/project-027-autonomous-hardware-agent/notes/m2-evidence-reset/generated/g4_drc_current.json\r\n",
       "stderr": ""
+    },
+    {
+      "name": "kicad_pos_mm",
+      "command": [
+        "C:\\Users\\fuker\\AppData\\Local\\Programs\\KiCad\\10.0\\bin\\kicad-cli.exe",
+        "pcb",
+        "export",
+        "pos",
+        "--format",
+        "csv",
+        "--units",
+        "mm",
+        "--side",
+        "both",
+        "--exclude-dnp",
+        "--output",
+        "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\m2_board_pos_mm_current.csv.tmp",
+        "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\hardware\\m2-board\\m2_board.kicad_pcb"
+      ],
+      "exit_code": 0,
+      "stdout": "Wrote position data to 'C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\m2_board_pos_mm_current.csv.tmp'.\r\n",
+      "stderr": ""
     }
   ],
   "reports": {
     "erc": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g2_erc_current.json",
-    "drc": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g4_drc_current.json"
+    "drc": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g4_drc_current.json",
+    "semantic": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\schematic_semantics_current.json",
+    "learning": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\learning_gate_current.json",
+    "fault_injection": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\semantic_fault_injection_current.json",
+    "netlist": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\m2_board_current.net.xml",
+    "cpl": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\m2_board_cpl_current.csv"
   },
   "artifacts": {
     "intent": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\hardware\\m2-board\\intent_v1.json",
-      "sha256": "b844e28fcbfdf5054dad35cd4914d3c1cb494ed6fdbb3f595d12813289796696",
+      "sha256": "f1703e228f7f145e1ecc54edec4f69a88aca144136f4ef01323dfa56c7538f56",
       "exists": true
     },
     "bom": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\gates\\bom\\bom_v1.json",
-      "sha256": "857b68d4fcdb67e655e41c619a08d385d2cb99952501eef5c4f023b3da477162",
+      "sha256": "3f58a42adb72329fdbf33782f33418beb0383103dd671737e4a0d1071b5f296c",
       "exists": true
     },
     "pos": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\delivery\\pos.csv",
-      "sha256": "3dd7e1d40f440428a0feac91ada120afc595ab5289c259b754655fabddcd7a4f",
+      "sha256": "4f11f7f3005f57f0ef091cdd672bf862d9d52f6885889a29e54f4dc491f511d9",
       "exists": true
     },
     "delivery_bom": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\delivery\\bom.csv",
-      "sha256": "84bbf0e9c356505430ccd063b1d02b7f99464360f23f165970b16d25364e1e18",
+      "sha256": "222f60b64faf20a266318da5d0c932b2e9fe76324498770ef808a14ffe9b20d6",
       "exists": true
     },
     "gerber_zip": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\delivery\\jlc_gerber_upload.zip",
-      "sha256": "d81aee38d79450d946956e39d7ce67de912945efebd04a965f32f4e00572f78b",
+      "sha256": "3fdb297521937cdd1c218c4b4e2fd152cff08043bfd14509cc9c67456f82a0a8",
       "exists": true
     },
     "board_review": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\gates\\board_review_v1.json",
-      "sha256": "a1681ca910164397f27afdf0b9a2349cba7b040e9e2fc047b19217a97e9eb02f",
+      "sha256": "53200d21bd10e3b37b0e06783434affba50742e4e13ea65d4058c00e1edb01cf",
+      "exists": true
+    },
+    "ops_evidence": {
+      "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\ops_validate_current.json",
+      "sha256": "2f91ed2b46f0929b2733264ad4f29816a7257d95cad337fca7195fe698367172",
+      "exists": true
+    },
+    "semantic_netlist": {
+      "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\m2_board_current.net.xml",
+      "sha256": "fafe76eb9cbe9d274583a99072bd16050113d6cc6b4f91ff8604a86cf34daea8",
+      "exists": true
+    },
+    "cpl_current": {
+      "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\m2_board_cpl_current.csv",
+      "sha256": "4f11f7f3005f57f0ef091cdd672bf862d9d52f6885889a29e54f4dc491f511d9",
+      "exists": true
+    },
+    "semantic_report": {
+      "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\schematic_semantics_current.json",
+      "sha256": "0ca3671b5ef2dfcc1f2a2899d1de9bd6cb8cfc7706c749cbefe7942171ef5978",
+      "exists": true
+    },
+    "fault_injection_report": {
+      "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\semantic_fault_injection_current.json",
+      "sha256": "e8db3254dfe3b5f773385a5b783bb1d768a61635d5a63bdd025b8766326a554d",
+      "exists": true
+    },
+    "learning_report": {
+      "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\learning_gate_current.json",
+      "sha256": "3adb2276428d2059f68d00f69a11d0a0e55ee27442f865a619469efedefa2b9e",
       "exists": true
     },
     "erc_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g2_erc_current.json",
-      "sha256": "dd9712bfd06ffc7628a2edc101169a5cb3a42c9121516b36f7f66fbdb43ae8d1",
+      "sha256": "08dba469ca7b525384e664c18444cbf4ebf4f03dc6a185132802b52946ba4798",
       "exists": true
     },
     "drc_report": {
       "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\g4_drc_current.json",
-      "sha256": "49e6a55ea5dcb8ece7fe5e6c6201cb3f347ed36d675471521e520322b243aac8",
+      "sha256": "92dde8ba2e5020e6960b65b0b0937145db92bcebc677356ceb2e377f78ba839c",
       "exists": true
     }
   },
@@ -123,6 +197,9 @@
       "status": "pass",
       "details": {
         "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\gates\\bom\\bom_v1.json",
+        "stock_evidence": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\bom_stock_current.json",
+        "minimum_assembly_stock": 3320,
+        "minimum_stock_lcsc": "C235316",
         "error_count": 0
       },
       "errors": [],
@@ -133,14 +210,20 @@
       "status": "pass",
       "details": {
         "paths": [
+          "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\hardware\\m2-board\\intent_v1.json",
           "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\gates\\bom\\bom_v1.json",
           "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\delivery\\pos.csv",
           "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\delivery\\bom.csv",
-          "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\delivery\\jlc_gerber_upload.zip"
+          "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\delivery\\jlc_gerber_upload.zip",
+          "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\delivery\\manifest_v1.json"
         ],
-        "bom_ref_count": 17,
-        "pos_ref_count": 17,
-        "zip_entry_count": 26
+        "intent_ref_count": 21,
+        "bom_ref_count": 21,
+        "pos_ref_count": 21,
+        "delivery_bom_ref_count": 21,
+        "zip_entry_count": 11,
+        "fresh_cpl": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\m2_board_cpl_current.csv",
+        "fresh_cpl_sha256": "4f11f7f3005f57f0ef091cdd672bf862d9d52f6885889a29e54f4dc491f511d9"
       },
       "errors": [],
       "evidence_grade": "A"
@@ -150,8 +233,8 @@
       "status": "pass",
       "details": {
         "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\hardware\\m2-board\\intent_v1.json",
-        "component_count": 19,
-        "net_count": 13
+        "component_count": 23,
+        "net_count": 15
       },
       "errors": [],
       "evidence_grade": "A"
@@ -160,25 +243,124 @@
       "name": "ops",
       "status": "pass",
       "details": {
-        "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m1-evidence\\ops_validate.json",
-        "op_count": 6
+        "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\ops_validate_current.json",
+        "ops_path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\hardware\\m2-board\\ops_gen.json",
+        "op_count": 109,
+        "ops_sha256": "57bd61aa1e2c0a337de9c8a9e8a181db02d8fba7ba650e086d980f3df0fd28a4",
+        "live_validation": {
+          "executable": "C:\\Users\\fuker\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\akcli.exe",
+          "expected_version": "akcli 0.21.0 (protocol 2)",
+          "version": "akcli 0.21.0 (protocol 2)",
+          "exit_code": 0,
+          "result": {
+            "protocol_version": 2,
+            "valid": true,
+            "ops_sha256": "57bd61aa1e2c0a337de9c8a9e8a181db02d8fba7ba650e086d980f3df0fd28a4",
+            "op_count": 109,
+            "errors": []
+          }
+        }
+      },
+      "errors": [],
+      "evidence_grade": "A"
+    },
+    {
+      "name": "schematic_semantics",
+      "status": "pass",
+      "details": {
+        "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\schematic_semantics_current.json",
+        "status": "pass",
+        "summary": {
+          "passed": 5,
+          "failed": 0,
+          "total": 5
+        }
+      },
+      "errors": [],
+      "evidence_grade": "A"
+    },
+    {
+      "name": "learning",
+      "status": "pass",
+      "details": {
+        "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\learning_gate_current.json",
+        "lesson_count": 1,
+        "status": "pass"
+      },
+      "errors": [],
+      "evidence_grade": "A"
+    },
+    {
+      "name": "requirements_contract",
+      "status": "pass",
+      "details": {
+        "contract_path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\gates\\requirements\\requirements_contract_v1.json",
+        "intent_path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\hardware\\m2-board\\intent_v1.json",
+        "contract_sha256": "a315effe644fbe11611448c0a4e658eb7dc03a70c17f67e86e82a57344c7eab0"
       },
       "errors": [],
       "evidence_grade": "A"
     },
     {
       "name": "board_review",
-      "status": "pass",
+      "status": "fail",
       "details": {
         "path": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\gates\\board_review_v1.json",
         "review_count": 8,
         "status_counts": {
           "pass": 8
         },
-        "manufacturing_release": true
+        "manufacturing_release": false,
+        "auto_evidence": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\notes\\m2-evidence-reset\\generated\\board_review_auto.json"
       },
-      "errors": [],
-      "evidence_grade": "C"
+      "errors": [
+        "manufacturing_release is false"
+      ],
+      "evidence_grade": "A"
+    },
+    {
+      "name": "datasheet_contract",
+      "status": "fail",
+      "details": {
+        "manifest": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\hardware\\m2-board\\evidence\\datasheet_manifest.json",
+        "contracts": "C:\\Users\\fuker\\Desktop\\workspace\\project-027-autonomous-hardware-agent\\src\\hardware\\m2-board\\evidence\\contracts\\m2_component_contracts.json",
+        "block_count": 32
+      },
+      "errors": [
+        "DS4-6 U1: required check 'pinout' has no check_evidence record",
+        "DS4-6 U1: required check 'supply_voltage' has no check_evidence record",
+        "DS4-6 U1: required check 'power_source_capacity' has no check_evidence record",
+        "DS4-6 U1: required check 'enable_and_strapping' has no check_evidence record",
+        "DS4-6 U1: required check 'decoupling' has no check_evidence record",
+        "DS4-6 U1: required check 'antenna_keepout' has no check_evidence record",
+        "DS4-6 U1: required check 'recommended_land_pattern' has no check_evidence record",
+        "DS4-6 U2: required check 'pinout' has no check_evidence record",
+        "DS4-6 U2: required check 'address_selection' has no check_evidence record",
+        "DS4-6 U2: required check 'i2c_pullups' has no check_evidence record",
+        "DS4-6 U2: required check 'decoupling' has no check_evidence record",
+        "DS4-6 U2: required check 'package_orientation' has no check_evidence record",
+        "DS4-6 U2: required check 'handling_and_board_cleaning' has no check_evidence record",
+        "DS3 U3: contract 'M2-U3-POWER-MARGIN' is BLOCK_UNTIL_REVIEWED and has no check_evidence record yet",
+        "DS4-6 U3: required check 'pinout' has no check_evidence record",
+        "DS4-6 U3: required check 'input_output_voltage' has no check_evidence record",
+        "DS4-6 U3: required check 'output_current_package_specific' has no check_evidence record",
+        "DS4-6 U3: required check 'absolute_maximum_power_dissipation' has no check_evidence record",
+        "DS4-6 U3: required check 'input_output_capacitors' has no check_evidence record",
+        "DS4-6 U3: check 'thermal_margin' is recorded as blocked but the block decision needs engineer sign-off",
+        "DS4-6 D1: check 'exact_mpn' is unsigned (status=machine_prechecked); only a human signature clears a check",
+        "DS4-6 D1: check 'polarity' is unsigned (status=awaiting_engineer); only a human signature clears a check",
+        "DS4-6 D1: check 'forward_voltage' is unsigned (status=machine_prechecked); only a human signature clears a check",
+        "DS4-6 D1: check 'forward_current' is unsigned (status=machine_prechecked); only a human signature clears a check",
+        "DS4-6 D1: check 'reverse_voltage_or_reverse_current' is unsigned (status=machine_prechecked); only a human signature clears a check",
+        "DS4-6 D1: check 'package_marking' is unsigned (status=awaiting_engineer); only a human signature clears a check",
+        "DS4-6 J1: required check 'exact_mpn' has no check_evidence record",
+        "DS4-6 J1: required check 'pin_numbering' has no check_evidence record",
+        "DS4-6 J1: check 'mechanical_drawing' is unsigned (status=machine_prechecked); only a human signature clears a check",
+        "DS4-6 J1: required check 'recommended_land_pattern' has no check_evidence record",
+        "DS4-6 J1: required check 'orientation' has no check_evidence record",
+        "DS4-6 J1: required check 'rated_current' has no check_evidence record"
+      ],
+      "evidence_grade": "A"
     }
   ]
 }

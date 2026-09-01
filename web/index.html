@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AEDL 需求澄清工作台</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-title">
+        <h1>需求澄清工作台</h1>
+        <p class="subtitle">
+          NL 需求 → 建议问题 → 人工作答 → 需求合同 → 门禁校验
+        </p>
+      </div>
+      <div class="topbar-config">
+        <label class="cfg">
+          <span>数据源</span>
+          <select id="mode-select">
+            <option value="mock">MOCK（内置，离线可跑）</option>
+            <option value="http">真实 API</option>
+          </select>
+        </label>
+        <label class="cfg">
+          <span>baseURL</span>
+          <input
+            id="base-url"
+            type="text"
+            placeholder="http://127.0.0.1:8787"
+            spellcheck="false"
+          />
+        </label>
+      </div>
+    </header>
+
+    <div id="mode-banner" class="banner" role="status"></div>
+
+    <main>
+      <!-- --------------------------------------------------------------- -->
+      <section class="step" id="step-1">
+        <div class="step-head">
+          <span class="step-no">1</span>
+          <h2>输入自然语言需求</h2>
+        </div>
+        <div class="step-body">
+          <label class="field">
+            <span class="field-label"
+              >需求原文（写入合同的 <code>user_goal</code>）</span
+            >
+            <textarea
+              id="nl-input"
+              rows="4"
+              placeholder="例：ESP32-C3 + SHT30 温湿度载板，USB-C 供电，BLE 上报，可嘉立创打板"
+            ></textarea>
+          </label>
+
+          <div class="grid-2">
+            <label class="field">
+              <span class="field-label">board_id</span>
+              <input
+                id="meta-board-id"
+                type="text"
+                placeholder="project-027-m2-esp32c3-sht30"
+                spellcheck="false"
+              />
+            </label>
+            <label class="field">
+              <span class="field-label">author</span>
+              <input
+                id="meta-author"
+                type="text"
+                placeholder="human+ai"
+                spellcheck="false"
+              />
+            </label>
+            <label class="field">
+              <span class="field-label">intent_binding.intent_path</span>
+              <input
+                id="meta-intent-path"
+                type="text"
+                placeholder="src/hardware/m2-board/intent_v1.json"
+                spellcheck="false"
+              />
+            </label>
+          </div>
+
+          <div class="actions">
+            <button id="btn-propose" class="btn btn-primary">
+              获取建议问题（POST /api/propose）
+            </button>
+            <span id="propose-status" class="status"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- --------------------------------------------------------------- -->
+      <section class="step" id="step-2">
+        <div class="step-head">
+          <span class="step-no">2</span>
+          <h2>审阅并作答（建议只是建议，可增删改）</h2>
+        </div>
+        <div class="step-body">
+          <p class="hint">
+            LLM 给出的问题清单只是草案。你可以修改措辞、调整 blocking /
+            nonblocking、 删除或新增问题，然后再逐题作答。答案只来自人类。
+          </p>
+
+          <div id="warnings-box" class="note note-warn hidden"></div>
+
+          <div class="block-head">
+            <h3>问题清单</h3>
+            <div class="counters">
+              <span id="counter-blocking" class="pill pill-danger"
+                >还剩 0 个必答问题</span
+              >
+              <span id="counter-nonblocking" class="pill">0 个选答未答</span>
+            </div>
+          </div>
+          <div id="questions-list" class="list"></div>
+          <button id="btn-add-question" class="btn btn-ghost">
+            + 新增问题
+          </button>
+
+          <div class="block-head">
+            <h3>假设确认</h3>
+          </div>
+          <p class="hint">
+            每条假设都带有 <code>requires_human_confirmation: true</code>，
+            必须逐条显式确认或剔除。确认的写入合同（status:
+            recorded），剔除的不留痕。
+          </p>
+          <div id="assumptions-list" class="list"></div>
+        </div>
+      </section>
+
+      <!-- --------------------------------------------------------------- -->
+      <section class="step" id="step-3">
+        <div class="step-head">
+          <span class="step-no">3</span>
+          <h2>补齐合同溯源信息</h2>
+        </div>
+        <div class="step-body">
+          <div class="block-head">
+            <h3>source_statements（用户的原始陈述）</h3>
+            <button id="btn-add-statement" class="btn btn-ghost btn-sm">
+              + 新增
+            </button>
+          </div>
+          <p class="hint">
+            合同必须能追溯到用户说过的话。默认一条取自需求原文，请按需拆分或补充。
+          </p>
+          <div id="statements-list" class="list"></div>
+
+          <div class="block-head">
+            <h3>resolved_requirements（已决需求，可留空）</h3>
+            <button id="btn-add-requirement" class="btn btn-ghost btn-sm">
+              + 新增
+            </button>
+          </div>
+          <div id="requirements-list" class="list"></div>
+
+          <div class="block-head">
+            <h3>forbidden_assumptions（明令禁止的假设）</h3>
+            <button id="btn-add-forbidden" class="btn btn-ghost btn-sm">
+              + 新增
+            </button>
+          </div>
+          <div id="forbidden-list" class="list"></div>
+        </div>
+      </section>
+
+      <!-- --------------------------------------------------------------- -->
+      <section class="step" id="step-4">
+        <div class="step-head">
+          <span class="step-no">4</span>
+          <h2>生成合同</h2>
+        </div>
+        <div class="step-body">
+          <div class="actions">
+            <button id="btn-finalize" class="btn btn-primary" disabled>
+              生成合同（POST /api/finalize）
+            </button>
+            <button id="btn-download" class="btn" disabled>下载 JSON</button>
+            <button id="btn-copy" class="btn" disabled>复制 JSON</button>
+            <span id="finalize-status" class="status"></span>
+          </div>
+          <p id="finalize-blocker" class="hint hint-danger"></p>
+
+          <div class="note">
+            <strong>绑定语义（C4 语义锁）：</strong>
+            前端草稿的 <code>intent_binding</code>
+            <strong>只写 <code>intent_path</code></strong
+            >。 <code>intent_semantic_sha256</code>（intent 的
+            <code>components</code>/<code>nets</code>
+            白名单哈希）由<strong>服务端</strong>在
+            <code>/api/finalize</code> 时读 intent
+            计算写入——签名时刻的电路快照由服务端采集。 因此
+            <strong>MOCK 模式生成的合同不含语义哈希</strong>，送真实门禁 C4
+            会因缺字段而 FAIL；这不是 bug，是 mock 传输层没有 intent
+            可读的诚实结果（见 <code>web/README.md</code> 第 5 节）。
+          </div>
+
+          <pre
+            id="contract-preview"
+            class="code-block"
+          ><code>// 尚未生成合同</code></pre>
+        </div>
+      </section>
+
+      <!-- --------------------------------------------------------------- -->
+      <section class="step" id="step-5">
+        <div class="step-head">
+          <span class="step-no">5</span>
+          <h2>门禁校验</h2>
+        </div>
+        <div class="step-body">
+          <label class="field">
+            <span class="field-label">
+              合同路径（<code>/api/validate</code>
+              的入参；浏览器没有服务端文件系统视角，
+              契约未定义前端如何取得该路径，故此处手动填写）
+            </span>
+            <input
+              id="validate-path"
+              type="text"
+              spellcheck="false"
+              placeholder="留空则使用 web/_session/&lt;board_id&gt;.requirements_contract.json"
+            />
+          </label>
+          <div class="actions">
+            <button id="btn-validate" class="btn btn-primary" disabled>
+              校验（POST /api/validate）
+            </button>
+            <span id="validate-status" class="status"></span>
+          </div>
+          <div id="verdict-box" class="verdict hidden">
+            <div class="verdict-head">
+              <span id="verdict-badge" class="badge">—</span>
+              <span id="verdict-source" class="verdict-source"></span>
+            </div>
+            <ul id="verdict-errors" class="errors"></ul>
+          </div>
+          <p class="hint">
+            校验失败的 <code>errors[]</code> 原样展示，前端不过滤、不美化。
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>
+        接口契约唯一依据：<code>docs/api/requirements_api.md</code>。
+        合同门禁唯一权威：<code>gates/requirements_contract.py</code>（C1-C7，Python，无法在浏览器内运行）。
+      </p>
+    </footer>
+
+    <script src="sha256.js"></script>
+    <script src="canonical-json.js"></script>
+    <script src="contract-builder.js"></script>
+    <script src="mock-data.js"></script>
+    <script src="api-client.js"></script>
+    <script src="app.js"></script>
+    <script>
+      /* Test hook: open index.html?e2e=1 to run web/e2e-browser.js, which drives
+       * the full mock closed loop in a real browser and prints a verdict.
+       * Not loaded during normal use. */
+      if (/[?&]e2e=1/.test(location.search)) {
+        var s = document.createElement("script");
+        s.src = "e2e-browser.js";
+        document.addEventListener("DOMContentLoaded", function () {
+          document.body.appendChild(s);
+        });
+      }
+    </script>
+  </body>
+</html>

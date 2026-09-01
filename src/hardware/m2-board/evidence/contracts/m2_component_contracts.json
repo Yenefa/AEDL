@@ -1,0 +1,92 @@
+{
+  "schema_version": "1.0",
+  "board": "M2",
+  "origin": "external M2_datasheet_evidence_pack (contracts/m2_component_contracts.json), corrected by local verification 2026-08-31: U2 EP pin normalized to symbol pin 9; U3 power facts annotated with local verification status",
+  "contracts": [
+    {
+      "id": "M2-D1-POLARITY",
+      "severity": "BLOCK",
+      "refdes": "D1",
+      "assertions": [
+        {"pin": "1", "semantic": "K", "net": "GND"},
+        {"pin": "2", "semantic": "A", "net": "LED_A"}
+      ],
+      "note": "M2-specific rule. Do not generalize to all LED circuits (active-low sink topologies keep K away from GND legally)."
+    },
+    {
+      "id": "M2-U2-PINOUT",
+      "severity": "BLOCK",
+      "refdes": "U2",
+      "assertions": [
+        {"pin": "1", "semantic": "SDA", "net": "SDA"},
+        {"pin": "2", "semantic": "ADDR", "net": "GND"},
+        {"pin": "4", "semantic": "SCL", "net": "SCL"},
+        {"pin": "5", "semantic": "VDD", "net": "+3V3"},
+        {"pin": "7", "semantic": "R", "net": "GND", "datasheet_requirement": "connect to VSS"},
+        {"pin": "8", "semantic": "VSS", "net": "GND"},
+        {"pin": "9", "semantic": "VSS_EP", "net": "GND", "datasheet_requirement": "exposed pad internally connected to VSS"}
+      ],
+      "additional": [
+        "100nF decoupling capacitor near VDD",
+        "SDA/SCL require external pull-ups",
+        "handling/cleaning restrictions must be checked before assembly release"
+      ]
+    },
+    {
+      "id": "M2-U3-PINOUT",
+      "severity": "BLOCK",
+      "refdes": "U3",
+      "assertions": [
+        {"pin": "1", "semantic": "VIN", "net": "+5V"},
+        {"pin": "2", "semantic": "VSS", "net": "GND"},
+        {"pin": "3", "semantic": "CE", "net": "+5V"},
+        {"pin": "4", "semantic": "NC", "net": null},
+        {"pin": "5", "semantic": "VOUT", "net": "+3V3"}
+      ]
+    },
+    {
+      "id": "M2-U3-POWER-MARGIN",
+      "severity": "BLOCK_UNTIL_REVIEWED",
+      "refdes": "U3",
+      "facts": {
+        "vin_v": 5.0,
+        "vout_v": 3.3,
+        "package": "SOT-353",
+        "package_power_dissipation_absmax_mw": 250,
+        "datasheet_package_specific_max_output_current_ma": 400,
+        "esp32_c3_supply_design_recommended_capacity_min_ma": 500
+      },
+      "fact_verification": {
+        "package_power_dissipation_absmax_mw": {
+          "status": "verified_locally",
+          "source": "ME6211 V14 mirror p5 Absolute Maximum Ratings (SOT353=250mW), local sha256 7e33d6651f019782b16169a5b26b7cad43e9d462b5e25dc54815b458f88fd59b"
+        },
+        "datasheet_package_specific_max_output_current_ma": {
+          "status": "verified_locally_from_frozen_original",
+          "adjudged_by": "human",
+          "adjudged_at": "2026-08-31",
+          "resolution": "datasheet_package_specific_value_wins",
+          "source": "ME6211 V20 datasheet p9『ME6211C33 (SOT343R, FBP1*1-4L, SOT353)』Maximum Output Current = 400mA（同页标准封装表为 500mA）",
+          "local_frozen_copy": "src/hardware/m2-board/evidence/datasheets/U3_ME6211C33R5G/ME6211_V20_lcsc_official.pdf",
+          "local_sha256": "23084e9d0d0fd762c7419509ee656856be36f08ffc39f184e22a2acf7cfae5e6",
+          "verified_pages": "p9（SOT353 专属表 400mA）；p5（SOT353 Pd=250mW）",
+          "conflicting_claim": "LCSC 商品页标 500mA，让位于 datasheet 按封装值",
+          "note": "人工裁决 + V20 原件已冻结并经机器逐页核对，裁决获一手文档背书；工程师对设计影响（400mA<Espressif 建议 500mA）的签发仍待完成"
+        },
+        "esp32_c3_supply_design_recommended_capacity_min_ma": {
+          "status": "url_only",
+          "source": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32c3/index.html（本地快照未取）"
+        }
+      },
+      "required_evidence": [
+        "worst_case_average_current",
+        "wifi_tx_burst_current",
+        "ambient_temperature",
+        "thermal_derating",
+        "measured_3v3_droop",
+        "measured_regulator_temperature"
+      ],
+      "recommendation": "5V→3.3V 压差 1.7V × 150mA ≈ 255mW，已越过 SOT-353 250mW absmax（absmax 不是工作点）。V20 未提供厂家 θJA，禁止抄用第三方『常见 θJA』代签。人工裁决倾向路线 B：保持 U3_POWER_THERMAL=BLOCKED，走正式 ECO/ADR 换 >=1A 级 3.3V regulator（正式选型流程：嘉立创库存+datasheet+封装+成本，不得随手换料，换料完成前不改 BOM）；路线 A（保留 ME6211）仅在取得 Microne 官方 ME6211C33R5G/SOT353 θJA/derating 条件后可行。"
+    }
+  ]
+}

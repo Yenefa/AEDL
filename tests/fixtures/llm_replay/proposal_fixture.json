@@ -1,0 +1,24 @@
+{
+  "records": [
+    {
+      "label": "temperature sensor carrier",
+      "response": {
+        "questions": [
+          {"id": "Q1", "question": "板子如何供电？", "kind": "blocking",
+           "options": ["USB-C 5V", "外部电源"], "dimension": "power"},
+          {"id": "Q2", "question": "需要无线连接吗？", "kind": "nonblocking",
+           "dimension": "connectivity"}
+        ],
+        "assumptions": [{"text": "室内环境使用"}]
+      }
+    },
+    {
+      "contains": "ESP32",
+      "response": "Sure! Here is my proposal:\n```json\n{\"questions\": [{\"id\": \"Q1\", \"question\": \"天线净空要求？\", \"kind\": \"weird-kind\", \"dimension\": \"formfactor\"}], \"assumptions\": []}\n```"
+    },
+    {
+      "label": "garbage",
+      "response": "I would just build something nice for you."
+    }
+  ]
+}

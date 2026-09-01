@@ -1,0 +1,124 @@
+{
+  "$schema": "https://aedl.local/schemas/bom-stock-snapshot.v1.json",
+  "schema_version": 1,
+  "generated_at": "2026-08-30T11:24:24Z",
+  "status": "pass",
+  "errors": [],
+  "tool": "jlcpcb 0.1.0",
+  "bom": "gates/bom/bom_v1.json",
+  "bom_sha256": "3f58a42adb72329fdbf33782f33418beb0383103dd671737e4a0d1071b5f296c",
+  "parts": [
+    {
+      "lcsc": "C15850",
+      "mpn": "CL21A106KAYNNNE",
+      "manufacturer": "Samsung Electro-Mechanics",
+      "package": "0805",
+      "library": "base",
+      "assembly_stock": 7978002
+    },
+    {
+      "lcsc": "C1591",
+      "mpn": "CL10B104KB8NNNC",
+      "manufacturer": "Samsung Electro-Mechanics",
+      "package": "0603",
+      "library": "expand",
+      "assembly_stock": 6745430
+    },
+    {
+      "lcsc": "C165948",
+      "mpn": "TYPE-C-31-M-12",
+      "manufacturer": "Korean Hroparts Elec",
+      "package": "SMD",
+      "library": "expand",
+      "assembly_stock": 339283
+    },
+    {
+      "lcsc": "C177609",
+      "mpn": "RCT034K7FLF",
+      "manufacturer": "HKR(Hong Kong Resistors)",
+      "package": "0603",
+      "library": "expand",
+      "assembly_stock": 86878
+    },
+    {
+      "lcsc": "C177649",
+      "mpn": "RCT031KFLF",
+      "manufacturer": "HKR(Hong Kong Resistors)",
+      "package": "0603",
+      "library": "expand",
+      "assembly_stock": 141478
+    },
+    {
+      "lcsc": "C22356467",
+      "mpn": "RCA035K1FLF",
+      "manufacturer": "HKR(Hong Kong Resistors)",
+      "package": "0603",
+      "library": "expand",
+      "assembly_stock": 267746
+    },
+    {
+      "lcsc": "C2286",
+      "mpn": "KT-0603R",
+      "manufacturer": "Hubei KENTO Elec",
+      "package": "0603",
+      "library": "base",
+      "assembly_stock": 5259766
+    },
+    {
+      "lcsc": "C23345",
+      "mpn": "0603WAF220JT5E",
+      "manufacturer": "UNI-ROYAL(Uniroyal Elec)",
+      "package": "0603",
+      "library": "base",
+      "assembly_stock": 9080659
+    },
+    {
+      "lcsc": "C235316",
+      "mpn": "ME6211C33R5G",
+      "manufacturer": "MICRONE(Nanjing Micro One Elec)",
+      "package": "SOT-353",
+      "library": "expand",
+      "assembly_stock": 3320
+    },
+    {
+      "lcsc": "C25804",
+      "mpn": "0603WAF1002T5E",
+      "manufacturer": "UNI-ROYAL(Uniroyal Elec)",
+      "package": "0603",
+      "library": "base",
+      "assembly_stock": 32592562
+    },
+    {
+      "lcsc": "C2687423",
+      "mpn": "SHT30-DIS-B10KS",
+      "manufacturer": "Sensirion",
+      "package": "DFN-8-EP(2.5x2.5)",
+      "library": "expand",
+      "assembly_stock": 29356
+    },
+    {
+      "lcsc": "C2934560",
+      "mpn": "ESP32-C3-WROOM-02-N4",
+      "manufacturer": "Espressif Systems",
+      "package": "SMD,20x18mm",
+      "library": "expand",
+      "assembly_stock": 10314
+    },
+    {
+      "lcsc": "C455280",
+      "mpn": "TS-1088R-02026",
+      "manufacturer": "XUNPU",
+      "package": "SMD,4x3mm",
+      "library": "expand",
+      "assembly_stock": 204634
+    },
+    {
+      "lcsc": "C59782",
+      "mpn": "CL10B105KO8NNNC",
+      "manufacturer": "Samsung Electro-Mechanics",
+      "package": "0603",
+      "library": "expand",
+      "assembly_stock": 611567
+    }
+  ]
+}

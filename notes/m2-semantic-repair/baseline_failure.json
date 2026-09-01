@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "incident_id": "PIT-20260830-001",
+  "captured_at": "2026-08-29T16:58:02Z",
+  "release_state": "revoked_before_repair",
+  "historical_signoff": {
+    "reviewer": "sca331613-commits",
+    "reviewed_at": "2026-08-29T08:13:39Z",
+    "board_review_sha256": "a1681ca910164397f27afdf0b9a2349cba7b040e9e2fc047b19217a97e9eb02f",
+    "auto_evidence": "notes/m2-evidence-reset/generated/board_review_auto.json",
+    "drc_evidence": "notes/m2-evidence-reset/generated/g4_drc_current.json"
+  },
+  "confirmed_findings": [
+    {
+      "id": "USB_POLARITY_REVERSED",
+      "severity": "critical",
+      "observed": [
+        "src/hardware/m2-board/intent_v1.json: USB_DP includes U1.13",
+        "src/hardware/m2-board/intent_v1.json: USB_DM includes U1.14"
+      ],
+      "required": "ESP32-C3-WROOM-02 pin 13 is USB D- and pin 14 is USB D+",
+      "source": "https://documentation.espressif.com/esp32-c3-wroom-02_datasheet_en.html"
+    },
+    {
+      "id": "SHT30_ADDR_FLOATING",
+      "severity": "critical",
+      "observed": [
+        "src/hardware/m2-board/ops_gen.json: add_no_connect U2.2",
+        "src/firmware/include/sht30.h: firmware address is 0x44"
+      ],
+      "required": "SHT30 ADDR must be tied low for address 0x44 and must not float",
+      "source": "https://sensirion.com/media/documents/213E6A3B/63A5A569/Datasheet_SHT3x_DIS.pdf"
+    },
+    {
+      "id": "SHT30_NRESET_DIRECT_TO_VDD",
+      "severity": "major",
+      "observed": [
+        "src/hardware/m2-board/intent_v1.json: U2.6 is on +3V3"
+      ],
+      "required": "Unused nRESET should float, or be connected to VDD through at least 2 kohm",
+      "source": "https://sensirion.com/media/documents/213E6A3B/63A5A569/Datasheet_SHT3x_DIS.pdf"
+    },
+    {
+      "id": "ESP32_RECOMMENDED_SUPPORT_NETWORKS_MISSING",
+      "severity": "major",
+      "observed": [
+        "No USB series resistors between connector and U1",
+        "No EN-to-GND capacitor",
+        "No GPIO9 external pull-up"
+      ],
+      "required": "Add 22 ohm USB series resistors, EN RC support, and GPIO9 pull-up per the approved repair design",
+      "source": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32c3/schematic-checklist.html"
+    }
+  ],
+  "evidence_boundary": "This record documents design-file findings only. It is not physical-board evidence and does not prove the repaired board works."
+}

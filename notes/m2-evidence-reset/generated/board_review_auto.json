@@ -1,5 +1,6 @@
 {
-  "generated_at": "2026-08-29T08:10:48Z",
+  "algorithm_revision": "sha256:b5e3d4ac0b3b4dd3bb2c80ed58300f598c1b78d779345b2bc495af850cb9354d",
+  "generated_at": "2026-08-31T11:43:18Z",
   "pcb": "src\\hardware\\m2-board\\m2_board.kicad_pcb",
   "board_outline_mm": [
     0.0,
@@ -7,7 +8,7 @@
     60.0,
     40.0
   ],
-  "footprint_count": 17,
+  "footprint_count": 21,
   "nets": [
     "+3V3",
     "+5V",
@@ -21,7 +22,9 @@
     "SCL",
     "SDA",
     "USB_DM",
-    "USB_DP"
+    "USB_DM_CONN",
+    "USB_DP",
+    "USB_DP_CONN"
   ],
   "reviews": [
     {
@@ -35,7 +38,7 @@
     {
       "id": "ESP_ANTENNA",
       "status": "pass",
-      "evidence": "ESP32-C3 U1 (12.0,18.0) rot=0.0; 质心距板边 12.00mm；7.5mm 净空圈内器件: 无；天线端朝向=板边(正确)（按 WROOM-02 天线在 -Y 端、rot=0.0deg 推断）",
+      "evidence": "ESP32-C3 U1 (12.0,18.0) rot=0.0; 质心距板边 12.00mm；7.5mm 净空圈内器件: 无；天线端朝向=板边(正确)（按模组天线在本地 -Y 端、旋转后方向向量 (0.00,-1.00) 推断）",
       "measured": {
         "edge_distance_mm": 12.0,
         "keepout_intruders": [],
@@ -45,53 +48,62 @@
     {
       "id": "GROUND_RETURN",
       "status": "pass",
-      "evidence": "via 总数=29，铺铜 zone 存在=True；USB_DP/DM 下方与 SHT30 周边的地回流连续性需评审人在 KiCad 渲染中确认",
+      "evidence": "via 总数=23，铺铜 zone 存在=True；USB_DP/DM 下方与 SHT30 周边的地回流连续性需评审人在 KiCad 渲染中确认",
       "measured": {
-        "via_count": 29,
+        "via_count": 23,
         "zones": true
       }
     },
     {
       "id": "DECOUPLING",
       "status": "pass",
-      "evidence": "IC→最近去耦电容距离（courtyard 边界距，上限 8.0mm）：[{\"ic\": \"U2\", \"nearest_cap\": \"C4\", \"boundary_distance_mm\": 2.3}, {\"ic\": \"U1\", \"nearest_cap\": \"C3\", \"boundary_distance_mm\": 0.0}, {\"ic\": \"U3\", \"nearest_cap\": \"C1\", \"boundary_distance_mm\": 2.8}]",
+      "evidence": "预期 IC 角色集 ['U1', 'U2', 'U3']；IC→最近去耦电容距离（courtyard 边界距，电容须与该 IC 共享电源网络，上限 8.0mm）：[{\"ic\": \"U1\", \"nearest_cap\": \"C3\", \"boundary_distance_mm\": 0.0}, {\"ic\": \"U2\", \"nearest_cap\": \"C4\", \"boundary_distance_mm\": 2.3}, {\"ic\": \"U3\", \"nearest_cap\": \"C1\", \"boundary_distance_mm\": 3.4}]",
       "measured": {
-        "worst_distance_mm": 2.8,
+        "worst_distance_mm": 3.4,
         "ics": [
-          {
-            "ic": "U2",
-            "nearest_cap": "C4",
-            "boundary_distance_mm": 2.3
-          },
           {
             "ic": "U1",
             "nearest_cap": "C3",
             "boundary_distance_mm": 0.0
           },
           {
+            "ic": "U2",
+            "nearest_cap": "C4",
+            "boundary_distance_mm": 2.3
+          },
+          {
             "ic": "U3",
             "nearest_cap": "C1",
-            "boundary_distance_mm": 2.8
+            "boundary_distance_mm": 3.4
           }
-        ]
+        ],
+        "problems": []
       }
     },
     {
       "id": "USB_ROUTING",
       "status": "pass",
-      "evidence": "USB 差分对走线长度(mm)：{'USB_DP': 39.68, 'USB_DM': 38.8}；skew=0.87mm（要求 <= 1.0mm）；90Ω 差分阻抗需按 1.6mm 双层板叠层计算复核",
+      "evidence": "USB 逻辑通道（连接器侧网络 + 串阻 + MCU 侧网络）铜长(mm)：{'D+': 34.64, 'D-': 33.69}；endpoint_mismatches=[]；missing_nets=[]；skew=0.95mm（要求 <= 1.0mm）；90Ω 差分阻抗需按 1.6mm 双层板叠层计算复核",
       "measured": {
-        "lengths_mm": {
-          "USB_DP": 39.68,
-          "USB_DM": 38.8
+        "net_lengths_mm": {
+          "USB_DP_CONN": 32.92,
+          "USB_DP": 1.73,
+          "USB_DM_CONN": 31.96,
+          "USB_DM": 1.73
         },
-        "skew_mm": 0.87
+        "logical_channel_lengths_mm": {
+          "D+": 34.64,
+          "D-": 33.69
+        },
+        "endpoint_mismatches": [],
+        "missing_nets": [],
+        "skew_mm": 0.95
       }
     },
     {
       "id": "SHT30_THERMAL",
       "status": "pass",
-      "evidence": "SHT30 U2 (10.0,35.0)；热源距离：[('J1', 45.9), ('U3', 49.2), ('D1', 35.2)]；最近 D1 @35.2mm（要求 >= 10.0mm）；外壳气流需实物复核",
+      "evidence": "SHT30 U2 (10.0,35.0)；热源角色集['U3', 'J1', 'D1'] 距离：[('U3', 49.2), ('J1', 45.9), ('D1', 35.2)]；最近 D1 @35.2mm（要求 >= 10.0mm）；外壳气流需实物复核",
       "measured": {
         "nearest_heat_source_mm": 35.2
       }
@@ -99,16 +111,16 @@
     {
       "id": "PROTECTION",
       "status": "pass",
-      "evidence": "PCB 实测：挂接 +5V 的电容 2 个（bulk 要求 >=1）；原理图 TVS/ESD 器件=False（USB 5V 直供 LDO 场景为建议项）；反接/过压/热插拔瞬态属实物级验证",
+      "evidence": "PCB 实测：挂接 +5V 的电容 1 个（bulk 要求 >=1）；原理图 TVS/ESD 器件=False（USB 5V 直供 LDO 场景为建议项）；反接/过压/热插拔瞬态属实物级验证",
       "measured": {
-        "vbus_caps": 2,
+        "vbus_caps": 1,
         "tvs": false
       }
     },
     {
       "id": "ASSEMBLY",
       "status": "pass",
-      "evidence": "丝印 Reference 覆盖 17/17；方向敏感件（pin1/极性）：['J1', 'U2', 'U3', 'D1']；装配方向与工艺备注由评审人在装配图上确认",
+      "evidence": "丝印 Reference 覆盖（须位于 F.SilkS/B.SilkS 且未隐藏）21/21；方向敏感件（pin1/极性）：['J1', 'U2', 'U3', 'D1']；装配方向与工艺备注由评审人在装配图上确认",
       "measured": {
         "silk_missing": [],
         "polarity_parts": [
@@ -116,7 +128,8 @@
           "U2",
           "U3",
           "D1"
-        ]
+        ],
+        "polarity_missing": []
       }
     }
   ],
@@ -130,5 +143,11 @@
     "PROTECTION": "pass",
     "ASSEMBLY": "pass"
   },
-  "note": "机器测量证据；朝向/阻抗/气流/瞬态等无法静态判定项已在 evidence 中标注，需具名评审人在 KiCad 中复核后签发 manufacturing_release。"
+  "note": "机器测量证据；朝向/阻抗/气流/瞬态等无法静态判定项已在 evidence 中标注，需具名评审人在 KiCad 中复核后签发 manufacturing_release。",
+  "render_evidence": {
+    "pcb_sha256": "f4db9d1205048e9b6dee64e5b760d98415638f015b9191b8959dae867aaec8e0",
+    "top_png_sha256": "a9a18646cbe8d141b78f913f1f44c7f4e155cbda8ff7bca5151b52fb35e8288e",
+    "bottom_png_sha256": "fd51ca641b63061929e6ea22df07814f657d429822ccf8134e02429fedf8d333",
+    "rendered_at": "2026-08-31T11:43:18Z"
+  }
 }

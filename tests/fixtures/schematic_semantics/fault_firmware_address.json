@@ -1,0 +1,7 @@
+{
+  "id": "FAULT_FIRMWARE_ADDRESS_MISMATCH",
+  "expected_rule": "SHT30_ADDRESS",
+  "mutations": [
+    { "op": "set", "path": ["views", "firmware", "constants", "DEFAULT_ADDR"], "value": 69 }
+  ]
+}

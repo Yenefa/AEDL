@@ -81,6 +81,52 @@ AIC Score Target：已知评分项 / NONE / UNKNOWN
 
 若歧义会影响架构、公共接口、Benchmark、开源边界或比赛技术主张，先请求人工确认。
 
+## 2.1 AEDL 硬件发布前项目专属必读
+
+凡任务涉及硬件选型、原理图、PCB、BOM/CPL/Gerber、板级门禁、制造签发或下单，实质修改前还必须完整读取：
+
+- `docs/knowledge/PROJECT_PITFALLS.md`
+- `docs/knowledge/IMPROVEMENT_SYSTEM.md`
+
+并执行 `gates/learning_gate.py` 已提升的项目经验控制。历史交付物彼此一致、ERC/DRC 通过、自动板级评审通过，都不能替代独立数据手册合同、当前源文件哈希绑定、具名人工制造签发或回件后的实体 C 级验证。
+
+## 2.2 变更控制（Change Containment）——所有实质任务必做
+
+> 总原则：**Read broadly, write narrowly, verify explicitly, escalate on boundary change.**
+> （广泛读取，窄域修改，显式验证，触碰边界即升级。）
+
+开工前完成 **Impact Analysis** 并随任务记录输出：
+
+```text
+Impact Analysis
+
+Direct modifications:   // 本次直接修改的文件
+Potentially affected:   // 可能受影响的模块/文件
+Explicitly not touched: // 明确不碰的范围
+Risk: LOW / MEDIUM / HIGH
+```
+
+开工前填写 **Change Budget**（可并入 Issue 或任务记录）：
+
+```text
+change_budget:
+  expected_files: N
+  expected_modules: [module-a, module-b]
+  cross_module: false              # 是否跨模块
+  contract_change: false           # 是否改公共契约/schema
+  evidence_semantics_change: false # 是否改变 Evidence 语义
+```
+
+**越界规则**：实际改动超出预算（文件数/模块数显著超预期，或上述任一布尔项从 false 变 true）时：
+
+```text
+STOP
+→ 重做 Impact Analysis
+→ 扩 Scope 需人类确认
+```
+
+禁止"顺手"继续扩大范围（目标优先级：正确性 > 范围控制 > 可验证性 > 可追溯性 > 最小改动）。
+
 ---
 
 # 3. Git / GitHub 规则
@@ -733,6 +779,8 @@ EVID-...
 - [ ] 实际运行的测试和结果如实记录
 - [ ] 未运行的重要测试标记 `NOT_RUN`
 - [ ] 无虚假 Evidence / Benchmark
+- [ ] 硬件自动静态检查未被表述为人工制造签发或实体 C 级验证
+- [ ] BOM 库存已按精确料号即时复核；零库存/未知库存失败关闭且未自动换料
 
 ### Compliance
 - [ ] AI Usage：按需更新

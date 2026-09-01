@@ -1,0 +1,12 @@
+{
+  "id": "FAULT_REVERSED_USB_COMMON_MODE",
+  "expected_rule": "USB_POLARITY_AND_SERIES",
+  "mutations": [
+    { "op": "set", "path": ["views", "intent", "pins", "U1.13", "net"], "value": "USB_DP" },
+    { "op": "set", "path": ["views", "intent", "pins", "U1.14", "net"], "value": "USB_DM" },
+    { "op": "set", "path": ["views", "netlist", "pins", "U1.13", "net"], "value": "USB_DP" },
+    { "op": "set", "path": ["views", "netlist", "pins", "U1.14", "net"], "value": "USB_DM" },
+    { "op": "set", "path": ["views", "pcb", "pins", "U1.13", "net"], "value": "USB_DP" },
+    { "op": "set", "path": ["views", "pcb", "pins", "U1.14", "net"], "value": "USB_DM" }
+  ]
+}

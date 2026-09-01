@@ -1,0 +1,154 @@
+{
+  "$schema": "https://aedl.local/schemas/edd001-usb.v1.json",
+  "schema_version": 1,
+  "board_id": "project-027-edd001",
+  "block": "EDD-001.USB",
+  "created_at": "2026-09-01T00:00:00+00:00",
+  "author": "human+ai (定案草案，PENDING_HUMAN_REVIEW)",
+  "sources": {
+    "LCSC_C165948": "https://www.lcsc.com/product-detail/C165948.html",
+    "ESPRESSIF_S3_LCD_EV_BOARD": "https://dl.espressif.com/dl/schematics/SCH_ESP32-S3-LCD-Ev-Board-MB_V1.5_20231009.pdf",
+    "ESPRESSIF_SCHEMATIC_CHECKLIST": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32s3/schematic-checklist.html",
+    "ST_USBLC6_2": "https://www.st.com/en/protections-and-emi-filters/usblc6-2.html",
+    "ESPRESSIF_LAYOUT_GUIDE": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32s3/pcb-layout-design.html"
+  },
+  "role": {
+    "mode": "UFP / Device / Sink",
+    "excluded": ["usb_host", "usb_pd", "drp", "otg_power_output"]
+  },
+  "rules": [
+    {
+      "id": "USB_CONNECTOR",
+      "kind": "component",
+      "severity": "critical",
+      "title": "USB-C connector TYPE-C-31-M-12 (Korean Hroparts Elec / LCSC C165948), 16-pin, USB 2.0 data",
+      "source_ids": ["LCSC_C165948"],
+      "constraint": {
+        "mpn": "TYPE-C-31-M-12",
+        "manufacturer": "Korean Hroparts Elec",
+        "lcsc": "C165948",
+        "pins": 16,
+        "usb_version": "2.0",
+        "vbus_pin": "VBUS",
+        "data_pins": ["D+", "D-"],
+        "eda_models": ["pinout", "footprint", "eda_model"]
+      }
+    },
+    {
+      "id": "USB_CC_RESISTORS",
+      "kind": "connectivity",
+      "severity": "critical",
+      "title": "CC1 and CC2 each have an independent 5.1k 1% 0603 pull-down to GND; must NOT be shorted together",
+      "source_ids": ["ESPRESSIF_S3_LCD_EV_BOARD"],
+      "constraint": {
+        "cc1": { "resistor": "R_CC1", "value": "5.1k", "tolerance": "1%", "package": "0603", "to": "GND" },
+        "cc2": { "resistor": "R_CC2", "value": "5.1k", "tolerance": "1%", "package": "0603", "to": "GND" },
+        "independent": true,
+        "notes": "Two independent 5.1k Rd advertise Sink/Device to the Type-C source. Shorting CC1/CC2 is forbidden."
+      }
+    },
+    {
+      "id": "USB_NATIVE_DATA",
+      "kind": "connectivity",
+      "severity": "critical",
+      "title": "Native USB: GPIO19=USB_D-, GPIO20=USB_D+; no external UART bridge (no CP2102/CH340)",
+      "source_ids": ["ESPRESSIF_SCHEMATIC_CHECKLIST"],
+      "constraint": {
+        "dm_pin": "GPIO19",
+        "dp_pin": "GPIO20",
+        "series_resistor": {
+          "value": "22ohm",
+          "tolerance": "1%",
+          "placement": "near_mcu",
+          "baseline": "22ohm",
+          "alternative": "33ohm"
+        },
+        "cap_to_gnd": { "value": "DNP" }
+      }
+    },
+    {
+      "id": "USB_TYPE_C_FLIP",
+      "kind": "connectivity",
+      "severity": "critical",
+      "title": "Type-C flip handling: A6/B6 -> USB_D+, A7/B7 -> USB_D-; SBU1(A8)/SBU2(B8) -> NC",
+      "source_ids": ["ESPRESSIF_S3_LCD_EV_BOARD"],
+      "constraint": {
+        "dp_pins": ["A6", "B6"],
+        "dm_pins": ["A7", "B7"],
+        "sbu1": "NC",
+        "sbu2": "NC",
+        "notes": "USB 2.0 device does not need SBU."
+      }
+    },
+    {
+      "id": "USB_ESD",
+      "kind": "component",
+      "severity": "critical",
+      "title": "ESD protection USBLC6-2SC6 (ST), SOT23-6, protects D+/D- and VBUS",
+      "source_ids": ["ST_USBLC6_2"],
+      "constraint": {
+        "device": "USBLC6-2SC6",
+        "manufacturer": "STMicroelectronics",
+        "package": "SOT23-6",
+        "line_capacitance_max": "3.5pF",
+        "usb_speed": "USB 2.0 High-Speed 480Mb/s",
+        "iec_61000_4_2_level": 4,
+        "contact_rating": "8kV",
+        "air_rating": "15kV",
+        "placement": "near_connector",
+        "topology": "D+/D- in series path, VBUS and GND clamped",
+        "notes": "ESP32-S3 Native USB is only Full Speed 12Mb/s, so device bandwidth is not a bottleneck."
+      }
+    },
+    {
+      "id": "USB_ESD_PLACEMENT",
+      "kind": "layout",
+      "severity": "critical",
+      "title": "ESD must sit at the connector, not after a long trace; ESD->GND loop must be short and thick",
+      "source_ids": ["ESPRESSIF_LAYOUT_GUIDE"],
+      "constraint": {
+        "placement": "esd_at_connector",
+        "gnd_loop": "short_and_thick"
+      }
+    },
+    {
+      "id": "USB_VBUS_REVERSE_PROTECTION",
+      "kind": "power",
+      "severity": "critical",
+      "title": "VBUS reverse protection via SS34 Schottky between USB VBUS and USB_5V",
+      "source_ids": ["ESPRESSIF_S3_LCD_EV_BOARD"],
+      "constraint": {
+        "device": "SS34",
+        "topology": "USB VBUS -> SS34 -> USB_5V -> AP63203WU-7",
+        "purpose": "prevent back-feed into USB VBUS when other 5V sources are present",
+        "tech_debt": "Schottky has drop and loss; future high-power sandbox may use ideal-diode / power-path"
+      }
+    },
+    {
+      "id": "USB_POWER_PROFILE",
+      "kind": "power",
+      "severity": "critical",
+      "title": "USB power profile is conservative; source capability externally constrained, not assumed 2A",
+      "source_ids": ["ESPRESSIF_SCHEMATIC_CHECKLIST"],
+      "constraint": {
+        "mode": "conservative",
+        "source_capability": "externally_constrained",
+        "notes": "Two 5.1k Rd do NOT grant unconditional 1.5A/3A. Default USB current / 1.5A / 3.0A depend on source advertisement. No CC current detection in v0.1. High-power peripherals require CC current detection or USB-PD Sink Controller as a new Verified Block."
+      }
+    },
+    {
+      "id": "USB_SHIELD_BOND",
+      "kind": "connectivity",
+      "severity": "major",
+      "title": "Connector shield bonded to GND via 0-ohm bond",
+      "constraint": {
+        "shield": "GND",
+        "bond": "0ohm"
+      }
+    }
+  ],
+  "cross_references": {
+    "USB_DIFFERENTIAL": "gates/contracts/edd001_pin_constraints_v1.json#USB_DIFFERENTIAL",
+    "POWER_SOURCE_SEPARATION": "gates/contracts/edd001_pin_constraints_v1.json#POWER_SOURCE_SEPARATION"
+  }
+}

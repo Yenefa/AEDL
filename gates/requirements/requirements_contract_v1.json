@@ -1,0 +1,125 @@
+{
+  "$schema": "https://aedl.local/schemas/requirements-contract.v1.json",
+  "schema_version": 1,
+  "board_id": "project-027-m2-esp32c3-sht30",
+  "created_at": "2026-08-30T16:37:37.779112+00:00",
+  "author": "retroactive:human+ai (补录于 2026-08-30/31 会话，依据 M2 会话记录补录，非设计时生成)",
+  "user_goal": "ESP32-C3 + SHT30 温湿度载板，USB-C 供电，BLE 上报，可嘉立创打板",
+  "source_statements": [
+    {
+      "id": "S1",
+      "text": "USB-C 供电",
+      "type": "power"
+    },
+    {
+      "id": "S2",
+      "text": "ESP32-C3 为主控",
+      "type": "mcu"
+    },
+    {
+      "id": "S3",
+      "text": "SHT30 温湿度传感器",
+      "type": "sensor"
+    },
+    {
+      "id": "S4",
+      "text": "BLE 无线上报",
+      "type": "connectivity"
+    },
+    {
+      "id": "S5",
+      "text": "两个用户按键 + 一个状态 LED",
+      "type": "other"
+    }
+  ],
+  "resolved_requirements": [
+    {
+      "id": "R1",
+      "text": "USB-C 5V 输入经 ME6211C33 LDO 降到 3.3V",
+      "source_ids": [
+        "S1"
+      ]
+    },
+    {
+      "id": "R2",
+      "text": "U1 = ESP32-C3-WROOM-02-N4",
+      "source_ids": [
+        "S2"
+      ]
+    },
+    {
+      "id": "R3",
+      "text": "U2 = SHT30-DIS-B10KS，I2C 上拉 4.7k",
+      "source_ids": [
+        "S3"
+      ]
+    },
+    {
+      "id": "R4",
+      "text": "U3 换料为 C235316 ME6211C33R5G SOT-353（C82942 零库存，人工审核采纳）",
+      "source_ids": [
+        "S1"
+      ]
+    }
+  ],
+  "open_questions": [
+    {
+      "id": "Q1",
+      "question": "需要板载调试器（JTAG/SWD）吗？",
+      "answer": "不需要（ESP32-C3 用内置 USB CDC 下载）",
+      "kind": "blocking",
+      "source_ids": [
+        "S2"
+      ]
+    },
+    {
+      "id": "Q2",
+      "question": "需要板载显示屏吗？",
+      "answer": "No preference -> 无显示（LED 指示足够）",
+      "kind": "nonblocking",
+      "source_ids": []
+    },
+    {
+      "id": "Q3",
+      "question": "Wi-Fi 需要启用吗？",
+      "answer": "不需要（仅 BLE）",
+      "kind": "blocking",
+      "source_ids": [
+        "S4"
+      ]
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "A1",
+      "text": "民用温度范围 0-50C（SHT30-DIS 标准）",
+      "source_ids": [
+        "S3"
+      ],
+      "status": "recorded"
+    },
+    {
+      "id": "A2",
+      "text": "两层板、JLC 经济装配",
+      "source_ids": [],
+      "status": "recorded"
+    },
+    {
+      "id": "A3",
+      "text": "U3 持续负载 < 147mA（V20 保守边界，ADR-005）",
+      "source_ids": [
+        "S1"
+      ],
+      "status": "recorded"
+    }
+  ],
+  "forbidden_assumptions": [
+    "禁止在未询问用户的情况下增加 Wi-Fi 模块",
+    "禁止零库存自动换料（必须走人工审核，AI-20260830-002 教训）"
+  ],
+  "intent_binding": {
+    "intent_path": "src/hardware/m2-board/intent_v1.json",
+    "intent_semantic_sha256": "82f8aa2fae775735c92f88a3d86efbe253d5bca5f612f8b52ee1f3b54cd02c34"
+  },
+  "contract_sha256": "a315effe644fbe11611448c0a4e658eb7dc03a70c17f67e86e82a57344c7eab0"
+}

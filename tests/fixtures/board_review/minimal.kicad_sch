@@ -1,0 +1,7 @@
+(kicad_sch (version 20260830) (generator "p9-golden-fixture")
+  (lib_symbols)
+  (symbol (lib_id "Device:C") (at 100 100 0)
+    (property "Reference" "C4" (at 100 100 0))
+    (property "Value" "10uF" (at 100 102 0))
+  )
+)
