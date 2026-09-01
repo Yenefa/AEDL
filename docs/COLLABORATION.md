@@ -1,8 +1,9 @@
-# 多 AI 并行协作协议 v1（2026-08-31 大统领拍板启用）
+# 多 AI 并行协作协议 v2（2026-09-01 大统领批准：从单人多会话升级为真协作）
 
-> 目的：多个 AI 会话**同时**在 `C:\Users\fuker\Desktop\workspace\project-027-autonomous-hardware-agent` 工作，互不写坏文件、互不踩 diff、成果可合并。
+> 目的：多个 AI 会话（及未来的真人协作者）**同时**在 `C:\Users\fuker\Desktop\workspace\project-027-autonomous-hardware-agent` 工作，互不写坏文件、互不踩 diff、成果可合并。
 > 本协议是 AGENTS.md 的并行扩展，冲突时以 AGENTS.md 为准。
-> 每个 AI 会话开工时：读 `AGENTS.md` -> 读 `docs/HANDOFF.md` -> **读本文件** -> 在 `docs/compliance/AI_USAGE_LOG.md` 记一条新 AI ID。
+> **每个会话开工时（按序，缺一不可）**：读 `AGENTS.md` → 读 `docs/HANDOFF.md` 状态卡 → **读本文件** → `git status` 看现场 → 在 `docs/compliance/AI_USAGE_LOG.md` 领号（见 §0.1）。
+> v2 变更（2026-09-01，实战教训固化）：新增领号占位规则（§0.1）、pre-commit 钩子处置（§0.2）、撞车仲裁（§0.3）、commit 授权分级（§2 改）。历史协作记录见任务看板与各 handoff。
 
 ## 0. 比赛时钟（2026-08-31 大统领确认）
 
@@ -29,12 +30,35 @@
 
 **追加型文件**（只许 append 自己的条目，不许改别人的）：`docs/compliance/AI_USAGE_LOG.md`、`docs/HANDOFF.md`（各改各的章节）。
 
+## 0.1 台账领号（防撞号，2026-08-31 两次实战撞号后固化）
+
+1. 领号 = `grep -o "AI-2026[0-9-]*" docs/compliance/AI_USAGE_LOG.md | sort -u | tail -1` 取最大号 +1。
+2. **领号后第一步立即追加占位条目**（标题 + 一行"claimed by <会话名>，内容完工后补"）再开始干活——占位即锁号。
+3. 提交信息里的 `[AI-...]` 标签以台账条目**内容**为准，撞号时按条目甄别，不改写已提交历史。
+
+## 0.2 pre-commit 钩子（prettier）处置规则
+
+- 钩子会要求重排 md/json。**证据文件（manifest、receipt、test-results、datasheet 记录）严禁重排**——哈希绑定的证据改字节 = 破坏证据链。
+- 证据批次 commit 用 `git commit --no-verify`，**理由必须写进提交信息**（如 "evidence JSON is hash-bound, reformatting would alter evidence bytes"）。
+- 纯文档/代码批次正常过钩子；`--no-verify` 是例外不是惯例，滥用=违规。
+
+## 0.3 撞车仲裁（同树多 agent 实战规则）
+
+1. 发现自己的领地文件已被他人修改（内容/mtime 不符）：**立即停手**，不 revert 不覆盖。
+2. 评估：对方方案更优 → 撤自己撞车部分、保留对方、补对方遗漏的接缝（参考 AI-20260831-020 的处理）。
+3. 无法判定优劣 → 报告大统领取舍，两边都停在 PENDING_HUMAN_REVIEW。
+4. 预防：开工前 `git status` + `git diff <自己领地文件>` 必做；大任务先写任务卡（§3 看板）再动手。
+
 ## 2. 交接规范
 
-1. **开工**：`git status` 确认自己领地内没有别人未提交的改动（有 -> 停，报告大统领）。
-2. **每个工作单元结束**：在自己领地内留产物 + 在 `docs/HANDOFF.md` 的"并行会话状态"章节写三行：做了什么 / 文件清单 / 下一步。**不 commit**（工作树整体由大统领统一审核提交，避免多 AI 交错 commit 污染历史）。
-3. **冲突处理**：发现领地文件被他人改动（mtime + 内容不符）-> 停手报告，不覆盖。
-4. **红线继承 AGENTS.md**：AI 不得设置 `manufacturing_release=true` / `HUMAN_REVIEWED` / `ACCEPTED`；不得动 board_review 签发；不得把 Wokwi/DRC 说成实体验证。
+1. **开工**：`git status` 确认自己领地内没有别人未提交的改动（有 -> 停，按 §0.3 仲裁）。
+2. **每个工作单元结束**：在自己领地内留产物 + 在 `docs/HANDOFF.md` 的"并行会话状态"章节写三行：做了什么 / 文件清单 / 下一步。
+3. **commit 授权分级（v2 改）**：
+   - **大统领已验收/明示提交的批次**：执行会话可 commit + push，提交信息带 `[AI-...]` 标签。
+   - **未验收的在制品**：不 commit，靠 handoff + 台账留痕。
+   - 同树多会话时：commit 前确认只暂存自己领地文件（`git add` 逐路径），**禁止 `git add -A`**——防止把他人未提交批次混进提交。
+4. **冲突处理**：见 §0.3。
+5. **红线继承 AGENTS.md**：AI 不得设置 `manufacturing_release=true` / `HUMAN_REVIEWED` / `ACCEPTED`；不得动 board_review 签发；不得把 Wokwi/DRC 说成实体验证。
 
 ## 3. 任务看板（TASKS）
 
