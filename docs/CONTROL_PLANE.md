@@ -346,6 +346,10 @@ authority 模糊 → Exception contract → 发现 hash representation 模糊 �
    装完后 commit 即自动生成；未安装也能手动触发（命令同上）。bundle 永远落在仓库外的
    本地独立文件夹（`<repo 父目录>/review-bundles/<run>/`），不进 git、不随推送传播；
    跨机器/跨人共享靠手动发送（如 run-001 的 bundle 用法）。
+
+   **机器强制（开发者）**：`dev_gate` 含 `bundle_check`——非稳定分支本地运行时，
+   bundle 缺失/过期自动补生成，补不上则 gate FAIL（没装钩子也过不了门禁）；
+   CI 按设计豁免（bundle 只在本地）；规则（AGENTS.md §12）约束所有 Agent。
 2. **发送**：整包（或按需单文件）手动发送给对话式 AI 进行外部 Review——
    **选用高质量 AI 模型，思考强度调高**（例如 GPT 5.6 Sol，思考强度：高）。
 3. **Review 重点**（给 AI 的指令骨架）：
