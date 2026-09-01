@@ -262,6 +262,20 @@ Promotion 序列:     Yenefa/Percy Review → SHARED 确认（ci.yml/gates/contr
 
 AECP 自身遵守：Agent may propose, but not promote——控制面代码自己不例外。
 
+### Run 001 评审与迭代账本（2026-09-01）
+
+| 轮次 | 载体 | 结论 |
+|---|---|---|
+| R1 | bundle Review（run001-review.md） | REQUEST_CHANGES：CI 双跑 sandbox / EVID 过早 YES / ADR 陈旧 / 称谓修正 |
+| R2 | 源码 Review（run001-review-new-files.md 全内容） | REQUEST_CHANGES：5 个 hard blockers（git rc / BLOCKED binding / 空 allowed fail-open / HEAD 绑定 / broken 聚合）+ parser provenance + skip_deps 语义 |
+| R3 | delta Review（run001-review-delta.md） | 源码 APPROVE + 2 个文本 truth（机器字段五、CI 注释 task-context 语义） |
+| R4 | 真实 hunks（run001-source-diff.patch） | SOURCE REVIEW APPROVE → ⑥ commit 授权（CONDITIONAL） |
+| R5 | PR #21 + bundle（promotion） | CI 双平台全绿 → EVID YES → ⑪ Yenefa merge（master @ 084fb92） |
+
+统计：**评审 5 轮 / CI 矩阵迭代 3 次**（1st venv 遮蔽+cp1252 → 2nd 8.3 短名路径 → 3rd 全绿）/
+**自我拦截 1 次**（BLOCKED receipt 不能绑定，admit-v3-drift-blocked 实证）/
+**技术债 2 项被机器暴露**（CRLF 哈希缺口、路径解析层级不一致）。
+
 ### 设计冻结（Freeze，直到 Run 002）
 
 ```text
