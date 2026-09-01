@@ -2081,3 +2081,19 @@
 - 验证：manifest sha256 与本地文件逐字复核；PDF 元数据（producer/title/pages）核对。
 - BOM 未动；manufacturing_release 未动；选型等人工批准。
 - 最终状态：`PENDING_HUMAN_REVIEW`
+
+## AI-20260901-004
+
+- 日期：2026-09-01
+- 任务名称：Wave 4 多会话发卡 + GitHub 账号改名公告 + spike 独立仓发布
+- 模块/路径：`docs/WAVE4_TASKS_20260901.md`（新）、`docs/COLLABORATION.md`（公告 + §5 活动任务）、本台账
+
+- 做了什么：
+  - 大统领指示转入多 agent 协作模式后，切分 Wave 4 三路并行任务（W4A EDD 证据冻结 /
+    W4B kicad-happy intake / W4C U3 ECO 准备），任务卡自包含写入 WAVE4_TASKS 文件。
+  - COLLABORATION.md 顶部公告大统领 GitHub 改名 sca331613-commits → Yenefa（并行会话
+    开工必读该文件，一次广播）。
+  - spike 展示仓发布：https://github.com/Yenefa/AEDL-spike（public，81 文件，发布前
+    本机路径与 secret 扫描通过）。主仓库 .gitignore 排除 spike 目录。
+
+- 最终状态：`PENDING_HUMAN_REVIEW`

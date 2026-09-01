@@ -1,5 +1,9 @@
 # 多 AI 并行协作协议 v2（2026-09-01 大统领批准：从单人多会话升级为真协作）
 
+> 📢 **公告（2026-09-01）**：大统领 GitHub 账号已由 `sca331613-commits` 改名为 **`Yenefa`**。
+> 旧 URL 靠重定向仍可达；新建仓库/引用一律用 `Yenefa`；`gh repo create` 不带用户名前缀。
+> 已发布的 spike 展示仓：`https://github.com/Yenefa/AEDL-spike`。
+
 > 目的：多个 AI 会话（及未来的真人协作者）**同时**在 `C:\Users\fuker\Desktop\workspace\project-027-autonomous-hardware-agent` 工作，互不写坏文件、互不踩 diff、成果可合并。
 > 本协议是 AGENTS.md 的并行扩展，冲突时以 AGENTS.md 为准。
 > **每个会话开工时（按序，缺一不可）**：读 `AGENTS.md` → 读 `docs/HANDOFF.md` 状态卡 → **读本文件** → `git status` 看现场 → 在 `docs/compliance/AI_USAGE_LOG.md` 领号（见 §0.1）。
@@ -185,3 +189,10 @@
 - 验收：四边参数化测试（x<0、x>宽、y<0、y>高 至少各一，或等价参数化）；**保留现有 rot=0/180 朝向测试不动**；修复后 `py -3 -m unittest tests.test_board_review` 全绿。
 - **协调（必读）**：同 P12-A（同文件不同函数；不要重新生成 auto 报告；不 commit 不 push）。
 - 禁止：同 P12-A。
+
+## 5. 当前活动任务（Wave 4，2026-09-01 发卡）
+
+- **TASK-W4A**：EDD-001 证据冻结 + POWER 合同草案 → 🔨 待领（难度★★）
+- **TASK-W4B**：kicad-happy 六步 intake + 吸收方案 → 🔨 待领（难度★★★）
+- **TASK-W4C**：U3 ECO 准备 + 治理杂项 → 属主：ZCode 主会话
+- 任务书全文（领地/待办/验收/禁止）：`docs/WAVE4_TASKS_20260901.md`
