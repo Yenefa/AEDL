@@ -14,7 +14,7 @@ AEDL 探索如何在明确的人类审批边界内，把自然语言需求转化
 
 | 范围 | 当前边界 | 权威入口 |
 | --- | --- | --- |
-| M2 ESP32-C3/SHT30 设计 | 已有原理图、PCB、制造导出物和机器/静态验证记录 | [M2 硬件目录](src/hardware/m2-board/)、[HANDOFF](docs/HANDOFF.md) |
+| M2 ESP32-C3/SHT30 设计 | 已有原理图、PCB、制造导出物和机器/静态验证记录；**物理线已冻结（2026-09-01 裁决：不再下单/重签/换料）**，其验证机制保留为 Sandbox 地基 | [M2 硬件目录](src/hardware/m2-board/)、[HANDOFF](docs/HANDOFF.md) |
 | 制造放行 | **BLOCKED**；`manufacturing_release=false`，尚未重新人工签发，不得据旧记录下单 | [board_review_v1.json](gates/board_review_v1.json) |
 | 数据手册合同 | 仍有人工签发项；自动检查不能替代具名工程复核 | [硬件 Evidence](src/hardware/m2-board/evidence/)、[HANDOFF](docs/HANDOFF.md) |
 | 实体板验证 | **NOT_RUN**；上电、功耗、BLE、传感器精度、USB 眼图、瞬态与长期稳定性仍待回件 | [Evidence Index](docs/evidence/EVIDENCE_INDEX.md) |
