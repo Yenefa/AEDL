@@ -341,7 +341,7 @@
   - 卫星仓 GitHub Issue #1 / Draft PR #2。
   - `docs/COLLABORATION.md` §0.7。
   - `docs/evidence/EVIDENCE_INDEX.md` EVID-20260901-001 / EVID-20260901-002。
-  - 卫星治理分支 `codex/spike-governance` @ `6a2e70b`。
+  - 卫星治理分支 `codex/spike-governance` @ `0e562e5`。
 
 - 影响：
   - 后续 spike 实验默认在卫星仓立项；只有准备吸收时才修改主仓，并必须保留来源提交和限制。
