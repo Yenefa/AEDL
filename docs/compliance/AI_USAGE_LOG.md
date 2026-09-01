@@ -2613,3 +2613,71 @@ test_run_gates`：**115/115 OK**（覆盖问题 1 courtyard 四边越界、问�
 - AIC Score Target：`实现完成度与可验证效果`（GH-20）
 - 最终状态：
   - Run 001 晋升完成；设计冻结继续生效，Run 002 待天然碰撞
+
+## AI-20260902-001
+
+- 日期：2026-09-02
+- 任务名称：Run 002 — dev_gate secret_scan 误报修复 + autocrlf 环境要求（PR #22，补录）
+- 模块/路径：
+  - `tools/dev_gate.py`（+36/-13：枚举层/扫描层 fail-closed、>1MB 流式扫描）
+  - `docs/CONTROL_PLANE.md`（+5：本机 autocrlf 环境要求）
+  - `tests/test_control_plane_tools.py`（SecretScanTests 7 个：ignored 排除、tracked/untracked
+    枚举失败、git 缺失、read 失败、大文件流式扫描；stat 失败路径由实现 fail-closed，未设独立回归测试）
+  - 本台账本条目（补录）
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash`
+- 参与标签：DEBUG、GENERATE_CODE、GENERATE_TEST、DOCUMENT
+- 任务目标：dev_gate secret_scan 对 gitignored 目录（如 `_circuitbot_venv/`）误报；改为 git
+  ls-files 枚举（tracked + 未忽略未跟踪），并封死枚举/扫描两层 fail-open。
+- AI 实际产出：
+  - 枚举层：subprocess OSError（git 缺失）/ returncode≠0 → raise RuntimeError；check_secret_scan
+    捕获 → FAIL receipt（绝不部分扫描后 PASS）。
+  - 扫描层：stat/read_text 失败（含 PermissionError）→ FAIL，不再静默 continue；>1MB 改为流式
+    扫描（不跳过不 FAIL；仓库真实存在 1.15MB datasheet PDF，硬 FAIL 会让 gate 永远红）。
+  - 新增 SecretScanTests 7 个故障路径测试。
+- 团队自主部分：外部复审（bundle 审查）提出枚举层/扫描层两个 BLOCKER；Yenefa 执行 merge（promotion）。
+- 人工审核：`HUMAN_REVIEWED`（Yenefa，2026-09-01T21:43:26Z merge 即最终人工审核，口径同
+  AI-20260901-019）
+- 验证（真实运行，本机 + CI）：
+  - SecretScanTests 7/7 OK；test_control_plane_tools 37/37 OK。
+  - `python -m tools.dev_gate` exit 0：syntax / main 306 / sandbox 274（1 skip 1 xfail）/
+    secret_scan 305 files（dev-gate-receipt-v3.json）。
+  - CI run 33562113208：ubuntu + windows 双平台 SUCCESS（2026-09-01T21:37:54–21:39:20Z）。
+- 已知限制：PR 无正式 GitHub review 记录（会话/bundle 式审查，审计口径以 bundle 与台账为准，同
+  Run 001）。
+- Compliance：Third-party none；ADR none。
+- AIC Score Target：`实现完成度与可验证效果`（延续 GH-20 控制面修复）
+- 最终状态：
+  - `HUMAN_REVIEWED`（merge 即最终人工审核）
+
+## AI-20260902-002
+
+- 日期：2026-09-02
+- 任务名称：Run 002 评审与迭代账本补录（CONTROL_PLANE）+ 本台账补录
+- 模块/路径：
+  - `docs/CONTROL_PLANE.md`（新增 `### Run 002 评审与迭代账本` 段）
+  - 本台账本条目
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash`
+- 参与标签：DOCUMENT
+- 任务目标：Run 002（PR #22）的评审/迭代过程此前未记账；按 Run 001 账本格式补录，审计口径对齐
+  review-bundles/run-002/ 与 GitHub 记录。
+- AI 实际产出：
+  - CONTROL_PLANE.md 新增 Run 002 账本段：R1–R3 轮次表（初版 bundle → delta → delta v2）+ 统计
+    （评审 3 轮 / CI 矩阵迭代 1 次 / 本地 gate 迭代 3 次 / 自我拦截 0 次 / 正式登记技术债 0 项 +
+    非阻塞 follow-up 2 项：stat OSError 独立回归测试未设、receipt "text files" 命名精确化）；
+    冻结状态注明继续生效（FIX 类运行，解除由人工决策）。
+  - 复审修正（Yenefa REQUEST_CHANGES → 修正后通过）：R1 failure model 按裁定改正（git 缺失抛
+    FileNotFoundError 而非返回空列表；fail-open 路径为 rc≠0 被静默忽略）；SecretScanTests 覆盖
+    描述去掉不实的 stat 独立测试项（实现 fail-closed，测试未覆盖）；登记 2 项非阻塞 follow-up。
+- 团队自主部分：账本内容基于 review-bundles/run-002/ 材料与 GitHub 事实如实重建，无编造轮次。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 验证：
+  - 交叉核对：run002-review.md / run002-review-delta.md / run002-review-delta-v2.md /
+    dev-gate-receipt-v3.json / `gh pr view 22`（checks run 33562113208 双平台 SUCCESS、
+    merge commit 2edff77）。
+  - `python -m tools.dev_gate` exit 0（无 envelope，scope_check/binding_check 显式 excluded）。
+- Compliance：Third-party none；ADR none。
+- AIC Score Target：`NONE`（纯流程记录）
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`（PR 待人工 review，merge 由 Yenefa/Percy 执行）

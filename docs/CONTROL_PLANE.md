@@ -281,6 +281,26 @@ AECP 自身遵守：Agent may propose, but not promote——控制面代码自�
 **自我拦截 1 次**（BLOCKED receipt 不能绑定，admit-v3-drift-blocked 实证）/
 **技术债 2 项被机器暴露**（CRLF 哈希缺口、路径解析层级不一致）。
 
+### Run 002 评审与迭代账本（2026-09-02）
+
+Run 002 = PR #22：dev_gate secret_scan 误报修复（gitignored 排除）+ autocrlf 环境要求落文档。
+base master @ 3226dd9；无 envelope（dev_gate 自身 FIX 类，属冻结允许面）。
+
+| 轮次 | 载体 | 结论 |
+|---|---|---|
+| R1 | bundle Review（run002-review.md） | REQUEST_CHANGES：枚举层 fail-open——git ls-files 任一调用 rc≠0 被静默忽略，可能导致 0/部分 target 扫描后 PASS；git executable 缺失则抛 FileNotFoundError（非空列表）；缺少故障路径测试 |
+| R2 | delta Review（run002-review-delta.md） | 枚举层 fail-closed 确认（枚举失败 → raise → FAIL receipt，绝不部分扫描后 PASS；+4 测试）；复审 BLOCKER：扫描层 fail-open（stat/read 静默跳过、>1MB 跳过） |
+| R3 | delta v2 Review（run002-review-delta-v2.md） | 扫描层 fail-closed 封口（stat/read 失败 → FAIL；>1MB 流式扫描，不跳过不 FAIL；+3 测试）+ "303 未变"证据澄清（v3 receipt：306 tests）→ PR #22 merge（Yenefa，master @ 2edff77） |
+
+统计：**评审 3 轮 / CI 矩阵迭代 1 次**（run 33562113208：ubuntu + windows 双平台全绿；main 306 / sandbox 274）/
+**本地 gate 迭代 3 次**（receipt v1→v3，逐轮封口）/
+**自我拦截 0 次**（无 envelope → 无 admit；初版 bundle 自查声明 fail-open 边界，缺口由外部复审确认）/
+**正式登记技术债 0 项**；**非阻塞 follow-up 2 项**（stat OSError 独立回归测试未设；
+secret_scan receipt "scanned N text files" 命名不精确——实际含二进制 datasheet；
+1.15MB datasheet 由流式扫描覆盖，不豁免不跳过）。
+
+冻结状态：**继续生效**（Run 002 为 dev_gate FIX 类运行，未触碰冻结面；解除由人工决策）。
+
 ### 设计冻结（Freeze，直到 Run 002）
 
 ```text
