@@ -29,30 +29,30 @@
   "sources": {
     "board": {
       "path": "src/hardware/m2-board/m2_board.kicad_pcb",
-      "sha256": "f4db9d1205048e9b6dee64e5b760d98415638f015b9191b8959dae867aaec8e0"
+      "sha256": "6c1dc9c2628875263aa227f575bedcbefe5973f33fb39fb47aa1a78d0bc13ae0"
     },
     "intent": {
       "path": "src/hardware/m2-board/intent_v1.json",
-      "sha256": "f1703e228f7f145e1ecc54edec4f69a88aca144136f4ef01323dfa56c7538f56"
+      "sha256": "41c2c0dc83fa5b6cd273389f6cf628af64ec8979d273f77528e82dd1ae11388f"
     },
     "bom": {
       "path": "gates/bom/bom_v1.json",
-      "sha256": "3f58a42adb72329fdbf33782f33418beb0383103dd671737e4a0d1071b5f296c"
+      "sha256": "e68809e55c9b1ea8fad3ae6f7dcf544d011c12ef69b98d16cd80e6f89ba65952"
     },
     "bom_stock_evidence": {
       "path": "notes/m2-evidence-reset/generated/bom_stock_current.json",
-      "sha256": "d05567f64a8c9983b27af52db2be530ec5bd1f74ac4650401f9898bd04f93e69"
+      "sha256": "d29a3b15e91079535af23450c6f6840696a63d9bc61a9e351bc11c89656fa880"
     }
   },
   "artifacts": {
     "bom": {
       "path": "delivery/bom.csv",
-      "sha256": "222f60b64faf20a266318da5d0c932b2e9fe76324498770ef808a14ffe9b20d6",
+      "sha256": "c1d932279bf0f4af510d1e1a45797d25711caa49a19f408dfb326b93ff326e52",
       "rows": 21
     },
     "cpl": {
       "path": "delivery/pos.csv",
-      "sha256": "4f11f7f3005f57f0ef091cdd672bf862d9d52f6885889a29e54f4dc491f511d9",
+      "sha256": "fe2ed3159c58f007dc0be3dadaae7644478f93937663d41cf25325a8d97cf041",
       "rows": 21
     },
     "gerber_zip": {

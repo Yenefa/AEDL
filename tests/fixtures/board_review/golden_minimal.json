@@ -1,5 +1,5 @@
 {
-  "algorithm_revision": "sha256:b5e3d4ac0b3b4dd3bb2c80ed58300f598c1b78d779345b2bc495af850cb9354d",
+  "algorithm_revision": "sha256:736ea4026f60583a0eeaa9a8fd76653896b613347cc2451d144beb9b66a9ff13",
   "pcb": "tests/fixtures/board_review/minimal.kicad_pcb",
   "board_outline_mm": [
     0.0,

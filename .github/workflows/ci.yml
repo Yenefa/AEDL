@@ -1,12 +1,15 @@
-# Minimal CI (Layer 1 automatic verification) - Issue #8
-# Scope: lint-level syntax check + main repo unit tests + sandbox unit tests + secret scan.
-# Explicitly NOT run here: run_gates.py, KiCad, ESP-IDF, hardware flows,
-# anything that generates or rewrites formal Evidence.
-# Platform note: frozen hashes in this repo are inconsistent across line
-# endings (some pinned to Windows CRLF worktree, some to LF repo blobs), so
-# no single platform can pass every test. This CI runs on ubuntu (LF) and
-# excludes the three CRLF-pinned tests (golden report / BOM stock / delivery
-# manifest) - they still run locally on the Windows dev machine.
+# Minimal CI (Layer 1 automatic verification) - Issue #8, GH-20
+# ONE job, ONE gate entry: `python -m tools.dev_gate` — the same executable local
+# agents and humans run. CI covers the universal required checks:
+#   syntax / main tests / sandbox tests (uv provided by setup-uv) / secret scan
+# Task-context checks (scope_check / binding_check) require an envelope and an
+# admission receipt and are performed in the task workspace, not in generic CI.
+# LF byte baseline (.gitattributes): the same full test set runs on every
+# platform - no platform-specific test exclusions.
+# Formal Evidence gates (gates/run_gates.py / KiCad / ESP-IDF) are deliberately
+# NOT run here: a CI PASS is a development verification receipt, not Evidence.
+# NOTE: GH-20 Verification Policy Change (SHARED/HIGH-RISK) - requires both
+# human owners (Yenefa + Percy) to confirm before merge.
 name: minimal-ci
 
 on:
@@ -15,36 +18,22 @@ on:
     branches: [master]
 
 jobs:
-  main-tests:
-    name: Main repo unit tests
-    runs-on: ubuntu-latest
+  dev-gate:
+    name: Development gate (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.9" # matches local dev env (py -3 = 3.9.13)
-      - name: Syntax check
-        run: python -m compileall -q gates tools tests
-      - name: Unit tests (isolated stdlib; excludes 3 CRLF-pinned tests)
-        run: python -S -m unittest discover -s tests -k "not frozen_golden and not bom_stock_evidence and not delivery_manifest_hash"
-
-  sandbox-tests:
-    name: Sandbox runtime unit tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+          python-version: "3.9" # main repo suite (matches local dev env py -3 = 3.9.13)
       - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.11"
-      - name: Sandbox unit tests
-        run: uv run --frozen --project sandbox_runtime python -m unittest discover -s sandbox_runtime/tests -p "test_*.py"
-
-  secret-scan:
-    name: Secret pattern scan
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Scan for high-confidence secret patterns
-        run: |
-          ! grep -rInE "(ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,}|sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{35}|AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----)" \
-            --exclude-dir=.git --exclude-dir=.pio --exclude-dir=node_modules .
+          python-version: "3.11" # sandbox runtime (pinned by uv.lock)
+      - name: Development gate (compileall + main tests + sandbox tests + secret scan)
+        env:
+          AEDL_PYTHON: python # use the setup-python interpreter on both OSes
+        run: python -m tools.dev_gate

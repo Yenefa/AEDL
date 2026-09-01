@@ -26,6 +26,16 @@ State the single outcome this task must achieve.
 - Contributor classification: `TO_VERIFY` (`AEDL_TEAM` / `EXTERNAL_CONTRIBUTOR`)
 - Start condition: do not begin until exactly one owner is assigned.
 
+## Base
+
+Baseline approved at task creation; drift from it = BLOCKED until a human decision (admission checks this).
+
+```yaml
+base:
+  branch: master
+  sha: <approval-time-SHA>
+```
+
 ## Owned paths (Allowed Paths)
 
 - List every writable file or directory (glob patterns allowed).
@@ -38,6 +48,13 @@ State the single outcome this task must achieve.
 
 - List files that may be read but must not be changed.
 - List upstream Issues, contracts, or human decisions.
+- Machine-checked dependencies (admission blocks until satisfied):
+
+```yaml
+dependencies:
+  - ref: GH-9
+    required_state: merged   # merged | closed | open
+```
 
 ## Change Budget
 
@@ -78,6 +95,20 @@ change_budget:
 - ADR: `YES / NO / TO_VERIFY`
 - Evidence Index: `YES / NO / TO_VERIFY`
 - Fusion Map / Open Outputs / Submission Check: `YES / NO / TO_VERIFY`
+
+## Escalation
+
+When BLOCKED (admission, gate, or boundary): STOP → Explain → Escalate → Human decision → Record → Resume/Reject. Never silently bypass.
+
+```text
+BLOCKED
+Task: <GH-N>
+Reason:
+Observed need:
+Requested:
+Owner decision: PENDING / APPROVED / REJECTED
+Decision ref:
+```
 
 ## Known risks and blockers
 

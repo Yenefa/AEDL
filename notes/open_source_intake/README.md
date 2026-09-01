@@ -13,6 +13,14 @@
 | neuroboard.md | NeuroBoard (Be-bibek) | 六步完成 | LICENSE=MIT 与 README 法律声明块=CC BY-NC 4.0 双声明矛盾 → 按最严解释零代码复用，只作反面教材；验证全链无 fail-closed（GlobalDRC 恒 True、SI/PDN 回退硬编码、失败进 self_correction 继续）、回滚仅位置级快照；11 门禁对照仅 erc/drc 有形态等价且均 fail-open；附 kicad-ai(amcolex) GitHub API 五层取证定案（补记）与 Konnect license 细节（THIRD_PARTY.md §2.4） |
 | kicad-mcp.md | KiCad MCP（家族，深审 mixelpixx 版） | 六步完成 | 工具层判决缺席 by design，AEDL 判决自持不变；JLC 检索仅可做 discovery 不得做 gating；后继项目 Konnect 为 AGPL-3.0 禁接触 |
 
+## 控制面 donor（补充层，与产品层六步 Intake 分开）
+
+| 文件 | 项目 | 层 | 结论一句话 |
+|---|---|---|---|
+| _CONTROL_PLANE_DONOR_TEMPLATE.md | 模板（七栏） | control-plane | Capability → Mechanism → Maturity(证据) → Failure Mode(置信度) → AEDL Adaptation → Trigger；每条结论必须挂 primary source |
+| gemini-cli-control-plane.md | Gemini CLI | control-plane | 吸 ALLOW/DENY/ASK_USER decision model 与 priority；#18186 证明 repo 内 policy 文件 ≠ enforcement（与 CODEOWNERS"路由器不是警察"同构）；headless ASK→DENY 与 AEDL BLOCKED+人工决策同构 |
+| gemini-cli-policy-deepdive-2026-09-01.md | Gemini CLI（源码级二轮） | control-plane | 机制 CONFIRMED（scheduler 插入点/优先级公式/TOML schema/hook exit code）；畸形 policy fail-OPEN 与 hook-ask 无条件覆盖 DENY 为 AEDL 反面教材；AEDL 保持：配置解析失败=GATE_BROKEN、机器层 BLOCKED 不可被 ask 降级 |
+
 ## 附属
 
 - `_circuitbot_repo/`：本地克隆（ff9b003，2026-08-16），供后续 Phase 2-4 复查；含 .git，勿提交进 AEDL 仓库（已在 AEDL .gitignore 排除前先确认）。

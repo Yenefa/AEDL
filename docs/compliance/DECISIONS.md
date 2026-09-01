@@ -350,3 +350,53 @@
 
 - 后续复查条件：
   - 首个卫星成果实际晋升主仓；卫星仓准备公开/Release；两仓许可证或再分发边界变化；或正式比赛材料引用卫星结果时复查。
+
+## ADR-011 — 控制面最小切片：Task Envelope + Admission + 单一 Development Gate + Escalation
+
+- 日期：2026-09-01
+- 状态：Proposed（分支 `feat/control-plane-minimal-slice`，未 commit/push；已按 Run 001
+  Review REQUEST_CHANGES 三项整改收敛为最终 candidate 语义；待 Yenefa + Percy Review）
+
+- 问题：
+  - AEDL 已有完整规范文本（AGENTS.md 开工确认、Change Budget、越界 STOP、PENDING_HUMAN_REVIEW）与正式 Evidence Gate（`gates/run_gates.py`），但"开发验证"入口不统一：CI 跑过滤后的单测（`-k` 排除 3 个 CRLF-pinned 测试）、本地 Windows 跑全量、正式 Evidence 跑另一套。2026-09-01 实测：同一 HEAD 上主仓库 269 个测试有 2 个失败、sandbox 272 个有 8 个失败（全部为 Windows CRLF 检出 vs LF 声明哈希失配），而远端 CI 全绿——同一候选在不同环境有不同"验证通过"语义。
+  - Agent 开工前没有机器可核验的 baseline/依赖/范围绑定；不同 Agent 可能基于不同 baseline、不同规则版本继续工作（C 类 State Coordination Failure）。
+
+- 候选方案：
+  1. 继续依靠 AGENTS.md 文本规则 + 手工核对。
+  2. 先做 Context 分层 / Skill 路由优化。
+  3. 最小切片：Task Envelope（base/deps/paths 机器字段）→ Admission（fail-closed）→ 单一 Development Gate（本地=CI 同一命令，JSON receipt）→ Escalation 协议；痛点出现一个再机械化一个，不建平台。
+
+- 决策：
+  - 采用方案 3。
+  - Envelope 实例放 `tasks/GH-N.yaml`（模板 `docs/ENVELOPE_EXAMPLE.yaml`）；机器字段：base / dependencies / allowed_paths / forbidden_paths / exceptions；其余为自由文本。
+  - 开工前 `python -m tools.admit --envelope tasks/GH-N.yaml`；fail-closed，BLOCKED 走 STOP → Explain → Escalate → Human Decision → Record → Resume / Reject。
+  - 完成前 `python -m tools.dev_gate [--envelope ...] [--admit-receipt ...]`：syntax / main_tests / sandbox_tests / secret_scan / scope_check / binding_check；receipt 是开发验证回执，**不是**正式 Evidence；promotion 只有人工 merge。
+  - CI 单一 dev-gate job（ubuntu + windows 矩阵）调用同一命令；GH-20 后**无平台排除**——选择性 `.gitattributes` LF 字节基线使同一测试集在每平台运行，`excluded_checks` 为空；sandbox 测试并入 gate（uv 由 job 提供），不旁生独立验证入口。
+  - `--allow-dirty` / `--allow-drift` / `--skip-deps` 三个 flag **本身没有 authority**：必须由 envelope 的 `exceptions` 预授权（permitted+authority 或 granted_by+decision_ref），否则 BLOCKED（cannot self-authorize）；授权记录进 receipt `exceptions_used`。
+  - admit receipt 绑定 `envelope_sha256`；gate 的 binding_check 校验 admission 后 envelope 未变（TOCTOU），变更 → FAIL → re-admit。
+
+- 理由：
+  - 先解决 B（Enforcement）+ C（State Coordination）两类最危险失败；A（Knowledge / Context）最后优化（上下文路由排第 6）。
+  - 单一入口消除"四种验证语义"；receipt 让 PASS 语义可审计、可对比。
+  - 本切片不引入任何第三方依赖（stdlib only）、不建平台、不造第二真源。
+
+- AI 参与：
+  - DeepSeek Harness（DSH Web）/ deepseek-v4-flash 将前两轮架构讨论（WorkBuddy / Claude Code / GitHub Copilot / Devin / Cursor / Linear 调研收敛）落地为可执行原语；以真实运行验证（单测 13/13、admit 三连演示、dev_gate 全量、干净 worktree 基线归因、gh 探测 PR #18）。
+
+- 团队自主判断：
+  - Yenefa 定稿吸收顺序（1 Envelope/Admission → 2 Gate → 3 Candidate→Promotion → 4 Escalation → 5 Derived+Provenance → 6 Context Routing）与四句话原则；AI 只做实现与验证，不做策略裁决。
+
+- Evidence / Reference：
+  - `tools/dev_gate.py`、`tools/admit.py`、`tools/envelope.py`、`tests/test_control_plane_tools.py`、`docs/CONTROL_PLANE.md`、`docs/ENVELOPE_EXAMPLE.yaml`。
+  - AI-20260901-010（台账）。
+  - dev_gate 真实 receipt：baseline `18b238164dc39bd34fbe9a5e7b7e0cf91a53f2f0`，status FAIL（2 主仓 + 8 sandbox 既有 CRLF 哈希失败；干净 worktree 归因与本次改动无关）。
+  - 远端 CI 最近 6 次 run 全绿（LF）；本地 Windows 同 HEAD 失败（CRLF）——平台感知排除清单目前不完整：主仓另有 2 个、sandbox 另有 8 个 CRLF-pinned 哈希测试。
+
+- 影响：
+  - 变更集 22 个条目（10 修改 + 12 新增/更新，见 AI-20260901-010..013）；`.github/workflows/ci.yml` 变更属 Verification Policy Change，需 Yenefa + Percy 双人确认。
+  - CRLF 哈希缺口已在 GH-20（Tasks 1-5）收敛：选择性 `eol=lf`（LF 声明文件）+ `eol=crlf`（gerbers，ZIP 契约）+ 8 处文本绑定重冻结为 blob 哈希 + 3 个 CRLF-pinned 测试重冻结；全局 `eol=lf` 方案被否决（Task 3：不得改写 M2 Evidence 字节）。
+  - 未修改 M2 Evidence 仓库字节（工作树规范化 diff-free；bom_stock_current.json 仅声明刷新）；未运行会重写 Evidence 的 `gates/run_gates.py`；不构成制造签发或实体 C 级验证。
+  - 本 ADR 承载**最终 candidate 语义**，不做 changelog；第一代→第三代演化记录在 AI-20260901-010..013。
+
+- 后续复查条件：
+  - 首个真实 Issue 以 envelope + admission 走完 ADMIT → EXECUTE → GATE → PENDING_HUMAN_REVIEW → MERGE 全链路；CRLF 哈希缺口得到双人裁决；或 CI/本地验证语义再次分叉时复查。
