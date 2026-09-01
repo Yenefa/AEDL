@@ -2096,6 +2096,10 @@
   - spike 展示仓发布：https://github.com/Yenefa/AEDL-spike（public，81 文件，发布前
     本机路径与 secret 扫描通过）。主仓库 .gitignore 排除 spike 目录。
 
+- 人工修改（补记，2026-09-01 晚）：
+  - 项目负责人手动将 `Yenefa/AEDL-spike` 可见性改回 **PRIVATE**（发布 public 后手动回改；
+    该手动操作当时未留痕，现按负责人指示在本台账补记，保持台账与仓库实际状态一致）。
+
 - 最终状态：`PENDING_HUMAN_REVIEW`
 
 ## AI-20260901-005
