@@ -2,6 +2,13 @@
 # the current private-repository plan, so the Issue owner and human PR review
 # remain authoritative. The second collaborator is verified as an AEDL formal
 # team member.
+#
+# Routing semantics (see docs/COLLABORATION.md section 0.8):
+#   OWNED   - listed owner leads changes; normal PR flow.
+#   SHARED  - both listed humans must confirm substantive changes.
+#   FOREIGN - default read-only for the task owner; crossing requires scope
+#             expansion approved by the owning human.
+# CODEOWNERS routes review requests; it does NOT enforce. Enforcement is human.
 
 * @Yenefa @la4876949-bot
 /.github/ @Yenefa
@@ -10,3 +17,10 @@
 /docs/compliance/ @Yenefa
 /src/hardware/ @Yenefa
 /delivery/ @Yenefa
+
+# SHARED: both humans confirm substantive changes
+/gates/contracts/ @Yenefa @la4876949-bot
+/sandbox_runtime/contracts/ @Yenefa @la4876949-bot
+/.github/workflows/ @Yenefa @la4876949-bot
+/docs/evidence/ @Yenefa @la4876949-bot
+/gates/lessons_registry_v1.json @Yenefa @la4876949-bot
