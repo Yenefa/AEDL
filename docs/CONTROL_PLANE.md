@@ -333,8 +333,10 @@ authority 模糊 → Exception contract → 发现 hash representation 模糊 �
 
 ### 使用方法（写给 AI 审查者与人工审查者）
 
-1. **生成**：候选变更集形成后，从工作树拼装（git status / git diff / 新文件列表 +
-   已运行验证证据）。Delta 复审一律用**真实 hunks**（.patch），不用摘要冒充补丁。
+1. **生成（自动）**：本机 post-commit 钩子（`scripts/post-commit.bundle.sh`）在每次
+   commit 后自动生成；交付时也可手动执行 `python -m tools.make_review_bundle`
+   （产物含状态 / SHARED 推导 / receipt 摘要 / 变更统计 / 新文件全内容 / 真实 hunks）。
+   Delta 复审一律用**真实 hunks**（.patch），不用摘要冒充补丁。
 2. **发送**：整包（或按需单文件）手动发送给对话式 AI 进行外部 Review——
    **选用高质量 AI 模型，思考强度调高**（例如 GPT 5.6 Sol，思考强度：高）。
 3. **Review 重点**（给 AI 的指令骨架）：

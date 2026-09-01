@@ -2613,3 +2613,30 @@ test_run_gates`：**115/115 OK**（覆盖问题 1 courtyard 四边越界、问�
 - AIC Score Target：`实现完成度与可验证效果`（GH-20）
 - 最终状态：
   - Run 001 晋升完成；设计冻结继续生效，Run 002 待天然碰撞
+
+## AI-20260901-020
+
+- 日期：2026-09-01
+- 任务名称：Review Bundle 自动化生成器 + post-commit 钩子（CONTROL_PLANE §8 机制落地）
+- 模块/路径：
+  - `tools/make_review_bundle.py`（生成器：状态 / SHARED 推导（读 CODEOWNERS）/ receipt 摘要 / 变更统计 / 新文件全内容 / 真实 hunks；`--run/--out/--base/--pr`）
+  - `scripts/post-commit.bundle.sh`（本机 post-commit 钩子：非稳定分支每次 commit 自动生成；跳过 master/main）
+  - `docs/CONTROL_PLANE.md`（§8 使用方法 → 自动生成 + 命令）
+  - `AGENTS.md`（§12 勾选项补命令引用）
+  - 本台账本条目
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash`
+- 参与标签：GENERATE_CODE、DOCUMENT
+- 任务目标：Yenefa 指出"bundle 规则已写进文档但实际工作没有自动生成"——把 §8 从约定变成机械：交付即自动生成到本地 `review-bundles/`。
+- AI 实际产出：如上；本机 `.git/hooks/post-commit` 已安装（scripts/ 版本化副本，跨机器可重新安装）。
+- 团队自主部分：需求由 Yenefa 提出（"要求自动生成到本地的呀"）。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 验证：
+  - 手动运行 `py -3 -m tools.make_review_bundle` → manifest 正常（branch/base/head/文件清单/SHARED=[] 正确，tools/scripts 非 SHARED 路径）。
+  - 修复两处：`git diff --no-index` rc=1 是差异正常语义（非错误）；receipt 通配跳过 `_` 开头临时文件；untracked 统计补入变更摘要。
+  - commit 后钩子自动生成待验证（本条目随 commit 触发）。
+- 已知限制：钩子为本机安装（`.git/hooks/` 不随仓库传播；脚本版本化在 `scripts/`，新机器需复制安装）；bundle 永远在仓库外。
+- Compliance：Third-party none。
+- AIC Score Target：`NONE`
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`
