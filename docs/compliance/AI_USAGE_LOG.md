@@ -2628,7 +2628,10 @@ test_run_gates`：**115/115 OK**（覆盖问题 1 courtyard 四边越界、问�
 - 模型：`deepseek-v4-flash`
 - 参与标签：GENERATE_CODE、DOCUMENT
 - 任务目标：Yenefa 指出"bundle 规则已写进文档但实际工作没有自动生成"——把 §8 从约定变成机械：交付即自动生成到本地 `review-bundles/`。
-- AI 实际产出：如上；本机 `.git/hooks/post-commit` 已安装（scripts/ 版本化副本，跨机器可重新安装）。
+- AI 实际产出：如上；本机已安装到**激活的 hooksPath**（`core.hooksPath` = `~/.claude/hooks`，
+  即 prettier pre-commit 钩子所在目录；scripts/ 是版本化副本，跨机器复制即可）。钩子带仓库守卫
+  （无 `tools/make_review_bundle.py` 的 repo 直接跳过），错误写 `review-bundles/bundle-hook.log`
+  不打断 commit。
 - 团队自主部分：需求由 Yenefa 提出（"要求自动生成到本地的呀"）。
 - 人工审核：`PENDING_HUMAN_REVIEW`
 - 验证：
