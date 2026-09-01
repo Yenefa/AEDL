@@ -21,6 +21,7 @@
 - 软件基线（2026-09-01 顺序实测）：Sandbox 272/272 OK（1 skip、1 expectedFailure）；主仓库 269/269 OK。该结果不是实体硬件验证。
 - 真实 EDD-001 preflight：`BLOCKED` / 7 findings，缺本地器件资料、`EDD-001.POWER`、compiler registration 与 independent verifier coverage；保持失败关闭。
 - 板子：M2 ESP32-C3+SHT30；D1 极性已修、U3 当前仍为 C235316。既有记录为 board_review `manufacturing_release=false`、datasheet_contract 32 项待人工签发；本治理批次未重跑会改写 Evidence 的完整 gate runner，也未执行制造签发。
+- **M2 物理线冻结（2026-09-01 人工裁决）**：不再下单/重签/换料；U3（ME6211C33R5G）挂账封存，datasheet_contract 的 M2 阻断记录为已知冻结状态；M2 的验证机制（门禁链/契约/教训库）继续作为 Sandbox 地基保留。
 - 北极星：正确交付实体板卡（M2 教训 → sandbox 手段 → EDD-001 兑现板）；叙事锚点见 Issue #15。
 - 人工队列：Review/merge Issue #1 的 Draft PR；裁决 U3 路线；datasheet 签发、board_review 重签、下单与实体 C 级验证继续独立保留。
 - 检索入口：`docs/ID_MAP.md`；协作规范：`docs/COLLABORATION.md`；Wave 4：`docs/WAVE4_TASKS_20260901.md`；RAG 取舍：`docs/knowledge/RAG_DECISION.md`。
