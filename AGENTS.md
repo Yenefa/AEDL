@@ -90,6 +90,43 @@ AIC Score Target：已知评分项 / NONE / UNKNOWN
 
 并执行 `gates/learning_gate.py` 已提升的项目经验控制。历史交付物彼此一致、ERC/DRC 通过、自动板级评审通过，都不能替代独立数据手册合同、当前源文件哈希绑定、具名人工制造签发或回件后的实体 C 级验证。
 
+## 2.2 变更控制（Change Containment）——所有实质任务必做
+
+> 总原则：**Read broadly, write narrowly, verify explicitly, escalate on boundary change.**
+> （广泛读取，窄域修改，显式验证，触碰边界即升级。）
+
+开工前完成 **Impact Analysis** 并随任务记录输出：
+
+```text
+Impact Analysis
+
+Direct modifications:   // 本次直接修改的文件
+Potentially affected:   // 可能受影响的模块/文件
+Explicitly not touched: // 明确不碰的范围
+Risk: LOW / MEDIUM / HIGH
+```
+
+开工前填写 **Change Budget**（可并入 Issue 或任务记录）：
+
+```text
+change_budget:
+  expected_files: N
+  expected_modules: [module-a, module-b]
+  cross_module: false              # 是否跨模块
+  contract_change: false           # 是否改公共契约/schema
+  evidence_semantics_change: false # 是否改变 Evidence 语义
+```
+
+**越界规则**：实际改动超出预算（文件数/模块数显著超预期，或上述任一布尔项从 false 变 true）时：
+
+```text
+STOP
+→ 重做 Impact Analysis
+→ 扩 Scope 需人类确认
+```
+
+禁止"顺手"继续扩大范围（目标优先级：正确性 > 范围控制 > 可验证性 > 可追溯性 > 最小改动）。
+
 ---
 
 # 3. Git / GitHub 规则
