@@ -86,7 +86,7 @@ GitHub 模板：`.github/ISSUE_TEMPLATE/task.md`、`.github/PULL_REQUEST_TEMPLAT
 
 - 仓库为 private；2026-09-01 对 `master` 与协作基线查询 branch protection/rulesets 均返回 403，提示需升级套餐或公开仓库。
 - 在许可证、第三方再分发与公开内容边界未完成前，**不得为了分支保护把仓库改成 public**。
-- 当前所有“禁止直推、必须另一人 Review”均为程序性约束。项目负责人负责执行；AI 不得把未受 GitHub 强制的规则描述成已技术锁定。
+- 当前所有“禁止直推”“必须另一名真人 Review”等要求均属于协作流程纪律，由 Yenefa 与 Percy 在各自操作及 Merge 决策中共同执行；AI 不得把未受 GitHub 技术强制的规则描述成已技术锁定。
 - 若套餐或可见性变化，先建立最小 ruleset（禁止 force-push、要求 PR、至少 1 名真人 Review），再更新本节。
 
 ## 0.7 主仓 ↔ 实验/Evidence 卫星仓
