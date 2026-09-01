@@ -6,7 +6,7 @@
   "errors": [],
   "tool": "jlcpcb 0.1.0",
   "bom": "gates/bom/bom_v1.json",
-  "bom_sha256": "3f58a42adb72329fdbf33782f33418beb0383103dd671737e4a0d1071b5f296c",
+  "bom_sha256": "e68809e55c9b1ea8fad3ae6f7dcf544d011c12ef69b98d16cd80e6f89ba65952",
   "parts": [
     {
       "lcsc": "C15850",

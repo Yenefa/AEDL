@@ -118,3 +118,44 @@
 - 是否可复现：PARTIAL（native 依赖记录的本地工具链；Wokwi 还依赖网络、凭据和配额）。
 - 已知限制：Wokwi 不是实体硬件；外设是逻辑抽象；候选补丁为预设集合，不是 LLM 生成；未做并发或配额 Benchmark。
 - 人工核验：`PENDING_HUMAN_REVIEW`
+
+## EVID-20260901-003 — GH-20 LF 字节基线收口（双平台同一测试集）
+
+- 日期：2026-09-01
+- 对应主张：LF 声明哈希的文件在 Windows 与 CI/Linux 检出同一字节基线；原 3 个
+  CRLF-pinned 测试与 10 个 LF-pinned 哈希绑定在同一测试集内双平台全过，CI 不再
+  需要平台排除（`excluded_checks` 为空）。
+- 关联模块：`.gitattributes`（选择性 eol=lf / eol=crlf）、`delivery/manifest_v1.json`
+  （文本绑定重冻结）、`tests/fixtures/board_review/golden_minimal.json`（LF 基线重生成）、
+  `notes/m2-evidence-reset/generated/bom_stock_current.json`（bom_sha256 声明刷新）、
+  `tools/dev_gate.py`、`.github/workflows/ci.yml`、`gates/contracts/**` 与
+  `src/hardware/edd001-board/evidence/contracts/**`（仅 checkout 表示规范化，git 字节零变化）
+- 关联 AI Usage：AI-20260901-011
+- 关联 ADR：ADR-011；GitHub Issue #20（Tasks 1-5+9）
+- 测试/实验：RED→GREEN 双平台回归。RED：LF 工作树（模拟 CI）上 frozen_golden /
+  delivery_manifest_hash / bom_stock_evidence 失败，Windows 上 learning_gate /
+  run_gates / 8 个 sandbox EDD-001 绑定失败；GREEN：修复后双平台同一测试集全过。
+- 环境：Windows（py -3 = 3.9.13；uv 0.11.32；git 2.54）；LF 工作树以
+  `core.autocrlf=false` 检出模拟 Linux/CI。
+- 执行命令：
+  - `py -3 -S -m unittest discover -s tests`（LF 工作树）→ 282/282 OK
+  - `py -3 -m tools.dev_gate --envelope tasks/GH-20.yaml`（Windows）→ PASS exit 0；
+    main 282 OK；sandbox 272 OK（1 skip、1 expectedFailure）；secret_scan PASS；
+    scope_check PASS；excluded_checks 空
+- Runs：RED 捕获每侧 1 轮；修复后 LF 工作树全量 1 轮 + Windows 全量 2 轮（含中间
+  gerber 双 CRLF 事故修复轮）。
+- 结果：manifest 8 处文本绑定 + 11 个 gerber CRLF 绑定 + golden + FROZEN_PROTOCOL +
+  7 处 fault-injection 绑定 + bom_stock 声明全部对齐；M2 Evidence 仓库字节零变化
+  （所有 blob 为 LF，工作树规范化 diff-free）；EDD-001 preflight 保持 BLOCKED。
+- 原始证据：`delivery/manifest_v1.json`、`tests/fixtures/board_review/golden_minimal.json`、
+  `notes/m2-evidence-reset/generated/bom_stock_current.json`；gate receipt 存于仓库外
+  （gh20-receipt.json）。
+- 是否可复现：YES（本地 Windows ✅、LF 工作树模拟 ✅；GitHub 双平台实际矩阵
+  ubuntu ✅ / windows ✅，PR #21 run 33557715205 全绿——同一测试集、零平台排除）。
+- 已知限制：矩阵首跑在 windows leg 暴露三个 runner 特有根因并已修复——
+  ① setup-uv 仓库根 .venv 遮蔽 `python`（主套件误跑 3.11）；② cp1252 控制台导致中文
+  print UnicodeEncodeError；③ TEMP 经 8.3 短名（RUNNER~1）/junction 与混合解析层级
+  （abspath vs realpath）导致路径误判（sandbox is_within + 两处测试断言，已改为双端
+  realpath，含 junction 回归测试）。修复后双平台全绿。不构成实体硬件验证；
+  `notes/m2-evidence-reset/generated/**` 除 bom_stock_current.json 声明刷新外零字节变化。
+- 人工核验：`PENDING_HUMAN_REVIEW`

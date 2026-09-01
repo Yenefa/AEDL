@@ -2244,3 +2244,347 @@ test_run_gates`：**115/115 OK**（覆盖问题 1 courtyard 四边越界、问�
 
 - 最终状态：
   - `PENDING_HUMAN_REVIEW`
+
+## AI-20260901-010
+
+- 日期：2026-09-01
+- 任务名称：Control Plane 最小切片落地 — Task Envelope + Admission + 单一 Development Gate + Escalation 协议（ADR-011）
+- 模块/路径：
+  - `tools/__init__.py`（新）
+  - `tools/envelope.py`（新）
+  - `tools/admit.py`（新）
+  - `tools/dev_gate.py`（新）
+  - `tests/test_control_plane_tools.py`（新）
+  - `docs/ENVELOPE_EXAMPLE.yaml`（新）
+  - `docs/CONTROL_PLANE.md`（新）
+  - `AGENTS.md`（§2.3 Admission/Escalation、§3.1、§12）
+  - `.github/ISSUE_TEMPLATE/task.md`（Base / Dependencies / Escalation 三节）
+  - `.github/workflows/ci.yml`（单一 dev-gate job；Verification Policy Change）
+  - `docs/compliance/DECISIONS.md`（ADR-011）
+  - `notes/open_source_intake/_CONTROL_PLANE_DONOR_TEMPLATE.md` + `gemini-cli-control-plane.md`（同工作单元后续补充，控制面 donor 七栏模板首实例）
+  - 本台账本条目
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash`（运行环境提供）
+
+- AI 参与类型：
+  - [x] GENERATE_CODE
+  - [x] GENERATE_TEST
+  - [x] DOCUMENT
+  - [x] ADVISE
+
+- 任务目标：
+  - 把架构讨论收敛出的最小切片落进 AEDL：Envelope → Admission → Development Gate → Escalation；本地 Agent、真人、CI 同一验证入口；不建平台、不引入第三方依赖（stdlib only）。
+
+- AI 实际产出：
+  - 三个工具模块（envelope 解析 / admit fail-closed / dev_gate 单一门禁 + JSON receipt + exit 0/1/2），13 个单测，envelope 模板与 CONTROL_PLANE 文档，AGENTS.md §2.3 协议，task.md 模板扩展，ci.yml 收敛为单一入口。
+
+- 团队自主部分：
+  - Yenefa 定稿吸收顺序（1 Envelope/Admission → 2 Gate → 3 Candidate→Promotion → 4 Escalation → 5 Derived+Provenance → 6 Context Routing）与四句话原则；AI 负责实现、测试与真实验证，不做策略裁决。
+
+- 人工审核：
+  - 状态：`PENDING_HUMAN_REVIEW`（ci.yml 变更属 Verification Policy Change，SHARED 级，需 Yenefa + Percy 双人确认；ADR-011 同批）
+
+- 验证（全部真实运行）：
+  - `py -3 -m unittest discover -s tests -p "test_control_plane_tools.py" -v` → 13/13 OK。
+  - `py -3 -m tools.admit --envelope docs/ENVELOPE_EXAMPLE.yaml` → BLOCKED exit 1（dirty / 分支不匹配 / 占位 sha / 依赖 unknown，4 条 reasons，fail-closed 演示）。
+  - `py -3 -m tools.admit --envelope ../slice-demo-envelope.yaml` → BLOCKED exit 1（仅 dirty）。
+  - 同命令 `--allow-dirty` → ADMIT exit 0（flag 即升级决策，记录进回执）。
+  - `gh pr view 18 --json state,mergedAt` → `{"state":"MERGED","mergedAt":"2026-09-01T17:38:14Z"}`（依赖核验链路可用）。
+  - `py -3 -m tools.dev_gate --envelope ../slice-demo-envelope.yaml` → FAIL exit 1：syntax / secret_scan / scope_check PASS；main_tests 282 个中 2 个失败（test_learning_gate / test_run_gates，PIT-20260830-001 fixture/input hash mismatch）；sandbox_tests 272 个中 8 个失败（edd001 contract EVIDENCE_HASH/SIZE_MISMATCH ×6、ERROR ×2）。
+  - 基线归因：干净 worktree @ HEAD `18b2381` 复跑 → 主仓库 269 个同样 2 失败；sandbox 同样 8 失败；与本次 10 个文件改动无关。
+  - 根因：proof 声明哈希（2026-08-31T12:25Z 生成）等于 LF 归一化 sha256；Windows CRLF 检出原始字节不同；`.gitattributes` 未对 fixture/contract 设 `eol=lf` → 本地 Windows 必挂、CI/Linux 必过（远端 CI 最近 6 次 run 全绿，一致）。
+  - 结论：主仓库另有 2 个、sandbox 另有 8 个 CRLF-pinned 哈希测试未被既有排除清单覆盖，与 frozen_golden / bom_stock_evidence / delivery_manifest_hash 同类；处置需双人裁决（ADR-011 影响节）。
+
+- 已知限制：
+  - 未 commit / 未 push（无授权）；分支 `feat/control-plane-minimal-slice`（自 `18b2381`），10 个文件改动待人工 Review。
+  - 未修改 gates/、src/、notes/、web/、delivery/ 与任何 Evidence 字节；未运行会重写 Evidence 的 `gates/run_gates.py`；不构成制造签发或实体 C 级验证。
+  - dev_gate 在非 Windows 平台自动排除 3 个已知 CRLF-pinned 测试（receipt excluded_checks 记录原因）；新增发现的 2+8 个 CRLF 哈希测试的处置未在本切片内决定。
+  - 临时演示文件 `slice-demo-envelope.yaml` / `slice-demo-receipt.json` 位于仓库外（workspace 根），不随仓库提交。
+
+- Compliance：ADR-011；Third-party none；Evidence Index / Fusion Map / Open Outputs / Submission Check 未触发（receipt 是开发验证回执，不登记为正式 Evidence）。
+- AIC Score Target：`NONE`（内部工程工具与治理）
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`
+
+## AI-20260901-011
+
+- 日期：2026-09-01
+- 任务名称：GH-20 碰撞执行 — LF 字节基线收口（Tasks 1-5 + 9）；控制面全流程首次真实运行
+- 模块/路径：
+  - `.gitattributes`（选择性 eol=lf / eol=crlf 契约，替代全局方案）
+  - `delivery/manifest_v1.json`（8 处文本绑定重冻结为 blob 哈希；gerbers 保持 CRLF）
+  - `tests/fixtures/board_review/golden_minimal.json`（LF 基线重生成）
+  - `notes/m2-evidence-reset/generated/bom_stock_current.json`（bom_sha256 声明刷新，Task 2 声明位于 evidence 文件内部）
+  - `tools/dev_gate.py`（移除平台排除，全量测试每平台运行）
+  - `.github/workflows/ci.yml`（dev-gate + sandbox 双平台矩阵）
+  - `tasks/GH-20.yaml`（envelope，新）
+  - `docs/evidence/EVIDENCE_INDEX.md`（EVID-20260901-003）
+  - 本台账本条目
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash`（运行环境提供）
+
+- AI 参与类型：
+  - [x] GENERATE_CODE
+  - [x] GENERATE_TEST
+  - [x] DEBUG
+  - [x] DOCUMENT
+  - [x] ADVISE
+
+- 任务目标：
+  - 用真实 Issue 撞控制面：envelope → admit（首次真实 BLOCKED）→ 升级决策 → 修复 → gate → receipt；执行 GH-20 Tasks 1-5 + 9，Tasks 6-8（SS34/AP63203 运行时对齐）明确 out-of-scope。
+
+- AI 实际产出：
+  - 控制面首次真实运行：`python -m tools.admit --envelope tasks/GH-20.yaml` → BLOCKED（repo dirty，16 entr(y/ies)）→ `--allow-dirty` 升级 → ADMIT exit 0（flag 记录进回执）。
+  - 诊断：全部 13 个哈希绑定按行尾基线分类（3 CRLF-pinned + 10 LF-pinned）；`ALGORITHM_REVISION` 绑定 `tools/board_review.py` 字节；delivery ZIP 存储 CRLF gerber 载荷（文件与 ZIP 条目必须同字节）。
+  - 修复：选择性 `.gitattributes`（LF 声明文件 eol=lf；gerbers eol=crlf；明确二进制）；manifest 文本绑定重冻结为 blob 哈希；golden 在 LF 基线重生成；bom_stock 声明刷新；dev_gate 移除排除；ci.yml 双平台矩阵；工作树字节规范化（`git add --renormalize` 解决 eol 属性幻影 M）。
+  - 双平台验证：LF 工作树（模拟 CI）282/282 OK；Windows 全量 gate PASS exit 0（main 282 OK、sandbox 272 OK、secret_scan/scope_check PASS、excluded_checks 空）。
+
+- 团队自主部分：
+  - Yenefa 在门禁暴露问题 4 分钟后创建 GH-20（P0，含 SS34/AP63203 冻结仲裁与 9 个任务），assignee=Yenefa；本碰撞只执行 Tasks 1-5+9。
+  - 范围澄清（升级记录）：a) `tools/dev_gate.py` 不在 GH-20 允许列表（Issue 早于 dev_gate 创建），Task 4"移除 CI 排除"要求同步改它；b) Task 2 的 bom_stock 声明位于 `notes/m2-evidence-reset/generated/bom_stock_current.json` 内部，刷新声明（语义不变）而非语义变更；c) 全局 `* text=auto eol=lf` 方案被否决——仓库 blob 混合行尾 + Task 3 禁止改写 Evidence 字节，改选择性属性。
+
+- 人工审核：
+  - 状态：`PENDING_HUMAN_REVIEW`（SHARED：ci.yml、gates/contracts 表示处理、manifest 声明；Verification Policy Change 需 Yenefa + Percy 双人确认）
+
+- 验证（全部真实运行）：
+  - admit：BLOCKED（dirty 16）→ --allow-dirty → ADMIT exit 0。
+  - LF 工作树 `py -3 -S -m unittest discover -s tests` → 282/282 OK（修复前 RED：3 失败）。
+  - Windows `py -3 -m tools.dev_gate --envelope tasks/GH-20.yaml` → PASS exit 0；
+    main_tests 282 OK（含 3 个原排除测试 + 13 个控制面测试）；sandbox_tests 272 OK
+    （1 skip、1 expectedFailure；原 8 个 EDD-001 CRLF 失败已修复）；secret_scan 302
+    文件 PASS；scope_check 20 文件全部在 envelope 内；excluded_checks 空。
+  - gerber 对齐：worktree == ZIP 条目字节 == 声明哈希（11/11）。
+  - M2 Evidence 仓库字节零变化：所有 blob LF，工作树规范化 diff-free。
+
+- 已知限制：
+  - 未 commit / 未 push（无授权）；分支 `feat/control-plane-minimal-slice`，20 个变更条目（10 修改 + 10 新增）。
+  - CI windows runner 的 checkout 是否按属性检出需矩阵实际运行确认（本地 git 2.54 对 `eol=crlf` checkout 不可靠，本地用显式字节规范化保证；actions/checkout 默认 autocrlf=false 应按属性检出）。
+  - Tasks 6-8（SS34/AP63203 运行时收集、manifest 缺失项对齐、Issue #2 更新）未执行，留给下一次碰撞。
+  - 未运行会重写 Evidence 的 `gates/run_gates.py`；不构成制造签发或实体 C 级验证。
+
+- Compliance：ADR-011（关联）；EVID-20260901-003（字节基线证据）；Third-party none；Fusion Map / Open Outputs / Submission Check 未触发。
+- AIC Score Target：`实现完成度与可验证效果`（GH-20 声明的评分项；软件/Evidence 完整性，非硬件证据）
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`
+
+## AI-20260901-012
+
+- 日期：2026-09-01
+- 任务名称：碰撞复盘两刀落地 — Exception 预授权模型 + Hash Domain 概念
+- 模块/路径：
+  - `tools/envelope.py`（exceptions 机器字段 + 合法性校验）
+  - `tools/admit.py`（check_flag_exception：flag 无 envelope 例外 = BLOCKED，cannot self-authorize；receipt `exceptions_used`）
+  - `tests/test_control_plane_tools.py`（+4 测试）
+  - `docs/ENVELOPE_EXAMPLE.yaml`（exceptions 两种形式示例）
+  - `tasks/GH-20.yaml`（补录 GH-20 实际使用的事后授权记录）
+  - `docs/CONTROL_PLANE.md`（§4 Exception 预授权；§5 Hash Domain + 四个 Review 事实）
+  - 本台账本条目
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash`
+- 参与标签：GENERATE_CODE、GENERATE_TEST、DOCUMENT、ADVISE
+- 任务目标：Yenefa 复盘 GH-20 碰撞提出两刀：a) `--allow-dirty` 等 flag 不能由 Agent 自己授权（否则只是 bypass with audit）；b) 每个 SHA256 必须声明绑定的 byte domain（git_blob / working_tree / archive_entry / generated_bytes）。
+- AI 实际产出：
+  - envelope 新增 `exceptions:` 机器字段，两种合法形式：permitted+authority（预授权）与 granted_by+decision_ref（事后批准）；非法形式 parse error。
+  - admit 对三个 flag 强制校验：无 envelope 例外 → BLOCKED（cannot self-authorize）；有例外 → 放行并把授权来源写入 receipt `exceptions_used`。
+  - GH-20 envelope 补录实际授权记录（granted_by: Yenefa，decision_ref: 在席 go-ahead / AI-20260901-011）。
+  - CONTROL_PLANE.md 新增 Hash Domain 章节：当前 8 组绑定的域图 + push 前四个核查命令 + 设计规则（blob/worktree/zip 差异必须是有意不同）+ manifest schema 暂不加字段的 Trigger。
+- 团队自主部分：两刀的设计（预授权 vs 强同步 ASK；Hash Domain 概念）由 Yenefa 提出；AI 落地实现与验证。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 验证（全部真实运行）：
+  - `py -3 -m unittest discover -s tests -p "test_control_plane_tools.py"` → 17/17 OK。
+  - `py -3 -m tools.admit --envelope tasks/GH-20.yaml --allow-dirty` → ADMIT exit 0；`exceptions_used.allow_dirty` 记录授权来源。
+  - `py -3 -m tools.admit --envelope docs/ENVELOPE_EXAMPLE.yaml --allow-dirty` → BLOCKED exit 1（cannot self-authorize）。
+  - 哈希域四事实复核：`check-attr` → text=set/eol=crlf；blob LF（sha c70011a5…）；worktree==ZIP 条目（CRLF，d59e7818…）== manifest 声明。
+- 已知限制：
+  - manifest schema 未增加 `hash_domain` 字段（会破坏 validate_delivery_manifest 精确字段集校验）；Trigger：新绑定类型或 packaging 变化时先加字段再扩展校验。
+  - dirty 归因 snapshot（admission 时记录 dirty_before，gate 对比 dirty_after）未实现；Trigger：第一次出现 existing dirty 与 task change 无法归因时。
+  - 未 commit / 未 push。
+- Compliance：ADR-011 关联；Third-party none。
+- AIC Score Target：`NONE`（控制面机制加固，不强行关联评分项）
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`
+
+## AI-20260901-013
+
+- 日期：2026-09-01
+- 任务名称：Authority 三级模型 + TOCTOU receipt binding + Gemini CLI 源码深潜接收
+- 模块/路径：
+  - `tools/admit.py`（receipt 增加 `envelope_sha256`，绑定 admission 时的控制面状态）
+  - `tools/dev_gate.py`（`--admit-receipt` + `binding_check`：envelope 在 admission 后变更 → FAIL → re-admit；compileall `-x` 排除 .venv/.pio/node_modules——uv 虚拟环境误伤修复）
+  - `tests/test_control_plane_tools.py`（+3 binding 测试）
+  - `docs/CONTROL_PLANE.md`（§4 Authority 三级模型；§3 binding_check；§7 碰撞记录 Run Log）
+  - `tasks/GH-20.yaml`（授权注明 historically reconciled）
+  - `notes/open_source_intake/gemini-cli-policy-deepdive-2026-09-01.md`（subagent 源码级深潜产出，131 行；后重构为 162 行，Authority Provenance 独立小节）
+  - `docs/CONTROL_PLANE.md`（L2 命名 Promotion-bound Authority；Policy/Authority/Integrity 三分；Run 001 状态 + 设计冻结）
+  - 本台账本条目
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash` + 后台 subagent（Gemini 深潜）
+- 参与标签：GENERATE_CODE、GENERATE_TEST、RESEARCH、DOCUMENT、ADVISE
+- 任务目标：Yenefa 指出最大剩余问题——authority 如何被机器证明（L1 declared / L2 git provenance / L3 external）与 receipt TOCTOU（admission 后 envelope 变更使旧 receipt 失效）；并要求 Gemini CLI 源码深潜 + authority provenance 问题。
+- AI 实际产出：
+  - TOCTOU 绑定：admit receipt 绑定 envelope sha256；gate `--admit-receipt` 校验未变，变更 → FAIL + re-admit；单测 3 个；端到端演示（真实 envelope 通过、篡改副本 BLOCK）。
+  - Authority 三级模型文档化：L1 declared（当前，措辞准确，不得写成 verified）、L2 git provenance（下一步）、L3 外部验证（不做）；Run 001 定性为 historically reconciled，Run 002 起 authority-before-consumption。
+  - Gemini 深潜（subagent）：scheduler 插入点（BeforeTool → checkPolicy → hook-ask 覆盖 → DENY/确认环）；headless ASK→throw（fail-closed）但 interactive 无命中默认 ASK；priority = tier_base + toml/1000 首个命中即赢；#18186 仍 OPEN（p3，管线在、加载被禁，workaround=User/Admin 目录）；畸形 policy fail-OPEN 与 hook-ask 无条件覆盖 DENY 为 AEDL 反面教材。第 7 问（authority provenance）已追加给 subagent 补节。
+  - 全量 gate 中发现并修复：uv 创建的 `sandbox_runtime/.venv` 导致 compileall 误入虚拟环境 → `-x` 排除。
+- 团队自主部分：三级模型与 TOCTOU 设计由 Yenefa 提出；AI 落地 + 演示 + 深潜执行。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 验证（全部真实运行）：
+  - `py -3 -m unittest discover -s tests -p "test_control_plane_tools.py"` → 20/20 OK。
+  - admit GH-20 → receipt `envelope_sha256=cbe9c1c4…`；篡改 envelope 副本后 `check_binding` → `TOCTOU: envelope changed after admission…re-admit`。
+  - 全量 gate（`--admit-receipt`）→ PASS exit 0：syntax / main_tests 289 OK / sandbox 272 OK / secret_scan / scope_check（22 文件在 envelope 内）/ binding_check（cbe9c1c4 绑定）全 PASS；excluded_checks 空。最终 receipt：`gh20-receipt-final.json`（仓库外）。
+- 已知限制：
+  - L2/L3 未实现（Trigger 挂起）；manifest `hash_domain` 字段未加（Trigger 挂起）；dirty 归因 snapshot 未实现（Trigger 挂起）。
+  - Gemini deep-dive 第 7 问（authority provenance）已完成：Q7 结论熔入 CONTROL_PLANE §4（PolicyIntegrityManager = L2 失败原型；L2 锚 = human-promoted git 状态；拒绝自管 pin / headless auto-accept / 无 provenance 批准）。
+  - 未 commit / 未 push。
+- Compliance：ADR-011 关联；Third-party none。
+- AIC Score Target：`NONE`
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`
+
+## AI-20260901-014
+
+- 日期：2026-09-01
+- 任务名称：Run 001 Review REQUEST_CHANGES 三项整改落地
+- 模块/路径：
+  - `.github/workflows/ci.yml`（删除独立 sandbox-tests job → 单一 dev-gate job，setup-uv 提供 uv，sandbox 并入 gate 只跑一次；修复"双重验证入口"）
+  - `docs/evidence/EVIDENCE_INDEX.md`（EVID-20260901-003 可复现 YES → PARTIAL / PENDING_CI_MATRIX，双平台全绿后晋升 YES）
+  - `docs/compliance/DECISIONS.md`（ADR-011 收敛到最终 candidate 语义：机器字段含 exceptions；无平台排除；flag 无 authority 需 envelope 预授权；binding_check；影响节更新；ADR 不做 changelog）
+  - `docs/compliance/AI_USAGE_LOG.md` + DECISIONS（本人条目的"项目负责人"→"Yenefa"，6 处；历史记录未动）
+  - 本台账本条目
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash`
+- 参与标签：REFACTOR、DOCUMENT
+- 任务目标：按 Run 001 正式 Review（REQUEST_CHANGES）收掉三个 blocker：① CI 双跑 sandbox 旁生第二验证入口；② EVID 过早 YES（desired 冒充 observed）；③ ADR-011 落后于第三代实现；另修称谓（项目负责人→Yenefa）。
+- AI 实际产出：如上模块。附带生成 `run001-review-new-files.md`（11 个新增文件全内容 bundle，78KB，仓库外）供源码 Review。
+- 团队自主部分：Review 结论与三项整改要求由 Yenefa 提出；AI 执行修复。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 验证：
+  - `py -3 -m unittest discover -s tests -p "test_control_plane_tools.py"` → 20/20 OK。
+  - `git diff --check` → exit 0；工作树 22 个条目不变（本轮无 tools/ 代码变更，本地 gate 结果不受影响）。
+  - CI 单 job 形态待 push 后实际矩阵验证（EVID 已同步降级为 PENDING_CI_MATRIX）。
+- 已知限制：未 commit / 未 push；CI 实际运行待授权后执行。
+- Compliance：ADR-011（已收敛）；Third-party none。
+- AIC Score Target：`NONE`
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`
+
+## AI-20260901-015
+
+- 日期：2026-09-01
+- 任务名称：Run 001 源码 Review 整改（5 blockers + 2 一致性 + 4 文档 drift；无新原语）
+- 模块/路径：
+  - `tools/envelope.py`（注释规则：仅空白前的 `#` 为注释，`GH-20#comment-1` 逐字节保留；scope 白名单 fail-closed：空 allowed_paths = 零写权限）
+  - `tools/admit.py`（checked git primitive：`git_checked` 非 0 抛 GitCommandError，`git_ok` 按 return code——修复 `cat-file -e` 成功时 stdout 为空被误判"不在历史"的 bug；`--skip-deps` 授权后 dependency status=waived）
+  - `tools/dev_gate.py`（binding_check 完整化：schema=admit.v1 + verdict=ADMIT + exit=0 + envelope hash + admitted HEAD==current HEAD；有 envelope 无 receipt = FAIL；聚合 broken/2 优先；sandbox 为 required check，uv 缺失 = GATE_BROKEN）
+  - `tests/test_control_plane_tools.py`（+10 adversarial tests：cat-file rc、git 失败非 clean、BLOCKED receipt binding FAIL、无 receipt FAIL、HEAD moved FAIL、空 allowed=零写、aggregate broken/2、uv 缺失 error、skip_deps waived、decision_ref 逐字节；30/30）
+  - `docs/CONTROL_PLANE.md`（机器字段四→五；flag 措辞对齐 §4 authority；Hash Domain 公式修正 git_blob(LF) ≠ working_tree(CRLF) == archive_entry(CRLF)）
+  - `tasks/GH-20.yaml`（goal/允许注释改选择性措辞；forbidden_paths 移除 human prose → escalation.human_scope_notes）
+  - 本台账本条目
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash`
+- 参与标签：REFACTOR、GENERATE_TEST、DEBUG、DOCUMENT
+- 任务目标：按源码 Review REQUEST_CHANGES 收掉 5 个硬 blocker（git rc 未检查 / binding 只验 hash 不验 ADMIT / 空 allowed fail-open / scope 只看 diff HEAD / GATE_BROKEN 聚合缺失 + uv 暗门）+ parser provenance + skip_deps 语义裂缝 + 文档 drift；不新增任何控制原语。
+- AI 实际产出：如上模块。全部为 correctness/fail-closed 修补 + adversarial 测试。
+- 团队自主部分：Review 发现与修复要求由 Yenefa 给出（含 cat-file 复现）；AI 执行修复与测试。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 验证（全部真实运行）：
+  - `py -3 -m unittest discover -s tests -p "test_control_plane_tools.py"` → 30/30 OK（含 10 个新 adversarial）。
+  - drift 实弹：envelope base=HEAD~1（历史存在）+ 授权 allow_drift → baseline status ok（"baseline drift ... (allowed)"，不再误报"not in repository history"）；decision_ref=GH-20#comment-1 逐字节保留。
+  - 全量 gate（v2 admit receipt）→ 待最终 receipt（后台）。
+- 已知限制：
+  - 未 commit / 未 push；CI 双平台矩阵待授权后运行。
+  - L2/L3、hash_domain schema、dirty 归因、参数级重验、policy tiers 仍挂 Trigger（设计冻结生效中）。
+- Compliance：ADR-011（已收敛）；Third-party none。
+- AIC Score Target：`NONE`
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`
+## AI-20260901-016
+
+- 日期：2026-09-01
+- 任务名称：Review Bundle 确立为 AECP 特色（本地独立文件夹 + 外部 AI Review 使用说明）
+- 模块/路径：
+  - 仓库外 `review-bundles/run-001/`（新建：run001-review.md / run001-review-new-files.md /
+    run001-source-diff.patch / run001-review-delta.md / gh20-admit-v2.json / gh20-receipt-v2.json）
+  - `docs/CONTROL_PLANE.md`（§8 Review Bundle：定位、存放与命名、使用方法、铁律）
+  - 本台账本条目
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash`
+- 参与标签：DOCUMENT
+- 任务目标：Yenefa 判定 review bundle 设定为 AECP 天才特色，坚决保留并写明使用方法：
+  bundle 放本地独立文件夹，方便手动发给对话式 AI（如 GPT 5.6 Sol，思考强度高）做外部 Review。
+- AI 实际产出：建 `review-bundles/` 文件夹并归位全部 run-001 审查产物；CONTROL_PLANE §8 写入
+  定位/存放/使用/铁律（bundle 是流程产物：任何需人工 Review 的交付必须附带，
+  无 bundle 不进入人工 Review；补丁可回溯到 review 时快照）。同步 AGENTS.md §3.6/§12。
+- 团队自主部分：特色判定与使用要求由 Yenefa 提出；AI 执行落盘。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 验证：文件移动后路径核对；仓库外文件不影响 `git diff --check`。
+- 已知限制：未 commit / 未 push。
+- Compliance：Third-party none。
+- AIC Score Target：`NONE`
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`
+
+## AI-20260901-017
+
+- 日期：2026-09-01
+- 任务名称：Run 001 落钉 — commit 5b38a2e + PR #21 + 首次真实 drift BLOCK 事件
+- 模块/路径：本台账本条目；commit `5b38a2e`（22 文件，prettier 钩子格式化后提交）；
+  PR https://github.com/Yenefa/AEDL/pull/21（draft，触发双平台 CI 矩阵）
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash`
+- 参与标签：DOCUMENT
+- 任务目标：按 CONDITIONAL APPROVE 落第一颗钉子：两个文本修正（CONTROL_PLANE 示例补 exceptions；
+  ci.yml 注释改为 task-context checks 语义）→ prettier 钩子修复（全局 hooksPath 的 pre-commit 检查
+  全部暂存 md/json/yml）→ commit → push → PR → CI。
+- AI 实际产出：
+  - commit `5b38a2e`：22 文件 +2465/-44，工作树干净；提交信息 [AI-20260901-010..016]。
+  - push origin/feat/control-plane-minimal-slice；Draft PR #21（base master）。
+  - **首次真实 drift BLOCK（AECP 抓到自己的 commit）**：commit 后 HEAD=5b38a2e ≠ envelope
+    base 18b2381 → admit BLOCKED（baseline drift；envelope 无 allow_drift 例外 → Agent 无法
+    自授权，fail-closed 正确）；gate binding_check 拒绝 BLOCKED receipt（"a BLOCKED receipt
+    cannot bind"）——源码 Review 的 adversarial 场景在真实环境复现。v2 的 admit+gate（binding@
+    18b2381，PASS）覆盖 review 后内容；committed 字节由 PR CI 验证。
+- 团队自主部分：CONDITIONAL APPROVE 与"commit 不是 promotion"的定性由 Yenefa 给出。
+- 人工审核：`PENDING_HUMAN_REVIEW`（PR #21）
+- 验证：
+  - `git diff --check` exit 0；单测 30/30 OK；prettier --check RC=0。
+  - v2 receipt：admission bound（envelope 1fcde0ad, HEAD 18b2381）PASS（commit 前）。
+  - drift 事件 receipt 归档：gh20-admit-v3-drift-blocked.json / gh20-receipt-v3-binding-rejected.json（review-bundles/run-001/）。
+  - CI：PR #21 @ 5b38a2e，ubuntu + windows 矩阵运行中（watcher 后台）。
+- 已知限制：CI 结果待观察；EVID-20260901-003 保持 PARTIAL 直至双平台全绿。
+- Compliance：ADR-011 关联；Third-party none。
+- AIC Score Target：`实现完成度与可验证效果`（GH-20）
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`
+
+## AI-20260901-018
+
+- 日期：2026-09-01
+- 任务名称：GH-20 双平台矩阵首跑 — 三个 Windows runner 根因 + 修复（commit 3e5f2d9）
+- 模块/路径：
+  - `sandbox_runtime/src/aedl_sandbox/policy/paths.py`（is_within 双端 realpath：root 与 target 同一解析层级）
+  - `tests/test_run_gates.py`（isolated-dir 断言改为 resolve 后比较）
+  - `sandbox_runtime/tests/policy/test_paths.py`（新增 junction 回归测试）
+  - `.github/workflows/ci.yml`（AEDL_PYTHON 钉死 setup-python 路径；PYTHONIOENCODING/PYTHONUTF8）
+  - 本台账本条目
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash`
+- 参与标签：DEBUG、REFACTOR、GENERATE_TEST、DOCUMENT
+- 任务目标：PR #21 双平台矩阵 ubuntu ✅ / windows ❌（main 1 fail+4 errors；sandbox 24 fail+4 errors）——收掉三个 Windows runner 特有根因。
+- 三个根因（全部本地 junction 复现验证）：
+  1. **解释器被 venv 遮蔽**：setup-uv 在仓库根建 .venv（3.11）并设 VIRTUAL_ENV，`AEDL_PYTHON=python` 解析到 3.11 → 主套件跑错解释器（traceback 指向 hostedtoolcache 3.11.9）。修复：钉死 setup-python 路径。
+  2. **cp1252 控制台**：Windows runner 默认 cp1252，board_review 打印中文 → UnicodeEncodeError。修复：PYTHONIOENCODING=utf-8 + PYTHONUTF8=1。
+  3. **TEMP 背后的 junction + 混合解析层级**：is_within 对 root 只 abspath、对 target 用 resolve()（realpath）——junction 一展开 target 变成真实路径而 root 不变 → 简单相对路径全部误判 PATH_ESCAPE（sandbox 24 失败）与 isolated-dir 断言失败。本地用 mklink /J 复现同款失败后修复（双端 realpath）+ junction 回归测试。
+- 团队自主部分：矩阵验证为 GH-20 Task 5 既定目标；根因排查与修复由 AI 执行。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 验证（全部真实运行）：
+  - junction TEMP 下：sandbox FileWrite 42/42、run_gates 23/23、test_paths 2/2 全过（修复前同条件成片失败）。
+  - 无 junction 回归：控制面 30/30、主套件 299 OK、sandbox 274 OK。
+  - commit 3e5f2d9 已 push；CI 重跑中。
+- CI 结果：第三次重跑（760836b）双平台全绿（ubuntu ✅ / windows ✅，run 33557715205）；
+  第二次重跑（3e5f2d9）后 sandbox 从 28 失败降到 2，暴露 8.3 短名根因（RUNNER~1 vs
+  runneradmin），commit 760836b 修复 test_workspace 两处断言（双端 resolve）。
+- Compliance：ADR-011 关联；Third-party none。
+- AIC Score Target：`实现完成度与可验证效果`（GH-20）
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`

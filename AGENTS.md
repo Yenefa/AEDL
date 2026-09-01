@@ -129,6 +129,47 @@ STOP
 
 - 任务未声明可写的路径视为 **FOREIGN（默认只读）**；确需修改先扩 Scope 并获对应 Owner 确认（权限语义见 `docs/COLLABORATION.md` §0.8）。
 
+## 2.3 Admission 与 Escalation 协议（Control Plane 最小原语）
+
+实质任务存在 Task Envelope（`tasks/GH-<N>.yaml`，模板见 `docs/ENVELOPE_EXAMPLE.yaml`，说明见 `docs/CONTROL_PLANE.md`）时，开工前必须执行：
+
+```bash
+python -m tools.admit --envelope tasks/GH-<N>.yaml
+```
+
+Admission **fail-closed**：BLOCKED 时 STOP，不得自行变通。升级协议：
+
+```text
+STOP → Explain → Escalate → Human Decision → Record → Resume / Reject
+```
+
+BLOCKED 记录模板（随 Issue/PR 线程留存，GitHub 是 event store）：
+
+```text
+BLOCKED
+Task: <GH-N>
+Reason: <admission 输出>
+Observed need: <任务实际需要的授权/变更>
+Requested: <expand scope / change baseline / waive check>
+Owner decision: PENDING / APPROVED / REJECTED
+Decision ref: <issue/PR comment 链接>
+```
+
+实质任务结束前执行 Development Gate（本地、CI、人类同一入口）：
+
+```bash
+python -m tools.dev_gate [--envelope tasks/GH-<N>.yaml]
+```
+
+Receipt JSON 是 candidate 的开发验证回执，**不是**正式 Evidence；正式 Evidence 由 `gates/run_gates.py` 产出。Receipt 不晋升任何东西，只有人工 merge 才是 promotion。
+
+```text
+Agent may propose, but not promote.
+Rules may guide, but gates enforce.
+Memory may suggest, but provenance decides.
+Exceptions may escalate, but never silently bypass.
+```
+
 ---
 
 # 3. Git / GitHub 规则
@@ -140,6 +181,12 @@ STOP
 ```bash
 git status
 git branch --show-current
+```
+
+存在 Task Envelope 时（`tasks/GH-<N>.yaml`），先执行 admission 核对 base.sha 与依赖：
+
+```bash
+python -m tools.admit --envelope tasks/GH-<N>.yaml
 ```
 
 需要时查看：
@@ -253,6 +300,8 @@ Evidence IDs
 Known risks / follow-up
 Human review: PENDING_HUMAN_REVIEW
 ```
+
+需人工 Review 的交付必须附带 Review Bundle（`review-bundles/`，见 `docs/CONTROL_PLANE.md` §8）：**无 bundle 不进入人工 Review**。
 
 Agent 可以起草 PR、分析 PR、提出 Review 建议，但不得冒充人工批准。
 
@@ -776,6 +825,7 @@ EVID-...
 - [ ] 已查看 `git status`
 - [ ] 已查看 `git diff`
 - [ ] 无无关修改
+- [ ] 已运行 `python -m tools.dev_gate`（有 envelope 时带 `--envelope`），receipt 已附（如适用）
 
 ### Verification
 
@@ -803,6 +853,7 @@ EVID-...
 - [ ] 分支使用符合规则
 - [ ] Commit / Push 状态如实报告
 - [ ] PR/Handoff 足够人工审核
+- [ ] Review Bundle 已生成（需人工 Review 的交付必须附带，见 CONTROL_PLANE §8）
 - [ ] 状态保持 `PENDING_HUMAN_REVIEW`
 
 ---

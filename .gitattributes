@@ -1,3 +1,33 @@
+# GH-20 LF byte baseline (selective): files whose frozen hashes are LF-based
+# must check out as LF on every platform, so local Windows == CI Linux ==
+# declared hashes. Gerbers must stay CRLF: the committed delivery ZIP stores
+# CRLF payloads and the manifest binds file and ZIP entry to the same bytes.
+gates/contracts/*.json text eol=lf
+src/hardware/edd001-board/evidence/contracts/*.json text eol=lf
+tests/fixtures/schematic_semantics/*.json text eol=lf
+sandbox_runtime/src/aedl_sandbox/protocol.py text eol=lf
+gates/bom/bom_v1.json text eol=lf
+src/hardware/m2-board/m2_board.kicad_pcb text eol=lf
+src/hardware/m2-board/intent_v1.json text eol=lf
+notes/m2-evidence-reset/generated/bom_stock_current.json text eol=lf
+delivery/bom.csv text eol=lf
+delivery/pos.csv text eol=lf
+tools/board_review.py text eol=lf
+delivery/gerbers/* text eol=crlf
+
+# Explicit binaries (untouched bytes)
+*.zip binary
+*.png binary
+*.docx binary
+*.pyc binary
+*.pdf binary
+*.gif binary
+*.jpg binary
+*.jpeg binary
+*.woff binary
+*.ttf binary
+*.ico binary
+
 # Preserve the exact imported AEDL governance sources, including Markdown hard-break spaces.
 AGENTS.md whitespace=-blank-at-eol
 docs/compliance/AEDL_开发记录与AI使用规范_v1.0.md whitespace=-blank-at-eol

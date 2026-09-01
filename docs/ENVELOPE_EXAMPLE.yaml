@@ -1,0 +1,58 @@
+# Task Envelope 模板 — 复制到 tasks/GH-<N>.yaml 并填写。
+#
+# 机器字段（base / dependencies / allowed_paths / forbidden_paths）由
+#   python -m tools.admit --envelope tasks/GH-<N>.yaml   （开工前）
+#   python -m tools.dev_gate --envelope tasks/GH-<N>.yaml（完成前）
+# 解析。其余字段（goal / scope / acceptance / change_budget / escalation）
+# 是给人/Agent 读的自由文本，工具不解释。
+# 完整说明见 docs/CONTROL_PLANE.md。
+
+task: GH-<N>
+
+base:
+  branch: master
+  sha: <approval-time-SHA> # 任务批准时对应的 commit；HEAD 漂移 = BLOCKED
+
+goal: |
+  这个任务要达成的唯一结果。
+
+scope: |
+  允许做什么 / 明确不做什么。
+
+dependencies:
+  - ref: GH-9
+    required_state: merged # merged | closed | open
+  #  - GH-12: closed          # 紧凑写法
+
+allowed_paths:
+  - src/**
+
+forbidden_paths:
+  - gates/**
+  - docs/evidence/**
+  - docs/compliance/**
+
+acceptance: |
+  什么算完成（可验证）。
+
+change_budget:
+  expected_files: N
+  expected_modules: [module-a]
+  cross_module: false
+  contract_change: false
+  evidence_semantics_change: false
+
+exceptions:
+  # 预授权形式：permitted + authority（envelope 本身就是 authority）
+  #  allow_dirty:
+  #    permitted: true
+  #    reason: existing unaccepted work-in-progress
+  #    authority: task-envelope
+  # 事后批准形式：granted_by + decision_ref（人类在 Issue/PR 线程授权后补录）
+  #  allow_drift:
+  #    granted_by: Yenefa
+  #    decision_ref: GH-20#comment-1
+  # 规则：Agent 不能给自己授权。flag 无 envelope 例外 = BLOCKED，不是 escalation。
+
+escalation:
+  owner: Percy

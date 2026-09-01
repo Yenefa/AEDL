@@ -356,8 +356,12 @@ class RunGatesTests(unittest.TestCase):
                 (evidence_dir / "learning_gate_current.json").read_text(encoding="utf-8-sig"))
             self.assertEqual(learning_report["status"], "pass", learning_report["errors"])
             fault_path = Path(learning_report["inputs"]["fault_injection_proof"]["path"])
-            self.assertTrue(str(fault_path).startswith(str(evidence_dir)),
-                            f"learning input must point inside isolated dir: {fault_path}")
+            # Compare at the same resolution level: TEMP may sit behind a
+            # junction, so one side resolved and the other not would false-fail.
+            self.assertTrue(
+                str(fault_path.resolve()).startswith(str(Path(evidence_dir).resolve())),
+                f"learning input must point inside isolated dir: {fault_path}",
+            )
 
 
 class OpsIndependenceTests(unittest.TestCase):
