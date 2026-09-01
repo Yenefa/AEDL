@@ -210,11 +210,41 @@ def check_secret_scan(root) -> dict:
         }
     for path in targets:
         try:
-            if path.stat().st_size > 1_000_000:
-                continue
-            text = path.read_text(encoding="utf-8", errors="ignore")
-        except Exception:
+            size = path.stat().st_size
+        except OSError as exc:
+            return {
+                "status": "fail",
+                "exit_code": 1,
+                "detail": f"secret scan cannot stat {path.relative_to(root)}: {exc}",
+                "duration_s": round(time.monotonic() - started, 1),
+            }
+        if size > 1_000_000:
+            # Stream large files line-by-line instead of skipping them: they are
+            # still scanned (no silent skip), and read failures stay fail-closed.
+            try:
+                with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+                    for line in fh:
+                        if any(pattern.search(line) for pattern in SECRET_PATTERNS):
+                            hits.append(str(path.relative_to(root)))
+                            break
+            except OSError as exc:
+                return {
+                    "status": "fail",
+                    "exit_code": 1,
+                    "detail": f"secret scan cannot read {path.relative_to(root)}: {exc}",
+                    "duration_s": round(time.monotonic() - started, 1),
+                }
+            scanned += 1
             continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError as exc:
+            return {
+                "status": "fail",
+                "exit_code": 1,
+                "detail": f"secret scan cannot read {path.relative_to(root)}: {exc}",
+                "duration_s": round(time.monotonic() - started, 1),
+            }
         scanned += 1
         if any(pattern.search(text) for pattern in SECRET_PATTERNS):
             hits.append(str(path.relative_to(root)))

@@ -380,6 +380,47 @@ class SecretScanTests(unittest.TestCase):
         self.assertEqual(res["status"], "fail")
         self.assertIn("cannot execute git", res["detail"])
 
+    def test_read_error_fails_closed(self):
+        # An enumerated target that cannot be read must FAIL, never silently
+        # skip and then PASS with a partial scan.
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(td)
+            (root / "secret.env").write_text("clean\n", encoding="utf-8")
+            subprocess.run(["git", "add", "secret.env"], cwd=td, check=True)
+            with mock.patch.object(
+                dev_gate.Path, "read_text", side_effect=PermissionError("denied"),
+            ):
+                res = dev_gate.check_secret_scan(root)
+        self.assertEqual(res["status"], "fail")
+        self.assertIn("cannot read", res["detail"])
+
+    def test_large_target_is_streamed_not_skipped(self):
+        # Large targets must still be scanned (streamed line-by-line), never
+        # silently skipped: a secret at the tail of a >1MB file must be caught.
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(td)
+            (root / "big.txt").write_text(
+                "a" * (1_000_000) + "\n" + "ghp_" + "X" * 36 + "\n",
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "add", "big.txt"], cwd=td, check=True)
+            res = dev_gate.check_secret_scan(root)
+        self.assertEqual(res["status"], "fail")
+        self.assertIn("big.txt", res["detail"])
+
+    def test_large_target_without_secret_passes(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(td)
+            (root / "big.txt").write_text(
+                "a" * (1_000_000) + "\nclean\n", encoding="utf-8",
+            )
+            subprocess.run(["git", "add", "big.txt"], cwd=td, check=True)
+            res = dev_gate.check_secret_scan(root)
+        self.assertEqual(res["status"], "pass")
+
 
 if __name__ == "__main__":
     unittest.main()
