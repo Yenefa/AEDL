@@ -171,22 +171,83 @@ def check_sandbox_tests(root) -> tuple:
     return _run(cmd, root), []
 
 
+def _secret_scan_targets(root) -> list:
+    """Tracked files plus untracked files that are NOT git-ignored.
+
+    Scanning ignored directories (e.g. intake research clones / venvs such as
+    notes/open_source_intake/_circuitbot_venv/) produced false positives; only
+    files that git would actually track or stage can leak into the repo.
+    """
+    targets = []
+    for extra in ([], ["--others", "--exclude-standard"]):
+        cmd = ["git", "ls-files", "-z"] + extra
+        try:
+            proc = subprocess.run(cmd, cwd=root, capture_output=True)
+        except OSError as exc:
+            raise RuntimeError(f"secret_scan cannot execute git: {exc}") from exc
+        if proc.returncode != 0:
+            stderr = proc.stderr.decode("utf-8", errors="replace").strip()
+            raise RuntimeError(
+                f"secret_scan git ls-files failed (exit={proc.returncode}): {stderr}"
+            )
+        targets.extend(
+            p for p in proc.stdout.decode("utf-8", errors="surrogateescape").split(chr(0)) if p
+        )
+    return [Path(root) / p for p in targets if p]
+
+
 def check_secret_scan(root) -> dict:
     started = time.monotonic()
     hits, scanned = [], 0
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
-        for name in filenames:
-            path = Path(dirpath) / name
+    try:
+        targets = _secret_scan_targets(root)
+    except RuntimeError as exc:
+        return {
+            "status": "fail",
+            "exit_code": 1,
+            "detail": f"secret scan target enumeration failed: {exc}",
+            "duration_s": round(time.monotonic() - started, 1),
+        }
+    for path in targets:
+        try:
+            size = path.stat().st_size
+        except OSError as exc:
+            return {
+                "status": "fail",
+                "exit_code": 1,
+                "detail": f"secret scan cannot stat {path.relative_to(root)}: {exc}",
+                "duration_s": round(time.monotonic() - started, 1),
+            }
+        if size > 1_000_000:
+            # Stream large files line-by-line instead of skipping them: they are
+            # still scanned (no silent skip), and read failures stay fail-closed.
             try:
-                if path.stat().st_size > 1_000_000:
-                    continue
-                text = path.read_text(encoding="utf-8", errors="ignore")
-            except Exception:
-                continue
+                with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+                    for line in fh:
+                        if any(pattern.search(line) for pattern in SECRET_PATTERNS):
+                            hits.append(str(path.relative_to(root)))
+                            break
+            except OSError as exc:
+                return {
+                    "status": "fail",
+                    "exit_code": 1,
+                    "detail": f"secret scan cannot read {path.relative_to(root)}: {exc}",
+                    "duration_s": round(time.monotonic() - started, 1),
+                }
             scanned += 1
-            if any(pattern.search(text) for pattern in SECRET_PATTERNS):
-                hits.append(str(path.relative_to(root)))
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError as exc:
+            return {
+                "status": "fail",
+                "exit_code": 1,
+                "detail": f"secret scan cannot read {path.relative_to(root)}: {exc}",
+                "duration_s": round(time.monotonic() - started, 1),
+            }
+        scanned += 1
+        if any(pattern.search(text) for pattern in SECRET_PATTERNS):
+            hits.append(str(path.relative_to(root)))
     if hits:
         return {"status": "fail", "exit_code": 1, "detail": "secret patterns found:\n" + "\n".join(hits),
                 "duration_s": round(time.monotonic() - started, 1)}

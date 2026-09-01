@@ -5,6 +5,7 @@ Pure-logic tests only: no git, gh, uv or interpreter required at test time
 """
 
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -321,6 +322,104 @@ class DevGateDryRunTests(unittest.TestCase):
         self.assertIn("main_tests", receipt["checks"])
         self.assertIn("excluded_checks", receipt)
         self.assertIsInstance(receipt["baseline_sha"], str)
+
+
+class SecretScanTests(unittest.TestCase):
+    """Failure semantics of the secret scan target enumeration (fail-closed)."""
+
+    def _init_repo(self, td):
+        subprocess.run(["git", "init", "-q"], cwd=td, check=True)
+        subprocess.run(["git", "config", "user.email", "t@example.com"], cwd=td, check=True)
+        subprocess.run(["git", "config", "user.name", "t"], cwd=td, check=True)
+
+    def test_ignored_files_excluded_tracked_and_untracked_scanned(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(td)
+            (root / "tracked.txt").write_text("clean\n", encoding="utf-8")
+            (root / "untracked.txt").write_text("clean\n", encoding="utf-8")
+            (root / "ignored.txt").write_text("ghp_" + "X" * 36 + "\n", encoding="utf-8")
+            (root / ".gitignore").write_text("ignored.txt\n", encoding="utf-8")
+            subprocess.run(["git", "add", "tracked.txt", ".gitignore"], cwd=td, check=True)
+            targets = dev_gate._secret_scan_targets(root)
+            names = {p.name for p in targets}
+            self.assertIn("tracked.txt", names)
+            self.assertIn("untracked.txt", names)
+            self.assertNotIn("ignored.txt", names)
+            res = dev_gate.check_secret_scan(root)
+            self.assertEqual(res["status"], "pass")
+
+    def test_tracked_enumeration_failure_fails_closed(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as td:
+            with mock.patch.object(
+                dev_gate.subprocess, "run",
+                return_value=SimpleNamespace(returncode=128, stdout=b"", stderr=b"boom"),
+            ):
+                res = dev_gate.check_secret_scan(Path(td))
+        self.assertEqual(res["status"], "fail")
+        self.assertIn("enumeration failed", res["detail"])
+
+    def test_untracked_enumeration_failure_fails_closed(self):
+        # First call (tracked) succeeds, second (untracked) fails -> partial
+        # enumeration must still FAIL, never PASS on an incomplete target list.
+        from types import SimpleNamespace
+        ok = SimpleNamespace(returncode=0, stdout=b"a.txt\0", stderr=b"")
+        bad = SimpleNamespace(returncode=128, stdout=b"", stderr=b"boom2")
+        with tempfile.TemporaryDirectory() as td:
+            with mock.patch.object(dev_gate.subprocess, "run", side_effect=[ok, bad]):
+                res = dev_gate.check_secret_scan(Path(td))
+        self.assertEqual(res["status"], "fail")
+        self.assertIn("enumeration failed", res["detail"])
+
+    def test_git_missing_fails_closed(self):
+        with mock.patch.object(
+            dev_gate.subprocess, "run", side_effect=FileNotFoundError("git"),
+        ):
+            res = dev_gate.check_secret_scan(Path("."))
+        self.assertEqual(res["status"], "fail")
+        self.assertIn("cannot execute git", res["detail"])
+
+    def test_read_error_fails_closed(self):
+        # An enumerated target that cannot be read must FAIL, never silently
+        # skip and then PASS with a partial scan.
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(td)
+            (root / "secret.env").write_text("clean\n", encoding="utf-8")
+            subprocess.run(["git", "add", "secret.env"], cwd=td, check=True)
+            with mock.patch.object(
+                dev_gate.Path, "read_text", side_effect=PermissionError("denied"),
+            ):
+                res = dev_gate.check_secret_scan(root)
+        self.assertEqual(res["status"], "fail")
+        self.assertIn("cannot read", res["detail"])
+
+    def test_large_target_is_streamed_not_skipped(self):
+        # Large targets must still be scanned (streamed line-by-line), never
+        # silently skipped: a secret at the tail of a >1MB file must be caught.
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(td)
+            (root / "big.txt").write_text(
+                "a" * (1_000_000) + "\n" + "ghp_" + "X" * 36 + "\n",
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "add", "big.txt"], cwd=td, check=True)
+            res = dev_gate.check_secret_scan(root)
+        self.assertEqual(res["status"], "fail")
+        self.assertIn("big.txt", res["detail"])
+
+    def test_large_target_without_secret_passes(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(td)
+            (root / "big.txt").write_text(
+                "a" * (1_000_000) + "\nclean\n", encoding="utf-8",
+            )
+            subprocess.run(["git", "add", "big.txt"], cwd=td, check=True)
+            res = dev_gate.check_secret_scan(root)
+        self.assertEqual(res["status"], "pass")
 
 
 if __name__ == "__main__":

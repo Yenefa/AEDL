@@ -6,6 +6,11 @@
 > 本文件是控制面的**装载规则**，不是新的台账。真源仍然是 Git / GitHub / Issue /
 > PR / 正式 Evidence；这里只定义三个可执行原语：**Task Envelope → Admission →
 > Development Gate**，以及配套的 **Escalation 协议**。
+>
+> **本机环境要求（字节契约前提）**：`git config core.autocrlf false`（或
+> `input`）。仓库对哈希绑定文件使用选择性 LF checkout（`.gitattributes`，
+> GH-20）；`autocrlf=true` 会把 LF 转成 CRLF，导致本地哈希绑定测试失败
+> （CI 的 checkout 行为等同 `false`，本地必须一致才能复现“一个 PASS 语义”）。
 
 ## 状态阶梯
 
