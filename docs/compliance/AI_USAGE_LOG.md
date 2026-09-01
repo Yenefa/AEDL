@@ -2097,3 +2097,42 @@
     本机路径与 secret 扫描通过）。主仓库 .gitignore 排除 spike 目录。
 
 - 最终状态：`PENDING_HUMAN_REVIEW`
+
+## AI-20260901-005
+
+- 日期：2026-09-01
+- 任务名称：AEDL 两人协作治理基线（Issue-first / 独立 clone / PR 人工 Review）
+- 模块/路径：
+  - `.github/ISSUE_TEMPLATE/task.md`（新）
+  - `.github/PULL_REQUEST_TEMPLATE.md`（新）
+  - `.github/CODEOWNERS`（新，advisory only）
+  - `docs/COLLABORATION.md`（v2 → v3）
+  - `docs/WAVE4_TASKS_20260901.md`（GitHub Issue 跟踪版）
+  - `docs/HANDOFF.md`（当前状态卡）
+  - `docs/compliance/DECISIONS.md`（ADR-009）
+  - 本台账本条目
+
+- 做了什么：
+  - 现场复核本地/远端 Git、GitHub private 仓库、默认分支、协作者、邀请、PR/Issue 与 branch protection/rulesets 能力，确认当前工作线已同步而默认 `master` 落后 44 个提交。
+  - 将本地 `origin` 从历史重定向地址更新为 `https://github.com/Yenefa/AEDL.git`。
+  - 建立 GitHub Issue #1（本治理任务）、#2（W4A）、#3（W4B）、#4（W4C）、#5（Sandbox V3）；项目负责人确认 `la4876949-bot` 是第二名真人协作者后，将 #3 指派给该账号，#2/#4/#5 保持 `TO_ASSIGN`。
+  - 新增 Issue/PR 模板与 advisory CODEOWNERS；将两名真人的一人一 clone、唯一 Owner、文件领地、禁止直推、另一人 Review、精确暂存和冲突串行化固化为协作协议 v3。
+  - 新增 ADR-009，记录“临时完整工作线作为过渡基线，稳定化后回归 master”的最小协作决策；没有引入长期 develop/Git Flow。
+
+- 验证：
+  - 修改前 `git fetch origin --prune` 成功；当前冻结点 `e7ff3c1` 与 `origin/fix/m2-schematic-semantic-release` 为 `0/0`。
+  - 修改前顺序基线：Sandbox `272/272 OK`（1 skip、1 expectedFailure）；主仓库 `269/269 OK`。
+  - 最终提交前验证：Prettier check 通过；`git diff --check` exit 0；高置信 secret pattern 0 命中；AI-005 与 ADR-009 标题均恰好 1 条；Issue #1–#5 均 OPEN，#3 assignee 为 `la4876949-bot`；CODEOWNERS 基础语法与 Issue template frontmatter 检查通过。
+  - 修改后顺序复跑：Sandbox `272/272 OK`（1 skip、1 expectedFailure）；主仓库 `269/269 OK`。
+  - 真实 EDD-001 preflight：`BLOCKED` / 7 findings / exit 1（资料、POWER、compiler、verifier 缺口保持失败关闭）。
+  - commit / push / Draft PR：`PENDING_AFTER_COMMIT`。
+
+- 已知限制：
+  - `la4876949-bot` 已确认为第二名真人协作者，但其 `AEDL_TEAM / EXTERNAL_CONTRIBUTOR` 身份仍为 `TO_VERIFY`；另有一条 `invitee=null` 的未过期 write 邀请，接收人 `UNKNOWN`。本批不更新 `TEAM_CONTRIBUTIONS.md`；除已领取的 W4B 外，其余 W4/Sandbox Issues 不指派。
+  - 当前 private 仓库套餐无法启用 branch protection/rulesets；禁止直推与另一人 Review 目前是程序性约束，不是 GitHub 技术强制。
+  - GitHub 官方文档确认 Issue/PR 模板只有位于默认分支才会自动显示；当前默认 `master` 尚未包含本批，所以稳定化合入 `master` 前只能手工引用模板内容。
+  - 本批不修改硬件设计、BOM、原理图、PCB、制造文件或 Evidence 字节；不重跑会改写 Evidence 的完整 gate runner；不构成制造签发或实体 C 级验证。
+
+- Commit / PR：Issue #1；分支 `codex/collaboration-onboarding`；commit / push / Draft PR 均待最终验证后执行。
+- AIC Score Target：`NONE`（内部协作治理，不强行关联评分项）
+- 最终状态：`PENDING_HUMAN_REVIEW`

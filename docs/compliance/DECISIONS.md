@@ -252,3 +252,51 @@
 
 - 后续复查条件：
   - V1 运行时完成并产生真实集成测试；首个 KiCad compiler/read-back verifier 接入；Sandbox 扩展到 EDD-001 之外；或引入 OS/容器级强隔离时复查。
+
+## ADR-009 — 两人协作采用 Issue-first、独立 clone 与临时集成基线
+
+- 日期：2026-09-01
+- 状态：Proposed（项目负责人已授权实施；Draft PR 仍待另一名真人 Review）
+
+- 问题：
+  - AEDL 从单人多 AI 会话进入两名真人开发者协作，但 2026-09-01 现场审计发现：默认 `master` 比当前完整工作线落后 44 个提交；GitHub 无开放 PR/Issue/模板；当前 private 套餐不能启用 branch protection/rulesets；第二名协作者的 GitHub 账号与正式/外部身份尚未核实。
+  - 若直接让两人从 `master` 或同一工作目录开工，会产生过期基线、共享 index、混合暂存、贡献归因错误和无人工 Review 的风险。
+
+- 候选方案：
+  1. 继续通过聊天分工，两人直接向共享分支 push。
+  2. 新增长期 `develop` 分支，再设计一套完整 Git Flow。
+  3. 采用最小 Issue-first 流程：一人一份 clone；一个 Issue 一个 Owner/领地/分支；过渡期从当前完整工作线开任务分支并向其提 PR；另一名真人 Review；稳定化后回归 `master` 作为唯一基线。
+
+- 决策：
+  - 采用方案 3。
+  - `fix/m2-schematic-semantic-release` @ `e7ff3c1` 作为治理启动冻结点；治理 PR 合入后，以该远端分支最新提交为临时协作基线。
+  - 禁止任务直接 push 到 `master` 或临时协作基线；只 push 任务分支，并通过 PR 交接。
+  - GitHub 无法强制保护期间，由项目负责人程序性执行“禁止直推、另一名真人 Review、禁止自批”。
+  - 不为了取得分支保护而把 private 仓库改成 public；公开仍受 ADR-003 的许可证与第三方边界约束。
+  - 项目负责人已确认 `la4876949-bot` 为第二名真人协作者并允许领取 W4B；其 `AEDL_TEAM / EXTERNAL_CONTRIBUTOR` 分类核实前，不登记团队贡献或做比赛归因。
+
+- 理由：
+  - 方案 3 直接补齐当前实际缺口，保持 AGENTS.md 的稳定分支与人工 Review 原则，同时不引入两人团队暂时不需要的复杂长期分支模型。
+  - 独立 clone 隔离 working tree/index；Issue 的唯一 Owner 和 Owned paths 隔离写权限；PR 将 diff、测试与合规 ID 放到同一人工审核点。
+  - 临时基线避免朋友从过期 `master` 开工；稳定化后回归 `master`，不把历史功能分支永久制度化。
+
+- AI 参与：
+  - OpenAI Codex 对本地 Git、远端分支、GitHub 协作者/邀请、PR/Issue、保护能力和测试基线进行现场审计，提出并实施治理入口、模板与任务卡。
+
+- 团队自主判断：
+  - 项目负责人明确表示“直接听你的，你直接开始操作”，授权执行已提交的治理先行方案；最终 PR 审核与 merge 仍保留给真人。
+
+- Evidence / Reference：
+  - GitHub Issue #1：两人协作治理基线。
+  - GitHub Issues #2–#5：W4A、W4B、W4C 与 Sandbox V3。
+  - `docs/COLLABORATION.md` v3。
+  - `.github/ISSUE_TEMPLATE/task.md`、`.github/PULL_REQUEST_TEMPLATE.md`、`.github/CODEOWNERS`。
+
+- 影响：
+  - 新任务必须先创建 Issue 并明确唯一 Owner、领地、验收和身份分类。
+  - 当前过渡期 PR 目标为 `fix/m2-schematic-semantic-release`；稳定化合并完成后改回 `master`。
+  - `CODEOWNERS` 当前仅提供提醒，不构成技术强制；不能把程序规则描述成 GitHub 已锁定。
+  - GitHub Issue/PR 模板只有进入默认分支才会在新建界面自动生效；治理 PR 仅合入临时协作基线期间，模板作为手工规范使用。
+
+- 后续复查条件：
+  - 第二名真人协作者贡献分类核实；治理 PR 经人工 Review；当前工作线合并回 `master`；GitHub 套餐/可见性允许启用 ruleset；或协作人数超过两人时。

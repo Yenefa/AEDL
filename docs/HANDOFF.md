@@ -10,16 +10,17 @@
 > 到具体会话；据此识别前任/并行会话的工作边界、未审改动和已知坑，避免并发写坏工作区。
 > 收尾时按 AGENTS.md 第 4 节为本次实质工作新增一条记录，默认 `PENDING_HUMAN_REVIEW`。
 
-## 项目状态卡（2026-08-31 深夜，AI-20260831-017 更新）
+## 项目状态卡（2026-09-01，AI-20260901-005 协作治理批次）
 
-- 板子：M2 ESP32-C3+SHT30；D1 极性已修、U3 已换料 C235316；待人工重签 board_review 后方可下单。
-- 门禁：11 个 = 9 PASS + board_review FAIL（仅 `manufacturing_release=false` 等重签）+ datasheet_contract FAIL（32 项 BLOCK，全部待人工签发类）。
-- 分支：`fix/m2-schematic-semantic-release`，已推送；master 未合并。
-- 测试：269/269 全绿（`py -3 -m unittest discover -s tests`，2026-08-31 深夜实测）。
-- 通宵三卡：P7 runtime server 实测+31 新测试+400 JSON 修复；P8 NeuroBoard intake+kicad-ai 判"不存在"+Konnect license 取证；P9 board_review 51 条特征化/golden 测试。API 契约 6 条缺口已补（v1.1）。
-- 待大统领：① P12 批次 commit 授权（board_review 现仅余 manufacturing_release=false 一条报错，算法修订已绑定）；② 重签 board_review（大统领指示：不急，最后再下单）；② datasheet_contract 32 项签发（U3 热复核倾向路线 B=换 ≥1A 方案，需你裁决）；③ master 合并；④ `ok` 死逻辑与 AI-012 撞号两处小裁决（见台账 017）。
-- 吸收：CircuitBot/KiCadAI/KiCad MCP/NeuroBoard intake 全部完成；kicad-ai(amcolex) 判"不存在/不可核实"。
-- 检索：`docs/ID_MAP.md`；协作卡：`docs/COLLABORATION.md`；RAG 取舍：`docs/knowledge/RAG_DECISION.md`。
+- Git/GitHub：private 正式仓库为 `https://github.com/Yenefa/AEDL`；本地 `origin` 已改为正式地址。协作冻结点为 `fix/m2-schematic-semantic-release` @ `e7ff3c1`，当时与同名 origin `0/0`；默认 `master` 当时落后 44 个提交，尚未合并。
+- 当前治理：GitHub Issue #1，任务分支 `codex/collaboration-onboarding`；目标是补齐两人协作模板、任务入口与 v3 协议，完成后只开 Draft PR，不由 AI merge。Issue/PR 模板只有合入默认 `master` 后才会在 GitHub 新建界面自动生效，之前仅作手工规范。
+- 后续任务：W4B Issue #3 已指派给第二名真人协作者 `la4876949-bot`；W4A Issue #2、W4C Issue #4、Sandbox V3 Issue #5 仍为 `TO_ASSIGN`。
+- 协作者边界：项目负责人已确认 `la4876949-bot` 是第二名真人协作者；其 `AEDL_TEAM / EXTERNAL_CONTRIBUTOR` 分类仍为 `TO_VERIFY`，尚未发生可登记贡献。另有一条 `invitee=null` 的未过期 write 邀请，接收人 `UNKNOWN`。
+- 软件基线（2026-09-01 顺序实测）：Sandbox 272/272 OK（1 skip、1 expectedFailure）；主仓库 269/269 OK。该结果不是实体硬件验证。
+- 真实 EDD-001 preflight：`BLOCKED` / 7 findings，缺本地器件资料、`EDD-001.POWER`、compiler registration 与 independent verifier coverage；保持失败关闭。
+- 板子：M2 ESP32-C3+SHT30；D1 极性已修、U3 当前仍为 C235316。既有记录为 board_review `manufacturing_release=false`、datasheet_contract 32 项待人工签发；本治理批次未重跑会改写 Evidence 的完整 gate runner，也未执行制造签发。
+- 人工队列：确认 `la4876949-bot` 的正式团队/外部贡献分类；Review/merge Issue #1 的 Draft PR；裁决 U3 路线；datasheet 签发、board_review 重签、下单与实体 C 级验证继续独立保留。
+- 检索入口：`docs/ID_MAP.md`；协作规范：`docs/COLLABORATION.md`；Wave 4：`docs/WAVE4_TASKS_20260901.md`；RAG 取舍：`docs/knowledge/RAG_DECISION.md`。
 
 ## 归档：并行会话历史（截至 2026-08-31）
 
