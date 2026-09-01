@@ -14,7 +14,10 @@ __all__ = ["is_within", "resolve_within"]
 
 
 def _norm(path: Path) -> str:
-    return os.path.normcase(os.path.abspath(str(path)))
+    # Root and target must be compared at the SAME resolution level: realpath
+    # (not abspath) so junctions/symlinks (e.g. a TEMP dir through a junction)
+    # cannot make a contained target look like an escape, or vice versa.
+    return os.path.normcase(os.path.realpath(os.path.abspath(str(path))))
 
 
 def is_within(root: Path, target: Path, *, strict: bool = False) -> bool:

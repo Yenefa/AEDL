@@ -35,5 +35,9 @@ jobs:
           python-version: "3.11" # sandbox runtime (pinned by uv.lock)
       - name: Development gate (compileall + main tests + sandbox tests + secret scan)
         env:
-          AEDL_PYTHON: python # use the setup-python interpreter on both OSes
+          # setup-uv creates a repo-root .venv that shadows `python` on Windows
+          # runners; pin the exact setup-python interpreter instead.
+          AEDL_PYTHON: ${{ runner.os == 'Windows' && format('{0}\\python.exe', env.pythonLocation) || 'python' }}
+          PYTHONIOENCODING: utf-8 # Windows runner consoles default to cp1252
+          PYTHONUTF8: "1"
         run: python -m tools.dev_gate
