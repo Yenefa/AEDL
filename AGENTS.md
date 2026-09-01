@@ -853,7 +853,7 @@ EVID-...
 - [ ] 分支使用符合规则
 - [ ] Commit / Push 状态如实报告
 - [ ] PR/Handoff 足够人工审核
-- [ ] Review Bundle 已生成（需人工 Review 的交付必须附带，见 CONTROL_PLANE §8）
+- [ ] Review Bundle 已生成（需人工 Review 的交付必须附带，见 CONTROL_PLANE §8；命令：`python -m tools.make_review_bundle`，post-commit 钩子亦自动生成）
 - [ ] 状态保持 `PENDING_HUMAN_REVIEW`
 
 ---

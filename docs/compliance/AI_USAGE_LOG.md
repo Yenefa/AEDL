@@ -2614,6 +2614,60 @@ test_run_gates`：**115/115 OK**（覆盖问题 1 courtyard 四边越界、问�
 - 最终状态：
   - Run 001 晋升完成；设计冻结继续生效，Run 002 待天然碰撞
 
+## AI-20260901-020
+
+- 日期：2026-09-01
+- 任务名称：Review Bundle 自动化生成器 + post-commit 钩子（CONTROL_PLANE §8 机制落地）
+- 模块/路径：
+  - `tools/make_review_bundle.py`（生成器：状态 / SHARED 推导（读 CODEOWNERS）/ receipt 摘要 / 变更统计 / 新文件全内容 / 真实 hunks；`--run/--out/--base/--pr`）
+  - `scripts/post-commit.bundle.sh`（本机 post-commit 钩子：非稳定分支每次 commit 自动生成；跳过 master/main）
+  - `docs/CONTROL_PLANE.md`（§8 使用方法 → 自动生成 + 命令）
+  - `AGENTS.md`（§12 勾选项补命令引用）
+  - 本台账本条目
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash`
+- 参与标签：GENERATE_CODE、DOCUMENT
+- 任务目标：Yenefa 指出"bundle 规则已写进文档但实际工作没有自动生成"——把 §8 从约定变成机械：交付即自动生成到本地 `review-bundles/`。
+- AI 实际产出：如上；本机已安装到**激活的 hooksPath**（`core.hooksPath` = `~/.claude/hooks`，
+  即 prettier pre-commit 钩子所在目录；scripts/ 是版本化副本，跨机器复制即可）。钩子带仓库守卫
+  （无 `tools/make_review_bundle.py` 的 repo 直接跳过），错误写 `review-bundles/bundle-hook.log`
+  不打断 commit。
+- 团队自主部分：需求由 Yenefa 提出（"要求自动生成到本地的呀"）。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 验证：
+  - 手动运行 `py -3 -m tools.make_review_bundle` → manifest 正常（branch/base/head/文件清单/SHARED=[] 正确，tools/scripts 非 SHARED 路径）。
+  - 修复两处：`git diff --no-index` rc=1 是差异正常语义（非错误）；receipt 通配跳过 `_` 开头临时文件；untracked 统计补入变更摘要。
+  - commit 后钩子自动生成待验证（本条目随 commit 触发）。
+- 已知限制：钩子为本机安装（`.git/hooks/` 不随仓库传播；脚本版本化在 `scripts/`，新机器需复制安装）；bundle 永远在仓库外。
+- Compliance：Third-party none。
+- AIC Score Target：`NONE`
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`
+
+## AI-20260901-021
+
+- 日期：2026-09-01
+- 任务名称：bundle_check — 机器强制 Review Bundle（dev_gate 新 check）
+- 模块/路径：
+  - `tools/dev_gate.py`（`bundle_check`：非稳定分支本地运行时 bundle 缺失/过期自动补生成，补不上 FAIL；CI 按设计豁免；`_bundle_decision` 纯决策可测）
+  - `tests/test_control_plane_tools.py`（+7：CI 豁免 / 稳定分支豁免 / 生成器缺失豁免 / stale→fail / current→pass / run 名派生）
+  - `docs/CONTROL_PLANE.md`（§8 机器强制说明）
+  - 本台账本条目
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash`
+- 参与标签：GENERATE_CODE、GENERATE_TEST、DOCUMENT
+- 任务目标：Yenefa 要求"强制使用者装钩子（至少开发者）"——git 无法强制客户端装钩子（clone 即执行是安全反模式），改为**强制结果**：bundle 是门禁的前置条件。
+- AI 实际产出：dev_gate 的 bundle_check（本地强制 + 自愈补生成 + 失败带指令）；单测 7 个；活体验证三条路径（current→PASS / stale→自动补生成→PASS / 补生成失败→FAIL）。
+- 团队自主部分：强制方式（结果而非安装）由 Yenefa 要求，AI 落地。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 验证：
+  - 单测 43/43 OK（含 7 个 bundle_check 决策测试）。
+  - 活体：T1 current→PASS；T2 弄脏 manifest→自动再生成→PASS；T3 注入语法错误+stale→FAIL（带修复指令），恢复后生成器正常。
+- 已知限制：CI 豁免是设计（bundle 只在本地）；旧 checkout（无生成器）豁免。
+- Compliance：Third-party none。
+- AIC Score Target：`NONE`
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`
 ## AI-20260902-001
 
 - 日期：2026-09-02

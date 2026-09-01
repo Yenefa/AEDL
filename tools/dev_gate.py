@@ -318,6 +318,85 @@ def check_binding(root, envelope_path, admit_receipt_path) -> tuple:
             "duration_s": 0.0}, []
 
 
+def run_name_from_branch(branch: str) -> str:
+    cleaned = re.sub(r"[^a-zA-Z0-9_-]+", "_", branch).strip("_")
+    return cleaned or "candidate"
+
+
+def _bundle_decision(branch, is_ci, generator_available, manifest_matches, head, run):
+    """Pure decision for bundle_check (unit-testable).
+
+    Returns (status_or_None, excluded_reason_or_None)."""
+    if is_ci:
+        return None, "CI: bundles are local-only by design (CONTROL_PLANE section 8)"
+    if not branch or branch in ("master", "main"):
+        return None, f"stable branch {branch or chr(39) + chr(100)}: no bundle required" if False else f"stable branch {branch or 'detached'}: no bundle required"
+    if not generator_available:
+        return None, "bundle generator not in this repo (old checkout)"
+    if not manifest_matches:
+        return ("fail", None)
+    return ("pass", None)
+
+
+def check_bundle(root) -> tuple:
+    """Machine enforcement of CONTROL_PLANE section 8: candidate branches must
+    carry a current local review bundle. CI is excluded by design (bundles are
+    local). Locally the gate regenerates the bundle when missing/stale and
+    FAILS when that is impossible - forgetting the hook cannot slip past.
+    """
+    branch = git_checked(root, "branch", "--show-current") or ""
+    head = git_checked(root, "rev-parse", "HEAD")
+    run = run_name_from_branch(branch)
+    bundle_dir = root.parent / "review-bundles" / run
+    manifest_path = bundle_dir / "manifest.json"
+    generator_available = (root / "tools" / "make_review_bundle.py").is_file()
+
+    def manifest_head():
+        try:
+            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+            return data.get("head_sha") if isinstance(data, dict) else None
+        except Exception:
+            return None
+
+    manifest_matches = manifest_head() == head
+    status, reason = _bundle_decision(
+        branch,
+        os.environ.get("GITHUB_ACTIONS") == "true",
+        generator_available,
+        manifest_matches,
+        head,
+        run,
+    )
+    if status is None:
+        return None, [{"id": "bundle_check", "reason": reason}]
+    if status == "pass":
+        return {"status": "pass", "exit_code": 0,
+                "detail": f"bundle current for {branch} (HEAD {head[:12]}, {bundle_dir.name})",
+                "duration_s": 0.0}, []
+    # stale/missing: regenerate locally (safe side effect, bundle is outside the repo)
+    regen_err = None
+    try:
+        probe = subprocess.run(
+            [sys.executable, "-m", "tools.make_review_bundle"],
+            cwd=str(root), capture_output=True, timeout=120,
+        )
+        if probe.returncode != 0:
+            regen_err = (probe.stderr or b"").decode("utf-8", errors="replace").strip()[-300:]
+    except Exception as exc:
+        regen_err = f"{type(exc).__name__}: {exc}"
+    if manifest_head() != head:
+        detail = (
+            f"review bundle missing/stale for {branch} (expected HEAD {head[:12]}): "
+            "auto-regeneration failed"
+            + (f" ({regen_err})" if regen_err else "")
+            + "; run python -m tools.make_review_bundle or install the post-commit hook (CONTROL_PLANE section 8)"
+        )
+        return {"status": "fail", "exit_code": 1, "detail": detail, "duration_s": 0.0}, []
+    return {"status": "pass", "exit_code": 0,
+            "detail": f"bundle regenerated for {branch} (HEAD {head[:12]})",
+            "duration_s": 0.0}, []
+
+
 def check_scope(root, envelope_path) -> tuple:
     if not envelope_path:
         return None, [{"id": "scope_check", "reason": "no --envelope provided"}]
@@ -366,12 +445,15 @@ def run_gate(root=None, envelope=None, dry_run=False, receipt_path=None, interpr
         secret = check_secret_scan(root)
         scope, excl_scope = check_scope(root, envelope)
         binding, excl_binding = check_binding(root, envelope, admit_receipt)
+        bundle, excl_bundle = check_bundle(root)
         checks = {"syntax": syntax, "main_tests": main, "sandbox_tests": sandbox, "secret_scan": secret}
         if scope is not None:
             checks["scope_check"] = scope
         if binding is not None:
             checks["binding_check"] = binding
-        excluded = excl_main + excl_sand + excl_scope + excl_binding
+        if bundle is not None:
+            checks["bundle_check"] = bundle
+        excluded = excl_main + excl_sand + excl_scope + excl_binding + excl_bundle
         status, exit_code = aggregate_checks(checks)
     receipt = {
         "schema_version": SCHEMA_VERSION,

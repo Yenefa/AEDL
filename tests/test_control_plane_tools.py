@@ -312,6 +312,40 @@ class AdversarialGateTests(unittest.TestCase):
         self.assertIn("skip_deps", receipt["exceptions_used"])
 
 
+class BundleCheckTests(unittest.TestCase):
+    def test_bundle_decision_ci_excluded(self):
+        from tools.dev_gate import _bundle_decision
+        status, reason = _bundle_decision("feat/x", True, True, True, "h", "feat_x")
+        self.assertIsNone(status)
+        self.assertIn("CI", reason)
+
+    def test_bundle_decision_stable_branch_excluded(self):
+        from tools.dev_gate import _bundle_decision
+        status, reason = _bundle_decision("master", False, True, True, "h", "master")
+        self.assertIsNone(status)
+        self.assertIn("stable", reason)
+
+    def test_bundle_decision_missing_generator_excluded(self):
+        from tools.dev_gate import _bundle_decision
+        status, reason = _bundle_decision("feat/x", False, False, True, "h", "feat_x")
+        self.assertIsNone(status)
+        self.assertIn("generator", reason)
+
+    def test_bundle_decision_stale_fails(self):
+        from tools.dev_gate import _bundle_decision
+        status, reason = _bundle_decision("feat/x", False, True, False, "h", "feat_x")
+        self.assertEqual(status, "fail")
+
+    def test_bundle_decision_current_passes(self):
+        from tools.dev_gate import _bundle_decision
+        status, reason = _bundle_decision("feat/x", False, True, True, "h", "feat_x")
+        self.assertEqual(status, "pass")
+
+    def test_run_name_from_branch(self):
+        from tools.dev_gate import run_name_from_branch
+        self.assertEqual(run_name_from_branch("feat/control-plane"), "feat_control-plane")
+
+
 class DevGateDryRunTests(unittest.TestCase):
     def test_dry_run_receipt_shape(self):
         receipt = dev_gate.run_gate(dry_run=True)
