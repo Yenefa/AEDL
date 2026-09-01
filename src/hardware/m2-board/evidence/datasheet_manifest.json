@@ -24,9 +24,11 @@
         },
         {
           "type": "hardware_design_guidelines",
-          "source_url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32c3/index.html",
-          "local_file": null,
-          "note": "URL-only；500mA 供电能力建议出自此处（本地快照未取）"
+          "source_url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32c3/schematic-checklist.html",
+          "local_file": "src/hardware/m2-board/evidence/datasheets/U1_ESP32-C3-WROOM-02/esp32c3_schematic_checklist_power_supply_2026-08-31.html",
+          "sha256": "6a635580808fc7ff0e54778534fd40c7e01b5d14ebc4c3335dd3125f6efb517b",
+          "retrieved_at": "2026-08-31T14:36:46Z",
+          "note": "经页面实际核对的事实：单电源推荐 3.3V 且输出电流不低于 500mA；VDD3P3_CPU 与 VDDA 工作范围 3.0V~3.6V；主电源入口建议至少 10µF 电容；TX 发射时电流突增可能导致电源轨塌陷，强烈建议在电源轨加 10µF（与 0.1µF 等并用）。官方供电指南本地快照。"
         },
         {
           "type": "kicad_library",
