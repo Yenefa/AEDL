@@ -2523,3 +2523,68 @@ test_run_gates`：**115/115 OK**（覆盖问题 1 courtyard 四边越界、问�
 - AIC Score Target：`NONE`
 - 最终状态：
   - `PENDING_HUMAN_REVIEW`
+
+## AI-20260901-017
+
+- 日期：2026-09-01
+- 任务名称：Run 001 落钉 — commit 5b38a2e + PR #21 + 首次真实 drift BLOCK 事件
+- 模块/路径：本台账本条目；commit `5b38a2e`（22 文件，prettier 钩子格式化后提交）；
+  PR https://github.com/Yenefa/AEDL/pull/21（draft，触发双平台 CI 矩阵）
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash`
+- 参与标签：DOCUMENT
+- 任务目标：按 CONDITIONAL APPROVE 落第一颗钉子：两个文本修正（CONTROL_PLANE 示例补 exceptions；
+  ci.yml 注释改为 task-context checks 语义）→ prettier 钩子修复（全局 hooksPath 的 pre-commit 检查
+  全部暂存 md/json/yml）→ commit → push → PR → CI。
+- AI 实际产出：
+  - commit `5b38a2e`：22 文件 +2465/-44，工作树干净；提交信息 [AI-20260901-010..016]。
+  - push origin/feat/control-plane-minimal-slice；Draft PR #21（base master）。
+  - **首次真实 drift BLOCK（AECP 抓到自己的 commit）**：commit 后 HEAD=5b38a2e ≠ envelope
+    base 18b2381 → admit BLOCKED（baseline drift；envelope 无 allow_drift 例外 → Agent 无法
+    自授权，fail-closed 正确）；gate binding_check 拒绝 BLOCKED receipt（"a BLOCKED receipt
+    cannot bind"）——源码 Review 的 adversarial 场景在真实环境复现。v2 的 admit+gate（binding@
+    18b2381，PASS）覆盖 review 后内容；committed 字节由 PR CI 验证。
+- 团队自主部分：CONDITIONAL APPROVE 与"commit 不是 promotion"的定性由 Yenefa 给出。
+- 人工审核：`PENDING_HUMAN_REVIEW`（PR #21）
+- 验证：
+  - `git diff --check` exit 0；单测 30/30 OK；prettier --check RC=0。
+  - v2 receipt：admission bound（envelope 1fcde0ad, HEAD 18b2381）PASS（commit 前）。
+  - drift 事件 receipt 归档：gh20-admit-v3-drift-blocked.json / gh20-receipt-v3-binding-rejected.json（review-bundles/run-001/）。
+  - CI：PR #21 @ 5b38a2e，ubuntu + windows 矩阵运行中（watcher 后台）。
+- 已知限制：CI 结果待观察；EVID-20260901-003 保持 PARTIAL 直至双平台全绿。
+- Compliance：ADR-011 关联；Third-party none。
+- AIC Score Target：`实现完成度与可验证效果`（GH-20）
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`
+
+## AI-20260901-018
+
+- 日期：2026-09-01
+- 任务名称：GH-20 双平台矩阵首跑 — 三个 Windows runner 根因 + 修复（commit 3e5f2d9）
+- 模块/路径：
+  - `sandbox_runtime/src/aedl_sandbox/policy/paths.py`（is_within 双端 realpath：root 与 target 同一解析层级）
+  - `tests/test_run_gates.py`（isolated-dir 断言改为 resolve 后比较）
+  - `sandbox_runtime/tests/policy/test_paths.py`（新增 junction 回归测试）
+  - `.github/workflows/ci.yml`（AEDL_PYTHON 钉死 setup-python 路径；PYTHONIOENCODING/PYTHONUTF8）
+  - 本台账本条目
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash`
+- 参与标签：DEBUG、REFACTOR、GENERATE_TEST、DOCUMENT
+- 任务目标：PR #21 双平台矩阵 ubuntu ✅ / windows ❌（main 1 fail+4 errors；sandbox 24 fail+4 errors）——收掉三个 Windows runner 特有根因。
+- 三个根因（全部本地 junction 复现验证）：
+  1. **解释器被 venv 遮蔽**：setup-uv 在仓库根建 .venv（3.11）并设 VIRTUAL_ENV，`AEDL_PYTHON=python` 解析到 3.11 → 主套件跑错解释器（traceback 指向 hostedtoolcache 3.11.9）。修复：钉死 setup-python 路径。
+  2. **cp1252 控制台**：Windows runner 默认 cp1252，board_review 打印中文 → UnicodeEncodeError。修复：PYTHONIOENCODING=utf-8 + PYTHONUTF8=1。
+  3. **TEMP 背后的 junction + 混合解析层级**：is_within 对 root 只 abspath、对 target 用 resolve()（realpath）——junction 一展开 target 变成真实路径而 root 不变 → 简单相对路径全部误判 PATH_ESCAPE（sandbox 24 失败）与 isolated-dir 断言失败。本地用 mklink /J 复现同款失败后修复（双端 realpath）+ junction 回归测试。
+- 团队自主部分：矩阵验证为 GH-20 Task 5 既定目标；根因排查与修复由 AI 执行。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 验证（全部真实运行）：
+  - junction TEMP 下：sandbox FileWrite 42/42、run_gates 23/23、test_paths 2/2 全过（修复前同条件成片失败）。
+  - 无 junction 回归：控制面 30/30、主套件 299 OK、sandbox 274 OK。
+  - commit 3e5f2d9 已 push；CI 重跑中。
+- CI 结果：第三次重跑（760836b）双平台全绿（ubuntu ✅ / windows ✅，run 33557715205）；
+  第二次重跑（3e5f2d9）后 sandbox 从 28 失败降到 2，暴露 8.3 短名根因（RUNNER~1 vs
+  runneradmin），commit 760836b 修复 test_workspace 两处断言（双端 resolve）。
+- Compliance：ADR-011 关联；Third-party none。
+- AIC Score Target：`实现完成度与可验证效果`（GH-20）
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`

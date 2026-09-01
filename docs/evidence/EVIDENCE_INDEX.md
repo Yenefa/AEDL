@@ -150,11 +150,12 @@
 - 原始证据：`delivery/manifest_v1.json`、`tests/fixtures/board_review/golden_minimal.json`、
   `notes/m2-evidence-reset/generated/bom_stock_current.json`；gate receipt 存于仓库外
   （gh20-receipt.json）。
-- 是否可复现：PARTIAL / PENDING_CI_MATRIX（本地 Windows ✅、LF 工作树模拟 ✅；
-  GitHub ubuntu/windows 实际矩阵尚未运行——push 后双平台全绿再晋升 YES）。
-- 已知限制：CI windows runner 的 checkout 是否按 `eol=crlf/eol=lf` 属性检出需 Task 5
-  矩阵实际运行确认（本地 git 2.54 对 `eol=crlf` checkout 不可靠，已用显式字节规范化
-  保证本地；GitHub actions/checkout 默认 `autocrlf=false` 应按属性检出）；不构成实体
-  硬件验证；`notes/m2-evidence-reset/generated/**` 除 bom_stock_current.json 声明
-  刷新外零字节变化。
+- 是否可复现：YES（本地 Windows ✅、LF 工作树模拟 ✅；GitHub 双平台实际矩阵
+  ubuntu ✅ / windows ✅，PR #21 run 33557715205 全绿——同一测试集、零平台排除）。
+- 已知限制：矩阵首跑在 windows leg 暴露三个 runner 特有根因并已修复——
+  ① setup-uv 仓库根 .venv 遮蔽 `python`（主套件误跑 3.11）；② cp1252 控制台导致中文
+  print UnicodeEncodeError；③ TEMP 经 8.3 短名（RUNNER~1）/junction 与混合解析层级
+  （abspath vs realpath）导致路径误判（sandbox is_within + 两处测试断言，已改为双端
+  realpath，含 junction 回归测试）。修复后双平台全绿。不构成实体硬件验证；
+  `notes/m2-evidence-reset/generated/**` 除 bom_stock_current.json 声明刷新外零字节变化。
 - 人工核验：`PENDING_HUMAN_REVIEW`
