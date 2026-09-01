@@ -2187,3 +2187,32 @@
 - Commit / PR：卫星分支 `codex/spike-governance` 已推送至最终治理头 `0e562e5`，Draft PR #2；主仓内容提交 `d1c625a`，随 Handoff 回写提交推送至 Draft PR #6。
 - AIC Score Target：`NONE`（仓库与协作治理，不把普通 GitHub/AI 工具使用包装成比赛创新）
 - 最终状态：`PENDING_HUMAN_REVIEW`
+## AI-20260901-007
+
+- 日期：2026-09-01
+- 任务名称：登记真人身份与代称映射（Percy / Yenefa）
+- 模块/路径：`docs/ID_MAP.md`、本台账
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash`（运行环境提供）
+
+- AI 参与类型：
+  - [x] DOCUMENT
+
+- 任务目标：
+  - 项目负责人明确指定真人代称：`la4876949-bot` 的代称为 **Percy**，项目负责人本人为 **Yenefa**（原 `sca331613-commits` 改名）；将映射写入 ID 检索入口，供所有会话与协作者统一引用。
+
+- AI 实际产出：
+  - 在 `docs/ID_MAP.md` 新增"真人身份与代称"小节（导航表，不替代 GitHub 账号名、`docs/COLLABORATION.md` 身份说明或 `TEAM_CONTRIBUTIONS.md` 贡献记录）。
+
+- 团队自主部分：
+  - 项目负责人指定代称与采用决定；AI 只负责落盘与留痕。
+
+- 人工审核：
+  - 状态：`PENDING_HUMAN_REVIEW`
+
+- 验证：
+  - 文档结构检查：Markdown 表格渲染正常；`git diff --check` 无空白错误。
+  - 未修改任何代码、硬件、Evidence 或门禁文件。
+
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`

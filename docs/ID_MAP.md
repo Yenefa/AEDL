@@ -15,6 +15,16 @@
 | 事故教训 ID | `PIT-YYYYMMDD-NNN`（如 PIT-20260830-001） | `gates/lessons_registry_v1.json`（机器可执行）+ `docs/knowledge/PROJECT_PITFALLS.md`（叙述版） | 已防错误清单；排查"为什么门禁这样设计"时先查 |
 | 协作任务卡 | `TASK-PN`（如 TASK-P5） | `docs/COLLABORATION.md` | 多 AI 领地划分与任务领取状态 |
 
+## 真人身份与代称
+
+> 仓库内以 GitHub 账号名作为权威标识；代称用于会话、对话与口头引用，不替代账号名。
+> 身份边界与贡献分类见 `docs/COLLABORATION.md`；本表只做检索导航。
+
+| GitHub 账号 | 代称 | 角色 |
+|---|---|---|
+| `Yenefa` | Yenefa | 项目负责人（大统领）；原 `sca331613-commits`，2026-09-01 改名 |
+| `la4876949-bot` | Percy | 正式团队成员（AEDL_TEAM）；第二名真人协作者，2026-09-01 确认 |
+
 ## 按需加载路由（任务类型 → 必读文件）
 
 - **硬件发布 / 下单 / 重签 board_review** → `AGENTS.md` §2.1 → `docs/knowledge/` 两份（IMPROVEMENT_SYSTEM、PROJECT_PITFALLS）→ `gates/board_review_v1.json` + `notes/m2-evidence-reset/generated/board_review_auto.json` → 先跑 `py -3 gates/run_gates.py` 看基线。
