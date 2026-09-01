@@ -171,22 +171,35 @@ def check_sandbox_tests(root) -> tuple:
     return _run(cmd, root), []
 
 
+def _secret_scan_targets(root) -> list:
+    """Tracked files plus untracked files that are NOT git-ignored.
+
+    Scanning ignored directories (e.g. intake research clones / venvs such as
+    notes/open_source_intake/_circuitbot_venv/) produced false positives; only
+    files that git would actually track or stage can leak into the repo.
+    """
+    targets = []
+    for extra in ([], ["--others", "--exclude-standard"]):
+        cmd = ["git", "ls-files", "-z"] + extra
+        proc = subprocess.run(cmd, cwd=root, capture_output=True)
+        if proc.returncode == 0 and proc.stdout:
+            targets.extend(p for p in proc.stdout.decode("utf-8", errors="ignore").split(chr(0)) if p)
+    return [Path(root) / p for p in targets if p]
+
+
 def check_secret_scan(root) -> dict:
     started = time.monotonic()
     hits, scanned = [], 0
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
-        for name in filenames:
-            path = Path(dirpath) / name
-            try:
-                if path.stat().st_size > 1_000_000:
-                    continue
-                text = path.read_text(encoding="utf-8", errors="ignore")
-            except Exception:
+    for path in _secret_scan_targets(root):
+        try:
+            if path.stat().st_size > 1_000_000:
                 continue
-            scanned += 1
-            if any(pattern.search(text) for pattern in SECRET_PATTERNS):
-                hits.append(str(path.relative_to(root)))
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
+        scanned += 1
+        if any(pattern.search(text) for pattern in SECRET_PATTERNS):
+            hits.append(str(path.relative_to(root)))
     if hits:
         return {"status": "fail", "exit_code": 1, "detail": "secret patterns found:\n" + "\n".join(hits),
                 "duration_s": round(time.monotonic() - started, 1)}
