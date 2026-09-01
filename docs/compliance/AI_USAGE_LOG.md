@@ -2622,7 +2622,7 @@ test_run_gates`：**115/115 OK**（覆盖问题 1 courtyard 四边越界、问�
   - `tools/dev_gate.py`（+36/-13：枚举层/扫描层 fail-closed、>1MB 流式扫描）
   - `docs/CONTROL_PLANE.md`（+5：本机 autocrlf 环境要求）
   - `tests/test_control_plane_tools.py`（SecretScanTests 7 个：ignored 排除、tracked/untracked
-    枚举失败、git 缺失、stat/read 失败、大文件流式扫描）
+    枚举失败、git 缺失、read 失败、大文件流式扫描；stat 失败路径由实现 fail-closed，未设独立回归测试）
   - 本台账本条目（补录）
 - AI 工具/平台：DeepSeek Harness（DSH Web）
 - 模型：`deepseek-v4-flash`
@@ -2664,8 +2664,12 @@ test_run_gates`：**115/115 OK**（覆盖问题 1 courtyard 四边越界、问�
   review-bundles/run-002/ 与 GitHub 记录。
 - AI 实际产出：
   - CONTROL_PLANE.md 新增 Run 002 账本段：R1–R3 轮次表（初版 bundle → delta → delta v2）+ 统计
-    （评审 3 轮 / CI 矩阵迭代 1 次 / 本地 gate 迭代 3 次 / 自我拦截 0 次 / 技术债 0 项新增）；
+    （评审 3 轮 / CI 矩阵迭代 1 次 / 本地 gate 迭代 3 次 / 自我拦截 0 次 / 正式登记技术债 0 项 +
+    非阻塞 follow-up 2 项：stat OSError 独立回归测试未设、receipt "text files" 命名精确化）；
     冻结状态注明继续生效（FIX 类运行，解除由人工决策）。
+  - 复审修正（Yenefa REQUEST_CHANGES → 修正后通过）：R1 failure model 按裁定改正（git 缺失抛
+    FileNotFoundError 而非返回空列表；fail-open 路径为 rc≠0 被静默忽略）；SecretScanTests 覆盖
+    描述去掉不实的 stat 独立测试项（实现 fail-closed，测试未覆盖）；登记 2 项非阻塞 follow-up。
 - 团队自主部分：账本内容基于 review-bundles/run-002/ 材料与 GitHub 事实如实重建，无编造轮次。
 - 人工审核：`PENDING_HUMAN_REVIEW`
 - 验证：
