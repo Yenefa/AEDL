@@ -1,13 +1,14 @@
-# 多 AI 并行协作协议 v2（2026-09-01 大统领批准：从单人多会话升级为真协作）
+# AEDL 两人 + 多 AI 协作协议 v4（2026-09-01）
 
 > 📢 **公告（2026-09-01）**：大统领 GitHub 账号已由 `sca331613-commits` 改名为 **`Yenefa`**。
 > 旧 URL 靠重定向仍可达；新建仓库/引用一律用 `Yenefa`；`gh repo create` 不带用户名前缀。
-> 已发布的 spike 展示仓：`https://github.com/Yenefa/AEDL-spike`。
+> 当前 private 的实验/Evidence 卫星仓：`https://github.com/Yenefa/AEDL-spike`；其治理入口为
+> `Yenefa/AEDL-spike#1` / Draft PR #2。
 
-> 目的：多个 AI 会话（及未来的真人协作者）**同时**在 `C:\Users\fuker\Desktop\workspace\project-027-autonomous-hardware-agent` 工作，互不写坏文件、互不踩 diff、成果可合并。
+> 目的：两名真人开发者通过各自独立 clone 协作，同时允许多个 AI 会话在受控领地内辅助；所有成果经 Issue、任务分支、PR 和另一名真人 Review 交接，避免覆盖、混提和身份误记。
 > 本协议是 AGENTS.md 的并行扩展，冲突时以 AGENTS.md 为准。
 > **每个会话开工时（按序，缺一不可）**：读 `AGENTS.md` → 读 `docs/HANDOFF.md` 状态卡 → **读本文件** → `git status` 看现场 → 在 `docs/compliance/AI_USAGE_LOG.md` 领号（见 §0.1）。
-> v2 变更（2026-09-01，实战教训固化）：新增领号占位规则（§0.1）、pre-commit 钩子处置（§0.2）、撞车仲裁（§0.3）、commit 授权分级（§2 改）。历史协作记录见任务看板与各 handoff。
+> v4 变更：新增主仓与实验/Evidence 卫星仓的唯一职责和回流协议（§0.7）；v3 的真人协作者身份、独立 clone、Issue-first 分支/PR 和 GitHub 强制能力边界继续生效。治理实施由 GitHub Issue #1 跟踪。
 
 ## 0. 比赛时钟（2026-08-31 大统领确认）
 
@@ -15,7 +16,7 @@
 - 关键路径：人工重签 board_review → 嘉立创下单（物理周期 1-2 周）→ 回件 C 级实测 → 报告/PPT/视频 + FAIRNESS_CHECK + 版本冻结。
 - 板子生产是唯一不可压缩环节：9 月第一周不下单，实测容错窗口就没了。
 - 等板子的窗口（9 月上中旬）= 并行任务黄金期：competition 资产、C 方案升级、前端、intake 全在这里消化。
-- 待办：`docs/competition/` 六资产（AIC_STANDARD/SCORING_MAP/FUSION_MAP/OPEN_OUTPUTS/PROBLEM_EVIDENCE/SUBMISSION_CHECKLIST）**尚未建**，需从无到有。
+- 资产现状（2026-09-01 实查）：`FUSION_MAP.md`、`OPEN_OUTPUTS.md`、`PROBLEM_EVIDENCE.md`、`SUBMISSION_CHECKLIST.md` 已存在；`AIC_STANDARD.md`、`SCORING_MAP.md` 仍不存在。后两者在触发正式评分/定位任务前保持 `NOT_FOUND`，不得假装已读。
 
 ---
 
@@ -52,6 +53,51 @@
 2. 评估：对方方案更优 → 撤自己撞车部分、保留对方、补对方遗漏的接缝（参考 AI-20260831-020 的处理）。
 3. 无法判定优劣 → 报告大统领取舍，两边都停在 PENDING_HUMAN_REVIEW。
 4. 预防：开工前 `git status` + `git diff <自己领地文件>` 必做；大任务先写任务卡（§3 看板）再动手。
+
+## 0.4 真人协作者接入与身份边界
+
+1. **一人一份 clone**：两名真人不得共用同一个工作目录、index 或未提交工作树。AI 可以在其所属真人的 clone 内工作，但必须服从该任务 Issue 的 Owner 与领地。
+2. **身份先核实再归因**：项目负责人已确认 GitHub 账号 `la4876949-bot` 是第二名真人协作者，当前具有 write 权限；另有一条 `invitee=null` 的未过期 write 邀请，接收人仍为 `UNKNOWN`，不得据此推断第三人身份。
+3. **贡献分类**：项目负责人已确认 `la4876949-bot` 为 `AEDL_TEAM`（正式团队成员）。成员身份不等于已经产生贡献；只有实际贡献发生后才写入 `TEAM_CONTRIBUTIONS.md`。未来如接收外部贡献，仍须保留来源、授权、使用边界，不得包装成正式团队自主成果。
+4. **正式 clone 地址**：只使用 `https://github.com/Yenefa/AEDL.git`。旧 owner URL 仅为历史重定向，不再写入新文档或命令。
+5. **当前协作基线**：`fix/m2-schematic-semantic-release` @ `e7ff3c1` 是 2026-09-01 治理启动前冻结点。治理 PR 合入后，以该远端分支最新提交为任务分支起点；不要从当时落后 44 个提交的默认 `master` 开工。
+
+首次接入命令：
+
+```powershell
+git clone https://github.com/Yenefa/AEDL.git
+cd AEDL
+git fetch origin
+git switch --track origin/fix/m2-schematic-semantic-release
+```
+
+## 0.5 Issue → Branch → PR → Review
+
+1. **先建 Issue**：每个工作单元只有一个 Goal、一个 Owner 和一组独占写路径。Issue 必须写 Scope、Out of Scope、Acceptance Criteria、Evidence Needed、AIC Score Target 与合规触发项。
+2. **再开任务分支**：从最新协作基线创建 `feat/`、`fix/`、`docs/`、`test/`、`chore/` 等任务分支；一个分支只承载一个 Issue。
+3. **禁止直推共享分支**：不得直接向 `master` 或 `fix/m2-schematic-semantic-release` 提交任务改动。当前过渡期 PR 目标为 `fix/m2-schematic-semantic-release`；待该分支经稳定化 PR 回归 `master` 后，恢复以 `master` 为唯一稳定基线。
+4. **逐路径暂存**：`git add <明确路径>`；禁止 `git add .`、`git add -A`。提交前检查 working/staged diff、secret、Evidence 字节与未知删除。
+5. **另一名真人 Review**：作者不能把自己的 PR 标记为人工批准。审查者核对真实 diff 与实际测试后才能合并；AI 始终保持 `PENDING_HUMAN_REVIEW`。
+6. **冲突串行化**：两个 Issue 需要同一文件时，后领任务暂停该文件，由前一 Owner 完成交接或项目负责人重新划分领地；禁止依赖事后冲突合并解决所有权问题。
+
+GitHub 模板：`.github/ISSUE_TEMPLATE/task.md`、`.github/PULL_REQUEST_TEMPLATE.md`；`CODEOWNERS` 只作审查提醒，不能替代 Issue Owner。GitHub 官方规则要求 Issue/PR 模板位于**默认分支**才会自动出现在新建界面；当前默认 `master` 尚未包含本治理批次，因此稳定化合入 `master` 前，模板文件只能作为手工填写规范，不能声称 UI 已自动启用。
+
+## 0.6 当前 GitHub 强制能力边界
+
+- 仓库为 private；2026-09-01 对 `master` 与协作基线查询 branch protection/rulesets 均返回 403，提示需升级套餐或公开仓库。
+- 在许可证、第三方再分发与公开内容边界未完成前，**不得为了分支保护把仓库改成 public**。
+- 当前所有“禁止直推”“必须另一名真人 Review”等要求均属于协作流程纪律，由 Yenefa 与 Percy 在各自操作及 Merge 决策中共同执行；AI 不得把未受 GitHub 技术强制的规则描述成已技术锁定。
+- 若套餐或可见性变化，先建立最小 ruleset（禁止 force-push、要求 PR、至少 1 名真人 Review），再更新本节。
+
+## 0.7 主仓 ↔ 实验/Evidence 卫星仓
+
+1. **主仓唯一真源**：`Yenefa/AEDL` 负责集成代码、工程合同、ADR、合规台账、比赛主张、正式 Evidence 索引与制造权限；任何对外能力主张必须能回到主仓的确定提交和证据。
+2. **卫星仓职责**：`Yenefa/AEDL-spike` 负责边界清晰的协议执行器实验、故障注入样例和过程 Evidence。卫星实验通过不等于主仓已集成、M2 已制造放行或实体硬件已验证。
+3. **各仓独立治理**：卫星任务同样执行 Issue → task branch → Draft PR → 另一名真人 Review；不得直接 push/force-push 其 `main`。当前入口为卫星 Issue #1 / Draft PR #2。
+4. **受控回流**：准备吸收卫星成果时，在主仓创建或扩展一个 Issue，明确写出 exact spike commit、源文件路径、要吸收的机制、复现命令、已知限制和主仓独占写路径；随后只在主仓任务分支集成并重新验证。
+5. **Evidence 不偷换**：卫星的历史 Evidence 保留原路径和提交；主仓可以索引或镜像可审计摘要，但不能把旧运行重命名成当前运行、把 native/Wokwi 结果写成物理结果，或手工改写原始 Evidence 得到 PASS。
+6. **架构与许可证边界**：卫星仓不单独改变主仓架构、比赛主张、制造签发、公开范围或许可证。需要公开或再分发时，先核对 `THIRD_PARTY_RESOURCES.md`、`NOTICE` 和 `OPEN_OUTPUTS.md`，由人类裁决。
+7. **不在两仓重复开发同一任务**：同一工作单元必须指定主仓或卫星仓为 Owner；跨仓修改可以共享一个 AI Usage ID，但每个仓都保留自己的 commit、PR 和 Handoff。
 
 ## 2. 交接规范
 
@@ -192,7 +238,9 @@
 
 ## 5. 当前活动任务（Wave 4，2026-09-01 发卡）
 
-- **TASK-W4A**：EDD-001 证据冻结 + POWER 合同草案 → 🔨 待领（难度★★）
-- **TASK-W4B**：kicad-happy 六步 intake + 吸收方案 → 🔨 待领（难度★★★）
-- **TASK-W4C**：U3 ECO 准备 + 治理杂项 → 属主：ZCode 主会话
+- **COLLAB-BASELINE**：两人协作入口 → GitHub Issue #1 / Draft PR #6；分支 `codex/collaboration-onboarding`；已请求 `la4876949-bot` Review，状态 `PENDING_HUMAN_REVIEW`。
+- **TASK-W4A**：EDD-001 证据冻结 + POWER 合同草案 → GitHub Issue #2；`TO_ASSIGN`，身份核实前不得领取（难度★★）。
+- **TASK-W4B**：kicad-happy 六步 intake + 吸收方案 → GitHub Issue #3；Owner `la4876949-bot`，贡献分类 `AEDL_TEAM`（难度★★★）。
+- **TASK-W4C**：U3 ECO 准备 + 治理杂项 → GitHub Issue #4；旧文档属主为 ZCode 主会话，GitHub 真人 Owner `TO_ASSIGN`。
+- **SANDBOX-V3**：外部信任锚 + orchestrator 注入闭环 → GitHub Issue #5；与 Wave 4 硬件任务独立领取。
 - 任务书全文（领地/待办/验收/禁止）：`docs/WAVE4_TASKS_20260901.md`

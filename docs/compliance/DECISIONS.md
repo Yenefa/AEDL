@@ -252,3 +252,101 @@
 
 - 后续复查条件：
   - V1 运行时完成并产生真实集成测试；首个 KiCad compiler/read-back verifier 接入；Sandbox 扩展到 EDD-001 之外；或引入 OS/容器级强隔离时复查。
+
+## ADR-009 — 两人协作采用 Issue-first、独立 clone 与临时集成基线
+
+- 日期：2026-09-01
+- 状态：Proposed（已实施于 Draft PR #6；仍待另一名真人 Review）
+
+- 问题：
+  - AEDL 从单人多 AI 会话进入两名真人开发者协作，但 2026-09-01 现场审计发现：默认 `master` 比当前完整工作线落后 44 个提交；GitHub 无开放 PR/Issue/模板；当前 private 套餐不能启用 branch protection/rulesets；第二名协作者的 GitHub 账号与正式/外部身份尚未核实。
+  - 若直接让两人从 `master` 或同一工作目录开工，会产生过期基线、共享 index、混合暂存、贡献归因错误和无人工 Review 的风险。
+
+- 候选方案：
+  1. 继续通过聊天分工，两人直接向共享分支 push。
+  2. 新增长期 `develop` 分支，再设计一套完整 Git Flow。
+  3. 采用最小 Issue-first 流程：一人一份 clone；一个 Issue 一个 Owner/领地/分支；过渡期从当前完整工作线开任务分支并向其提 PR；另一名真人 Review；稳定化后回归 `master` 作为唯一基线。
+
+- 决策：
+  - 采用方案 3。
+  - `fix/m2-schematic-semantic-release` @ `e7ff3c1` 作为治理启动冻结点；治理 PR 合入后，以该远端分支最新提交为临时协作基线。
+  - 禁止任务直接 push 到 `master` 或临时协作基线；只 push 任务分支，并通过 PR 交接。
+  - GitHub 无法强制保护期间，由项目负责人程序性执行“禁止直推、另一名真人 Review、禁止自批”。
+  - 不为了取得分支保护而把 private 仓库改成 public；公开仍受 ADR-003 的许可证与第三方边界约束。
+  - 项目负责人已确认 `la4876949-bot` 为第二名真人协作者，贡献分类为 `AEDL_TEAM`，并允许领取 W4B；成员身份本身不登记为团队贡献，待其产生实际贡献后再更新 `TEAM_CONTRIBUTIONS.md` 与相应比赛归因。
+
+- 理由：
+  - 方案 3 直接补齐当前实际缺口，保持 AGENTS.md 的稳定分支与人工 Review 原则，同时不引入两人团队暂时不需要的复杂长期分支模型。
+  - 独立 clone 隔离 working tree/index；Issue 的唯一 Owner 和 Owned paths 隔离写权限；PR 将 diff、测试与合规 ID 放到同一人工审核点。
+  - 临时基线避免朋友从过期 `master` 开工；稳定化后回归 `master`，不把历史功能分支永久制度化。
+
+- AI 参与：
+  - OpenAI Codex 对本地 Git、远端分支、GitHub 协作者/邀请、PR/Issue、保护能力和测试基线进行现场审计，提出并实施治理入口、模板与任务卡。
+
+- 团队自主判断：
+  - 项目负责人明确表示“直接听你的，你直接开始操作”，授权执行已提交的治理先行方案；最终 PR 审核与 merge 仍保留给真人。
+
+- Evidence / Reference：
+  - GitHub Issue #1：两人协作治理基线。
+  - GitHub Issues #2–#5：W4A、W4B、W4C 与 Sandbox V3。
+  - `docs/COLLABORATION.md` v3。
+  - `.github/ISSUE_TEMPLATE/task.md`、`.github/PULL_REQUEST_TEMPLATE.md`、`.github/CODEOWNERS`。
+
+- 影响：
+  - 新任务必须先创建 Issue 并明确唯一 Owner、领地、验收和身份分类。
+  - 当前过渡期 PR 目标为 `fix/m2-schematic-semantic-release`；稳定化合并完成后改回 `master`。
+  - `CODEOWNERS` 当前仅提供提醒，不构成技术强制；不能把程序规则描述成 GitHub 已锁定。
+  - GitHub Issue/PR 模板只有进入默认分支才会在新建界面自动生效；治理 PR 仅合入临时协作基线期间，模板作为手工规范使用。
+
+- 后续复查条件：
+  - 第二名真人协作者产生首个实际贡献并完成登记；治理 PR 经人工 Review；当前工作线合并回 `master`；GitHub 套餐/可见性允许启用 ruleset；或协作人数超过两人时。
+
+## ADR-010 — AEDL 主仓与 spike 实验/Evidence 卫星采用受控晋升边界
+
+- 日期：2026-09-01
+- 状态：Proposed（已实施于两个 Draft PR；仍待另一名真人 Review）
+
+- 问题：
+  - `Yenefa/AEDL-spike` 已保存两阶段协议执行器、故障注入与过程 Evidence，但主仓只把它称为“展示仓”，没有定义架构权限、技术主张归属、Evidence 回流或协作门禁。
+  - 现场复核发现卫星仓当前为 private、只有历史基础提交、没有 Issue/PR/AGENTS/Handoff；同时主仓 README 仍把已撤销的 2026-08-29 制造签发写成当前 `manufacturing_release=true` 和“已授权下单”。
+  - 若继续让两仓各自陈述状态，会产生双重真源、旧 Evidence 冒充当前结果、实验能力未经复验直接进入比赛主张，以及两名开发者跨仓重复修改的风险。
+
+- 候选方案：
+  1. 将 spike 内容全部复制回主仓并关闭卫星仓。
+  2. 把卫星仓保留为无治理的展示快照，主仓只放一个链接。
+  3. 主仓保持集成/技术主张真源，卫星仓成为受治理的实验/过程 Evidence 仓；跨仓吸收必须引用 exact commit/path，并在主仓 Issue/PR 中重新验证。
+
+- 决策：
+  - 采用方案 3。
+  - `Yenefa/AEDL` 唯一负责集成代码、工程合同、ADR、合规台账、比赛主张、正式 Evidence 索引和制造权限。
+  - `Yenefa/AEDL-spike` 负责协议执行器实验、故障注入样例和历史过程 Evidence；它不单独决定主仓架构、制造签发、公开范围或比赛技术主张。
+  - 两仓各自执行 Issue → task branch → Draft PR → 另一名真人 Review；同一跨仓工作单元可以共享 AI Usage ID，但必须有独立 commit、PR 和 Handoff。
+  - 卫星成果晋升必须记录 exact spike commit、源路径、复现命令、限制和主仓落点；在主仓独立验证后才能改变 Implemented/Claimed 状态。
+  - 历史 Evidence 只做索引，不重命名为新运行，不把 native/Wokwi 结果提升为物理验证，不把预设候选池描述成 LLM 自主修复。
+  - README 不再复制易漂移的绿色计数或制造授权；当前状态委托给 HANDOFF、Evidence Index 和结构化门禁真源。
+
+- 理由：
+  - 方案 3 保留实验历史和独立复现价值，同时用精确提交引用与主仓复验防止双重真源。
+  - 关闭卫星会破坏过程上下文；无治理展示仓又不能满足两人协作、证据真实性和 AIC 自研/AI/第三方边界要求。
+  - 稳定 README 减少历史结论反复漂移，真实制造状态仍由 `gates/board_review_v1.json` 失败关闭。
+
+- AI 参与：
+  - OpenAI Codex desktop 现场复核两仓 Git/GitHub 状态、协作者、历史 Evidence 与复现路径，提出并实施双仓治理、README 状态修复、卫星模板/索引和 Stage 1 Windows 输出解码修复。精确部署型号仍为 `UNKNOWN`。
+
+- 团队自主判断：
+  - 项目负责人确认 `la4876949-bot` 为正式团队成员，并明确将两个仓库的治理与修改全权交给当前 Agent；最终 PR Review 与 merge 仍由真人完成。
+
+- Evidence / Reference：
+  - 主仓 GitHub Issue #1 / Draft PR #6。
+  - 卫星仓 GitHub Issue #1 / Draft PR #2。
+  - `docs/COLLABORATION.md` §0.7。
+  - `docs/evidence/EVIDENCE_INDEX.md` EVID-20260901-001 / EVID-20260901-002。
+  - 卫星治理分支 `codex/spike-governance` @ `0e562e5`。
+
+- 影响：
+  - 后续 spike 实验默认在卫星仓立项；只有准备吸收时才修改主仓，并必须保留来源提交和限制。
+  - 卫星仓当前保持 private；本决策不触发公开、Release、许可证变更或 Submission Check。
+  - 本次只登记历史 Evidence，不重跑 Wokwi，不修改 M2 硬件、生产包、制造签发或实体验证状态。
+
+- 后续复查条件：
+  - 首个卫星成果实际晋升主仓；卫星仓准备公开/Release；两仓许可证或再分发边界变化；或正式比赛材料引用卫星结果时复查。

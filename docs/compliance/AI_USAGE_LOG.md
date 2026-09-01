@@ -2097,3 +2097,93 @@
     本机路径与 secret 扫描通过）。主仓库 .gitignore 排除 spike 目录。
 
 - 最终状态：`PENDING_HUMAN_REVIEW`
+
+## AI-20260901-005
+
+- 日期：2026-09-01
+- 任务名称：AEDL 两人协作治理基线（Issue-first / 独立 clone / PR 人工 Review）
+- 模块/路径：
+  - `.github/ISSUE_TEMPLATE/task.md`（新）
+  - `.github/PULL_REQUEST_TEMPLATE.md`（新）
+  - `.github/CODEOWNERS`（新，advisory only）
+  - `docs/COLLABORATION.md`（v2 → v3）
+  - `docs/WAVE4_TASKS_20260901.md`（GitHub Issue 跟踪版）
+  - `docs/HANDOFF.md`（当前状态卡）
+  - `docs/compliance/DECISIONS.md`（ADR-009）
+  - 本台账本条目
+
+- 做了什么：
+  - 现场复核本地/远端 Git、GitHub private 仓库、默认分支、协作者、邀请、PR/Issue 与 branch protection/rulesets 能力，确认当前工作线已同步而默认 `master` 落后 44 个提交。
+  - 将本地 `origin` 从历史重定向地址更新为 `https://github.com/Yenefa/AEDL.git`。
+  - 建立 GitHub Issue #1（本治理任务）、#2（W4A）、#3（W4B）、#4（W4C）、#5（Sandbox V3）；项目负责人确认 `la4876949-bot` 是第二名真人协作者并将其分类为 `AEDL_TEAM` 后，将 #3 指派给该账号，#2/#4/#5 保持 `TO_ASSIGN`。
+  - 新增 Issue/PR 模板与 advisory CODEOWNERS；将两名真人的一人一 clone、唯一 Owner、文件领地、禁止直推、另一人 Review、精确暂存和冲突串行化固化为协作协议 v3。
+  - 新增 ADR-009，记录“临时完整工作线作为过渡基线，稳定化后回归 master”的最小协作决策；没有引入长期 develop/Git Flow。
+
+- 验证：
+  - 修改前 `git fetch origin --prune` 成功；当前冻结点 `e7ff3c1` 与 `origin/fix/m2-schematic-semantic-release` 为 `0/0`。
+  - 修改前顺序基线：Sandbox `272/272 OK`（1 skip、1 expectedFailure）；主仓库 `269/269 OK`。
+  - 最终提交前验证：Prettier check 通过；`git diff --check` exit 0；高置信 secret pattern 0 命中；AI-005 与 ADR-009 标题均恰好 1 条；Issue #1–#5 均 OPEN，#3 assignee 为 `la4876949-bot`；CODEOWNERS 基础语法与 Issue template frontmatter 检查通过。
+  - 修改后顺序复跑：Sandbox `272/272 OK`（1 skip、1 expectedFailure）；主仓库 `269/269 OK`。
+  - 真实 EDD-001 preflight：`BLOCKED` / 7 findings / exit 1（资料、POWER、compiler、verifier 缺口保持失败关闭）。
+  - Git：首个提交 `e8ca7c5` 已通过全局 pre-commit hook，并成功推送 `origin/codex/collaboration-onboarding`；Draft PR #6 已创建，base 为 `fix/m2-schematic-semantic-release`，已请求 `la4876949-bot` Review。
+
+- 已知限制：
+  - `la4876949-bot` 已确认为第二名真人协作者，贡献分类为 `AEDL_TEAM`；成员身份不等于实际贡献，因此本批不更新 `TEAM_CONTRIBUTIONS.md`。另有一条 `invitee=null` 的未过期 write 邀请，接收人 `UNKNOWN`；除已领取的 W4B 外，其余 W4/Sandbox Issues 不指派。
+  - 当前 private 仓库套餐无法启用 branch protection/rulesets；禁止直推与另一人 Review 目前是程序性约束，不是 GitHub 技术强制。
+  - GitHub 官方文档确认 Issue/PR 模板只有位于默认分支才会自动显示；当前默认 `master` 尚未包含本批，所以稳定化合入 `master` 前只能手工引用模板内容。
+  - 本批不修改硬件设计、BOM、原理图、PCB、制造文件或 Evidence 字节；不重跑会改写 Evidence 的完整 gate runner；不构成制造签发或实体 C 级验证。
+
+- Commit / PR：首个提交 `e8ca7c5`；Handoff 回写提交 `4c8df18`；分支 `codex/collaboration-onboarding` 已推送；Draft PR #6（base=`fix/m2-schematic-semantic-release`）；正式团队成员分类同步随当前提交推送。
+- AIC Score Target：`NONE`（内部协作治理，不强行关联评分项）
+- 最终状态：`PENDING_HUMAN_REVIEW`
+
+## AI-20260901-006
+
+- 日期：2026-09-01
+- 任务名称：AEDL 双仓库治理、主 README 真实性修复与 spike 验收缺陷收口
+- 关联工作项：
+  - 主仓 `Yenefa/AEDL#1` / Draft PR #6
+  - 卫星仓 `Yenefa/AEDL-spike#1` / Draft PR #2
+- 参与标签：`ADVISE`、`DOCUMENT`、`DEBUG`、`GENERATE_TEST`
+- AI 系统：OpenAI Codex desktop；精确部署型号 `UNKNOWN`
+- 人类授权：项目负责人确认 `la4876949-bot` 为正式团队成员，并明确将两个仓库的治理与修改全权交给当前 Agent；最终 PR Review 与 merge 仍由真人完成。
+- 主仓模块/路径：
+  - `README.md`
+  - `docs/COLLABORATION.md`
+  - `docs/HANDOFF.md`
+  - `docs/compliance/DECISIONS.md`（ADR-010）
+  - `docs/evidence/EVIDENCE_INDEX.md`（EVID-20260901-001/002）
+  - 本台账本条目
+- 卫星模块/路径：
+  - 仓库治理入口、README、报告路径、GitHub 模板、CODEOWNERS、`.gitignore`、Handoff、AI/Evidence 索引
+  - `spike1/verification/runner.py`
+  - `tests/test_stage1_runner_encoding.py`
+  - 删除一个误跟踪的 `spike2/verification/__pycache__/*.pyc`
+
+- 做了什么：
+  - 现场复核两个本地工作树与 GitHub 远端，确认 `Yenefa/AEDL-spike` 当前为 private、默认 `main` 只有历史基础提交，`Yenefa` 为 admin，正式团队成员 `la4876949-bot` 具有 write 权限；没有把历史台账中的“public”描述倒改成当前事实。
+  - 将卫星仓治理为主仓的实验/过程 Evidence 卫星：建立 Issue-first、任务分支、Draft PR、另一真人 Review、Agent/Handoff/模板/CODEOWNERS、Evidence 不可变与受控回流入口；仓库描述与 topics 同步更新。
+  - 修正卫星 README 的退役主仓链接和迁移路径，删除误跟踪字节码，保留 `spike1/evidence/`、`spike2/evidence/` 的既有字节不变。
+  - 隔离验收 Stage 1 时发现 Windows 默认 GBK 解码可在子进程读取线程产生 `UnicodeDecodeError`，而矩阵仍退出 0。先增加非法 UTF-8 回归测试并观察 RED，再将 Stage 1 改为按字节捕获、UTF-8 `errors="replace"` 解码；验证断言、DUT 和故障模型未改。
+  - 重写主仓 README：删除已撤销的“7/7 全绿、`manufacturing_release=true`、授权下单”现状叙述，直接标明当前制造放行 `BLOCKED`、实体板验证 `NOT_RUN`，并将动态状态委托给 HANDOFF、Evidence Index 与结构化门禁真源。
+  - 新增 ADR-010 和两个历史 spike Evidence 索引，明确主仓是集成/技术主张真源，卫星能力只有引用 exact commit/path 并经主仓 Issue/PR 独立复验后才能晋升。
+
+- 验证：
+  - 卫星编码回归测试：RED（缺少安全 capture helper）→ GREEN，`1` test passed。
+  - 卫星干净隔离副本：Stage 1 native baseline 3/3、四类故障检出、exit 0；Stage 2 native baseline 3/3、四类故障检出、exit 0；原 decoder-thread exception 未复现。
+  - 卫星静态验收：changed Markdown Prettier PASS；`git diff --check` PASS；22 个 tracked JSON 可解析；高置信 secret scan 0；两个历史 Evidence 树相对 `origin/main` 0 文件差异。
+  - 主仓 `py -3 -S -m unittest discover -s tests`：269/269 OK。
+  - 主仓 `uv run --frozen --project sandbox_runtime python -m unittest discover -s sandbox_runtime/tests -p "test_*.py"`：272/272 OK（1 skip、1 expectedFailure）。
+  - 主仓 EDD-001 preflight：`BLOCKED` / 7 findings / exit 1，继续对资料、POWER 合同、compiler 和 independent verifier 缺口失败关闭。
+  - 主仓没有运行会重写 `notes/m2-evidence-reset/` 的完整 `gates/run_gates.py`。
+
+- 已知限制：
+  - 本任务没有重跑 Wokwi、repair 或实体硬件；2026-09-01 的 isolated native 验收不替换卫星历史 Evidence。
+  - 本任务不修改 M2 原理图、PCB、BOM、生产包、`gates/board_review_v1.json` 或现有原始 Evidence；`manufacturing_release=false`、datasheet 人工签发、下单和回件 C 级验证仍独立保留。
+  - 卫星仓保持 private；没有触发公开、Release、第三方资源变化、FUSION_MAP、OPEN_OUTPUTS 或 Submission Check。
+  - 两个 Draft PR 均等待 `la4876949-bot` 真人 Review；AI 不 Approve、不 merge。
+
+- Compliance：ADR-010；EVID-20260901-001 / EVID-20260901-002（历史索引）；Third-party none；Fusion Map/Open Outputs/Submission Check 均未触发。
+- Commit / PR：卫星分支 `codex/spike-governance` 已推送至最终治理头 `0e562e5`，Draft PR #2；主仓内容提交 `d1c625a`，随 Handoff 回写提交推送至 Draft PR #6。
+- AIC Score Target：`NONE`（仓库与协作治理，不把普通 GitHub/AI 工具使用包装成比赛创新）
+- 最终状态：`PENDING_HUMAN_REVIEW`
