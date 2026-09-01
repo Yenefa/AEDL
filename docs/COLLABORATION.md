@@ -1,13 +1,14 @@
-# AEDL 两人 + 多 AI 协作协议 v3（2026-09-01）
+# AEDL 两人 + 多 AI 协作协议 v4（2026-09-01）
 
 > 📢 **公告（2026-09-01）**：大统领 GitHub 账号已由 `sca331613-commits` 改名为 **`Yenefa`**。
 > 旧 URL 靠重定向仍可达；新建仓库/引用一律用 `Yenefa`；`gh repo create` 不带用户名前缀。
-> 已发布的 spike 展示仓：`https://github.com/Yenefa/AEDL-spike`。
+> 当前 private 的实验/Evidence 卫星仓：`https://github.com/Yenefa/AEDL-spike`；其治理入口为
+> `Yenefa/AEDL-spike#1` / Draft PR #2。
 
 > 目的：两名真人开发者通过各自独立 clone 协作，同时允许多个 AI 会话在受控领地内辅助；所有成果经 Issue、任务分支、PR 和另一名真人 Review 交接，避免覆盖、混提和身份误记。
 > 本协议是 AGENTS.md 的并行扩展，冲突时以 AGENTS.md 为准。
 > **每个会话开工时（按序，缺一不可）**：读 `AGENTS.md` → 读 `docs/HANDOFF.md` 状态卡 → **读本文件** → `git status` 看现场 → 在 `docs/compliance/AI_USAGE_LOG.md` 领号（见 §0.1）。
-> v3 变更：新增真人协作者身份核验与独立 clone（§0.4）、Issue-first 分支/PR 流程（§0.5）、当前 GitHub 强制能力边界（§0.6）；v2 的领号、钩子、撞车和 commit 规则继续生效。治理实施由 GitHub Issue #1 跟踪。
+> v4 变更：新增主仓与实验/Evidence 卫星仓的唯一职责和回流协议（§0.7）；v3 的真人协作者身份、独立 clone、Issue-first 分支/PR 和 GitHub 强制能力边界继续生效。治理实施由 GitHub Issue #1 跟踪。
 
 ## 0. 比赛时钟（2026-08-31 大统领确认）
 
@@ -87,6 +88,16 @@ GitHub 模板：`.github/ISSUE_TEMPLATE/task.md`、`.github/PULL_REQUEST_TEMPLAT
 - 在许可证、第三方再分发与公开内容边界未完成前，**不得为了分支保护把仓库改成 public**。
 - 当前所有“禁止直推、必须另一人 Review”均为程序性约束。项目负责人负责执行；AI 不得把未受 GitHub 强制的规则描述成已技术锁定。
 - 若套餐或可见性变化，先建立最小 ruleset（禁止 force-push、要求 PR、至少 1 名真人 Review），再更新本节。
+
+## 0.7 主仓 ↔ 实验/Evidence 卫星仓
+
+1. **主仓唯一真源**：`Yenefa/AEDL` 负责集成代码、工程合同、ADR、合规台账、比赛主张、正式 Evidence 索引与制造权限；任何对外能力主张必须能回到主仓的确定提交和证据。
+2. **卫星仓职责**：`Yenefa/AEDL-spike` 负责边界清晰的协议执行器实验、故障注入样例和过程 Evidence。卫星实验通过不等于主仓已集成、M2 已制造放行或实体硬件已验证。
+3. **各仓独立治理**：卫星任务同样执行 Issue → task branch → Draft PR → 另一名真人 Review；不得直接 push/force-push 其 `main`。当前入口为卫星 Issue #1 / Draft PR #2。
+4. **受控回流**：准备吸收卫星成果时，在主仓创建或扩展一个 Issue，明确写出 exact spike commit、源文件路径、要吸收的机制、复现命令、已知限制和主仓独占写路径；随后只在主仓任务分支集成并重新验证。
+5. **Evidence 不偷换**：卫星的历史 Evidence 保留原路径和提交；主仓可以索引或镜像可审计摘要，但不能把旧运行重命名成当前运行、把 native/Wokwi 结果写成物理结果，或手工改写原始 Evidence 得到 PASS。
+6. **架构与许可证边界**：卫星仓不单独改变主仓架构、比赛主张、制造签发、公开范围或许可证。需要公开或再分发时，先核对 `THIRD_PARTY_RESOURCES.md`、`NOTICE` 和 `OPEN_OUTPUTS.md`，由人类裁决。
+7. **不在两仓重复开发同一任务**：同一工作单元必须指定主仓或卫星仓为 Owner；跨仓修改可以共享一个 AI Usage ID，但每个仓都保留自己的 commit、PR 和 Handoff。
 
 ## 2. 交接规范
 

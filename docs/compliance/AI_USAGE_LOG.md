@@ -2136,3 +2136,53 @@
 - Commit / PR：首个提交 `e8ca7c5`；Handoff 回写提交 `4c8df18`；分支 `codex/collaboration-onboarding` 已推送；Draft PR #6（base=`fix/m2-schematic-semantic-release`）；正式团队成员分类同步随当前提交推送。
 - AIC Score Target：`NONE`（内部协作治理，不强行关联评分项）
 - 最终状态：`PENDING_HUMAN_REVIEW`
+
+## AI-20260901-006
+
+- 日期：2026-09-01
+- 任务名称：AEDL 双仓库治理、主 README 真实性修复与 spike 验收缺陷收口
+- 关联工作项：
+  - 主仓 `Yenefa/AEDL#1` / Draft PR #6
+  - 卫星仓 `Yenefa/AEDL-spike#1` / Draft PR #2
+- 参与标签：`ADVISE`、`DOCUMENT`、`DEBUG`、`GENERATE_TEST`
+- AI 系统：OpenAI Codex desktop；精确部署型号 `UNKNOWN`
+- 人类授权：项目负责人确认 `la4876949-bot` 为正式团队成员，并明确将两个仓库的治理与修改全权交给当前 Agent；最终 PR Review 与 merge 仍由真人完成。
+- 主仓模块/路径：
+  - `README.md`
+  - `docs/COLLABORATION.md`
+  - `docs/HANDOFF.md`
+  - `docs/compliance/DECISIONS.md`（ADR-010）
+  - `docs/evidence/EVIDENCE_INDEX.md`（EVID-20260901-001/002）
+  - 本台账本条目
+- 卫星模块/路径：
+  - 仓库治理入口、README、报告路径、GitHub 模板、CODEOWNERS、`.gitignore`、Handoff、AI/Evidence 索引
+  - `spike1/verification/runner.py`
+  - `tests/test_stage1_runner_encoding.py`
+  - 删除一个误跟踪的 `spike2/verification/__pycache__/*.pyc`
+
+- 做了什么：
+  - 现场复核两个本地工作树与 GitHub 远端，确认 `Yenefa/AEDL-spike` 当前为 private、默认 `main` 只有历史基础提交，`Yenefa` 为 admin，正式团队成员 `la4876949-bot` 具有 write 权限；没有把历史台账中的“public”描述倒改成当前事实。
+  - 将卫星仓治理为主仓的实验/过程 Evidence 卫星：建立 Issue-first、任务分支、Draft PR、另一真人 Review、Agent/Handoff/模板/CODEOWNERS、Evidence 不可变与受控回流入口；仓库描述与 topics 同步更新。
+  - 修正卫星 README 的退役主仓链接和迁移路径，删除误跟踪字节码，保留 `spike1/evidence/`、`spike2/evidence/` 的既有字节不变。
+  - 隔离验收 Stage 1 时发现 Windows 默认 GBK 解码可在子进程读取线程产生 `UnicodeDecodeError`，而矩阵仍退出 0。先增加非法 UTF-8 回归测试并观察 RED，再将 Stage 1 改为按字节捕获、UTF-8 `errors="replace"` 解码；验证断言、DUT 和故障模型未改。
+  - 重写主仓 README：删除已撤销的“7/7 全绿、`manufacturing_release=true`、授权下单”现状叙述，直接标明当前制造放行 `BLOCKED`、实体板验证 `NOT_RUN`，并将动态状态委托给 HANDOFF、Evidence Index 与结构化门禁真源。
+  - 新增 ADR-010 和两个历史 spike Evidence 索引，明确主仓是集成/技术主张真源，卫星能力只有引用 exact commit/path 并经主仓 Issue/PR 独立复验后才能晋升。
+
+- 验证：
+  - 卫星编码回归测试：RED（缺少安全 capture helper）→ GREEN，`1` test passed。
+  - 卫星干净隔离副本：Stage 1 native baseline 3/3、四类故障检出、exit 0；Stage 2 native baseline 3/3、四类故障检出、exit 0；原 decoder-thread exception 未复现。
+  - 卫星静态验收：changed Markdown Prettier PASS；`git diff --check` PASS；22 个 tracked JSON 可解析；高置信 secret scan 0；两个历史 Evidence 树相对 `origin/main` 0 文件差异。
+  - 主仓 `py -3 -S -m unittest discover -s tests`：269/269 OK。
+  - 主仓 `uv run --frozen --project sandbox_runtime python -m unittest discover -s sandbox_runtime/tests -p "test_*.py"`：272/272 OK（1 skip、1 expectedFailure）。
+  - 主仓 EDD-001 preflight：`BLOCKED` / 7 findings / exit 1，继续对资料、POWER 合同、compiler 和 independent verifier 缺口失败关闭。
+  - 主仓没有运行会重写 `notes/m2-evidence-reset/` 的完整 `gates/run_gates.py`。
+
+- 已知限制：
+  - 本任务没有重跑 Wokwi、repair 或实体硬件；2026-09-01 的 isolated native 验收不替换卫星历史 Evidence。
+  - 本任务不修改 M2 原理图、PCB、BOM、生产包、`gates/board_review_v1.json` 或现有原始 Evidence；`manufacturing_release=false`、datasheet 人工签发、下单和回件 C 级验证仍独立保留。
+  - 卫星仓保持 private；没有触发公开、Release、第三方资源变化、FUSION_MAP、OPEN_OUTPUTS 或 Submission Check。
+  - 两个 Draft PR 均等待 `la4876949-bot` 真人 Review；AI 不 Approve、不 merge。
+
+- Compliance：ADR-010；EVID-20260901-001 / EVID-20260901-002（历史索引）；Third-party none；Fusion Map/Open Outputs/Submission Check 均未触发。
+- AIC Score Target：`NONE`（仓库与协作治理，不把普通 GitHub/AI 工具使用包装成比赛创新）
+- 最终状态：`PENDING_HUMAN_REVIEW`

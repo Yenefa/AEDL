@@ -300,3 +300,53 @@
 
 - 后续复查条件：
   - 第二名真人协作者产生首个实际贡献并完成登记；治理 PR 经人工 Review；当前工作线合并回 `master`；GitHub 套餐/可见性允许启用 ruleset；或协作人数超过两人时。
+
+## ADR-010 — AEDL 主仓与 spike 实验/Evidence 卫星采用受控晋升边界
+
+- 日期：2026-09-01
+- 状态：Proposed（已实施于两个 Draft PR；仍待另一名真人 Review）
+
+- 问题：
+  - `Yenefa/AEDL-spike` 已保存两阶段协议执行器、故障注入与过程 Evidence，但主仓只把它称为“展示仓”，没有定义架构权限、技术主张归属、Evidence 回流或协作门禁。
+  - 现场复核发现卫星仓当前为 private、只有历史基础提交、没有 Issue/PR/AGENTS/Handoff；同时主仓 README 仍把已撤销的 2026-08-29 制造签发写成当前 `manufacturing_release=true` 和“已授权下单”。
+  - 若继续让两仓各自陈述状态，会产生双重真源、旧 Evidence 冒充当前结果、实验能力未经复验直接进入比赛主张，以及两名开发者跨仓重复修改的风险。
+
+- 候选方案：
+  1. 将 spike 内容全部复制回主仓并关闭卫星仓。
+  2. 把卫星仓保留为无治理的展示快照，主仓只放一个链接。
+  3. 主仓保持集成/技术主张真源，卫星仓成为受治理的实验/过程 Evidence 仓；跨仓吸收必须引用 exact commit/path，并在主仓 Issue/PR 中重新验证。
+
+- 决策：
+  - 采用方案 3。
+  - `Yenefa/AEDL` 唯一负责集成代码、工程合同、ADR、合规台账、比赛主张、正式 Evidence 索引和制造权限。
+  - `Yenefa/AEDL-spike` 负责协议执行器实验、故障注入样例和历史过程 Evidence；它不单独决定主仓架构、制造签发、公开范围或比赛技术主张。
+  - 两仓各自执行 Issue → task branch → Draft PR → 另一名真人 Review；同一跨仓工作单元可以共享 AI Usage ID，但必须有独立 commit、PR 和 Handoff。
+  - 卫星成果晋升必须记录 exact spike commit、源路径、复现命令、限制和主仓落点；在主仓独立验证后才能改变 Implemented/Claimed 状态。
+  - 历史 Evidence 只做索引，不重命名为新运行，不把 native/Wokwi 结果提升为物理验证，不把预设候选池描述成 LLM 自主修复。
+  - README 不再复制易漂移的绿色计数或制造授权；当前状态委托给 HANDOFF、Evidence Index 和结构化门禁真源。
+
+- 理由：
+  - 方案 3 保留实验历史和独立复现价值，同时用精确提交引用与主仓复验防止双重真源。
+  - 关闭卫星会破坏过程上下文；无治理展示仓又不能满足两人协作、证据真实性和 AIC 自研/AI/第三方边界要求。
+  - 稳定 README 减少历史结论反复漂移，真实制造状态仍由 `gates/board_review_v1.json` 失败关闭。
+
+- AI 参与：
+  - OpenAI Codex desktop 现场复核两仓 Git/GitHub 状态、协作者、历史 Evidence 与复现路径，提出并实施双仓治理、README 状态修复、卫星模板/索引和 Stage 1 Windows 输出解码修复。精确部署型号仍为 `UNKNOWN`。
+
+- 团队自主判断：
+  - 项目负责人确认 `la4876949-bot` 为正式团队成员，并明确将两个仓库的治理与修改全权交给当前 Agent；最终 PR Review 与 merge 仍由真人完成。
+
+- Evidence / Reference：
+  - 主仓 GitHub Issue #1 / Draft PR #6。
+  - 卫星仓 GitHub Issue #1 / Draft PR #2。
+  - `docs/COLLABORATION.md` §0.7。
+  - `docs/evidence/EVIDENCE_INDEX.md` EVID-20260901-001 / EVID-20260901-002。
+  - 卫星治理分支 `codex/spike-governance` @ `6a2e70b`。
+
+- 影响：
+  - 后续 spike 实验默认在卫星仓立项；只有准备吸收时才修改主仓，并必须保留来源提交和限制。
+  - 卫星仓当前保持 private；本决策不触发公开、Release、许可证变更或 Submission Check。
+  - 本次只登记历史 Evidence，不重跑 Wokwi，不修改 M2 硬件、生产包、制造签发或实体验证状态。
+
+- 后续复查条件：
+  - 首个卫星成果实际晋升主仓；卫星仓准备公开/Release；两仓许可证或再分发边界变化；或正式比赛材料引用卫星结果时复查。
