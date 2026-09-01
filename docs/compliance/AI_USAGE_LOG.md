@@ -2196,6 +2196,12 @@
 - 日期：2026-09-01
 - 任务名称：登记真人身份与代称映射（Percy / Yenefa）
 - 模块/路径：`docs/ID_MAP.md`、本台账
+
+## AI-20260901-008
+
+- 日期：2026-09-01
+- 任务名称：Issue 模板扩展 Allowed/Forbidden/Change Budget/Verification Policy Change（Issue #10）
+- 模块/路径：`.github/ISSUE_TEMPLATE/task.md`、本台账
 - AI 工具/平台：DeepSeek Harness（DSH Web）
 - 模型：`deepseek-v4-flash`（运行环境提供）
 
@@ -2210,6 +2216,13 @@
 
 - 团队自主部分：
   - 项目负责人指定代称与采用决定；AI 只负责落盘与留痕。
+  - 按 Issue #10 把修改边界与预算字段落进任务模板：Forbidden paths（默认禁止，跨界 STOP）、Change Budget（YAML 软预算）、Verification Policy Change 标记（涉及 `.github/workflows/**` 必须双人确认）。
+
+- AI 实际产出：
+  - `task.md` 新增三节；`Owned paths` 标注为 Allowed Paths 语义；与既有 Shared read-only 节衔接。
+
+- 团队自主部分：
+  - 项目负责人批准 Issue #10 与模板扩展方案。
 
 - 人工审核：
   - 状态：`PENDING_HUMAN_REVIEW`
@@ -2217,6 +2230,7 @@
 - 验证：
   - 文档结构检查：Markdown 表格渲染正常；`git diff --check` 无空白错误。
   - 未修改任何代码、硬件、Evidence 或门禁文件。
+  - `git diff --check` 通过；模板字段与 AGENTS.md §2.2 一致。
 
 - 最终状态：
   - `PENDING_HUMAN_REVIEW`

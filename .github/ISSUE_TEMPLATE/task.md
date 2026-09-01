@@ -26,14 +26,36 @@ State the single outcome this task must achieve.
 - Contributor classification: `TO_VERIFY` (`AEDL_TEAM` / `EXTERNAL_CONTRIBUTOR`)
 - Start condition: do not begin until exactly one owner is assigned.
 
-## Owned paths
+## Owned paths (Allowed Paths)
 
-- List every writable file or directory.
+- List every writable file or directory (glob patterns allowed).
+
+## Forbidden paths
+
+- List paths that are default-denied for this task; crossing them requires STOP + scope expansion approved by the human owner.
 
 ## Shared read-only paths and dependencies
 
 - List files that may be read but must not be changed.
 - List upstream Issues, contracts, or human decisions.
+
+## Change Budget
+
+Declare expected size before starting; if actuals exceed the budget, STOP and redo the impact analysis (AGENTS.md §2.2):
+
+```yaml
+change_budget:
+  expected_files: N
+  expected_modules: [module-a]
+  cross_module: false
+  contract_change: false
+  evidence_semantics_change: false
+```
+
+## Verification Policy Change
+
+- Mark YES only when this task modifies `.github/workflows/**` or the required test set, secret scan, runner environment, or skip conditions. Such changes require both human owners (Yenefa + Percy) to confirm.
+- `YES / NO`
 
 ## Acceptance criteria
 
