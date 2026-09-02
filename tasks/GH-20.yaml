@@ -93,6 +93,11 @@ exceptions:
     # NOTE: historically reconciled — granted AFTER consumption (Run 001
     # discovered the authority gap); authority-before-consumption applies
     # from Run 002 onward (CONTROL_PLANE.md §4).
+  allow_drift:
+    permitted: true # 预授权（Run 002 起 authority-before-consumption）
+    reason: collision-2 envelope self-update commit; base 63e6cdd remains ancestor
+    authority: task-envelope
+    decision_ref: "2026-09-02 Yenefa in-session special authorization (一路推进)"
 
 escalation:
   owner: Yenefa (在席) + Percy (SHARED 路径：gates/contracts/**、ci.yml、manifest 声明)
