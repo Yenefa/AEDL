@@ -2735,3 +2735,33 @@ test_run_gates`：**115/115 OK**（覆盖问题 1 courtyard 四边越界、问�
 - AIC Score Target：`NONE`（纯流程记录）
 - 最终状态：
   - `PENDING_HUMAN_REVIEW`（PR 待人工 review，merge 由 Yenefa/Percy 执行）
+
+## AI-20260902-004
+
+- 日期：2026-09-02
+- 任务名称：AGENTS.md §13 收尾模板固化「Review Bundle 显式汇报」（绝对路径 + 文件清单）
+- 模块/路径：
+  - `AGENTS.md`（§13 Agent 最终回复格式，新增 Review Bundle 行）
+  - 本台账本条目
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash`
+- 参与标签：DOCUMENT
+- 任务目标：用户指出 review bundle 由 post-commit 钩子自动生成但收尾汇报未显式告知位置；选定方案 2
+  （不改生成器/钩子代码，设计冻结期），把「最终回复必须显式包含 bundle 绝对路径 + 文件清单」固化进
+  AGENTS.md §13 模板，作为所有 Agent 的固定收尾要求。
+- AI 实际产出：
+  - AGENTS.md §13 模板在 AIC score target 与 Human review 之间新增一行：
+    `Review Bundle: <绝对路径> + <文件清单> / none（master/main 或无需人工 Review 时）`。
+  - 与 §12 完成门禁（Review Bundle 已生成）和 §3.6（无 bundle 不进入人工 Review）衔接一致。
+- 团队自主部分：方案与措辞由用户选定；最小改动（仅 AGENTS.md 与本台账），未改任何控制平面原语。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 验证：
+  - `py -3 -m tools.dev_gate`（无 envelope，scope_check/binding_check 显式 excluded）exit 0：
+    main_tests 312 OK / sandbox_tests 274 OK（skipped=1, expected failures=1）/ secret_scan 307 文件 /
+    bundle_check pass。
+  - post-commit 钩子自动生成 bundle 至 `<repo parent>/review-bundles/docs_agent-report-bundle-path/`，
+    manifest head_sha 与 commit 一致（待 commit 后核验）。
+- Compliance：Third-party none；ADR none；Evidence none（流程性模板变更）。
+- AIC Score Target：`NONE`（内部流程约束）
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`（PR 待人工 review，merge 由 Yenefa/Percy 执行）
