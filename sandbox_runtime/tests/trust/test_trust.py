@@ -272,5 +272,94 @@ class RealEdd001ManifestTests(unittest.TestCase):
             self.assertNotIn("http://", blob)
 
 
+
+class RemoteEvidenceMetadataTests(unittest.TestCase):
+    """Review M4 (2026-09-02): field-level machine validation of
+    metadata.remote_evidence. The trust validator only checks that the
+    top-level metadata is an object; these tests pin the provenance records
+    to their declared shape so the W4A freeze claims are machine-checked
+    rather than resting on manual inspection."""
+
+    REAL = REPO_ROOT / "src" / "hardware" / "edd001-board" / "evidence" / "sandbox_bundle_manifest_v1.json"
+
+    REQUIRED_KEYS = {
+        "id", "role", "component_mpn", "contract_evidence_id", "source_url",
+        "source_tier", "manufacturer", "sha256", "size_bytes", "retrieved_at",
+        "pdf_metadata", "redistribution_status", "binary_committed",
+        "manufacturer_verification",
+    }
+
+    def setUp(self) -> None:
+        self.data = json.loads(self.REAL.read_text(encoding="utf-8"))
+        self.records = self.data["metadata"]["remote_evidence"]
+
+    def test_exactly_six_records_with_unique_ids(self) -> None:
+        self.assertEqual(len(self.records), 6)
+        ids = [r["id"] for r in self.records]
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertEqual(
+            set(ids),
+            {
+                "ESP32_S3_WROOM_1_N8R8_DATASHEET",
+                "AP63203WU_7_DATASHEET",
+                "TYPE_C_31_M_12_DRAWING",
+                "USBLC6_2SC6_DATASHEET",
+                "SS34_DATASHEET",
+                "ESPRESSIF_S3_LCD_EV_BOARD_SCHEMATIC",
+            },
+        )
+
+    def test_roles_split_five_exact_component_one_reference_design(self) -> None:
+        roles = [r["role"] for r in self.records]
+        self.assertEqual(roles.count("exact_component"), 5)
+        self.assertEqual(roles.count("reference_design"), 1)
+        ref = next(r for r in self.records if r["role"] == "reference_design")
+        self.assertEqual(ref["id"], "ESPRESSIF_S3_LCD_EV_BOARD_SCHEMATIC")
+        self.assertIsNone(ref["component_mpn"])
+
+    def test_every_record_has_the_declared_shape(self) -> None:
+        for r in self.records:
+            self.assertTrue(self.REQUIRED_KEYS.issubset(r.keys()), msg=r["id"])
+            self.assertTrue(r["source_url"].startswith("https://"), msg=r["id"])
+            self.assertRegex(r["sha256"], r"^[0-9a-f]{64}$", msg=r["id"])
+            self.assertIsInstance(r["size_bytes"], int)
+            self.assertGreater(r["size_bytes"], 0, msg=r["id"])
+            self.assertRegex(
+                r["retrieved_at"],
+                r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$",
+                msg=r["id"],
+            )
+            self.assertTrue(r["manufacturer"], msg=r["id"])
+            self.assertTrue(r["manufacturer_verification"], msg=r["id"])
+
+    def test_sha256_uniqueness_across_records(self) -> None:
+        hashes = [r["sha256"] for r in self.records]
+        self.assertEqual(len(hashes), len(set(hashes)))
+
+    def test_redistribution_all_to_verify_and_binaries_not_committed(self) -> None:
+        """Owner ruling (2026-09-02): provenance-only freeze. No record may
+        claim a redistribution grant or a committed binary while TO_VERIFY."""
+        for r in self.records:
+            self.assertEqual(r["redistribution_status"], "TO_VERIFY", msg=r["id"])
+            self.assertIs(r["binary_committed"], False, msg=r["id"])
+
+    def test_records_do_not_pretend_to_be_local_frozen_files(self) -> None:
+        """Reviewer implementation note: a TO_VERIFY remote source must never
+        masquerade as a local frozen file. The five exact-component provenance
+        ids must NOT appear as repo_path entries in manifest.files, and their
+        corresponding missing_requirements must remain present. The
+        reference_design record has no missing_requirement (it is advisory
+        corroboration, not a component evidence gap)."""
+        files_repo_paths = {e["repo_path"] for e in self.data["files"]}
+        missing_ids = {m["id"] for m in self.data["missing_requirements"]}
+        for r in self.records:
+            self.assertNotIn(r["id"], files_repo_paths, msg=r["id"])
+            self.assertNotIn(r["source_url"], files_repo_paths, msg=r["id"])
+            if r["role"] == "exact_component":
+                self.assertIn(r["id"], missing_ids, msg=r["id"])
+            else:
+                self.assertNotIn(r["id"], missing_ids, msg=r["id"])
+
+
 if __name__ == "__main__":
     unittest.main()

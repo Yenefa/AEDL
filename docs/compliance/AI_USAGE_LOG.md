@@ -2858,5 +2858,179 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
     manifest head_sha=7b92273 与 commit 一致（已核验）。
 - Compliance：Third-party none；ADR none；Evidence none（流程性模板变更）。
 - AIC Score Target：`NONE`（内部流程约束）
+
+## AI-20260902-005
+
+- 日期：2026-09-02
+- **台账 ID 改号说明（2026-09-02）**：本条目原领用 `AI-20260902-004`。Rebase onto
+  master（PR #26）时发现 master 已有并行会话的 `AI-20260902-004`（AGENTS.md 模板
+  变更，DeepSeek 产出），台账 ID 撞号。裁定：master 先占 004，本 W4A 工作单元改号
+  **005**，两条均保留；历史 commit message 中的 `[AI-20260902-004]` 不改写（改号
+  事实以本说明为准）；RES-010 / EVID-20260902-002 等关联记录同步改指 005。
+- 任务名称：W4A Collision 1 — EDD-001 组件证据 provenance 冻结（元数据级）+ POWER 合同草案
+- 模块/路径：
+  - `src/hardware/edd001-board/evidence/sandbox_bundle_manifest_v1.json`（新增
+    `metadata.remote_evidence` 六条 provenance；六项 missing_requirements 描述精化；notes +2）
+  - `gates/contracts/edd001_power_contract_v1.json`（POWER 合同草案，DRAFT，6 rules，
+    evidence-first）+ `src/hardware/edd001-board/evidence/contracts/` 同名镜像
+  - `docs/compliance/THIRD_PARTY_RESOURCES.md`（RES-010）
+  - `docs/evidence/EVIDENCE_INDEX.md`（EVID-20260902-002）；本台账本条目
+  - `docs/COLLABORATION.md` / `docs/WAVE4_TASKS_20260901.md`（W4A 状态行）
+  - `tasks/GH-2.yaml`（envelope，随本碰撞首个工作 commit 入 PR）
+- AI 工具/平台：TRAE（GLM-5.3）
+- 模型：`GLM-5.3`
+- 参与标签：RESEARCH、DEBUG（下载源排障：diodes.com 404 / Mouser 反爬 / LCSC
+  viewer HTML，均换源解决）、GENERATE_CODE（manifest 更新脚本）、DOCUMENT（POWER
+  DRAFT + 台账）
+- 任务目标：按 Issue #2 与 GH-2 envelope（rev2，PASS）冻结五份组件资料 + 一份参考
+  设计资料的 provenance；起草 EDD-001 POWER 合同 DRAFT。
+- AI 实际产出：
+  - 六份资料获取与核对（URL/sha256/bytes/retrieved_at/PDF 元数据；TYPE-C 制造商
+    Korean Hroparts Elec 目录级核实 + 零 HIROSE 反证；AP63203 = DS41326 Rev. 3-2）
+  - manifest `metadata.remote_evidence` 六条记录（5 exact_component + 1
+    reference_design，schema 合法落点）；missing_requirements 六项如实保留（描述
+    更新为 provenance-pinned/binary-not-committed）；notes 登记 Owner 裁定与 DRAFT 说明
+  - POWER 合同草案（DRAFT）：power tree（循冻结 USB 契约 declared topology）、
+    AP63203 参数与外部器件（Cin 10µF / Cout 2×22µF / L 3.9µH / CBST 100nF，
+    DS41326 Rev. 3-2 Typical Application）、EN UVLO 1.18V、USBLC6 protection network
+    位置（非 5V 串联元件）、SS34 角色（40V/3A 反向保护）
+- 团队自主部分：Owner（Yenefa）2026-09-02 会话内两项裁定：① redistribution
+  TO_VERIFY → 仅元数据冻结、binary 不入仓；② 完整清集（5 exact + 1 reference，
+  EV Board 不替代 SS34 exact-component 身份）。la4876949-bot（Percy）：SHARED 路径
+  review 待 PR——对象为 gates/contracts/edd001_power_contract_v1.json 与
+  docs/evidence/EVIDENCE_INDEX.md（迭代 1 纠正：原误写含 manifest；manifest 不在
+  CODEOWNERS SHARED 段）。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 验证（真实运行，本机）：
+  - 下载核对：六份 PDF header/sha256/bytes/mtime 与 manifest 记录逐一一致。
+  - `uv run --frozen --project sandbox_runtime python -m unittest
+    sandbox_runtime.tests.trust.test_trust.RealEdd001ManifestTests …` → 2 tests OK。
+  - final dev_gate（见 PR 描述）→ PASS。
+- 已知限制：元数据级冻结非本地冻结（preflight findings 诚实保留）；SS34/AP63203 的
+  契约 evidence id（EV Board 网页源/TECHPEDIA 网页）无法作为本地文件如实冻结；
+  二进制本地暂存 `../w4a-staging/`（不入 git，URL+sha256 可复现）。
+- Compliance：Third-party RES-010；ADR none。
+- AIC Score Target：`实现完成度与可验证效果`
 - 最终状态：
   - `PENDING_HUMAN_REVIEW`（PR 待人工 review，merge 由 Yenefa/Percy 执行）
+### AI-20260902-005 · Review 迭代 1（2026-09-02，REQUEST_CHANGES 处置）
+
+外部 review 裁定 REQUEST_CHANGES（2 BLOCKER + 2 MUST-FIX 级）。逐条处置：
+
+- **B1（AP63203 电感 4.7µH 误写）— 确认并修复**：从冻结 PDF 原文重新提取核对——
+  DS41326 Rev. 3-2 Table 2 对 AP63203/3.3V 明确 **L = 3.9µH**（C1 10µF / C2 2×22µF /
+  C3 100nF）；4.7µH 是 Table 3 的 AP63205/5V 值，且 Figure 2 典型应用电路标注为
+  AP63205——首版误抄自该图。已改为 `recommended: 3.9uH` + `allowed_design_range:
+  2.2uH to 10uH`（标注表源与 variant 混淆警示），同步修合同 title/镜像/manifest
+  notes/metadata 与本台账。
+- **B2（bundle 内部矛盾）— 修复**：review.md 原仍写 "no SHARED path changes" 与
+  manifest.json 的 shared=[2 files] 矛盾；本轮 bundle 重生成后对 review.md 与
+  manifest.json 一并手工补丁，两视图统一为 2 个 SHARED 文件 + manual correction 注记。
+- **MUST-FIX（SHARED reviewer 对象写错）— 修复**：envelope escalation 由
+  "gates/contracts + manifest" 改为 "gates/contracts/edd001_power_contract_v1.json +
+  docs/evidence/EVIDENCE_INDEX.md"（la4876949-bot/Percy + Yenefa 双人确认）；Issue #2
+  body 与 PR #27 body 同步纠正。envelope 修订 → base 重绑 991b609 → 重新 admit。
+- **EV corroboration 收窄**：POWER_TREE notes 拆分证据责任——EV 板只佐证
+  "USB VBUS → SS34 → protected rail"；"AP63203WU-7 → 3V3" 由 datasheet + 冻结项目
+  拓扑支撑，EV 板 v1.5 的 SY8088/ETA3409/ME6211 明示非本设计 precedent。
+- 验证（真实运行，本机，迭代后）：re-admit → ADMIT；dev_gate → PASS（scope/binding
+  同 envelope 新 hash）；合同 JSON 与镜像 hash 一致。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+### AI-20260902-005 · Review 迭代 2（2026-09-02，最终残片处置）
+
+- **MUST-FIX（constraint.notes 残片）**：POWER_TREE_TOPOLOGY 的
+  `constraint.notes` 仍保留旧的整体 corroboration 措辞（外层 notes 迭代 1 已改对，
+  内层漏改——该字段属 machine-adjacent contract semantics，必须与外层一致）。
+  已按 reviewer 给定措辞收窄：EV 板只佐证 USB VBUS → SS34 → protected board rail
+  段；AP63203WU-7 → 3V3 段由 DS41326 Rev. 3-2 + 冻结项目拓扑支撑；镜像同步。
+- 非阻塞顺手修：GH-2 头部注释区分 initial baseline（36b92f8）与 current base
+  （随迭代重绑，当前 991b609）。
+- 登记非阻塞 follow-up（不动 scope）：POWER_USB_ESD_POSITION.source_ids 中的
+  ESPRESSIF_HW_DESIGN_GUIDELINES 目前是普通参考链接、非 provenance-pinned
+  evidence；未来若 source_ids 定义升级为必须 pin，需单独冻结该网页或降级移除。
+- 验证：envelope 修订（header 注释）→ 重新 admit → dev_gate PASS（binding/scope
+  同新 envelope hash）；合同与镜像 hash 一致。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+### AI-20260902-005 · Review 迭代 3（2026-09-02，rebase 后终态收口）
+
+- **背景**：master 落入 PR #26（AGENTS.md 模板 + AI log），本分支 rebase onto
+  master 时 AI log append-append 冲突 → 解冲突中暴露台账 ID 撞号（master 的 PR #26
+  也创建了 `AI-20260902-004`，AGENTS.md 模板变更）。裁定：master 已占 004，本工作
+  单元改号 **005**（见上方大条目头部的改号说明），关联记录同步改指。
+- **P0-1（终态 HEAD 无 admission 绑定）— 修复**：rebase 重写提交导致 envelope
+  `base.sha`（b5cd68b）成为悬空 commit、fresh admission 漂移 BLOCKED。处置：
+  envelope 迭代 4 修订——base 重绑 rebase 后工作链顶（df138d9）并预授权
+  `allow_drift` exception（envelope 自含 + commit 的自引用约束：终态 commit 必然
+  在 base 之后，唯一自洽出口是 envelope 预授权的 drift 容忍，agent 不能自授，
+  见 envelope exceptions 段决策引用）；终态 commit 后在干净 HEAD 上重新
+  admit（--allow-dirty 为既有授权，--allow-drift 为本轮 envelope 授权）+ 终态
+  dev_gate，回执入 review bundle。
+- **P0-2（PR 基线漂移且冲突）— 修复**：PR #27 冲突根因是远端分支仍停在 rebase 前
+  旧链（origin 分支 head 与 master 的 f53f2a8 冲突）。处置：rebase 后分支
+  `push --force-with-lease`（分支属本任务，非 master；AGENTS.md 红线只禁 force 到
+  main），冲突随之解除；bundle base 从可变名 `origin/master` 改为钉死 SHA
+  f53f2a8（reviewer 指出可变名称是漂移隐患）。
+- **P1（SHARED 目录规则永不匹配）— 修复**：`make_review_bundle.py` 的
+  `Path.match()` 不实现 CODEOWNERS 的根锚定目录前缀语义，稳定误报 `shared=[]`。
+  新增 `codeowners_match()`（目录规则 = 根锚定前缀匹配；根锚定文件规则 = 精确
+  路径；裸名 = 任意目录 basename），含前缀陷阱负向测试（`gates/contracts-extra`
+  不命中 `/gates/contracts/`）与真实仓库端到端测试（9 变更路径恰好命中 2 个
+  SHARED 文件）。7/7 测试过。**此为 envelope amendment 扩 scope 的两个新路径**
+  （tools/make_review_bundle.py + tests/test_control_plane_tools.py）——触发依据
+  即 envelope 自带的「需第四个 test file → amendment 扩 scope」条款 + reviewer 裁定。
+- **P1（remote_evidence 字段级校验缺失）— 修复**：trust validator 仅查顶层
+  metadata 是对象，六条记录的 URL/sha256/size/role/时间戳/唯一性无机器校验。
+  `sandbox_runtime/tests/trust/test_trust.py` 新增 `RemoteEvidenceMetadataTests`
+  （6 用例）：六条记录、ID 唯一且为既定集合、角色 5+1 分布、字段形状
+  （https URL / 小写 64-hex sha256 / 正整数 size / ISO 时间戳）、sha256 唯一性、
+  TO_VERIFY + binary 不入仓不变量、TO_VERIFY 远程源不得伪装成本地冻结文件
+  （missing_requirements 对 exact_component 必须保留、对 reference_design 必须缺席）。
+  manifest 数据同步修正：remote_evidence 的 sha256 由大写统一为小写（与 files[]
+  约定一致）。22/22 测试过（1 skip 为既有 expected skip）。
+- **MUST-FIX（陈旧事实）— 修复**：PR body 的 rev2/旧 admit hash/scope 9 files →
+  统一为终态（envelope hash、4-file scope 以最终 gate 回执为准）；RES-010 /
+  EVID-20260902-002 的关联 AI Usage 004 → 005（附改号说明）；EVIDENCE_INDEX 的
+  rev2+admit e084056ff128 陈旧引用 → 改为「以机器字段 base.sha 为准 + PR #27
+  记录终态回执」。
+- **MUST-FIX（版权措辞过度）— 修复**：RES-010 的"六份文档内均为保留权利式版权声明"
+  收窄为如实表述：SS34 与 TYPE-C 两份 PDF 未核实到明确再分发授权（授权原文以
+  PDF 为准，未逐字复核前不作强表述）；保守结论（TO_VERIFY、binary 不入仓）不变。
+- 验证（真实运行，本机）：CodeownersMatchTests 7/7；trust 套件 22/22；
+  re-admit ADMIT + 终态 dev_gate PASS（scope/binding 见 bundle 回执）。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+### AI-20260902-005 · Review 迭代 4（2026-09-02，receipt discovery 收口 + gate 干净化）
+
+外部二审二轮（SHARED 真值已签：2 个 SHARED 路径经 matcher 修复 + 真实 CODEOWNERS
+端到端回归支撑）Remaining：1 BLOCKER + 1 MUST-FIX + gate 重跑要求。逐条处置：
+
+- **BLOCKER（receipt discovery 三视图矛盾）— 修复**：review.md 写 "no receipts
+  found"（生成器 `receipt_summaries` 扫 repo parent 的散落回执——捞不到 bundle
+  目录内的当前回执，还会把其他 run 的陈旧回执误当证据），而 manifest.receipts
+  （此前是人工后处理注记）声称有、manifest.files 却不列回执——三视图互斥，不可
+  交付。修复：`receipt_summaries` 改为只扫 bundle 输出目录（唯一事实源；
+  admit-receipt.json 双 glob 命中去重；`_` 前缀跳过），manifest.files 原生包含
+  实际回执文件，manifest.receipts 由生成器从实际文件产出（人工注记退役，保证
+  review.md == manifest.receipts == manifest.files 三视图一致）。补 3 用例回归：
+  temp git repo + 两份回执端到端（review.md/manifest 双视图断言）、`_` 前缀与
+  非回执 JSON 跳过、双 glob 去重。
+- **MUST-FIX（8→6 用例）— 更正**：`RemoteEvidenceMetadataTests` 实际 6 个测试
+  方法（sandbox 套件 277→283 增量吻合）；迭代 3 台账误写"8 用例"，已更正为 6。
+- **gate 干净化（UnicodeDecodeError）— 修复**：gate 回执 sandbox_tests detail
+  挂着 Popen reader 线程 `UnicodeDecodeError: 'utf-8' codec can't decode byte
+  0xb4`——出处 `policy/test_paths.py` junction 回归的 `cmd /c mklink`：cmd.exe
+  输出本地 ANSI/OEM 代码页字节（「创」GBK=B4B4），`text=True` 按 UTF-8 解码即崩
+  （`mklink /?` 复现确认）。按 reviewer 处方改 `text=True, errors="replace"`
+  （逻辑只依赖 returncode，stderr 仅用于 skip 消息）。test_paths.py 经 envelope
+  迭代 5 amendment 入授权面（第四-test-file 条款 + reviewer 明示修复指令）。
+- **非阻断 follow-up 登记（不动 scope）**：clean-HEAD gate 的 scope_check 只看
+  worktree delta，不能机器证明 committed delta in-scope——理想形态是 gate 原生
+  做 base→HEAD 的 committed-delta scope 检查；涉及 tools/dev_gate.py（不在本
+  envelope 授权面内），留后续 envelope amendment。
+- 验证（真实运行，本机，迭代 4）：CodeownersMatchTests 7/7 +
+  BundleReceiptDiscoveryTests 3/3；主仓/sandbox 全量绿且 sandbox 输出无 thread
+  exception。终态流程（本 commit 之后执行，结果不预写）：干净 HEAD 上 re-admit
+  （--allow-drift）+ 终态 dev_gate + bundle 重生成——结果与 hash 以
+  review-bundles/feat_w4a-evidence-freeze/ 内 admit/gate-receipt.json 与
+  manifest.json 为准（三视图一致性由 BundleReceiptDiscoveryTests 机器锁定）。
+  committed-delta scope（envelope base df138d9..HEAD）复核结果见 PR #27 描述。
+- 人工审核：`PENDING_HUMAN_REVIEW`
