@@ -33,7 +33,7 @@ allowed_paths:
   - tasks/** # 本 envelope
   # —— 碰撞 2（Tasks 6-8）新增允许路径 ——
   - sandbox_runtime/src/aedl_sandbox/policy/edd001.py # Task 7：递归收集嵌套声明（AP63203）
-  - sandbox_runtime/tests/policy/test_edd001_preflight.py # Task 6：SS34/AP63203 必需性测试
+  - sandbox_runtime/tests/** # Task 6/7：SS34/AP63203 必需性测试 + findings 数断言同步
   - src/hardware/edd001-board/evidence/sandbox_bundle_manifest_v1.json # Task 7：missing_requirements 对齐
   - gates/contracts/** # 只读核对（冻结内容不改）
   # 上一碰撞遗留的工作树内容（admission 已 --allow-dirty 批准，scope_check 需覆盖）：
