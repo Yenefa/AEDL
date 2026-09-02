@@ -2681,3 +2681,30 @@ test_run_gates`：**115/115 OK**（覆盖问题 1 courtyard 四边越界、问�
 - AIC Score Target：`NONE`（纯流程记录）
 - 最终状态：
   - `PENDING_HUMAN_REVIEW`（PR 待人工 review，merge 由 Yenefa/Percy 执行）
+
+## AI-20260902-003
+
+- 日期：2026-09-02
+- 任务名称：AGENT_ONBOARDING 引导文档（to AI coding agents）+ README 链接
+- 模块/路径：
+  - `AGENT_ONBOARDING.md`（新增，仓库根）
+  - `README.md`（AI Agent 节加引导入口）
+  - 本台账本条目
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash`
+- 参与标签：DOCUMENT
+- 任务目标：让任何 AI coding agent（Claude Code / Codex / zcode / DSH / opencode / Hermes /
+  Trae / Work Buddy / Qoder / OpenClaw 等）clone 后按引导完成环境自检（autocrlf / Python 3.9 /
+  uv / gh）、必读顺序、AECP 生命周期速查与红线，减少新环境 onboarding 摩擦（Percy PR #14 CRLF
+  教训为触发背景之一）。
+- AI 实际产出：
+  - AGENT_ONBOARDING.md：0 身份与定位 / 1 环境自检 4 项命令 + dev_gate 基线 / 2 必读顺序 /
+    3 AECP 速查 / 4 红线 / 5 台账指针。
+- 团队自主部分：内容取材自仓库既有规范（AGENTS.md / CONTROL_PLANE.md / README），未发明新规则。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 验证：`py -3 -m tools.dev_gate` exit 0（syntax / main 306 / sandbox 274 / secret_scan 305）；
+  `git diff --check` RC 0。
+- Compliance：Third-party none；ADR none。
+- AIC Score Target：`NONE`（内部协作引导，不包装成比赛创新）
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`（PR 待人工 review）
