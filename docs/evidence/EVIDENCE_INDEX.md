@@ -163,19 +163,19 @@
 ## EVID-20260902-001 — GH-20 尾巴：EDD-001 preflight 组件真源对齐（SS34 + AP63203WU-7 双报出）
 
 - 日期：2026-09-02
-- 对应主张：真实 EDD-001 preflight 的组件证据需求集与冻结三合同收敛：递归收集
-  `POWER_SOURCE_SEPARATION.constraint.regulator_3v3.device`（AP63203WU-7）与
+- 对应主张：真实 EDD-001 preflight 的组件证据需求集与冻结三合同收敛：按已仲裁
+  嵌套声明路径收集 `POWER_SOURCE_SEPARATION.constraint.regulator_3v3.device`（AP63203WU-7）与
   `USB_VBUS_REVERSE_PROTECTION.constraint.device`（SS34）同时报出；bundle manifest
   `missing_requirements` 对齐为 POWER + 5 个组件证据项（新增 SS34_DATASHEET）。
 - 关联模块：`sandbox_runtime/src/aedl_sandbox/policy/edd001.py`（`_collect_components`
-  递归化）、`sandbox_runtime/tests/policy/test_edd001_preflight.py`、
+  增加声明路径白名单：顶层 mpn/device + 已仲裁嵌套 regulator_3v3）、`sandbox_runtime/tests/policy/test_edd001_preflight.py`、
   `sandbox_runtime/tests/trust/test_trust.py`、
   `sandbox_runtime/tests/orchestrator/test_integration.py`、
   `src/hardware/edd001-board/evidence/sandbox_bundle_manifest_v1.json`
 - 关联 AI Usage：AI-20260902-003
 - 关联 ADR：无；GitHub Issue #20（Tasks 6-7，碰撞 2 envelope `tasks/GH-20.yaml`）
 - 测试/实验：RED→GREEN 回归。RED：新回归测试 `test_nested_and_direct_power_parts_are_both_required`
-  与 4 处计数断言在修复前失败（AP63203WU-7 缺席：KeyError / 7!=8）；GREEN：递归收集修复后全过。
+  与 4 处计数断言在修复前失败（AP63203WU-7 缺席：KeyError / 7!=8）；GREEN：声明路径白名单修复后全过。
 - 环境：Windows；py -3 = 3.9.13；uv（sandbox runtime，Python 3.11，uv.lock 冻结）
 - 执行命令：
   - `uv run --frozen --project sandbox_runtime python -m unittest discover -s sandbox_runtime/tests -p test_*.py` → 275 tests OK（skipped=1，expected failures=1）
