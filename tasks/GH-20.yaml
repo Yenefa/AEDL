@@ -12,9 +12,9 @@ task: GH-20
 
 base:
   branch: fix/gh-20-preflight-component-truth
-  # 碰撞 2 迭代 1 起点：首迭代提交（Review REQUEST_CHANGES 处置前的基线）。
-  # envelope 随 B2/M1 处置修订，admission 以本 sha 重新绑定。
-  sha: c14342994b8a680a5c92119d4877c2bf4eac4461
+  # 碰撞 2 迭代 2 起点：迭代 1 提交（B2/M1 处置后）。
+  # envelope 随 reference-design 分级裁定（manifest note 精化）修订，admission 重新绑定。
+  sha: 34cc76e97c9a5cf91aee9990e8a152d4f4a17884
 
 dependencies: []
 

@@ -2818,3 +2818,15 @@ test_run_gates`：**115/115 OK**（覆盖问题 1 courtyard 四边越界、问�
     → PASS exit 0，binding_check PASS，admit/gate/最终提交的 GH-20.yaml 三者
     envelope sha 一致（见 EVID-20260902-001 更新）。
 - 人工审核：`PENDING_HUMAN_REVIEW`（本迭代随 PR #25 一并待审）
+### AI-20260902-003 · Review 迭代 2（2026-09-02，reference-design 分级固化）
+
+Owner 对 ESP32-S3-LCD-EV-Board 资料给出分级裁定（authoritative reference design /
+非精确组件证据），已按给定结构固化进 `sandbox_bundle_manifest_v1.json` notes：
+source_role=authoritative_reference_design；exact_component_evidence=false；
+applicable_to（family/USB-C/native USB/BOOT-RESET/UART/电源入口共 6 项）；
+not_valid_for（N8R8 SKU/SHT40/3.3V 稳压器电流热资质/BOM 等效共 4 项）；
+版本边界（旧 PDF=N16R8、v1.5=N16R16V 含 1.8V rail 与 IO47/48，均非本板 N8R8；
+v1.5 的 SY8088/ETA3409/ME6211 不构成本板 AP63203WU-7 的 precedent）。
+SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"。
+验证：envelope base 重绑 34cc76e → ADMIT → dev_gate PASS（binding/scope 同前）。
+- 人工审核：`PENDING_HUMAN_REVIEW`（随 PR #25 一并待审）
