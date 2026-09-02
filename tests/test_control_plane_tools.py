@@ -458,3 +458,70 @@ class SecretScanTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CodeownersMatchTests(unittest.TestCase):
+    """Review P1 (2026-09-02): Path.match silently returned False for every
+    CODEOWNERS directory rule, so make_review_bundle reported shared=[] for
+    real SHARED hits. codeowners_match implements the actual semantics."""
+
+    def setUp(self) -> None:
+        from tools.make_review_bundle import codeowners_match
+        self.match = codeowners_match
+
+    def test_directory_rule_hits_nested_files(self) -> None:
+        self.assertTrue(self.match("gates/contracts/edd001_power_contract_v1.json", "/gates/contracts/"))
+        self.assertTrue(self.match("docs/evidence/EVIDENCE_INDEX.md", "/docs/evidence/"))
+        self.assertTrue(self.match("gates/contracts/sub/dir/deep.md", "/gates/contracts/"))
+
+    def test_directory_rule_matches_the_directory_itself(self) -> None:
+        self.assertTrue(self.match("gates/contracts", "/gates/contracts/"))
+
+    def test_directory_rule_negative_prefix_trick(self) -> None:
+        # "gates/contracts-extra" must NOT match "/gates/contracts/"
+        self.assertFalse(self.match("gates/contracts-extra/file.md", "/gates/contracts/"))
+        self.assertFalse(self.match("docs/evidence-backup/x.md", "/docs/evidence/"))
+        self.assertFalse(self.match("sandbox_runtime/contracts/x.json", "/gates/contracts/"))
+
+    def test_root_anchored_file_rule(self) -> None:
+        self.assertTrue(self.match("gates/lessons_registry_v1.json", "/gates/lessons_registry_v1.json"))
+        self.assertFalse(self.match("docs/gates/lessons_registry_v1.json", "/gates/lessons_registry_v1.json"))
+
+    def test_basename_rule_matches_any_directory(self) -> None:
+        self.assertTrue(self.match("a/b/CODEOWNERS", "CODEOWNERS"))
+        self.assertTrue(self.match("CODEOWNERS", "CODEOWNERS"))
+        self.assertFalse(self.match("a/b/CODEOWNERS2", "CODEOWNERS"))
+
+    def test_regression_old_matcher_failed_on_directory_rules(self) -> None:
+        """The exact real-world pair that used to be reported as non-SHARED."""
+        from pathlib import Path
+        self.assertFalse(Path("gates/contracts/edd001_power_contract_v1.json").match("/gates/contracts/"))  # old bug
+        self.assertTrue(self.match("gates/contracts/edd001_power_contract_v1.json", "/gates/contracts/"))  # fixed
+
+    def test_real_repo_shared_patterns_against_w4a_change_set(self) -> None:
+        """End-to-end against the repo's actual CODEOWNERS: the W4A change set
+        must yield exactly the two adjudicated SHARED files (review-verified
+        ground truth), and nothing else."""
+        from tools.make_review_bundle import shared_patterns, codeowners_match
+        root = Path(__file__).resolve().parents[1]
+        patterns = shared_patterns(root)
+        self.assertIn("/gates/contracts/", patterns)
+        changed = [
+            "docs/COLLABORATION.md",
+            "docs/WAVE4_TASKS_20260901.md",
+            "docs/compliance/AI_USAGE_LOG.md",
+            "docs/compliance/THIRD_PARTY_RESOURCES.md",
+            "docs/evidence/EVIDENCE_INDEX.md",
+            "gates/contracts/edd001_power_contract_v1.json",
+            "src/hardware/edd001-board/evidence/contracts/edd001_power_contract_v1.json",
+            "src/hardware/edd001-board/evidence/sandbox_bundle_manifest_v1.json",
+            "tasks/GH-2.yaml",
+        ]
+        shared = sorted(p for p in changed if any(codeowners_match(p, pat) for pat in patterns))
+        self.assertEqual(
+            shared,
+            [
+                "docs/evidence/EVIDENCE_INDEX.md",
+                "gates/contracts/edd001_power_contract_v1.json",
+            ],
+        )

@@ -2862,6 +2862,11 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 ## AI-20260902-005
 
 - 日期：2026-09-02
+- **台账 ID 改号说明（2026-09-02）**：本条目原领用 `AI-20260902-004`。Rebase onto
+  master（PR #26）时发现 master 已有并行会话的 `AI-20260902-004`（AGENTS.md 模板
+  变更，DeepSeek 产出），台账 ID 撞号。裁定：master 先占 004，本 W4A 工作单元改号
+  **005**，两条均保留；历史 commit message 中的 `[AI-20260902-004]` 不改写（改号
+  事实以本说明为准）；RES-010 / EVID-20260902-002 等关联记录同步改指 005。
 - 任务名称：W4A Collision 1 — EDD-001 组件证据 provenance 冻结（元数据级）+ POWER 合同草案
 - 模块/路径：
   - `src/hardware/edd001-board/evidence/sandbox_bundle_manifest_v1.json`（新增
@@ -2908,7 +2913,7 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - AIC Score Target：`实现完成度与可验证效果`
 - 最终状态：
   - `PENDING_HUMAN_REVIEW`（PR 待人工 review，merge 由 Yenefa/Percy 执行）
-### AI-20260902-004 · Review 迭代 1（2026-09-02，REQUEST_CHANGES 处置）
+### AI-20260902-005 · Review 迭代 1（2026-09-02，REQUEST_CHANGES 处置）
 
 外部 review 裁定 REQUEST_CHANGES（2 BLOCKER + 2 MUST-FIX 级）。逐条处置：
 
@@ -2931,7 +2936,7 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - 验证（真实运行，本机，迭代后）：re-admit → ADMIT；dev_gate → PASS（scope/binding
   同 envelope 新 hash）；合同 JSON 与镜像 hash 一致。
 - 人工审核：`PENDING_HUMAN_REVIEW`
-### AI-20260902-004 · Review 迭代 2（2026-09-02，最终残片处置）
+### AI-20260902-005 · Review 迭代 2（2026-09-02，最终残片处置）
 
 - **MUST-FIX（constraint.notes 残片）**：POWER_TREE_TOPOLOGY 的
   `constraint.notes` 仍保留旧的整体 corroboration 措辞（外层 notes 迭代 1 已改对，
@@ -2945,4 +2950,51 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
   evidence；未来若 source_ids 定义升级为必须 pin，需单独冻结该网页或降级移除。
 - 验证：envelope 修订（header 注释）→ 重新 admit → dev_gate PASS（binding/scope
   同新 envelope hash）；合同与镜像 hash 一致。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+### AI-20260902-005 · Review 迭代 3（2026-09-02，rebase 后终态收口）
+
+- **背景**：master 落入 PR #26（AGENTS.md 模板 + AI log），本分支 rebase onto
+  master 时 AI log append-append 冲突 → 解冲突中暴露台账 ID 撞号（master 的 PR #26
+  也创建了 `AI-20260902-004`，AGENTS.md 模板变更）。裁定：master 已占 004，本工作
+  单元改号 **005**（见上方大条目头部的改号说明），关联记录同步改指。
+- **P0-1（终态 HEAD 无 admission 绑定）— 修复**：rebase 重写提交导致 envelope
+  `base.sha`（b5cd68b）成为悬空 commit、fresh admission 漂移 BLOCKED。处置：
+  envelope 迭代 4 修订——base 重绑 rebase 后工作链顶（df138d9）并预授权
+  `allow_drift` exception（envelope 自含 + commit 的自引用约束：终态 commit 必然
+  在 base 之后，唯一自洽出口是 envelope 预授权的 drift 容忍，agent 不能自授，
+  见 envelope exceptions 段决策引用）；终态 commit 后在干净 HEAD 上重新
+  admit（--allow-dirty 为既有授权，--allow-drift 为本轮 envelope 授权）+ 终态
+  dev_gate，回执入 review bundle。
+- **P0-2（PR 基线漂移且冲突）— 修复**：PR #27 冲突根因是远端分支仍停在 rebase 前
+  旧链（origin 分支 head 与 master 的 f53f2a8 冲突）。处置：rebase 后分支
+  `push --force-with-lease`（分支属本任务，非 master；AGENTS.md 红线只禁 force 到
+  main），冲突随之解除；bundle base 从可变名 `origin/master` 改为钉死 SHA
+  f53f2a8（reviewer 指出可变名称是漂移隐患）。
+- **P1（SHARED 目录规则永不匹配）— 修复**：`make_review_bundle.py` 的
+  `Path.match()` 不实现 CODEOWNERS 的根锚定目录前缀语义，稳定误报 `shared=[]`。
+  新增 `codeowners_match()`（目录规则 = 根锚定前缀匹配；根锚定文件规则 = 精确
+  路径；裸名 = 任意目录 basename），含前缀陷阱负向测试（`gates/contracts-extra`
+  不命中 `/gates/contracts/`）与真实仓库端到端测试（9 变更路径恰好命中 2 个
+  SHARED 文件）。7/7 测试过。**此为 envelope amendment 扩 scope 的两个新路径**
+  （tools/make_review_bundle.py + tests/test_control_plane_tools.py）——触发依据
+  即 envelope 自带的「需第四个 test file → amendment 扩 scope」条款 + reviewer 裁定。
+- **P1（remote_evidence 字段级校验缺失）— 修复**：trust validator 仅查顶层
+  metadata 是对象，六条记录的 URL/sha256/size/role/时间戳/唯一性无机器校验。
+  `sandbox_runtime/tests/trust/test_trust.py` 新增 `RemoteEvidenceMetadataTests`
+  （8 用例）：六条记录、ID 唯一且为既定集合、角色 5+1 分布、字段形状
+  （https URL / 小写 64-hex sha256 / 正整数 size / ISO 时间戳）、sha256 唯一性、
+  TO_VERIFY + binary 不入仓不变量、TO_VERIFY 远程源不得伪装成本地冻结文件
+  （missing_requirements 对 exact_component 必须保留、对 reference_design 必须缺席）。
+  manifest 数据同步修正：remote_evidence 的 sha256 由大写统一为小写（与 files[]
+  约定一致）。22/22 测试过（1 skip 为既有 expected skip）。
+- **MUST-FIX（陈旧事实）— 修复**：PR body 的 rev2/旧 admit hash/scope 9 files →
+  统一为终态（envelope hash、4-file scope 以最终 gate 回执为准）；RES-010 /
+  EVID-20260902-002 的关联 AI Usage 004 → 005（附改号说明）；EVIDENCE_INDEX 的
+  rev2+admit e084056ff128 陈旧引用 → 改为「以机器字段 base.sha 为准 + PR #27
+  记录终态回执」。
+- **MUST-FIX（版权措辞过度）— 修复**：RES-010 的"六份文档内均为保留权利式版权声明"
+  收窄为如实表述：SS34 与 TYPE-C 两份 PDF 未核实到明确再分发授权（授权原文以
+  PDF 为准，未逐字复核前不作强表述）；保守结论（TO_VERIFY、binary 不入仓）不变。
+- 验证（真实运行，本机）：CodeownersMatchTests 7/7；trust 套件 22/22；
+  re-admit ADMIT + 终态 dev_gate PASS（scope/binding 见 bundle 回执）。
 - 人工审核：`PENDING_HUMAN_REVIEW`

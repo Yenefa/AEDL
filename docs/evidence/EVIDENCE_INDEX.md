@@ -216,8 +216,9 @@
   （metadata.remote_evidence + missing_requirements 描述精化 + notes）、
   `gates/contracts/edd001_power_contract_v1.json`（DRAFT，含 evidence/contracts 镜像）、
   `docs/compliance/THIRD_PARTY_RESOURCES.md`（RES-010）
-- 关联 AI Usage：AI-20260902-004
-- 关联 ADR：无；GitHub Issue #2（W4A）；envelope `tasks/GH-2.yaml`（rev2，admit e084056ff128）
+- 关联 AI Usage：AI-20260902-005（原 004，撞号改号，见台账该条目说明）
+- 关联 ADR：无；GitHub Issue #2（W4A）；envelope `tasks/GH-2.yaml`（随 Review 迭代
+  多次重绑，机器字段 base.sha 为准；PR #27 描述记录终态 admit/gate 回执）
 - 测试/实验：manifest 结构变更（新增 metadata 段）后真实 bundle 测试回归。
 - 环境：Windows；py -3 = 3.9.13；uv（sandbox，Python 3.11）；curl 8.x（下载）；
   本地二进制暂存 `../w4a-staging/`（仓库外）

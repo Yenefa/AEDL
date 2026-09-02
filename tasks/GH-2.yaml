@@ -3,7 +3,9 @@
 # 前置：GH-20 碰撞 2（PR #25，已 merge 2026-09-02T00:49:29Z）组件真源对齐完成——
 # SS34 + AP63203WU-7 双报出、manifest missing_requirements = POWER + 5 组件项。
 # 本 envelope 的初始基线（initial baseline）为该 merge 后的 master（36b92f8）；
-# 随迭代重绑的当前 base 以机器字段 base.sha 及其注释为准（Review 迭代后 = 991b609）。
+# 随迭代重绑的当前 base 以机器字段 base.sha 及其注释为准（Review 迭代 3 = df138d9，
+# 即 rebase onto master PR #26 后的工作链顶；前值 991b609 / b5cd68b 已被 rebase 重写
+# 为悬空 commit，不属本分支历史）。
 # Issue #2 P0 dependency 就此解除。
 # 人类授权：2026-09-02 会话内 Owner 决策「先指派 Owner 并建 GH-2 envelope」
 #（Issue #2 assignee = Yenefa；Percy 承担 SHARED 路径 review）。
@@ -12,10 +14,14 @@ task: GH-2
 
 base:
   branch: feat/w4a-evidence-freeze
-  # 碰撞 1 迭代 2 起点：迭代 1 提交（B1 电感 3.9µH + SHARED 对象纠正后）。
-  # envelope 随 Review 迭代 2 处置修订（constraint.notes 残片收窄 / 头部
-  # initial-baseline 措辞澄清），admission 重新绑定。
-  sha: b5cd68b656da226669a1ace56b273777f51df033
+  # Review 迭代 3 起点：rebase onto master（PR #26）后的工作链顶（迭代 1+2 的
+  # 991b609/b5cd68b/2b9a473 被 rebase 重写为 f7734bb/ba2b9a2/df138d9）。
+  # envelope 随 Review 迭代 3 处置修订（P0/P1/MUST-FIX 五项 + scope 扩两路径 +
+  # allow_drift 预授权，见 AI-20260902-005 迭代 3 小节），admission 重新绑定。
+  # 自引用约束：含本 envelope 的终态 commit 必然在 base.sha 之后——终态绑定的
+  # 唯一自洽出口是下方 exceptions.allow_drift 预授权（envelope 先行修订，agent
+  # 不能自授；与 GH-20 同为 in-session Owner 模式）。
+  sha: df138d9c0e9ca6e86572b8811cfb607aab5d75f4
 
 dependencies:
   - ref: PR-25
@@ -31,6 +37,9 @@ allowed_paths:
   - sandbox_runtime/tests/trust/test_trust.py
   - sandbox_runtime/tests/orchestrator/test_integration.py
   - sandbox_runtime/tests/policy/test_edd001_preflight.py
+  # Review 迭代 3 扩 scope（触发依据：上条第四-test-file 条款 + reviewer P1×2 裁定）：
+  - tools/make_review_bundle.py # P1：Path.match 不实现 CODEOWNERS 根锚定目录前缀语义，shared=[] 稳定误报；换 codeowners_match
+  - tests/test_control_plane_tools.py # P1 匹配器正/负向回归（7 用例，含真实仓库端到端 9→2 SHARED）
   - docs/compliance/AI_USAGE_LOG.md # 本工作单元追加
   - docs/evidence/EVIDENCE_INDEX.md # 只登记真实冻结资料与真实运行结果
   - docs/compliance/THIRD_PARTY_RESOURCES.md # datasheet 属第三方资源：来源/License/再分发边界 VERIFIED 或 TO_VERIFY
@@ -76,7 +85,8 @@ change_budget:
   # 构成：5 datasheets + manifest 1 + POWER 草案（gates+镜像）2 + 台账 3（AI/EVIDENCE/THIRD_PARTY）
   # + COLLABORATION/WAVE4 状态行 2 + 测试断言 3（trust / integration / preflight）+ envelope 1
   # = 5+1+2+3+2+3+1 = 17（三个测试全调整的实际上限；GH-20 恰好动了同类三文件，非纯理论）
-  expected_files: 17
+  # Review 迭代 3 扩：+2（bundle 生成器修复 + 控制平面测试）= 19 上限
+  expected_files: 19
   expected_modules:
     [
       edd001-datasheet-freeze,
@@ -93,6 +103,9 @@ exceptions:
   allow_dirty:
     granted_by: Yenefa
     decision_ref: "2026-09-02 in-session go-ahead (先指派 Owner 并建 GH-2 envelope; envelope-first edit, same pattern as GH-20 collisions)"
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "2026-09-02 Review 迭代 3 escalation (P0: rebase 重写导致 envelope 旧 base 成悬空 commit、fresh admission 漂移 BLOCKED；envelope 自引用约束下终态 commit 必然晚于 base，唯一自洽出口是预授权 drift 容忍；admission 回执如实记录 HEAD 与 base 之差，终态 dev_gate 在干净 HEAD 上跑)"
 
 escalation:
   owner: Yenefa (在席，Issue #2 assignee) + la4876949-bot / Percy (SHARED 路径 review：gates/contracts/edd001_power_contract_v1.json 新增 + docs/evidence/EVIDENCE_INDEX.md；迭代 1 纠正——原误写含 manifest，manifest 不在 CODEOWNERS SHARED 段)

@@ -200,8 +200,9 @@
   - ESP32-S3-LCD-EV-Board-MB V1.5 原理图 — Espressif 官方（参考设计证据）
     （`https://dl.espressif.com/dl/schematics/SCH_ESP32-S3-LCD-Ev-Board-MB_V1.5_20231009.pdf`，
     sha256 384f0639…，1607358 B，UTC 2026-09-02T01:55:25Z）
-- License / 授权类型：`TO_VERIFY`（六份文档内均为保留权利式版权声明，未见再分发授权；
-  LCSC 托管副本如实表述为"原厂文档的 LCSC 托管副本"，不说成厂商官方网站）
+- License / 授权类型：`TO_VERIFY`（SS34 与 TYPE-C 两份 PDF 未核实到明确的再分发授权——
+  授权原文以各自 PDF 为准，未逐字复核前不作"均有版权声明"的强表述；保守结论不变：
+  再分发边界 TO_VERIFY、binary 不入仓。四份已复核文档为保留权利式版权声明）
 - 融合角色：SUPPORT（EDD-001 证据链输入；POWER DRAFT 合同的事实基础）
 - 用途与使用方式：provenance 冻结（URL/sha256/bytes/retrieved_at/PDF 元数据登记于
   `src/hardware/edd001-board/evidence/sandbox_bundle_manifest_v1.json` 的
@@ -214,4 +215,4 @@
 - 合规状态：`TO_VERIFY`
 - 关联模块：`src/hardware/edd001-board/evidence/sandbox_bundle_manifest_v1.json`、
   `gates/contracts/edd001_power_contract_v1.json`（DRAFT）
-- 关联 AI Usage：AI-20260902-004；关联 Evidence：EVID-20260902-002
+- 关联 AI Usage：AI-20260902-005（原 004，撞号改号，见台账该条目说明）；关联 Evidence：EVID-20260902-002

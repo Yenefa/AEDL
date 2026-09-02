@@ -139,7 +139,7 @@
         "source_url": "https://documentation.espressif.com/esp32-s3-wroom-1_wroom-1u_datasheet_en.pdf",
         "source_tier": "manufacturer_official",
         "manufacturer": "Espressif Systems",
-        "sha256": "27D71971DA07C280C6068D08C74720D1A25B8F20CF8494DC1765BDD28D40D435",
+        "sha256": "27d71971da07c280c6068d08c74720d1a25b8f20cf8494dc1765bdd28d40d435",
         "size_bytes": 1280501,
         "retrieved_at": "2026-09-02T01:28:49Z",
         "pdf_metadata": {
@@ -159,7 +159,7 @@
         "source_url": "https://datasheet.lcsc.com/datasheet/pdf/94820cc9e44613233ddcc1a15801eca3.pdf?productCode=C780769",
         "source_tier": "lcsc_catalog_hosted_manufacturer_datasheet",
         "manufacturer": "Diodes Incorporated",
-        "sha256": "EF99DAA3789D835BC025DFCB4C605C5C2E6D3E7223E86D40B33E6B497EA5A722",
+        "sha256": "ef99daa3789d835bc025dfcb4c605c5c2e6d3e7223e86d40b33e6b497ea5a722",
         "size_bytes": 1226090,
         "retrieved_at": "2026-09-02T01:33:36Z",
         "pdf_metadata": {
@@ -181,7 +181,7 @@
         "source_url": "https://datasheet.lcsc.com/datasheet/pdf/9e56b777c022540fcce7c7f67825f55e.pdf?productCode=C165948",
         "source_tier": "lcsc_catalog_hosted_manufacturer_datasheet",
         "manufacturer": "Korean Hroparts Elec",
-        "sha256": "6AE33D50AC47820114661138DC4E4659F40FDC5D4F485B46685DFEC338DA1A9E",
+        "sha256": "6ae33d50ac47820114661138dc4e4659f40fdc5d4f485b46685dfec338da1a9e",
         "size_bytes": 118176,
         "retrieved_at": "2026-09-02T01:32:27Z",
         "pdf_metadata": {
@@ -204,7 +204,7 @@
         "source_url": "https://www.st.com/resource/en/datasheet/usblc6-2.pdf",
         "source_tier": "manufacturer_official",
         "manufacturer": "STMicroelectronics",
-        "sha256": "BC30154F310CD631043214ED52571DAEFE04270587EC55072D49A23BD18B9068",
+        "sha256": "bc30154f310cd631043214ed52571daefe04270587ec55072d49a23bd18b9068",
         "size_bytes": 575521,
         "retrieved_at": "2026-09-02T01:28:52Z",
         "pdf_metadata": {
@@ -228,7 +228,7 @@
         "source_url": "https://datasheet.lcsc.com/datasheet/pdf/dfa1ff67dea875d0135103ba9ada713a.pdf?productCode=C8678",
         "source_tier": "lcsc_catalog_hosted_manufacturer_datasheet",
         "manufacturer": "MDD (Microdiode Semiconductor)",
-        "sha256": "FB4970875779696914D235BCF954240569302FB325399838F2861D474CBF9760",
+        "sha256": "fb4970875779696914d235bcf954240569302fb325399838f2861d474cbf9760",
         "size_bytes": 1300729,
         "retrieved_at": "2026-09-02T01:32:29Z",
         "pdf_metadata": {
@@ -251,7 +251,7 @@
         "source_url": "https://dl.espressif.com/dl/schematics/SCH_ESP32-S3-LCD-Ev-Board-MB_V1.5_20231009.pdf",
         "source_tier": "manufacturer_official",
         "manufacturer": "Espressif Systems",
-        "sha256": "384F0639B2C38E90E0065EC80722C2DD801D1F69476F85465D02E834A8915FD3",
+        "sha256": "384f0639b2c38e90e0065ec80722c2dd801d1f69476f85465d02e834a8915fd3",
         "size_bytes": 1607358,
         "retrieved_at": "2026-09-02T01:55:25Z",
         "pdf_metadata": {

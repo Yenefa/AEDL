@@ -84,6 +84,34 @@ def shared_patterns(root: Path) -> list:
     return patterns
 
 
+def codeowners_match(path: str, pattern: str) -> bool:
+    """CODEOWNERS path semantics (review B2/P1 2026-09-02: Path.match is a
+    right-anchored whole-tail matcher and silently returns False for every
+    directory rule, so the generator used to report shared=[] for real hits).
+
+    Rules implemented (subset used by this repo's CODEOWNERS):
+      - trailing "/"  -> directory rule: root-anchored prefix, matches the
+                         directory itself and everything below it
+      - leading "/"    -> root-anchored file rule: exact path match
+      - no "/" at all -> basename rule: matches in any directory
+    """
+    pat = pattern.strip()
+    if not pat:
+        return False
+    if pat.endswith("/"):
+        prefix = pat.strip("/")
+        return path == prefix or path.startswith(prefix + "/")
+    if pat.startswith("/"):
+        return path == pat.lstrip("/")
+    if "/" in pat:
+        # contains slashes but not anchored: match relative to any directory
+        # (tail match, which IS what Path.match is correct for)
+        from pathlib import PurePosixPath
+        return PurePosixPath(path).match(pat)
+    from pathlib import PurePosixPath
+    return PurePosixPath(path).name == pat
+
+
 def is_text(path: Path, limit: int = 8192) -> bool:
     try:
         return b"\x00" not in path.read_bytes()[:limit]
@@ -148,7 +176,7 @@ def build_bundle(root: Path, run: str, base: str, out: Path, pr) -> dict:
     tracked, untracked = collect_changes(root, base)
     changed = sorted(set(tracked) | set(untracked))
     patterns = shared_patterns(root)
-    shared = [p for p in changed if any(Path(p).match(pat) for pat in patterns)]
+    shared = [p for p in changed if any(codeowners_match(p, pat) for pat in patterns)]
 
     patch = build_patch(root, base, tracked, untracked)
     (out / f"{run}-source-diff.patch").write_text(patch, encoding="utf-8")
