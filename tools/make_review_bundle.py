@@ -149,18 +149,28 @@ def build_patch(root: Path, base: str, tracked: list, untracked: list) -> str:
     return "\n".join(parts)
 
 
-def receipt_summaries(root: Path) -> list:
-    """Summarize admit/gate receipts found next to the repository."""
-    found = []
+def receipt_summaries(out: Path) -> list:
+    """Summarize admit/gate receipts shipped inside the bundle directory.
+
+    Review iteration 4 (2026-09-02): discovery used to scan the repository
+    parent for loose receipt files, which (a) missed receipts placed next to
+    the bundle — review.md then claimed "no receipts found" while the bundle
+    dir held current receipts — and (b) happily summarized stale receipts from
+    other runs. The bundle directory is the single source: this scan, the
+    manifest.files inventory and the review.md evidence section all read the
+    same files. "admit-receipt.json" matches both globs and is deduplicated.
+    """
+    found, seen = [], set()
     for pattern in ("*admit*.json", "*receipt*.json"):
-        for path in sorted(root.parent.glob(pattern)):
-            if path.name.startswith("_"):  # scratch/temp receipts are not evidence
-                continue
+        for path in sorted(out.glob(pattern)):
+            if path.name.startswith("_") or path in seen:
+                continue  # scratch/temp receipts are not evidence
             try:
                 data = json.loads(path.read_text(encoding="utf-8"))
             except Exception:
                 continue
             if isinstance(data, dict) and ("verdict" in data or "status" in data):
+                seen.add(path)
                 found.append({
                     "file": path.name,
                     "verdict": data.get("verdict") or data.get("status"),
@@ -200,7 +210,7 @@ def build_bundle(root: Path, run: str, base: str, out: Path, pr) -> dict:
         new_lines.append(FENCE)
     (out / f"{run}-review-new-files.md").write_text("\n".join(new_lines), encoding="utf-8")
 
-    receipts = receipt_summaries(root)
+    receipts = receipt_summaries(out)
     stat = git(root, "diff", "--stat", base)
     if untracked:
         stat = (stat + f"\n{len(untracked)} new file(s) (see -review-new-files.md)").strip()
@@ -276,7 +286,23 @@ def build_bundle(root: Path, run: str, base: str, out: Path, pr) -> dict:
         "generated_at": utc_now(),
         "changed": changed,
         "shared": shared,
-        "files": [f"{run}-review.md", f"{run}-review-new-files.md", f"{run}-source-diff.patch", "manifest.json"],
+        # Review iteration 4: receipts shipped in the bundle dir are part of
+        # the inventory and are summarized here — review.md evidence section,
+        # manifest.receipts and manifest.files all derive from the same
+        # receipt_summaries(out) scan (three views, one source).
+        "files": [
+            f"{run}-review.md",
+            f"{run}-review-new-files.md",
+            f"{run}-source-diff.patch",
+            "manifest.json",
+        ] + [r["file"] for r in receipts],
+        "receipts": {
+            r["file"]: (
+                f"{r['verdict']} exit={r['exit_code']}"
+                + (f" envelope={r['envelope_sha256']}" if r.get("envelope_sha256") else "")
+            )
+            for r in receipts
+        },
     }
     (out / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return manifest

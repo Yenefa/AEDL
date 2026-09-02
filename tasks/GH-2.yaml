@@ -40,6 +40,8 @@ allowed_paths:
   # Review 迭代 3 扩 scope（触发依据：上条第四-test-file 条款 + reviewer P1×2 裁定）：
   - tools/make_review_bundle.py # P1：Path.match 不实现 CODEOWNERS 根锚定目录前缀语义，shared=[] 稳定误报；换 codeowners_match
   - tests/test_control_plane_tools.py # P1 匹配器正/负向回归（7 用例，含真实仓库端到端 9→2 SHARED）
+  # Review 迭代 4/5 扩 scope（reviewer BLOCKER 处方 + gate 干净化指令）：
+  - sandbox_runtime/tests/policy/test_paths.py # cmd /c mklink 输出本地代码页字节，text=True 按 UTF-8 解码在 gate 内崩 reader 线程；加 errors=replace（逻辑只依赖 returncode）
   - docs/compliance/AI_USAGE_LOG.md # 本工作单元追加
   - docs/evidence/EVIDENCE_INDEX.md # 只登记真实冻结资料与真实运行结果
   - docs/compliance/THIRD_PARTY_RESOURCES.md # datasheet 属第三方资源：来源/License/再分发边界 VERIFIED 或 TO_VERIFY
@@ -86,7 +88,8 @@ change_budget:
   # + COLLABORATION/WAVE4 状态行 2 + 测试断言 3（trust / integration / preflight）+ envelope 1
   # = 5+1+2+3+2+3+1 = 17（三个测试全调整的实际上限；GH-20 恰好动了同类三文件，非纯理论）
   # Review 迭代 3 扩：+2（bundle 生成器修复 + 控制平面测试）= 19 上限
-  expected_files: 19
+  # Review 迭代 4/5 扩：+1（test_paths junction 回归编码策略，gate 干净化）= 20 上限
+  expected_files: 20
   expected_modules:
     [
       edd001-datasheet-freeze,

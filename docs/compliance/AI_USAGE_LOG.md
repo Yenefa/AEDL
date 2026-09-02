@@ -2981,7 +2981,7 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - **P1（remote_evidence 字段级校验缺失）— 修复**：trust validator 仅查顶层
   metadata 是对象，六条记录的 URL/sha256/size/role/时间戳/唯一性无机器校验。
   `sandbox_runtime/tests/trust/test_trust.py` 新增 `RemoteEvidenceMetadataTests`
-  （8 用例）：六条记录、ID 唯一且为既定集合、角色 5+1 分布、字段形状
+  （6 用例）：六条记录、ID 唯一且为既定集合、角色 5+1 分布、字段形状
   （https URL / 小写 64-hex sha256 / 正整数 size / ISO 时间戳）、sha256 唯一性、
   TO_VERIFY + binary 不入仓不变量、TO_VERIFY 远程源不得伪装成本地冻结文件
   （missing_requirements 对 exact_component 必须保留、对 reference_design 必须缺席）。
@@ -2997,4 +2997,40 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
   PDF 为准，未逐字复核前不作强表述）；保守结论（TO_VERIFY、binary 不入仓）不变。
 - 验证（真实运行，本机）：CodeownersMatchTests 7/7；trust 套件 22/22；
   re-admit ADMIT + 终态 dev_gate PASS（scope/binding 见 bundle 回执）。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+### AI-20260902-005 · Review 迭代 4（2026-09-02，receipt discovery 收口 + gate 干净化）
+
+外部二审二轮（SHARED 真值已签：2 个 SHARED 路径经 matcher 修复 + 真实 CODEOWNERS
+端到端回归支撑）Remaining：1 BLOCKER + 1 MUST-FIX + gate 重跑要求。逐条处置：
+
+- **BLOCKER（receipt discovery 三视图矛盾）— 修复**：review.md 写 "no receipts
+  found"（生成器 `receipt_summaries` 扫 repo parent 的散落回执——捞不到 bundle
+  目录内的当前回执，还会把其他 run 的陈旧回执误当证据），而 manifest.receipts
+  （此前是人工后处理注记）声称有、manifest.files 却不列回执——三视图互斥，不可
+  交付。修复：`receipt_summaries` 改为只扫 bundle 输出目录（唯一事实源；
+  admit-receipt.json 双 glob 命中去重；`_` 前缀跳过），manifest.files 原生包含
+  实际回执文件，manifest.receipts 由生成器从实际文件产出（人工注记退役，保证
+  review.md == manifest.receipts == manifest.files 三视图一致）。补 3 用例回归：
+  temp git repo + 两份回执端到端（review.md/manifest 双视图断言）、`_` 前缀与
+  非回执 JSON 跳过、双 glob 去重。
+- **MUST-FIX（8→6 用例）— 更正**：`RemoteEvidenceMetadataTests` 实际 6 个测试
+  方法（sandbox 套件 277→283 增量吻合）；迭代 3 台账误写"8 用例"，已更正为 6。
+- **gate 干净化（UnicodeDecodeError）— 修复**：gate 回执 sandbox_tests detail
+  挂着 Popen reader 线程 `UnicodeDecodeError: 'utf-8' codec can't decode byte
+  0xb4`——出处 `policy/test_paths.py` junction 回归的 `cmd /c mklink`：cmd.exe
+  输出本地 ANSI/OEM 代码页字节（「创」GBK=B4B4），`text=True` 按 UTF-8 解码即崩
+  （`mklink /?` 复现确认）。按 reviewer 处方改 `text=True, errors="replace"`
+  （逻辑只依赖 returncode，stderr 仅用于 skip 消息）。test_paths.py 经 envelope
+  迭代 5 amendment 入授权面（第四-test-file 条款 + reviewer 明示修复指令）。
+- **非阻断 follow-up 登记（不动 scope）**：clean-HEAD gate 的 scope_check 只看
+  worktree delta，不能机器证明 committed delta in-scope——理想形态是 gate 原生
+  做 base→HEAD 的 committed-delta scope 检查；涉及 tools/dev_gate.py（不在本
+  envelope 授权面内），留后续 envelope amendment。
+- 验证（真实运行，本机，迭代 4）：CodeownersMatchTests 7/7 +
+  BundleReceiptDiscoveryTests 3/3；主仓/sandbox 全量绿且 sandbox 输出无 thread
+  exception。终态流程（本 commit 之后执行，结果不预写）：干净 HEAD 上 re-admit
+  （--allow-drift）+ 终态 dev_gate + bundle 重生成——结果与 hash 以
+  review-bundles/feat_w4a-evidence-freeze/ 内 admit/gate-receipt.json 与
+  manifest.json 为准（三视图一致性由 BundleReceiptDiscoveryTests 机器锁定）。
+  committed-delta scope（envelope base df138d9..HEAD）复核结果见 PR #27 描述。
 - 人工审核：`PENDING_HUMAN_REVIEW`

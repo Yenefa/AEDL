@@ -525,3 +525,74 @@ class CodeownersMatchTests(unittest.TestCase):
                 "gates/contracts/edd001_power_contract_v1.json",
             ],
         )
+
+
+class BundleReceiptDiscoveryTests(unittest.TestCase):
+    """Review iteration 4 (2026-09-02): receipts must be discovered INSIDE the
+    bundle directory and the three views — review.md evidence section,
+    manifest.receipts summaries, manifest.files inventory — must agree. The
+    old parent-directory scan reported "no receipts found" while the bundle
+    dir held current receipts, and summarized stale receipts from other runs."""
+
+    @staticmethod
+    def _init_repo(root: Path) -> None:
+        def git(*args: str) -> None:
+            subprocess.run(["git", *args], cwd=root, check=True, capture_output=True)
+
+        git("init", "-q")
+        git("config", "user.email", "t@example.com")
+        git("config", "user.name", "T")
+        (root / "file.txt").write_text("x", encoding="utf-8")
+        git("add", "-A")
+        git("commit", "-qm", "init")
+
+    def test_end_to_end_bundle_discovers_and_inventories_receipts(self) -> None:
+        from tools.make_review_bundle import build_bundle
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "repo"
+            out = Path(td) / "review-bundles" / "run"
+            root.mkdir()
+            out.mkdir(parents=True)
+            self._init_repo(root)
+            (out / "admit-receipt.json").write_text(json.dumps({
+                "schema_version": "admit.v1", "verdict": "ADMIT", "exit_code": 0,
+                "envelope_sha256": "a" * 64,
+            }), encoding="utf-8")
+            (out / "gate-receipt.json").write_text(json.dumps({
+                "schema_version": "dev-gate.v1", "status": "pass", "exit_code": 0,
+                "envelope_sha256": "a" * 64,
+            }), encoding="utf-8")
+
+            manifest = build_bundle(root, "run", "HEAD", out, None)
+
+            self.assertIn("admit-receipt.json", manifest["files"])
+            self.assertIn("gate-receipt.json", manifest["files"])
+            self.assertTrue(manifest["receipts"]["admit-receipt.json"].startswith("ADMIT"))
+            self.assertTrue(manifest["receipts"]["gate-receipt.json"].startswith("pass"))
+            review = (out / "run-review.md").read_text(encoding="utf-8")
+            self.assertIn("admit-receipt.json: ADMIT", review)
+            self.assertIn("gate-receipt.json: pass", review)
+
+    def test_receipt_scan_skips_underscore_and_non_receipt_json(self) -> None:
+        from tools.make_review_bundle import receipt_summaries
+
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td)
+            (out / "_scratch-receipt.json").write_text("{}", encoding="utf-8")
+            (out / "other.json").write_text("{}", encoding="utf-8")
+            (out / "manifest.json").write_text("{}", encoding="utf-8")
+            (out / "admit-receipt.json").write_text(json.dumps({"verdict": "ADMIT"}), encoding="utf-8")
+            summaries = receipt_summaries(out)
+            self.assertEqual([s["file"] for s in summaries], ["admit-receipt.json"])
+
+    def test_receipt_scan_dedupes_files_matching_both_globs(self) -> None:
+        from tools.make_review_bundle import receipt_summaries
+
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td)
+            # "admit-receipt.json" matches both "*admit*.json" and "*receipt*.json"
+            (out / "admit-receipt.json").write_text(json.dumps({"verdict": "ADMIT"}), encoding="utf-8")
+            summaries = receipt_summaries(out)
+            self.assertEqual(len(summaries), 1)
+            self.assertEqual(summaries[0]["file"], "admit-receipt.json")
