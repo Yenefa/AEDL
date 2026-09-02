@@ -19,7 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -211,24 +211,44 @@ def _device_evidence(contract: Mapping[str, Any]) -> list[str]:
     return sorted(key for key in sources if isinstance(key, str) and key.endswith("DATASHEET"))
 
 
-def _iter_declared_parts(constraint: Mapping[str, Any]) -> Iterator[str]:
-    """Yield part numbers declared anywhere inside a rule constraint.
+# Declaration semantics are adjudicated per frozen-schema path, NOT inferred
+# from key names at arbitrary depth. A nested device/mpn outside these paths
+# (e.g. a future reference_design.device or comparison.device) is a
+# reference, not a selected component: collecting it would manufacture a
+# false EVIDENCE_COMPONENT_SOURCE_MISSING finding on a fail-closed gate.
+# New nested declaration paths must be added here only via contract schema /
+# ADR adjudication (Issue #20 model), never by widening the walk.
+_DECLARATION_KEYS: tuple[str, ...] = ("mpn", "device")
+_ADJUDICATED_NESTED_BLOCKS: tuple[str, ...] = ("regulator_3v3",)
 
-    A part is "declared" when any mapping in the constraint — the constraint
-    itself or a nested block such as POWER_SOURCE_SEPARATION's
-    ``regulator_3v3`` — carries a non-empty ``mpn`` or ``device`` string.
-    Issue #20's frozen-contract adjudication requires the direct SS34
-    declaration (USB_VBUS_REVERSE_PROTECTION) and the nested AP63203WU-7
-    declaration (POWER_SOURCE_SEPARATION.regulator_3v3.device) to converge
-    into one required component set, so collection walks the constraint
-    recursively instead of only its top level.
+
+def _declared_parts(constraint: Mapping[str, Any]) -> list[str]:
+    """Part numbers declared on the adjudicated paths of a rule constraint.
+
+    Two families carry component-declaration semantics in the frozen
+    contracts (Issue #20 adjudication):
+
+    1. direct declaration:      ``constraint["mpn"]`` / ``constraint["device"]``
+       (covers kind == "component" rules and parts declared inside other rule
+       kinds, e.g. SS34 under USB_VBUS_REVERSE_PROTECTION);
+    2. adjudicated nested declaration:
+       ``constraint["regulator_3v3"]["mpn"|"device"]``
+       (POWER_SOURCE_SEPARATION's AP63203WU-7).
     """
-    for key, value in constraint.items():
-        if key in ("mpn", "device"):
+    parts: list[str] = []
+    for key in _DECLARATION_KEYS:
+        value = constraint.get(key)
+        if isinstance(value, str) and value:
+            parts.append(value)
+    for block_key in _ADJUDICATED_NESTED_BLOCKS:
+        block = constraint.get(block_key)
+        if not isinstance(block, Mapping):
+            continue
+        for key in _DECLARATION_KEYS:
+            value = block.get(key)
             if isinstance(value, str) and value:
-                yield value
-        elif isinstance(value, Mapping):
-            yield from _iter_declared_parts(value)
+                parts.append(value)
+    return parts
 
 
 def _collect_components(
@@ -255,12 +275,13 @@ def _collect_components(
             rule_id = _rule_id(rule)
             if not rule_id:
                 continue
-            declared = sorted(set(_iter_declared_parts(constraint)))
+            declared = sorted(set(_declared_parts(constraint)))
             if not declared:
                 continue
             # This covers kind == "component" (USB_CONNECTOR, USB_ESD), parts
             # declared inside other rule kinds (SS34 under a power rule), and
-            # nested devices (POWER_SOURCE_SEPARATION's regulator_3v3).
+            # the adjudicated nested device (POWER_SOURCE_SEPARATION's
+            # regulator_3v3 → AP63203WU-7).
             source_ids = rule.get("source_ids")
             evidence = (
                 sorted(str(item) for item in source_ids if isinstance(item, str))

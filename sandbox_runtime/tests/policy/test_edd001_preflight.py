@@ -211,6 +211,78 @@ class RealEdd001PreflightTests(unittest.TestCase):
             self.assertEqual(decision.reason_code, "POLICY_PATH_ESCAPE")
 
 
+class DeclarationSemanticsTests(unittest.TestCase):
+    """Only the adjudicated declaration paths carry component semantics.
+
+    Review B2 (2026-09-02): collection must not be an implicit rule language.
+    A nested device/mpn outside the frozen schema's adjudicated paths
+    (reference_design.device, comparison.device, candidate blocks...) is a
+    reference, not a selected component — collecting it would manufacture a
+    false EVIDENCE_COMPONENT_SOURCE_MISSING finding on a fail-closed gate.
+    """
+
+    def _document_with_probe_rule(self, constraint: dict[str, Any]) -> dict[str, Any]:
+        from aedl_sandbox.policy.edd001 import build_document_from_contracts
+
+        usb = read_contract("edd001_usb_contract_v1.json")
+        usb = json.loads(json.dumps(usb))  # deep copy: probe never mutates the file
+        usb["rules"].append(
+            {
+                "id": "PROBE_REFERENCE_ONLY",
+                "kind": "power",
+                "severity": "major",
+                "title": "probe: non-declaration nested parts",
+                "source_ids": ["ESPRESSIF_S3_LCD_EV_BOARD"],
+                "constraint": constraint,
+            }
+        )
+        contracts = [
+            (name, usb if name == "edd001_usb_contract_v1.json" else read_contract(name))
+            for name in CONTRACT_FILENAMES
+        ]
+        return build_document_from_contracts(contracts, REPO_ROOT)
+
+    def test_nested_reference_devices_are_not_collected(self) -> None:
+        document = self._document_with_probe_rule(
+            {
+                "reference_design": {"device": "REF-DESIGN-PART"},
+                "comparison": {"mpn": "COMPARED-PART"},
+                "candidate": {"device": "CANDIDATE-PART"},
+            }
+        )
+        mpns = {record["mpn"] for record in document["allowed_components"]}
+        self.assertNotIn("REF-DESIGN-PART", mpns)
+        self.assertNotIn("COMPARED-PART", mpns)
+        self.assertNotIn("CANDIDATE-PART", mpns)
+        # Positive control: the adjudicated direct and nested declarations stay.
+        self.assertIn("SS34", mpns)
+        self.assertIn("AP63203WU-7", mpns)
+        self.assertIn("USBLC6-2SC6", mpns)
+
+    def test_reference_devices_never_produce_preflight_findings(self) -> None:
+        """Even at preflight, a reference-only nested device must not be
+        reported as missing component evidence (false positive would wedge
+        the whole fail-closed gate)."""
+        from aedl_sandbox.policy import SandboxPolicyEngine
+
+        document = self._document_with_probe_rule(
+            {"reference_design": {"device": "REF-DESIGN-PART"}}
+        )
+        engine = SandboxPolicyEngine.from_document(document, REPO_ROOT)
+        candidate_root = REPO_ROOT / "sandbox_runtime" / ".runs" / "agent-m-preflight"
+        decision = engine.preflight("run-declaration-semantics", candidate_root)
+        reported = {
+            str(f.details["mpn"])
+            for f in decision.findings
+            if f.code == "EVIDENCE_COMPONENT_SOURCE_MISSING"
+        }
+        self.assertNotIn("REF-DESIGN-PART", reported)
+        self.assertEqual(
+            reported,
+            {"AP63203WU-7", "ESP32-S3-WROOM-1-N8R8", "SS34", "TYPE-C-31-M-12", "USBLC6-2SC6"},
+        )
+
+
 class RealEdd001PinTests(unittest.TestCase):
     def setUp(self) -> None:
         self.engine = SandboxPolicyEngine.for_edd001(REPO_ROOT)

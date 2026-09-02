@@ -180,15 +180,25 @@
 - 执行命令：
   - `uv run --frozen --project sandbox_runtime python -m unittest discover -s sandbox_runtime/tests -p test_*.py` → 275 tests OK（skipped=1，expected failures=1）
   - `py -3 -m tools.dev_gate --envelope tasks/GH-20.yaml --admit-receipt ..\gh20-collision2-admit.json` → PASS exit 0
-- Runs：RED 目标测试 1 轮（4 失败/错误）；GREEN 目标测试 1 轮（4/4 OK）；sandbox 全量 1 轮；dev_gate 全量 1 轮
+- Runs：RED 目标测试 1 轮（4 失败/错误）；GREEN 目标测试 1 轮（4/4 OK）；sandbox 全量 1 轮；dev_gate 全量 1 轮；Review 迭代 1（REQUEST_CHANGES 处置）后 sandbox 全量 1 轮（277 tests）+ admit/gate 重走 1 轮
 - 结果：真实 preflight findings 7→8（新增 AP63203WU-7 的 EVIDENCE_COMPONENT_SOURCE_MISSING，
   evidence id ESP32_S3_TECHPEDIA）；manifest missing_requirements 5→6（+SS34_DATASHEET）；
   EDD-001 preflight 保持 BLOCKED（诚实失败关闭）；冻结契约（gates/contracts/** 与
   evidence/contracts/**）仓库字节零变化
-- 原始证据：本仓库提交 diff；gate/admit receipt 存于仓库外（gh20-collision2-*.json）
+- 原始证据：本仓库提交 diff；admit + gate receipt 原件随 review bundle 交付
+  （review-bundles/fix_gh-20-preflight-component-truth/，admit-receipt.json /
+  gate-receipt.json，二者 envelope_sha256 与最终提交的 tasks/GH-20.yaml 一致）
+- 授权链（Review 迭代 1 收口）：重新 admission（envelope 修订后，含 B2/M1 处置与
+  budget 对齐）→ ADMIT；final dev_gate 以同一 envelope + 同一 admit receipt 运行 →
+  binding_check PASS；三者（提交内 GH-20.yaml / admit receipt / gate receipt）
+  envelope sha 一致。首迭代的 hash 矛盾系 bundle 摘要段 glob 收编碰撞 1 遗留 receipt
+  所致（详见 AI-20260902-003 Review 迭代 1；遗留 receipt 已归档
+  ../receipts-2026-09-01-archive/）。
 - 是否可复现：YES
 - 已知限制：软件/Evidence 完整性验证，不构成实体硬件验证。SS34 的 evidence id
   ESPRESSIF_S3_LCD_EV_BOARD 已按官方 ESP32-S3-LCD-EV-Board user guide 原理图页
   （Power Supply over USB：D1 = SS34，USB VBUS → USB_5V）在原理图文本级核对成立；
-  参数级核对与 SS34 vendor datasheet 冻结仍归 W4A（Issue #2）。
+  参数级核对与 SS34 vendor datasheet 冻结仍归 W4A（Issue #2）。组件声明语义为
+  白名单路径（顶层 mpn/device + regulator_3v3），引用性嵌套结构不产生 findings
+  （负向回归 DeclarationSemanticsTests 锁定）。
 - 人工核验：`PENDING_HUMAN_REVIEW`

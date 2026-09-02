@@ -2782,3 +2782,39 @@ test_run_gates`：**115/115 OK**（覆盖问题 1 courtyard 四边越界、问�
 - AIC Score Target：`实现完成度与可验证效果`（延续 GH-20）
 - 最终状态：
   - `PENDING_HUMAN_REVIEW`（PR 待人工 review，merge 由 Yenefa/Percy 执行）
+
+### AI-20260902-003 · Review 迭代 1（2026-09-02，REQUEST_CHANGES 处置）
+
+外部 review 裁定 REQUEST_CHANGES（2 BLOCKER + 1 MUST-FIX）。逐条处置：
+
+- **B1（envelope hash 分叉）— 根因为 bundle 摘要污染，非链路断裂**：
+  `gh20-collision2-admit.json`（ADMIT，envelope=d2beaf39e35d，HEAD=95a01a3）与
+  `gh20-collision2-gate.json`（PASS，envelope=d2beaf39e35d，binding_check PASS，
+  baseline=95a01a3，dirty=8 候选文件）自始一致；reviewer 看到的
+  `gh20-receipt-final.json`（envelope=cbe9c1c4eaf4）是**碰撞 1（PR #21，2026-09-01
+  19:28Z）遗留的 gate receipt**，被 `tools/make_review_bundle.py` 的
+  `receipt_summaries()` glob（`*receipt*.json`，不区分碰撞）一并收进本轮 bundle
+  摘要段。修复：① 归档碰撞 1 遗留 receipt 至 `../receipts-2026-09-01-archive/`
+  （保留不删）；② B2/M1 修复后重走完整 admit→gate（envelope 3ae623b35c62，
+  admit/gate/最终提交三者一致）；③ admit + gate receipt 原件拷贝进 review bundle
+  目录并登记其 manifest。**遗留（登记 follow-up，不阻塞本 PR）**：
+  `receipt_summaries` 按文件名 glob 收编全部历史 receipt 是工具缺陷，根治需按
+  HEAD/envelope 过滤或按 run 隔离目录（改 `tools/make_review_bundle.py` 超本碰撞
+  envelope scope，留 Owner 决策）。
+- **B2（递归收集语义过宽）— 已收窄**：`_iter_declared_parts`（任意深度 device/mpn
+  即组件）替换为 `_declared_parts` 白名单：顶层 `constraint[mpn|device]` + 已仲裁
+  嵌套 `constraint[regulator_3v3][mpn|device]`，其余嵌套结构（reference_design /
+  comparison / candidate 等）一律视为引用而非选定组件。新增负向回归
+  `DeclarationSemanticsTests`（2 个测试：引用性 device 不进组件集；不产生
+  EVIDENCE_COMPONENT_SOURCE_MISSING finding，含正向对照）。
+- **M1（budget 与 diff 不一致）— 已对齐**：`expected_files: 7→8`（注释注明含
+  envelope 自身这个控制面文件）；`cross_module: false→true`（policy / tests /
+  manifest / ledgers 四模块实际变更，与碰撞 1 的有界跨模块修复同类）。
+- 验证（真实运行，本机，迭代后）：
+  - `uv run --frozen --project sandbox_runtime python -m unittest discover -s
+    sandbox_runtime/tests -p test_*.py` → 277 tests OK（1 skip、1 xfail；+2 负向回归）。
+  - 重新 admit（envelope 修订后，base 重绑 c143429）→ ADMIT（envelope 3ae623b35c62）；
+    `py -3 -m tools.dev_gate --envelope tasks/GH-20.yaml --admit-receipt <receipt>`
+    → PASS exit 0，binding_check PASS，admit/gate/最终提交的 GH-20.yaml 三者
+    envelope sha 一致（见 EVID-20260902-001 更新）。
+- 人工审核：`PENDING_HUMAN_REVIEW`（本迭代随 PR #25 一并待审）

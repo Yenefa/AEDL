@@ -12,7 +12,9 @@ task: GH-20
 
 base:
   branch: fix/gh-20-preflight-component-truth
-  sha: 95a01a3c939549b292ea08a4ee545ec712e5c3d2
+  # 碰撞 2 迭代 1 起点：首迭代提交（Review REQUEST_CHANGES 处置前的基线）。
+  # envelope 随 B2/M1 处置修订，admission 以本 sha 重新绑定。
+  sha: c14342994b8a680a5c92119d4877c2bf4eac4461
 
 dependencies: []
 
@@ -44,7 +46,9 @@ acceptance: |
   - SS34 evidence id 若需改冻结合同才能纠正 → 不改，登记 TO_VERIFY 转 W4A 澄清
 
 change_budget:
-  expected_files: 7
+  # 8 = 7 个交付物 + tasks/GH-20.yaml（envelope 自身：控制面文件，随本碰撞修订，
+  # scope_check 由 allowed_paths 的 tasks/** 覆盖）
+  expected_files: 8
   expected_modules:
     [
       sandbox-policy-component-collection,
@@ -52,7 +56,9 @@ change_budget:
       edd001-bundle-manifest,
       evidence-ai-ledgers,
     ]
-  cross_module: false
+  # 四模块实际变更（policy / tests / manifest / ledgers）；与碰撞 1 同类：
+  # 有界跨模块修复，非单模块任务
+  cross_module: true
   contract_change: false # 冻结契约内容不变
   evidence_semantics_change: true # manifest 缺失项集合对齐冻结仲裁（POWER + 5 组件）
 
