@@ -1,21 +1,24 @@
-# Task Envelope — GH-20（碰撞 1：字节基线收口；Tasks 1-5 + 9）
+# Task Envelope — GH-20（碰撞 2：Tasks 6-8 运行时对齐；字节基线碰撞 1 已由 Run 001 完成并入 master）
 # 对应 GitHub Issue #20 [P0] Stabilize Evidence bytes and align EDD-001 preflight truth source
-# 范围说明：本 envelope 只装 Tasks 1-5（.gitattributes LF 契约 / 重冻结 3 个 CRLF-bound
-# 测试 / 不碰 M2 Evidence 字节 / 移除 CI 排除 / 双平台覆盖）+ Task 9（记录）。
-# Tasks 6-8（SS34/AP63203 运行时对齐，改 sandbox_runtime/src/aedl_sandbox/policy/edd001.py
-# 与 sandbox_bundle_manifest_v1.json 内容）明确 out-of-scope，留给下一次碰撞。
+# 范围说明（碰撞 2 = 原 envelope 注释"留给下一次碰撞"的 Tasks 6-8）：
+#   Task 6  测试：prove nested AP63203 + direct SS34 均为 preflight 必需
+#   Task 7  运行时：edd001.py 递归收集嵌套声明；manifest missing_requirements 与真源收敛
+#   Task 8  Issue #2 证据集对齐（POWER + 五件套）——在 W4A Issue #2 内更新
+# 碰撞 1（Tasks 1-5 + 9 的 LF 字节基线）已通过 Run 001（PR #21）合并入 master；
+# 本碰撞 base = master，工作树 clean，无 dirty/drift 例外。
 
 task: GH-20
 
 base:
-  branch: feat/control-plane-minimal-slice
-  sha: 18b238164dc39bd34fbe9a5e7b7e0cf91a53f2f0
+  branch: fix/edd001-preflight-truth-source
+  sha: 63e6cdd9e96f9c1c698a0149ac392332e61e9030
 
 goal: |
-  建立跨平台确定的字节基线（选择性）：LF 声明哈希的文件 checkout 为 LF，
-  gerbers 保持 CRLF 以匹配 delivery ZIP 载荷契约；3 个 CRLF-bound 测试重冻结
-  到 LF 基线；移除 CI 排除；本地 Windows 与 CI 跑完全相同的测试集，一个 PASS
-  语义。不修改任何 M2 生成 Evidence 的仓库字节。
+  碰撞 2（Tasks 6-8）：让 EDD-001 preflight 的运行时收集、manifest missing_requirements
+  与冻结 contracts 真源收敛——递归收集嵌套声明（AP63203WU-7 under
+  POWER_SOURCE_SEPARATION.regulator_3v3）与直接声明（SS34 under
+  USB_VBUS_REVERSE_PROTECTION），manifest 与 Issue #2 对齐 POWER + 五件套证据项，
+  同时保持 preflight 诚实 BLOCKED（不制造 PASS）。碰撞 1（LF 字节基线）已完成。
 
 dependencies: []
 
@@ -28,6 +31,11 @@ allowed_paths:
   - docs/evidence/EVIDENCE_INDEX.md # Task 9：记录字节基线刷新
   - docs/compliance/AI_USAGE_LOG.md # Task 9
   - tasks/** # 本 envelope
+  # —— 碰撞 2（Tasks 6-8）新增允许路径 ——
+  - sandbox_runtime/src/aedl_sandbox/policy/edd001.py # Task 7：递归收集嵌套声明（AP63203）
+  - sandbox_runtime/tests/policy/test_edd001_preflight.py # Task 6：SS34/AP63203 必需性测试
+  - src/hardware/edd001-board/evidence/sandbox_bundle_manifest_v1.json # Task 7：missing_requirements 对齐
+  - gates/contracts/** # 只读核对（冻结内容不改）
   # 上一碰撞遗留的工作树内容（admission 已 --allow-dirty 批准，scope_check 需覆盖）：
   - tools/**
   - tests/test_control_plane_tools.py
@@ -54,17 +62,15 @@ allowed_paths:
 forbidden_paths:
   - gates/board_review_v1.json
   - gates/lessons_registry_v1.json
-  - sandbox_runtime/src/aedl_sandbox/policy/edd001.py # Tasks 6-8 out-of-scope
-  - sandbox_runtime/tests/policy/test_edd001_preflight.py
-  - src/hardware/edd001-board/evidence/sandbox_bundle_manifest_v1.json # Tasks 6-8 out-of-scope
-  - src/hardware/edd001-board/evidence/datasheets/**
+  - src/hardware/edd001-board/evidence/datasheets/** # W4A（GH-2）资料下载范围，本碰撞不碰
+  - gates/contracts/** # 冻结契约内容不改（碰撞 2 只读）
 
 acceptance: |
-  - 主仓库全量测试（含原 3 个排除项）在 Windows 本地与 LF 工作树均通过
-  - sandbox 全量测试（含原 8 个 CRLF 失败）在 Windows 本地通过
-  - notes/m2-evidence-reset/generated/** 仓库字节零变化
-  - 远端 CI 双平台（ubuntu + windows）同一套测试全绿
-  - EDD-001 preflight 保持 BLOCKED（诚实失败关闭）
+  - preflight findings 同时含 SS34 与 AP63203WU-7 的资料缺失项（递归 + 直接声明均收集）
+  - manifest missing_requirements 与 preflight findings、Issue #2 对齐（POWER + 五件套）
+  - 冻结契约内容零改动（gates/contracts/** 与 evidence/contracts/** 只读核对）
+  - sandbox policy 测试全绿；dev_gate exit 0
+  - EDD-001 preflight 保持 BLOCKED（诚实失败关闭，不制造 PASS）
 
 change_budget:
   expected_files: 10
@@ -96,7 +102,6 @@ escalation:
     - compiler / verifier 实现
     - manufacturing_release / 下单 / 重签 / 换料语义
   notes: |
-    - admit 预期 BLOCKED：工作区含上一碰撞（control-plane 最小切片，14 文件）未提交
-    - 处置建议：--allow-dirty 继续（切片内容已完整汇报、ADR-011 已记录、未 commit 是
-      commit 授权分级 v2 的"未验收在制品不 commit"规则），升级记录随本任务留存
-    - GH-20 允许列表早于 dev_gate 存在，Task 4 需同步改 tools/dev_gate.py——范围澄清挂此
+    - 碰撞 2（2026-09-02）：base=master 63e6cdd，工作树 clean；Task 6-8 为原 envelope
+      注释声明的"下一次碰撞"，经 Yenefa 在席特殊授权（一路推进）启动
+    - 碰撞 1 的 dirty 例外（allow_dirty）已随 Run 001 merge 失效，本碰撞无例外
