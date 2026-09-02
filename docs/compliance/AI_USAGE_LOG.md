@@ -2681,3 +2681,44 @@ test_run_gates`：**115/115 OK**（覆盖问题 1 courtyard 四边越界、问�
 - AIC Score Target：`NONE`（纯流程记录）
 - 最终状态：
   - `PENDING_HUMAN_REVIEW`（PR 待人工 review，merge 由 Yenefa/Percy 执行）
+
+## AI-20260902-004
+
+- 日期：2026-09-02
+- 任务名称：GH-20 碰撞 2（Tasks 6-8）— preflight 真源对齐：嵌套 AP63203 收集 + manifest 五件套
+- 模块/路径：
+  - `tasks/GH-20.yaml`（envelope 扩展至碰撞 2；allow_drift 预授权）
+  - `sandbox_runtime/src/aedl_sandbox/policy/edd001.py`（`_iter_declared_mpns` 递归收集嵌套 device）
+  - `sandbox_runtime/tests/policy/test_edd001_preflight.py`（五件套断言 + 8 findings）
+  - `sandbox_runtime/tests/orchestrator/test_integration.py`（8 findings + manifest 6 项断言）
+  - `src/hardware/edd001-board/evidence/sandbox_bundle_manifest_v1.json`（missing_requirements 补 SS34_DATASHEET）
+  - 本台账本条目
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash`
+- 参与标签：DEBUG、GENERATE_CODE、GENERATE_TEST、DOCUMENT
+- 任务目标：Issue #20 Tasks 6-8——真实 preflight 此前只报 4 个组件（嵌套 AP63203WU-7 未收集、
+  `_collect_components` 注释明示 "deliberately not collected"）；与 #20 裁定（nested regulator_3v3
+  = AP63203WU-7 为必需组件）矛盾。
+- AI 实际产出：
+  - `_iter_declared_mpns`：递归收集 rule.constraint 内所有 device/mpn 声明（直接 + 嵌套），
+    字符串叶子不参与（prose 提 MPN 不产生声明）；影响面核对：core_base rules 无 device、
+    superseded rules 无 device → 只新增 AP63203WU-7。
+  - AP63203 的 required_evidence_ids 继承 POWER_SOURCE_SEPARATION.source_ids
+    （[ESP32_S3_TECHPEDIA]），与 SS34→ESPRESSIF_S3_LCD_EV_BOARD 同构。
+  - manifest missing_requirements 补 SS34_DATASHEET（五件套 + POWER = 6 项）。
+  - 测试同步：五件套断言、findings 7→8、manifest 5→6、全资料在场测试补 ESP32_S3_TECHPEDIA。
+- 团队自主部分：Yenefa 在席特殊授权（2026-09-02，一路推进）启动碰撞 2；envelope base 更新 +
+  allow_drift/allow_dirty 例外为预授权（authority-before-consumption）。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 验证（真实运行）：
+  - 修复前：真实 preflight 7 findings（缺 AP63203）；修复后：8 findings
+    （5 组件 AP63203/ESP32-S3/SS34/TYPE-C/USBLC6 + POWER + compiler + verifier）——与
+    #20 验收"报告 SS34 + AP63203"及交接包"8 findings"吻合。
+  - sandbox 全量 274 OK（1 skip 1 xfail）；policy 45/45。
+  - `py -3 -m tools.dev_gate --envelope tasks/GH-20.yaml --admit-receipt` exit 0：
+    main 306 / sandbox 274 / secret_scan 305 / scope_check PASS（4 files in scope）/
+    binding_check PASS（admission bound 784ffb@422c925）。
+- Compliance：Third-party none；ADR none（契约内容零改动）。
+- AIC Score Target：`实现完成度与可验证效果`（延续 GH-20 控制面/验证机制）
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`（PR 待人工 review，Issue #20 close 由 Yenefa 执行）

@@ -117,7 +117,9 @@ class Int01RealEdd001Tests(unittest.TestCase):
         self.assertEqual(len(executor.calls), 0)
         self.assertFalse((run_root / "run").exists())
         findings = state["policy_result"]["findings"]
-        self.assertEqual(len(findings), 7)
+        # 8 = 5 component sources (incl. nested AP63203WU-7, GH-20 Tasks 6-8)
+        #     + POWER contract + compiler + verifier
+        self.assertEqual(len(findings), 8)
         self.assertEqual(
             {finding["code"] for finding in findings},
             {
@@ -134,7 +136,8 @@ class Int01RealEdd001Tests(unittest.TestCase):
             status, _findings = trust.validate_bundle(REAL_MANIFEST)
         self.assertEqual(status, EvidenceStatus.PARTIAL)
         manifest = json.loads(REAL_MANIFEST.read_text(encoding="utf-8"))
-        self.assertEqual(len(manifest["missing_requirements"]), 5)
+        # POWER + five component sources (incl. SS34, GH-20 Tasks 6-8 alignment)
+        self.assertEqual(len(manifest["missing_requirements"]), 6)
         self.assertEqual(manifest["tool_coverage"], {"compilers": [], "verifiers": []})
 
 

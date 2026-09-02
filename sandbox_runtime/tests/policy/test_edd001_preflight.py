@@ -115,9 +115,17 @@ class RealEdd001PreflightTests(unittest.TestCase):
         for finding in component_findings:
             self.assertTrue(finding.details["missing_evidence_ids"], msg=str(finding.details))
         mpns = sorted(str(f.details["mpn"]) for f in component_findings)
+        # GH-20 Tasks 6-8: nested AP63203WU-7 (regulator_3v3) and direct SS34
+        # (reverse protection) are both required components.
         self.assertEqual(
             mpns,
-            ["ESP32-S3-WROOM-1-N8R8", "SS34", "TYPE-C-31-M-12", "USBLC6-2SC6"],
+            [
+                "AP63203WU-7",
+                "ESP32-S3-WROOM-1-N8R8",
+                "SS34",
+                "TYPE-C-31-M-12",
+                "USBLC6-2SC6",
+            ],
         )
 
     def test_source_urls_are_not_treated_as_local_evidence(self) -> None:
@@ -464,6 +472,7 @@ class MalformedContractBundleTests(unittest.TestCase):
             "ESPRESSIF_LAYOUT_GUIDE",
             "ESPTOOL_BOOT_MODE",
             "ESP32_S3_SCHEMATIC_CHECKLIST",
+            "ESP32_S3_TECHPEDIA",  # AP63203WU-7 nested declaration evidence (GH-20 T6-8)
         ):
             make_evidence_dir(datasheets, evidence_id)
         engine = SandboxPolicyEngine.for_edd001(self.repo_root)
@@ -614,7 +623,8 @@ class TrustBundleBindingTests(unittest.TestCase):
         )
         self.assertEqual(bound.outcome, Outcome.BLOCKED)
         self.assertEqual(sorted(f.code for f in bound.findings), sorted(f.code for f in direct.findings))
-        self.assertEqual(len(bound.findings), 7)
+        # 8 = 5 component sources (incl. nested AP63203WU-7) + POWER + compiler + verifier
+        self.assertEqual(len(bound.findings), 8)
         # The port stamps the validated manifest identity on its requests.
         self.assertEqual(len(port.verified_bundle_sha256), 64)
 

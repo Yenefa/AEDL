@@ -104,6 +104,12 @@
       "kind": "datasheet",
       "reason_code": "EVIDENCE_MISSING",
       "description": "USBLC6-2SC6 ESD protector datasheet not frozen as local evidence; USB protection constraints unverifiable"
+    },
+    {
+      "id": "SS34_DATASHEET",
+      "kind": "datasheet",
+      "reason_code": "EVIDENCE_MISSING",
+      "description": "SS34 Schottky datasheet not frozen as local evidence; USB VBUS reverse-protection constraints unverifiable (GH-20 adjudication: SS34 is a required component)"
     }
   ],
   "tool_coverage": {

@@ -211,6 +211,32 @@ def _device_evidence(contract: Mapping[str, Any]) -> list[str]:
     return sorted(key for key in sources if isinstance(key, str) and key.endswith("DATASHEET"))
 
 
+def _iter_declared_mpns(node: Any) -> list[str]:
+    """Recursively collect device/mpn values inside a rule constraint.
+
+    A part is "declared" when any nested field names it: direct declarations
+    (USB_CONNECTOR constraint.mpn, USB_ESD constraint.device), declarations
+    inside other rule kinds (SS34 under the USB_VBUS_REVERSE_PROTECTION power
+    rule) and nested device blocks (POWER_SOURCE_SEPARATION
+    regulator_3v3.device). GH-20 adjudication (2026-09-01) ruled nested
+    regulator_3v3.device = AP63203WU-7 is a required component, so nested
+    declarations are collected, not skipped. String leaf fields (notes,
+    topology ...) are never walked for keys, so prose mentioning an MPN
+    cannot create a declaration.
+    """
+    found: list[str] = []
+    if isinstance(node, Mapping):
+        for key, value in node.items():
+            if key in ("device", "mpn") and isinstance(value, str) and value:
+                found.append(value)
+            else:
+                found.extend(_iter_declared_mpns(value))
+    elif isinstance(node, Sequence) and not isinstance(node, (str, bytes)):
+        for item in node:
+            found.extend(_iter_declared_mpns(item))
+    return found
+
+
 def _collect_components(
     contracts: Sequence[tuple[str, Mapping[str, Any]]]
 ) -> list[dict[str, Any]]:
@@ -229,24 +255,21 @@ def _collect_components(
         for rule in rules:
             if not isinstance(rule, Mapping):
                 continue
-            # A part is "declared" when a rule constraint names it directly.
-            # This covers kind == "component" (USB_CONNECTOR, USB_ESD) and also
-            # parts declared inside other rule kinds (SS34 under a power rule).
-            # Nested devices such as POWER_SOURCE_SEPARATION's regulator_3v3
-            # are deliberately not collected: they are referenced, not selected.
             constraint = rule.get("constraint")
             if not isinstance(constraint, Mapping):
                 continue
-            mpn = constraint.get("mpn") or constraint.get("device")
             rule_id = _rule_id(rule)
-            if isinstance(mpn, str) and mpn and rule_id:
-                source_ids = rule.get("source_ids")
+            if not rule_id:
+                continue
+            source_ids = rule.get("source_ids")
+            evidence_ids = sorted(
+                str(item) for item in source_ids if isinstance(item, str)
+            ) if isinstance(source_ids, list) else []
+            for mpn in sorted({m for m in _iter_declared_mpns(constraint) if m}):
                 records[mpn] = {
                     "mpn": mpn,
                     "role": rule_id,
-                    "required_evidence_ids": sorted(
-                        str(item) for item in source_ids if isinstance(item, str)
-                    ) if isinstance(source_ids, list) else [],
+                    "required_evidence_ids": evidence_ids,
                 }
     return [records[mpn] for mpn in sorted(records)]
 
