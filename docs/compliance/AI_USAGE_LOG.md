@@ -2860,3 +2860,33 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - AIC Score Target：`NONE`（内部流程约束）
 - 最终状态：
   - `PENDING_HUMAN_REVIEW`（PR 待人工 review，merge 由 Yenefa/Percy 执行）
+
+## AI-20260902-006
+
+- 日期：2026-09-02
+- 任务名称：AGENT_ONBOARDING 引导文档（to AI coding agents）+ README 链接（重建版）
+- 模块/路径：
+  - `AGENT_ONBOARDING.md`（新增，仓库根）
+  - `README.md`（AI Agent 节加引导入口）
+  - 本台账本条目
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash`
+- 参与标签：DOCUMENT
+- 任务目标：让任何 AI coding agent（Claude Code / Codex / zcode / DSH / opencode / Hermes /
+  Trae / Work Buddy / Qoder / OpenClaw 等）clone 后按引导完成环境自检（autocrlf / Python 3.9 /
+  uv / gh）、必读顺序、AECP 生命周期速查与红线。
+- AI 实际产出：
+  - AGENT_ONBOARDING.md：0 身份与定位 / 1 环境自检 4 项命令 + dev_gate 基线 / 2 必读顺序 /
+    3 AECP 速查（含 `python -m tools.make_review_bundle`，引用 #24 工具）/ 4 红线 / 5 台账指针。
+- 版本沿革：首版曾标 AI-20260902-003（PR #28），与并行推进的 #25（Tasks 6-7 实现）撞号；
+  关闭重建于 master f53f2a8（#24/#25/#26 之后）；重建版初标 005 又与 #27（W4A Collision 1）
+  撞号，最终定号 006。内容取材自仓库既有规范（AGENTS.md / CONTROL_PLANE.md / README），
+  未发明新规则。
+- 团队自主部分：Yenefa 在席特殊授权（一路推进）下重建；撞号与并行撞车已如实记录。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 验证：`py -3 -m tools.dev_gate` exit 0（syntax / main 312 / sandbox 274 / secret_scan 307）；
+  `git diff --check` RC 0。
+- Compliance：Third-party none；ADR none。
+- AIC Score Target：`NONE`（内部协作引导，不包装成比赛创新）
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`（PR 待人工 review）
