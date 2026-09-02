@@ -2,7 +2,9 @@
 # 对应 GitHub Issue #2 [W4A] Freeze EDD-001 component evidence and draft POWER contract
 # 前置：GH-20 碰撞 2（PR #25，已 merge 2026-09-02T00:49:29Z）组件真源对齐完成——
 # SS34 + AP63203WU-7 双报出、manifest missing_requirements = POWER + 5 组件项。
-# 本 envelope 以该 merge 后的 master（36b92f8）为基线；Issue #2 P0 dependency 就此解除。
+# 本 envelope 的初始基线（initial baseline）为该 merge 后的 master（36b92f8）；
+# 随迭代重绑的当前 base 以机器字段 base.sha 及其注释为准（Review 迭代后 = 991b609）。
+# Issue #2 P0 dependency 就此解除。
 # 人类授权：2026-09-02 会话内 Owner 决策「先指派 Owner 并建 GH-2 envelope」
 #（Issue #2 assignee = Yenefa；Percy 承担 SHARED 路径 review）。
 
@@ -10,10 +12,10 @@ task: GH-2
 
 base:
   branch: feat/w4a-evidence-freeze
-  # 碰撞 1 迭代 1 起点：首迭代提交（provenance 冻结 + POWER DRAFT）。
-  # envelope 随 Review REQUEST_CHANGES 处置修订（B1 电感 3.9µH / escalation SHARED
-  # 对象纠正 / EV corroboration 收窄），admission 重新绑定。
-  sha: 991b609641a277e602569ef631bf067c1b815ab7
+  # 碰撞 1 迭代 2 起点：迭代 1 提交（B1 电感 3.9µH + SHARED 对象纠正后）。
+  # envelope 随 Review 迭代 2 处置修订（constraint.notes 残片收窄 / 头部
+  # initial-baseline 措辞澄清），admission 重新绑定。
+  sha: b5cd68b656da226669a1ace56b273777f51df033
 
 dependencies:
   - ref: PR-25

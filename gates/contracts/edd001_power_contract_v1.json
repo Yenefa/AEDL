@@ -60,7 +60,7 @@
           "ss34_topology": "gates/contracts/edd001_usb_contract_v1.json#USB_VBUS_REVERSE_PROTECTION",
           "regulator_separation": "gates/contracts/edd001_pin_constraints_v1.json#POWER_SOURCE_SEPARATION"
         },
-        "notes": "Power path follows the frozen USB contract's declared topology (USB VBUS -> SS34 -> USB_5V -> AP63203WU-7) and is corroborated by the ESP32-S3-LCD-EV-Board reference design at board level (reference-design evidence, not exact-component evidence)."
+        "notes": "Power path follows the frozen USB contract's declared topology. The ESP32-S3-LCD-EV-Board reference design corroborates only the USB VBUS -> SS34 -> protected board rail segment; the AP63203WU-7 -> 3V3 segment is supported by DS41326 Rev. 3-2 and the frozen project topology."
       },
       "notes": "Power path follows the frozen USB contract's declared topology (USB VBUS -> SS34 -> USB_5V -> AP63203WU-7). Evidence responsibility is split: the USB VBUS -> SS34 -> protected board rail segment is corroborated by the ESP32-S3-LCD-EV-Board reference design (board-level power-entry only); the AP63203WU-7 -> 3V3 buck segment rests on the AP63203 datasheet (DS41326 Rev. 3-2) and the frozen project topology. The EV board does NOT use AP63203WU-7 for its 3.3V rail (v1.5 uses SY8088/ETA3409/ME6211; none is a precedent for this design)."
     },

@@ -2931,3 +2931,18 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - 验证（真实运行，本机，迭代后）：re-admit → ADMIT；dev_gate → PASS（scope/binding
   同 envelope 新 hash）；合同 JSON 与镜像 hash 一致。
 - 人工审核：`PENDING_HUMAN_REVIEW`
+### AI-20260902-004 · Review 迭代 2（2026-09-02，最终残片处置）
+
+- **MUST-FIX（constraint.notes 残片）**：POWER_TREE_TOPOLOGY 的
+  `constraint.notes` 仍保留旧的整体 corroboration 措辞（外层 notes 迭代 1 已改对，
+  内层漏改——该字段属 machine-adjacent contract semantics，必须与外层一致）。
+  已按 reviewer 给定措辞收窄：EV 板只佐证 USB VBUS → SS34 → protected board rail
+  段；AP63203WU-7 → 3V3 段由 DS41326 Rev. 3-2 + 冻结项目拓扑支撑；镜像同步。
+- 非阻塞顺手修：GH-2 头部注释区分 initial baseline（36b92f8）与 current base
+  （随迭代重绑，当前 991b609）。
+- 登记非阻塞 follow-up（不动 scope）：POWER_USB_ESD_POSITION.source_ids 中的
+  ESPRESSIF_HW_DESIGN_GUIDELINES 目前是普通参考链接、非 provenance-pinned
+  evidence；未来若 source_ids 定义升级为必须 pin，需单独冻结该网页或降级移除。
+- 验证：envelope 修订（header 注释）→ 重新 admit → dev_gate PASS（binding/scope
+  同新 envelope hash）；合同与镜像 hash 一致。
+- 人工审核：`PENDING_HUMAN_REVIEW`
