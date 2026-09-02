@@ -159,3 +159,36 @@
   realpath，含 junction 回归测试）。修复后双平台全绿。不构成实体硬件验证；
   `notes/m2-evidence-reset/generated/**` 除 bom_stock_current.json 声明刷新外零字节变化。
 - 人工核验：`PENDING_HUMAN_REVIEW`
+
+## EVID-20260902-001 — GH-20 尾巴：EDD-001 preflight 组件真源对齐（SS34 + AP63203WU-7 双报出）
+
+- 日期：2026-09-02
+- 对应主张：真实 EDD-001 preflight 的组件证据需求集与冻结三合同收敛：递归收集
+  `POWER_SOURCE_SEPARATION.constraint.regulator_3v3.device`（AP63203WU-7）与
+  `USB_VBUS_REVERSE_PROTECTION.constraint.device`（SS34）同时报出；bundle manifest
+  `missing_requirements` 对齐为 POWER + 5 个组件证据项（新增 SS34_DATASHEET）。
+- 关联模块：`sandbox_runtime/src/aedl_sandbox/policy/edd001.py`（`_collect_components`
+  递归化）、`sandbox_runtime/tests/policy/test_edd001_preflight.py`、
+  `sandbox_runtime/tests/trust/test_trust.py`、
+  `sandbox_runtime/tests/orchestrator/test_integration.py`、
+  `src/hardware/edd001-board/evidence/sandbox_bundle_manifest_v1.json`
+- 关联 AI Usage：AI-20260902-003
+- 关联 ADR：无；GitHub Issue #20（Tasks 6-7，碰撞 2 envelope `tasks/GH-20.yaml`）
+- 测试/实验：RED→GREEN 回归。RED：新回归测试 `test_nested_and_direct_power_parts_are_both_required`
+  与 4 处计数断言在修复前失败（AP63203WU-7 缺席：KeyError / 7!=8）；GREEN：递归收集修复后全过。
+- 环境：Windows；py -3 = 3.9.13；uv（sandbox runtime，Python 3.11，uv.lock 冻结）
+- 执行命令：
+  - `uv run --frozen --project sandbox_runtime python -m unittest discover -s sandbox_runtime/tests -p test_*.py` → 275 tests OK（skipped=1，expected failures=1）
+  - `py -3 -m tools.dev_gate --envelope tasks/GH-20.yaml --admit-receipt ..\gh20-collision2-admit.json` → PASS exit 0
+- Runs：RED 目标测试 1 轮（4 失败/错误）；GREEN 目标测试 1 轮（4/4 OK）；sandbox 全量 1 轮；dev_gate 全量 1 轮
+- 结果：真实 preflight findings 7→8（新增 AP63203WU-7 的 EVIDENCE_COMPONENT_SOURCE_MISSING，
+  evidence id ESP32_S3_TECHPEDIA）；manifest missing_requirements 5→6（+SS34_DATASHEET）；
+  EDD-001 preflight 保持 BLOCKED（诚实失败关闭）；冻结契约（gates/contracts/** 与
+  evidence/contracts/**）仓库字节零变化
+- 原始证据：本仓库提交 diff；gate/admit receipt 存于仓库外（gh20-collision2-*.json）
+- 是否可复现：YES
+- 已知限制：软件/Evidence 完整性验证，不构成实体硬件验证。SS34 的 evidence id
+  ESPRESSIF_S3_LCD_EV_BOARD 已按官方 ESP32-S3-LCD-EV-Board user guide 原理图页
+  （Power Supply over USB：D1 = SS34，USB VBUS → USB_5V）在原理图文本级核对成立；
+  参数级核对与 SS34 vendor datasheet 冻结仍归 W4A（Issue #2）。
+- 人工核验：`PENDING_HUMAN_REVIEW`

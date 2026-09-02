@@ -2735,3 +2735,50 @@ test_run_gates`：**115/115 OK**（覆盖问题 1 courtyard 四边越界、问�
 - AIC Score Target：`NONE`（纯流程记录）
 - 最终状态：
   - `PENDING_HUMAN_REVIEW`（PR 待人工 review，merge 由 Yenefa/Percy 执行）
+
+## AI-20260902-003
+
+- 日期：2026-09-02
+- 任务名称：GH-20 碰撞 2（#20 尾巴）——EDD-001 preflight 组件真源对齐
+- 模块/路径：
+  - `sandbox_runtime/src/aedl_sandbox/policy/edd001.py`（`_collect_components` 递归化：
+    新增 `_iter_declared_parts`，嵌套 `regulator_3v3.device`（AP63203WU-7）并入必需组件集）
+  - `sandbox_runtime/tests/policy/test_edd001_preflight.py`（MPN 集合断言 +AP63203WU-7；
+    新增 `test_nested_and_direct_power_parts_are_both_required`；findings 计数 7→8；
+    全 datasheets 夹具补 `ESP32_S3_TECHPEDIA`）
+  - `sandbox_runtime/tests/trust/test_trust.py`（missing_ids 断言收紧为 == 6 项集合）
+  - `sandbox_runtime/tests/orchestrator/test_integration.py`（findings 7→8；missing 5→6）
+  - `src/hardware/edd001-board/evidence/sandbox_bundle_manifest_v1.json`
+    （missing_requirements +SS34_DATASHEET；notes 登记对齐与 SS34 evidence id 核对结论）
+  - `tasks/GH-20.yaml`（碰撞 2 envelope：Tasks 6-7 入 scope，冻结合同入 forbidden）
+  - `docs/evidence/EVIDENCE_INDEX.md`（EVID-20260902-001）；本台账本条目
+- AI 工具/平台：TRAE（GLM-5.3）
+- 模型：`GLM-5.3`
+- 参与标签：DEBUG、GENERATE_CODE、GENERATE_TEST、DOCUMENT、RESEARCH
+- 任务目标：按 Issue #20 冻结合同仲裁收敛组件真源——真实 preflight 双报出 SS34 与
+  AP63203WU-7；manifest missing_requirements 对齐为 POWER + 5 组件证据项；
+  核对 SS34 evidence id 映射（不动冻结契约内容）。
+- AI 实际产出：
+  - 递归收集修复：`_iter_declared_parts` 遍历 constraint 内任意深度映射的
+    `mpn`/`device` 字符串；SS34（顶层）与 AP63203WU-7（regulator_3v3 嵌套）同集报出。
+  - RED→GREEN 回归测试 + 三处真实 bundle 计数断言对齐（7→8 / 5→6 / == 6 ids）。
+  - manifest 补 SS34_DATASHEET 缺项并登记两条 notes（对齐说明 + SS34 evidence id 核对结论）。
+  - SS34 → ESPRESSIF_S3_LCD_EV_BOARD 映射核对：官方 ESP32-S3-LCD-EV-Board user guide
+    原理图页 "Power Supply over USB" 含 D1 = SS34（USB VBUS → USB_5V），原理图文本级成立；
+    冻结契约零改动。
+- 团队自主部分：Yenefa 会话内 Owner 决策「收 #20」（admit --allow-dirty 授权记录于
+  envelope exceptions）；最终 accept/merge 与 #20 close 留给人工。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 验证（真实运行，本机）：
+  - RED：4 处失败/错误（AP63203WU-7 KeyError、7!=8×2、MPN 集合缺项）。
+  - GREEN：目标测试 4/4 OK；`uv run --frozen --project sandbox_runtime python -m unittest
+    discover -s sandbox_runtime/tests -p test_*.py` → 275 tests OK（1 skip、1 xfail）。
+  - `py -3 -m tools.dev_gate --envelope tasks/GH-20.yaml --admit-receipt ..\gh20-collision2-admit.json`
+    → PASS exit 0（syntax / main_tests / sandbox_tests / secret_scan / scope_check /
+    binding_check / bundle_check）。
+- 已知限制：SS34 evidence id 核对为原理图文本级（官方 user guide PDF 镜像），参数级
+  datasheet 冻结与五份资料收集归 W4A；软件/Evidence 完整性验证，非实体硬件验证。
+- Compliance：Third-party none；ADR none。
+- AIC Score Target：`实现完成度与可验证效果`（延续 GH-20）
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`（PR 待人工 review，merge 由 Yenefa/Percy 执行）

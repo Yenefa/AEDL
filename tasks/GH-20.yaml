@@ -1,102 +1,74 @@
-# Task Envelope — GH-20（碰撞 1：字节基线收口；Tasks 1-5 + 9）
+# Task Envelope — GH-20（碰撞 2：#20 尾巴收口；Tasks 6-7 + 记录）
 # 对应 GitHub Issue #20 [P0] Stabilize Evidence bytes and align EDD-001 preflight truth source
-# 范围说明：本 envelope 只装 Tasks 1-5（.gitattributes LF 契约 / 重冻结 3 个 CRLF-bound
-# 测试 / 不碰 M2 Evidence 字节 / 移除 CI 排除 / 双平台覆盖）+ Task 9（记录）。
-# Tasks 6-8（SS34/AP63203 运行时对齐，改 sandbox_runtime/src/aedl_sandbox/policy/edd001.py
-# 与 sandbox_bundle_manifest_v1.json 内容）明确 out-of-scope，留给下一次碰撞。
+# 范围说明：碰撞 1（PR #21，已并入 master）完成 Tasks 1-5 + 9。本碰撞收 #20 尾巴：
+#   1. 修 policy 递归收集——真实 preflight 报出嵌套 AP63203WU-7（当前只报 SS34）
+#   2. 核对 SS34 的 evidence id = ESPRESSIF_S3_LCD_EV_BOARD（映射存疑则不动冻结
+#      contracts 内容，转 W4A/Issue #2 澄清）
+#   3. manifest 补 SS34 缺失项 + EVID-20260902-001 / AI-20260902-003 留痕
+# Task 8（Issue #2 更新）不在本碰撞，留给 W4A（同 Issue #20 尾巴裁定）。
+# 人类授权：2026-09-02 会话内 Owner 决策「收 #20」（admit 走本 GH-20.yaml，允许路径内修改）。
 
 task: GH-20
 
 base:
-  branch: feat/control-plane-minimal-slice
-  sha: 18b238164dc39bd34fbe9a5e7b7e0cf91a53f2f0
-
-goal: |
-  建立跨平台确定的字节基线（选择性）：LF 声明哈希的文件 checkout 为 LF，
-  gerbers 保持 CRLF 以匹配 delivery ZIP 载荷契约；3 个 CRLF-bound 测试重冻结
-  到 LF 基线；移除 CI 排除；本地 Windows 与 CI 跑完全相同的测试集，一个 PASS
-  语义。不修改任何 M2 生成 Evidence 的仓库字节。
+  branch: fix/gh-20-preflight-component-truth
+  sha: 95a01a3c939549b292ea08a4ee545ec712e5c3d2
 
 dependencies: []
 
 allowed_paths:
-  - .gitattributes # Task 1：选择性 LF checkout 契约（LF 声明文件 + gerbers CRLF）
-  - tests/** # Task 2：golden 重生成 + 字节契约回归
-  - delivery/manifest_v1.json # Task 2：仅"直接绑定的声明"重冻结（GH-20 原文允许）
-  - .github/workflows/ci.yml # Task 4/5：移除排除 + 双平台矩阵（SHARED，双人确认）
-  - tools/dev_gate.py # Task 4：移除内置 CRLF 排除（GH-20 允许列表早于 dev_gate，本项为范围澄清，需 Owner 确认）
-  - docs/evidence/EVIDENCE_INDEX.md # Task 9：记录字节基线刷新
-  - docs/compliance/AI_USAGE_LOG.md # Task 9
+  - sandbox_runtime/src/aedl_sandbox/policy/edd001.py # Task 6/7：递归收集嵌套 regulator_3v3.device
+  - sandbox_runtime/tests/policy/test_edd001_preflight.py # Task 6：RED→GREEN 回归 + 计数对齐
+  - sandbox_runtime/tests/trust/test_trust.py # manifest 组件集合断言对齐（6 项）
+  - sandbox_runtime/tests/orchestrator/test_integration.py # findings/missing 计数对齐（8/6）
+  - src/hardware/edd001-board/evidence/sandbox_bundle_manifest_v1.json # Task 7：补 SS34 缺失项
+  - docs/evidence/EVIDENCE_INDEX.md # EVID-20260902-001
+  - docs/compliance/AI_USAGE_LOG.md # AI-20260902-003
   - tasks/** # 本 envelope
-  # 上一碰撞遗留的工作树内容（admission 已 --allow-dirty 批准，scope_check 需覆盖）：
-  - tools/**
-  - tests/test_control_plane_tools.py
-  - docs/CONTROL_PLANE.md
-  - docs/ENVELOPE_EXAMPLE.yaml
-  - notes/open_source_intake/**
-  - AGENTS.md
-  - .github/ISSUE_TEMPLATE/task.md
-  - docs/compliance/DECISIONS.md
-  # 以下仅做"工作树规范化"（worktree→blob，diff-free，git 内字节零变化）：
-  - gates/contracts/**
-  - src/hardware/edd001-board/evidence/contracts/**
-  - src/hardware/m2-board/m2_board.kicad_pcb
-  - src/hardware/m2-board/intent_v1.json
-  - gates/bom/bom_v1.json
-  - delivery/bom.csv
-  - delivery/pos.csv
-  - delivery/gerbers/**
-  - tests/fixtures/board_review/**
-  - tests/fixtures/schematic_semantics/**
-  - sandbox_runtime/src/aedl_sandbox/protocol.py
-  - notes/m2-evidence-reset/generated/bom_stock_current.json
 
 forbidden_paths:
+  - gates/contracts/** # 冻结契约内容零变化（contract_change: false）
+  - src/hardware/edd001-board/evidence/contracts/** # 同上（镜像字节必须保持一致）
+  - notes/m2-evidence-reset/generated/**
+  - src/hardware/m2-board/**
   - gates/board_review_v1.json
-  - gates/lessons_registry_v1.json
-  - sandbox_runtime/src/aedl_sandbox/policy/edd001.py # Tasks 6-8 out-of-scope
-  - sandbox_runtime/tests/policy/test_edd001_preflight.py
-  - src/hardware/edd001-board/evidence/sandbox_bundle_manifest_v1.json # Tasks 6-8 out-of-scope
-  - src/hardware/edd001-board/evidence/datasheets/**
+  - src/hardware/edd001-board/evidence/datasheets/** # W4A 才做资料冻结，本碰撞零下载
+  - delivery/**
 
 acceptance: |
-  - 主仓库全量测试（含原 3 个排除项）在 Windows 本地与 LF 工作树均通过
-  - sandbox 全量测试（含原 8 个 CRLF 失败）在 Windows 本地通过
-  - notes/m2-evidence-reset/generated/** 仓库字节零变化
-  - 远端 CI 双平台（ubuntu + windows）同一套测试全绿
-  - EDD-001 preflight 保持 BLOCKED（诚实失败关闭）
+  - 真实 EDD-001 preflight 同时报出 SS34 与 AP63203WU-7 的 EVIDENCE_COMPONENT_SOURCE_MISSING
+  - preflight 保持 BLOCKED（诚实失败关闭），不产生任何 ALLOW/PASS
+  - manifest missing_requirements = POWER + 5 个组件证据项（新增 SS34_DATASHEET）
+  - 冻结契约（gates/contracts/** 与 evidence/contracts/**）仓库字节零变化
+  - 主套件 + sandbox 套件 + secret_scan 全过（dev_gate --envelope + admit receipt）
+  - SS34 evidence id 若需改冻结合同才能纠正 → 不改，登记 TO_VERIFY 转 W4A 澄清
 
 change_budget:
-  expected_files: 10
+  expected_files: 7
   expected_modules:
     [
-      repository-attributes,
-      ci,
-      tests,
-      gates-contracts-normalization,
-      manifest-declarations,
+      sandbox-policy-component-collection,
+      sandbox-tests,
+      edd001-bundle-manifest,
+      evidence-ai-ledgers,
     ]
-  cross_module: true # GH-20 明确"intentionally bounded baseline repair"
-  contract_change: false # 冻结契约内容不变（仅 checkout 表示规范化）
-  evidence_semantics_change: false # M2 Evidence 仓库字节零变化；声明值对齐 blob
+  cross_module: false
+  contract_change: false # 冻结契约内容不变
+  evidence_semantics_change: true # manifest 缺失项集合对齐冻结仲裁（POWER + 5 组件）
 
 exceptions:
   allow_dirty:
     granted_by: Yenefa
-    decision_ref: "2026-09-01 in-session go-ahead (AI-20260901-011 escalation record)"
-    # NOTE: historically reconciled — granted AFTER consumption (Run 001
-    # discovered the authority gap); authority-before-consumption applies
-    # from Run 002 onward (CONTROL_PLANE.md §4).
+    decision_ref: "2026-09-02 in-session go-ahead (收 #20 tail; envelope edit precedes admit by design, scope paths authorized by Owner)"
 
 escalation:
-  owner: Yenefa (在席) + Percy (SHARED 路径：gates/contracts/**、ci.yml、manifest 声明)
+  owner: Yenefa (在席) + Percy (SHARED 路径若涉及：gates/contracts/** 本碰撞禁改)
   human_scope_notes: |
     非机器约束（不写入 forbidden_paths，避免被误认为 mechanical enforcement）：
-    - W4A datasheet 下载 / POWER contract 实现
+    - W4A datasheet 下载 / POWER contract 实现（含 SS34 evidence id 澄清）
     - compiler / verifier 实现
     - manufacturing_release / 下单 / 重签 / 换料语义
   notes: |
-    - admit 预期 BLOCKED：工作区含上一碰撞（control-plane 最小切片，14 文件）未提交
-    - 处置建议：--allow-dirty 继续（切片内容已完整汇报、ADR-011 已记录、未 commit 是
-      commit 授权分级 v2 的"未验收在制品不 commit"规则），升级记录随本任务留存
-    - GH-20 允许列表早于 dev_gate 存在，Task 4 需同步改 tools/dev_gate.py——范围澄清挂此
+    - 碰撞 1 历史见 git log（PR #21）；其 envelope 被 本碰撞（碰撞 2）取代，
+      旧内容可由 git 历史追溯。
+    - admit --allow-dirty 预期用于 envelope 自身先行编辑的场景（授权见上）。

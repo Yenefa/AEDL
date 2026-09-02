@@ -117,8 +117,43 @@ class RealEdd001PreflightTests(unittest.TestCase):
         mpns = sorted(str(f.details["mpn"]) for f in component_findings)
         self.assertEqual(
             mpns,
-            ["ESP32-S3-WROOM-1-N8R8", "SS34", "TYPE-C-31-M-12", "USBLC6-2SC6"],
+            [
+                "AP63203WU-7",
+                "ESP32-S3-WROOM-1-N8R8",
+                "SS34",
+                "TYPE-C-31-M-12",
+                "USBLC6-2SC6",
+            ],
         )
+
+    def test_nested_and_direct_power_parts_are_both_required(self) -> None:
+        """GH-20 Tasks 6-7: both power-path parts must be collected.
+
+        ``USB_VBUS_REVERSE_PROTECTION`` declares SS34 directly under its
+        constraint; ``POWER_SOURCE_SEPARATION`` declares AP63203WU-7 nested
+        inside ``constraint.regulator_3v3.device``. Collection must be
+        recursive so the real preflight reports BOTH — dropping either
+        declaration is a regression against the frozen-contract adjudication.
+        """
+        document = self.engine.document
+        self.assertEqual(document.components["SS34"].role, "USB_VBUS_REVERSE_PROTECTION")
+        self.assertEqual(
+            document.components["SS34"].required_evidence_ids,
+            ("ESPRESSIF_S3_LCD_EV_BOARD",),
+        )
+        self.assertEqual(document.components["AP63203WU-7"].role, "POWER_SOURCE_SEPARATION")
+        self.assertEqual(
+            document.components["AP63203WU-7"].required_evidence_ids,
+            ("ESP32_S3_TECHPEDIA",),
+        )
+        decision = self.engine.preflight("run-edd001-real", self.candidate_root)
+        reported = {
+            str(f.details["mpn"])
+            for f in decision.findings
+            if f.code == "EVIDENCE_COMPONENT_SOURCE_MISSING"
+        }
+        self.assertIn("SS34", reported)
+        self.assertIn("AP63203WU-7", reported)
 
     def test_source_urls_are_not_treated_as_local_evidence(self) -> None:
         document = self.engine.document
@@ -464,6 +499,7 @@ class MalformedContractBundleTests(unittest.TestCase):
             "ESPRESSIF_LAYOUT_GUIDE",
             "ESPTOOL_BOOT_MODE",
             "ESP32_S3_SCHEMATIC_CHECKLIST",
+            "ESP32_S3_TECHPEDIA",
         ):
             make_evidence_dir(datasheets, evidence_id)
         engine = SandboxPolicyEngine.for_edd001(self.repo_root)
@@ -614,7 +650,9 @@ class TrustBundleBindingTests(unittest.TestCase):
         )
         self.assertEqual(bound.outcome, Outcome.BLOCKED)
         self.assertEqual(sorted(f.code for f in bound.findings), sorted(f.code for f in direct.findings))
-        self.assertEqual(len(bound.findings), 7)
+        # 8 findings: 5 component evidence gaps (incl. nested AP63203WU-7) +
+        # missing POWER contract + compiler + verifier coverage.
+        self.assertEqual(len(bound.findings), 8)
         # The port stamps the validated manifest identity on its requests.
         self.assertEqual(len(port.verified_bundle_sha256), 64)
 

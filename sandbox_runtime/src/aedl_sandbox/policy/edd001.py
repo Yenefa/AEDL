@@ -19,7 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -211,6 +211,26 @@ def _device_evidence(contract: Mapping[str, Any]) -> list[str]:
     return sorted(key for key in sources if isinstance(key, str) and key.endswith("DATASHEET"))
 
 
+def _iter_declared_parts(constraint: Mapping[str, Any]) -> Iterator[str]:
+    """Yield part numbers declared anywhere inside a rule constraint.
+
+    A part is "declared" when any mapping in the constraint — the constraint
+    itself or a nested block such as POWER_SOURCE_SEPARATION's
+    ``regulator_3v3`` — carries a non-empty ``mpn`` or ``device`` string.
+    Issue #20's frozen-contract adjudication requires the direct SS34
+    declaration (USB_VBUS_REVERSE_PROTECTION) and the nested AP63203WU-7
+    declaration (POWER_SOURCE_SEPARATION.regulator_3v3.device) to converge
+    into one required component set, so collection walks the constraint
+    recursively instead of only its top level.
+    """
+    for key, value in constraint.items():
+        if key in ("mpn", "device"):
+            if isinstance(value, str) and value:
+                yield value
+        elif isinstance(value, Mapping):
+            yield from _iter_declared_parts(value)
+
+
 def _collect_components(
     contracts: Sequence[tuple[str, Mapping[str, Any]]]
 ) -> list[dict[str, Any]]:
@@ -229,24 +249,29 @@ def _collect_components(
         for rule in rules:
             if not isinstance(rule, Mapping):
                 continue
-            # A part is "declared" when a rule constraint names it directly.
-            # This covers kind == "component" (USB_CONNECTOR, USB_ESD) and also
-            # parts declared inside other rule kinds (SS34 under a power rule).
-            # Nested devices such as POWER_SOURCE_SEPARATION's regulator_3v3
-            # are deliberately not collected: they are referenced, not selected.
             constraint = rule.get("constraint")
             if not isinstance(constraint, Mapping):
                 continue
-            mpn = constraint.get("mpn") or constraint.get("device")
             rule_id = _rule_id(rule)
-            if isinstance(mpn, str) and mpn and rule_id:
-                source_ids = rule.get("source_ids")
+            if not rule_id:
+                continue
+            declared = sorted(set(_iter_declared_parts(constraint)))
+            if not declared:
+                continue
+            # This covers kind == "component" (USB_CONNECTOR, USB_ESD), parts
+            # declared inside other rule kinds (SS34 under a power rule), and
+            # nested devices (POWER_SOURCE_SEPARATION's regulator_3v3).
+            source_ids = rule.get("source_ids")
+            evidence = (
+                sorted(str(item) for item in source_ids if isinstance(item, str))
+                if isinstance(source_ids, list)
+                else []
+            )
+            for mpn in declared:
                 records[mpn] = {
                     "mpn": mpn,
                     "role": rule_id,
-                    "required_evidence_ids": sorted(
-                        str(item) for item in source_ids if isinstance(item, str)
-                    ) if isinstance(source_ids, list) else [],
+                    "required_evidence_ids": evidence,
                 }
     return [records[mpn] for mpn in sorted(records)]
 

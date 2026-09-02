@@ -254,9 +254,17 @@ class RealEdd001ManifestTests(unittest.TestCase):
         self.assertEqual(len(data["mirror_sets"]), 3)
         self.assertEqual(data["tool_coverage"], {"compilers": [], "verifiers": []})
         missing_ids = {m["id"] for m in data["missing_requirements"]}
-        self.assertTrue({"EDD001_POWER_CONTRACT", "ESP32_S3_WROOM_1_N8R8_DATASHEET",
-                         "AP63203WU_7_DATASHEET", "TYPE_C_31_M_12_DRAWING",
-                         "USBLC6_2SC6_DATASHEET"} <= missing_ids)
+        self.assertEqual(
+            missing_ids,
+            {
+                "EDD001_POWER_CONTRACT",
+                "ESP32_S3_WROOM_1_N8R8_DATASHEET",
+                "AP63203WU_7_DATASHEET",
+                "TYPE_C_31_M_12_DRAWING",
+                "USBLC6_2SC6_DATASHEET",
+                "SS34_DATASHEET",
+            },
+        )
         for m in data["missing_requirements"]:
             blob = json.dumps(m)
             self.assertNotIn("http://", blob)
