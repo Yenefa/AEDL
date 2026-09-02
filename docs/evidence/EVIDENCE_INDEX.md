@@ -240,3 +240,11 @@
   manifest notes）；AP63203 契约 evidence id（ESP32_S3_TECHPEDIA 网页）无法如实
   冻结为本地文件，其 runtime finding 诚实保留
 - 人工核验：`PENDING_HUMAN_REVIEW`
+### EVID-20260902-002 · Review 迭代 1 更正（2026-09-02）
+
+外部 review 发现 POWER DRAFT 电感值误抄（Figure 2 为 AP63205 绘制，4.7µH 为
+AP63205/5V 值）：经冻结 PDF 原文重新核对，DS41326 Rev. 3-2 Table 2 对 AP63203/3.3V
+为 **L = 3.9µH**。合同/镜像/manifest/台账已全部改正（allowed_design_range 2.2–10µH
+不受影响）；EV 板 corroboration 同步收窄至 power-entry 段（VBUS → SS34 → protected
+rail），buck 段证据责任归 datasheet + 冻结拓扑。本条目为更正记录，不替代原
+Evidence（其元数据冻结结论不受影响）。

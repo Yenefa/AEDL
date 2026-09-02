@@ -10,7 +10,10 @@ task: GH-2
 
 base:
   branch: feat/w4a-evidence-freeze
-  sha: 36b92f852a6ede263efd81a84121fcbd2088d762
+  # 碰撞 1 迭代 1 起点：首迭代提交（provenance 冻结 + POWER DRAFT）。
+  # envelope 随 Review REQUEST_CHANGES 处置修订（B1 电感 3.9µH / escalation SHARED
+  # 对象纠正 / EV corroboration 收窄），admission 重新绑定。
+  sha: 991b609641a277e602569ef631bf067c1b815ab7
 
 dependencies:
   - ref: PR-25
@@ -90,7 +93,7 @@ exceptions:
     decision_ref: "2026-09-02 in-session go-ahead (先指派 Owner 并建 GH-2 envelope; envelope-first edit, same pattern as GH-20 collisions)"
 
 escalation:
-  owner: Yenefa (在席，Issue #2 assignee) + Percy (SHARED 路径 review：gates/contracts/edd001_power_contract_v1.json 新增 + manifest)
+  owner: Yenefa (在席，Issue #2 assignee) + la4876949-bot / Percy (SHARED 路径 review：gates/contracts/edd001_power_contract_v1.json 新增 + docs/evidence/EVIDENCE_INDEX.md；迭代 1 纠正——原误写含 manifest，manifest 不在 CODEOWNERS SHARED 段)
   human_scope_notes: |
     非机器约束（不写入 forbidden_paths，避免被误认为 mechanical enforcement）：
     - manufacturing_release / 下单 / 重签 / 换料语义

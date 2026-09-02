@@ -2886,12 +2886,15 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
     reference_design，schema 合法落点）；missing_requirements 六项如实保留（描述
     更新为 provenance-pinned/binary-not-committed）；notes 登记 Owner 裁定与 DRAFT 说明
   - POWER 合同草案（DRAFT）：power tree（循冻结 USB 契约 declared topology）、
-    AP63203 参数与外部器件（Cin 10µF / Cout 2×22µF / L 4.7µH / CBST 100nF，
+    AP63203 参数与外部器件（Cin 10µF / Cout 2×22µF / L 3.9µH / CBST 100nF，
     DS41326 Rev. 3-2 Typical Application）、EN UVLO 1.18V、USBLC6 protection network
     位置（非 5V 串联元件）、SS34 角色（40V/3A 反向保护）
 - 团队自主部分：Owner（Yenefa）2026-09-02 会话内两项裁定：① redistribution
   TO_VERIFY → 仅元数据冻结、binary 不入仓；② 完整清集（5 exact + 1 reference，
-  EV Board 不替代 SS34 exact-component 身份）。Percy：SHARED 路径 review 待 PR。
+  EV Board 不替代 SS34 exact-component 身份）。la4876949-bot（Percy）：SHARED 路径
+  review 待 PR——对象为 gates/contracts/edd001_power_contract_v1.json 与
+  docs/evidence/EVIDENCE_INDEX.md（迭代 1 纠正：原误写含 manifest；manifest 不在
+  CODEOWNERS SHARED 段）。
 - 人工审核：`PENDING_HUMAN_REVIEW`
 - 验证（真实运行，本机）：
   - 下载核对：六份 PDF header/sha256/bytes/mtime 与 manifest 记录逐一一致。
@@ -2905,3 +2908,26 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - AIC Score Target：`实现完成度与可验证效果`
 - 最终状态：
   - `PENDING_HUMAN_REVIEW`（PR 待人工 review，merge 由 Yenefa/Percy 执行）
+### AI-20260902-004 · Review 迭代 1（2026-09-02，REQUEST_CHANGES 处置）
+
+外部 review 裁定 REQUEST_CHANGES（2 BLOCKER + 2 MUST-FIX 级）。逐条处置：
+
+- **B1（AP63203 电感 4.7µH 误写）— 确认并修复**：从冻结 PDF 原文重新提取核对——
+  DS41326 Rev. 3-2 Table 2 对 AP63203/3.3V 明确 **L = 3.9µH**（C1 10µF / C2 2×22µF /
+  C3 100nF）；4.7µH 是 Table 3 的 AP63205/5V 值，且 Figure 2 典型应用电路标注为
+  AP63205——首版误抄自该图。已改为 `recommended: 3.9uH` + `allowed_design_range:
+  2.2uH to 10uH`（标注表源与 variant 混淆警示），同步修合同 title/镜像/manifest
+  notes/metadata 与本台账。
+- **B2（bundle 内部矛盾）— 修复**：review.md 原仍写 "no SHARED path changes" 与
+  manifest.json 的 shared=[2 files] 矛盾；本轮 bundle 重生成后对 review.md 与
+  manifest.json 一并手工补丁，两视图统一为 2 个 SHARED 文件 + manual correction 注记。
+- **MUST-FIX（SHARED reviewer 对象写错）— 修复**：envelope escalation 由
+  "gates/contracts + manifest" 改为 "gates/contracts/edd001_power_contract_v1.json +
+  docs/evidence/EVIDENCE_INDEX.md"（la4876949-bot/Percy + Yenefa 双人确认）；Issue #2
+  body 与 PR #27 body 同步纠正。envelope 修订 → base 重绑 991b609 → 重新 admit。
+- **EV corroboration 收窄**：POWER_TREE notes 拆分证据责任——EV 板只佐证
+  "USB VBUS → SS34 → protected rail"；"AP63203WU-7 → 3V3" 由 datasheet + 冻结项目
+  拓扑支撑，EV 板 v1.5 的 SY8088/ETA3409/ME6211 明示非本设计 precedent。
+- 验证（真实运行，本机，迭代后）：re-admit → ADMIT；dev_gate → PASS（scope/binding
+  同 envelope 新 hash）；合同 JSON 与镜像 hash 一致。
+- 人工审核：`PENDING_HUMAN_REVIEW`
