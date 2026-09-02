@@ -890,6 +890,9 @@ Compliance records:
 AIC score target:
 - <评分项> / NONE / UNKNOWN
 
+Review Bundle:
+- <绝对路径> + <文件清单> / none（master/main 或无需人工 Review 时）
+
 Human review:
 - PENDING_HUMAN_REVIEW
 ```
