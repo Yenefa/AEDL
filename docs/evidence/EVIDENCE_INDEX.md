@@ -202,3 +202,41 @@
   白名单路径（顶层 mpn/device + regulator_3v3），引用性嵌套结构不产生 findings
   （负向回归 DeclarationSemanticsTests 锁定）。
 - 人工核验：`PENDING_HUMAN_REVIEW`
+## EVID-20260902-002 — W4A Collision 1：EDD-001 组件证据 provenance 冻结（元数据级）+ POWER DRAFT
+
+- 日期：2026-09-02
+- 对应主张：五份组件资料 + 一份参考设计资料的来源、sha256、字节数、retrieved_at 与
+  PDF 元数据已全部钉住（manifest `metadata.remote_evidence` 六条记录，可复核）；其中
+  TYPE-C-31-M-12 制造商核实为 Korean Hroparts Elec（LCSC 目录级 + PDF 全文零
+  HIROSE/elecfans 反证）；AP63203 datasheet 为 Diodes DS41326 Rev. 3-2（2024-11）；
+  POWER 合同草案（DRAFT）以 evidence-first 方式基于该 datasheet 起草。Owner 裁定
+  （2026-09-02）：六份 redistribution 全部 TO_VERIFY → binary 不入仓、仅元数据冻结，
+  六项 missing_requirements 如实保留（来源债已消，本地冻结债留红）。
+- 关联模块：`src/hardware/edd001-board/evidence/sandbox_bundle_manifest_v1.json`
+  （metadata.remote_evidence + missing_requirements 描述精化 + notes）、
+  `gates/contracts/edd001_power_contract_v1.json`（DRAFT，含 evidence/contracts 镜像）、
+  `docs/compliance/THIRD_PARTY_RESOURCES.md`（RES-010）
+- 关联 AI Usage：AI-20260902-004
+- 关联 ADR：无；GitHub Issue #2（W4A）；envelope `tasks/GH-2.yaml`（rev2，admit e084056ff128）
+- 测试/实验：manifest 结构变更（新增 metadata 段）后真实 bundle 测试回归。
+- 环境：Windows；py -3 = 3.9.13；uv（sandbox，Python 3.11）；curl 8.x（下载）；
+  本地二进制暂存 `../w4a-staging/`（仓库外）
+- 执行命令：
+  - `uv run --frozen --project sandbox_runtime python -m unittest
+    sandbox_runtime.tests.trust.test_trust.RealEdd001ManifestTests
+    sandbox_runtime.tests.orchestrator.test_integration.Int01RealEdd001Tests.test_int_01_real_bundle_manifest_is_honestly_partial`
+    → 2 tests OK（metadata 段 schema 合法、六项 missing_requirements 保留、PARTIAL 状态不变）
+  - sandbox 全量（final gate 内）→ 见 gate receipt
+- Runs：下载 6 份（2 份首试为 HTML 反爬页，换 datasheet.lcsc.com 直链后成功）；
+  trust/integration 回归 1 轮；final gate 1 轮
+- 结果：六条 remote_evidence 记录 sha256/bytes/retrieved_at/PDF 元数据与本地暂存
+  二进制逐一核对一致；evidence_status 保持 PARTIAL（诚实）；preflight 行为不变
+  （datasheets/ 目录无本地文件，组件 findings 如实保留）
+- 原始证据：`../w4a-staging/`（本地暂存二进制，不入 git）+ manifest
+  `metadata.remote_evidence`（仓库内可复核 provenance）+ 下载 URL
+- 是否可复现：YES（六条 URL + sha256 逐份重新下载可核）
+- 已知限制：元数据级冻结不等于本地证据冻结——runtime preflight 的组件 findings
+  保持 BLOCKED（诚实）；redistribution 边界公开前须逐份复审（Owner 裁定记录于
+  manifest notes）；AP63203 契约 evidence id（ESP32_S3_TECHPEDIA 网页）无法如实
+  冻结为本地文件，其 runtime finding 诚实保留
+- 人工核验：`PENDING_HUMAN_REVIEW`

@@ -1,0 +1,144 @@
+{
+  "$schema": "https://aedl.local/schemas/edd001-power.v1.json",
+  "schema_version": 1,
+  "board_id": "project-027-edd001",
+  "block": "EDD-001.POWER",
+  "status": "DRAFT",
+  "created_at": "2026-09-02T02:05:00+00:00",
+  "author": "human+ai (DRAFT 草案，PENDING_HUMAN_REVIEW；未冻结，未批准，不设 APPROVED)",
+  "sources": {
+    "AP63203_DS41326_REV3_2": "https://datasheet.lcsc.com/datasheet/pdf/94820cc9e44613233ddcc1a15801eca3.pdf?productCode=C780769 (Diodes Incorporated DS41326 Rev. 3-2, November 2024; W4A provenance-pinned sha256 ef99daa3789d835bc025dfcb4c605c5c2e6d3e7223e86d40b33e6b497ea5a722)",
+    "ST_USBLC6_2": "https://www.st.com/resource/en/datasheet/usblc6-2.pdf (STMicroelectronics; W4A provenance-pinned sha256 bc30154f310cd631043214ed52571daefe04270587ec55072d49a23bd18b9068)",
+    "MDD_SS34_C8678": "https://datasheet.lcsc.com/datasheet/pdf/dfa1ff67dea875d0135103ba9ada713a.pdf?productCode=C8678 (MDD Microdiode SS34; W4A provenance-pinned sha256 fb4970875779696914d235bcf954240569302fb325399838f2861d474cbf9760)",
+    "ESPRESSIF_S3_LCD_EV_BOARD": "https://dl.espressif.com/dl/schematics/SCH_ESP32-S3-LCD-Ev-Board-MB_V1.5_20231009.pdf (authoritative reference design; W4A provenance-pinned sha256 384f0639b2c38e90e0065ec80722c2dd801d1f69476f85465d02e834a8915fd3)",
+    "ESPRESSIF_HW_DESIGN_GUIDELINES": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32s3/schematic-checklist.html"
+  },
+  "notes": [
+    "DRAFT ONLY: this contract is not frozen and carries no approval authority. It exists to record the power tree as described by the W4A provenance-pinned datasheets; freeze requires human review and a follow-up collision (Issue #2).",
+    "Topology basis is evidence-first (W4A Owner ruling 2026-09-02): the power path below is derived from DS41326 Rev. 3-2, the frozen USB contract's declared topology, and the EV-board reference design classified as authoritative_reference_design / exact_component_evidence=false.",
+    "The frozen pin contract rule POWER_SOURCE_SEPARATION remains valid and authoritative; nothing in this draft supersedes it."
+  ],
+  "rules": [
+    {
+      "id": "POWER_TREE_TOPOLOGY",
+      "kind": "power",
+      "severity": "critical",
+      "title": "EDD-001 power tree: USB-C VBUS 5V -> SS34 reverse protection -> USB_5V -> AP63203WU-7 buck -> 3V3",
+      "source_ids": ["AP63203_DS41326_REV3_2", "ESPRESSIF_S3_LCD_EV_BOARD"],
+      "constraint": {
+        "type": "power_tree",
+        "path": [
+          {"node": "USB-C VBUS", "rail": "5V", "source_capability": "externally_constrained"},
+          {"node": "SS34", "role": "reverse_polarity_backfeed_protection"},
+          {"node": "USB_5V", "rail": "5V"},
+          {"node": "AP63203WU-7", "role": "synchronous_buck"},
+          {"node": "3V3", "rail": "3.3V", "consumers": ["ESP32-S3-WROOM-1-N8R8"]}
+        ],
+        "cross_references": {
+          "ss34_topology": "gates/contracts/edd001_usb_contract_v1.json#USB_VBUS_REVERSE_PROTECTION",
+          "regulator_separation": "gates/contracts/edd001_pin_constraints_v1.json#POWER_SOURCE_SEPARATION"
+        },
+        "notes": "Power path follows the frozen USB contract's declared topology (USB VBUS -> SS34 -> USB_5V -> AP63203WU-7) and is corroborated by the ESP32-S3-LCD-EV-Board reference design at board level (reference-design evidence, not exact-component evidence)."
+      }
+    },
+    {
+      "id": "POWER_REGULATOR_AP63203",
+      "kind": "component",
+      "severity": "critical",
+      "title": "3V3 rail regulator AP63203WU-7 (Diodes Incorporated), TSOT-26, VIN 3.8-32V, fixed 3.3V output, 2A",
+      "source_ids": ["AP63203_DS41326_REV3_2"],
+      "constraint": {
+        "mpn": "AP63203WU-7",
+        "manufacturer": "Diodes Incorporated",
+        "package": "TSOT-26",
+        "vin_range": "3.8V to 32V",
+        "vout": "3.3V fixed",
+        "iout_continuous": "2A",
+        "switching_frequency": "1.1MHz",
+        "features": [
+          "frequency spread spectrum (FSS) for EMI reduction",
+          "PFM at light load (up to 80% efficiency at 1mA)",
+          "built-in 4ms soft-start",
+          "internal loop compensation",
+          "overvoltage protection",
+          "cycle-by-cycle peak current limit",
+          "thermal shutdown"
+        ],
+        "notes": "Rated output is regulator capability, not board-level available current; USB source capability remains externally constrained per frozen POWER_SOURCE_SEPARATION."
+      }
+    },
+    {
+      "id": "POWER_REGULATOR_EXTERNALS",
+      "kind": "power",
+      "severity": "critical",
+      "title": "AP63203 external components per DS41326 Rev. 3-2 typical application: Cin 10uF, Cout 2x22uF, L 4.7uH, CBST 100nF",
+      "source_ids": ["AP63203_DS41326_REV3_2"],
+      "constraint": {
+        "cin": {"value": "10uF", "placement": "VIN to GND, close to VIN pin"},
+        "cout": {"value": "2x22uF", "placement": "VOUT to GND"},
+        "inductor": {"typical": "4.7uH", "allowed_range": "2.2uH to 10uH", "dc_current_rating": "at least 35% higher than maximum load current"},
+        "bst_capacitor": {"value": "100nF", "placement": "SW to BST"},
+        "input_cap_rms_note": "input capacitor RMS rating greater than half of the maximum load current, low ESR",
+        "module_local_decoupling_retained": {
+          "rule": "gates/contracts/edd001_core_base_contract_v1.json#POWER_ENTRY_DECOUPLING",
+          "requirement": "22uF bulk + 100nF HF at module VDD33 must NOT be removed even though the buck has its own output caps"
+        }
+      }
+    },
+    {
+      "id": "POWER_ENABLE_UVLO",
+      "kind": "power",
+      "severity": "major",
+      "title": "AP63203 EN pin: precision 1.18V threshold for UVLO programming; tie to VIN or leave open for automatic startup",
+      "source_ids": ["AP63203_DS41326_REV3_2"],
+      "constraint": {
+        "en_threshold": "1.18V precision",
+        "default_connection": "attach to VIN or leave open for automatic startup",
+        "notes": "UVLO divider programming is available but not required for v0.1 baseline."
+      }
+    },
+    {
+      "id": "POWER_USB_ESD_POSITION",
+      "kind": "power",
+      "severity": "critical",
+      "title": "USBLC6-2SC6 sits on USB D+/D- series path with VBUS/GND clamp at the connector, not in the 5V power path",
+      "source_ids": ["ST_USBLC6_2", "ESPRESSIF_HW_DESIGN_GUIDELINES"],
+      "constraint": {
+        "device": "USBLC6-2SC6",
+        "manufacturer": "STMicroelectronics",
+        "package": "SOT23-6",
+        "protection_network": "D+/D- series path; VBUS and GND clamped",
+        "placement": "esd_at_connector, gnd_loop short and thick",
+        "cross_references": {
+          "usb_esd": "gates/contracts/edd001_usb_contract_v1.json#USB_ESD",
+          "usb_esd_placement": "gates/contracts/edd001_usb_contract_v1.json#USB_ESD_PLACEMENT"
+        },
+        "notes": "USBLC6-2SC6 is a USB data-line ESD protector with rail-to-rail clamp; it is not a series element in the VBUS-to-buck power path (W4A evidence-first adjudication)."
+      }
+    },
+    {
+      "id": "POWER_SS34_ROLE",
+      "kind": "power",
+      "severity": "critical",
+      "title": "SS34 Schottky (40V, 3A, SMA/DO-214AC) as VBUS reverse-protection diode between USB VBUS and USB_5V",
+      "source_ids": ["MDD_SS34_C8678", "ESPRESSIF_S3_LCD_EV_BOARD"],
+      "constraint": {
+        "mpn": "SS34",
+        "manufacturer_reference": "MDD (Microdiode Semiconductor), LCSC C8678",
+        "vrrm": "40V",
+        "io_avg": "3A",
+        "vf_max_at_3a": "0.55V",
+        "package": "SMA (DO-214AC)",
+        "position": "USB VBUS -> SS34 -> USB_5V",
+        "purpose": "prevent back-feed into USB VBUS when other 5V sources are present",
+        "tech_debt": "Schottky drop (~0.55V at 3A) reduces available headroom; future high-power revisions may move to ideal-diode/power-path (frozen USB contract tech_debt note)",
+        "notes": "Exact-component datasheet (MDD C8678, provenance-pinned) plus EV-board reference-design corroboration; vendor datasheet binary is NOT committed pending redistribution VERIFIED."
+      }
+    }
+  ],
+  "cross_references": {
+    "POWER_SOURCE_SEPARATION": "gates/contracts/edd001_pin_constraints_v1.json#POWER_SOURCE_SEPARATION",
+    "USB_VBUS_REVERSE_PROTECTION": "gates/contracts/edd001_usb_contract_v1.json#USB_VBUS_REVERSE_PROTECTION",
+    "POWER_ENTRY_DECOUPLING": "gates/contracts/edd001_core_base_contract_v1.json#POWER_ENTRY_DECOUPLING"
+  }
+}

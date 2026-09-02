@@ -1,0 +1,103 @@
+# Task Envelope — GH-2（W4A 碰撞 1：EDD-001 组件证据冻结 + POWER 合同草案）
+# 对应 GitHub Issue #2 [W4A] Freeze EDD-001 component evidence and draft POWER contract
+# 前置：GH-20 碰撞 2（PR #25，已 merge 2026-09-02T00:49:29Z）组件真源对齐完成——
+# SS34 + AP63203WU-7 双报出、manifest missing_requirements = POWER + 5 组件项。
+# 本 envelope 以该 merge 后的 master（36b92f8）为基线；Issue #2 P0 dependency 就此解除。
+# 人类授权：2026-09-02 会话内 Owner 决策「先指派 Owner 并建 GH-2 envelope」
+#（Issue #2 assignee = Yenefa；Percy 承担 SHARED 路径 review）。
+
+task: GH-2
+
+base:
+  branch: feat/w4a-evidence-freeze
+  sha: 36b92f852a6ede263efd81a84121fcbd2088d762
+
+dependencies:
+  - ref: PR-25
+    required_state: merged # GH-20 碰撞 2：组件真源对齐（Issue #2 P0 dependency 的载体）
+
+allowed_paths:
+  - src/hardware/edd001-board/evidence/datasheets/** # 五份冻结资料（新文件；仅 redistribution boundary 已 VERIFIED 的 PDF 才入仓，见 acceptance）
+  - src/hardware/edd001-board/evidence/sandbox_bundle_manifest_v1.json # files 入册 + missing_requirements 如实消项
+  - gates/contracts/edd001_power_contract_v1.json # EDD-001 POWER 草案（DRAFT，新文件，SHARED 路径）
+  - src/hardware/edd001-board/evidence/contracts/edd001_power_contract_v1.json # POWER 草案镜像（新文件）
+  # B2（review 裁定）：测试权限收窄到预计实际调整断言的三个文件；
+  # 若发现还需第四个 test file → envelope amendment + re-admit 扩 scope，不开通配符
+  - sandbox_runtime/tests/trust/test_trust.py
+  - sandbox_runtime/tests/orchestrator/test_integration.py
+  - sandbox_runtime/tests/policy/test_edd001_preflight.py
+  - docs/compliance/AI_USAGE_LOG.md # 本工作单元追加
+  - docs/evidence/EVIDENCE_INDEX.md # 只登记真实冻结资料与真实运行结果
+  - docs/compliance/THIRD_PARTY_RESOURCES.md # datasheet 属第三方资源：来源/License/再分发边界 VERIFIED 或 TO_VERIFY
+  - docs/COLLABORATION.md # 本卡状态行
+  - docs/WAVE4_TASKS_20260901.md # 本卡状态行
+  - tasks/GH-2.yaml # 本 envelope（最小授权：tasks/ 下其他 envelope 文件不在授权面内）
+
+forbidden_paths:
+  - gates/contracts/edd001_core_base_contract_v1.json # 三份冻结契约零变化（仅新增 POWER 草案）
+  - gates/contracts/edd001_pin_constraints_v1.json
+  - gates/contracts/edd001_usb_contract_v1.json
+  - src/hardware/edd001-board/evidence/contracts/edd001_core_base_contract_v1.json # 镜像同步冻结
+  - src/hardware/edd001-board/evidence/contracts/edd001_pin_constraints_v1.json
+  - src/hardware/edd001-board/evidence/contracts/edd001_usb_contract_v1.json
+  - sandbox_runtime/src/** # WAVE4 TASK-W4A：不改 sandbox runtime 实现代码（测试断言如实调整除外）
+  - src/hardware/m2-board/**
+  - notes/m2-evidence-reset/generated/**
+  - delivery/**
+  - gates/board_review_v1.json
+
+acceptance: |
+  - 五份冻结件（ESP32-S3-WROOM-1-N8R8 / AP63203WU-7 / TYPE-C-31-M-12 / USBLC6-2SC6 / SS34，
+    原厂优先、LCSC 次之）：每份记录来源、sha256、字节数、retrieved_at 与 PDF 元数据核对；
+    manifest files 与本地文件一致
+  - 再分发边界（review SHOULD-FIX 固化）：只有 redistribution boundary 已 VERIFIED 的 PDF
+    才 commit 入仓；仍为 TO_VERIFY 的资料先冻结 source URL / sha256 / bytes / retrieved_at /
+    metadata（登记进 manifest 与 THIRD_PARTY_RESOURCES），binary 暂不入仓，升级 Owner 裁定后
+    再决定
+  - TYPE-C-31-M-12 制造商核实为 Korean Hroparts Elec（不复用 M2 板 J1 的 HIROSE 水印前科资料；
+    若核实推翻既定制造商 → STOP 升级 Owner 裁定，不自行改冻结契约）
+  - manifest missing_requirements 按实际证据状态消项；资料不全保持 PARTIAL/BLOCKED，不制造 COMPLETE
+  - POWER 合同草案明确标 DRAFT；基于冻结 datasheet / reference design 如实描述：
+      - USB-C VBUS → 3V3 的实际 power path；
+      - AP63203 输入/输出电压、电流及 Cin/Cout 要求；
+      - SS34 的实际角色；
+      - USBLC6-2SC6 在 USB data / VBUS protection 网络中的位置。
+    不预设未经证据确认的器件串联拓扑，不设任何 APPROVED（格式参考既有三合同）
+  - sandbox 套件全绿（真实 manifest PARTIAL 相关断言按新证据状态如实调整，仅限授权的三个
+    测试文件）；真实 preflight 结果按实际情况记录，禁止制造 PASS
+  - 冻结契约（core_base / pin_constraints / usb 及其镜像）仓库字节零变化
+
+change_budget:
+  # 构成：5 datasheets + manifest 1 + POWER 草案（gates+镜像）2 + 台账 3（AI/EVIDENCE/THIRD_PARTY）
+  # + COLLABORATION/WAVE4 状态行 2 + 测试断言 3（trust / integration / preflight）+ envelope 1
+  # = 5+1+2+3+2+3+1 = 17（三个测试全调整的实际上限；GH-20 恰好动了同类三文件，非纯理论）
+  expected_files: 17
+  expected_modules:
+    [
+      edd001-datasheet-freeze,
+      edd001-bundle-manifest,
+      power-contract-draft,
+      compliance-ledgers,
+      sandbox-test-assertions,
+    ]
+  cross_module: true
+  contract_change: true # 新增 POWER 草案（DRAFT 不冻结）；三份既有冻结契约零变化
+  evidence_semantics_change: true # manifest files 入册与 missing_requirements 如实消项
+
+exceptions:
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "2026-09-02 in-session go-ahead (先指派 Owner 并建 GH-2 envelope; envelope-first edit, same pattern as GH-20 collisions)"
+
+escalation:
+  owner: Yenefa (在席，Issue #2 assignee) + Percy (SHARED 路径 review：gates/contracts/edd001_power_contract_v1.json 新增 + manifest)
+  human_scope_notes: |
+    非机器约束（不写入 forbidden_paths，避免被误认为 mechanical enforcement）：
+    - manufacturing_release / 下单 / 重签 / 换料语义
+    - 实体硬件验证宣称
+    - 冻结契约内容变更（TYPE-C 制造商核实若推翻 → 升级 Owner 裁定）
+  notes: |
+    - 下载通道（WAVE4 记录）：WebFetch 可直取原厂/LCSC；豆包搜索可用
+    - Issue #2 body 更新（Owner 行 TO_ASSIGN → Yenefa，及 GH-20 Task 8 债务：证据集
+      描述对齐 POWER + 5 组件）随本碰撞执行时一并完成（GitHub 侧，非文件路径）
+    - envelope 随 W4A 首个工作 commit 入 PR（GH-20 碰撞同模式）

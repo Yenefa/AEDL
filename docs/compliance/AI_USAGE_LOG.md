@@ -2858,5 +2858,50 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
     manifest head_sha=7b92273 与 commit 一致（已核验）。
 - Compliance：Third-party none；ADR none；Evidence none（流程性模板变更）。
 - AIC Score Target：`NONE`（内部流程约束）
+
+## AI-20260902-005
+
+- 日期：2026-09-02
+- 任务名称：W4A Collision 1 — EDD-001 组件证据 provenance 冻结（元数据级）+ POWER 合同草案
+- 模块/路径：
+  - `src/hardware/edd001-board/evidence/sandbox_bundle_manifest_v1.json`（新增
+    `metadata.remote_evidence` 六条 provenance；六项 missing_requirements 描述精化；notes +2）
+  - `gates/contracts/edd001_power_contract_v1.json`（POWER 合同草案，DRAFT，6 rules，
+    evidence-first）+ `src/hardware/edd001-board/evidence/contracts/` 同名镜像
+  - `docs/compliance/THIRD_PARTY_RESOURCES.md`（RES-010）
+  - `docs/evidence/EVIDENCE_INDEX.md`（EVID-20260902-002）；本台账本条目
+  - `docs/COLLABORATION.md` / `docs/WAVE4_TASKS_20260901.md`（W4A 状态行）
+  - `tasks/GH-2.yaml`（envelope，随本碰撞首个工作 commit 入 PR）
+- AI 工具/平台：TRAE（GLM-5.3）
+- 模型：`GLM-5.3`
+- 参与标签：RESEARCH、DEBUG（下载源排障：diodes.com 404 / Mouser 反爬 / LCSC
+  viewer HTML，均换源解决）、GENERATE_CODE（manifest 更新脚本）、DOCUMENT（POWER
+  DRAFT + 台账）
+- 任务目标：按 Issue #2 与 GH-2 envelope（rev2，PASS）冻结五份组件资料 + 一份参考
+  设计资料的 provenance；起草 EDD-001 POWER 合同 DRAFT。
+- AI 实际产出：
+  - 六份资料获取与核对（URL/sha256/bytes/retrieved_at/PDF 元数据；TYPE-C 制造商
+    Korean Hroparts Elec 目录级核实 + 零 HIROSE 反证；AP63203 = DS41326 Rev. 3-2）
+  - manifest `metadata.remote_evidence` 六条记录（5 exact_component + 1
+    reference_design，schema 合法落点）；missing_requirements 六项如实保留（描述
+    更新为 provenance-pinned/binary-not-committed）；notes 登记 Owner 裁定与 DRAFT 说明
+  - POWER 合同草案（DRAFT）：power tree（循冻结 USB 契约 declared topology）、
+    AP63203 参数与外部器件（Cin 10µF / Cout 2×22µF / L 4.7µH / CBST 100nF，
+    DS41326 Rev. 3-2 Typical Application）、EN UVLO 1.18V、USBLC6 protection network
+    位置（非 5V 串联元件）、SS34 角色（40V/3A 反向保护）
+- 团队自主部分：Owner（Yenefa）2026-09-02 会话内两项裁定：① redistribution
+  TO_VERIFY → 仅元数据冻结、binary 不入仓；② 完整清集（5 exact + 1 reference，
+  EV Board 不替代 SS34 exact-component 身份）。Percy：SHARED 路径 review 待 PR。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 验证（真实运行，本机）：
+  - 下载核对：六份 PDF header/sha256/bytes/mtime 与 manifest 记录逐一一致。
+  - `uv run --frozen --project sandbox_runtime python -m unittest
+    sandbox_runtime.tests.trust.test_trust.RealEdd001ManifestTests …` → 2 tests OK。
+  - final dev_gate（见 PR 描述）→ PASS。
+- 已知限制：元数据级冻结非本地冻结（preflight findings 诚实保留）；SS34/AP63203 的
+  契约 evidence id（EV Board 网页源/TECHPEDIA 网页）无法作为本地文件如实冻结；
+  二进制本地暂存 `../w4a-staging/`（不入 git，URL+sha256 可复现）。
+- Compliance：Third-party RES-010；ADR none。
+- AIC Score Target：`实现完成度与可验证效果`
 - 最终状态：
   - `PENDING_HUMAN_REVIEW`（PR 待人工 review，merge 由 Yenefa/Percy 执行）
