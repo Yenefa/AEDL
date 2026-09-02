@@ -104,6 +104,12 @@
       "kind": "datasheet",
       "reason_code": "EVIDENCE_MISSING",
       "description": "USBLC6-2SC6 ESD protector datasheet not frozen as local evidence; USB protection constraints unverifiable"
+    },
+    {
+      "id": "SS34_DATASHEET",
+      "kind": "datasheet",
+      "reason_code": "EVIDENCE_MISSING",
+      "description": "SS34 Schottky diode datasheet not frozen as local evidence; VBUS reverse-protection constraints unverifiable"
     }
   ],
   "tool_coverage": {
@@ -115,6 +121,9 @@
     "source URLs inside the contract files are references only, not frozen local evidence; no datasheet has been frozen for EDD-001 yet.",
     "evidence_status PARTIAL is the honest state: contract bundle present and hash-verified, engineering sources missing; no example data is used to manufacture COMPLETE.",
     "generated_at intentionally omitted: no caller-supplied deterministic time value is available and a wall-clock timestamp would break reproducibility.",
-    "V2 protocol frozen 2026-09-01 (sha256 f7d44732785d17a20283f3a18fde7689eebfee78f10a93ae899e1dd116383cad): approval authority now requires a candidate-bound HumanApprovalReceipt; this manifest's approval_status=PENDING remains truthful - no human approval receipt exists for EDD-001."
+    "V2 protocol frozen 2026-09-01 (sha256 f7d44732785d17a20283f3a18fde7689eebfee78f10a93ae899e1dd116383cad): approval authority now requires a candidate-bound HumanApprovalReceipt; this manifest's approval_status=PENDING remains truthful - no human approval receipt exists for EDD-001.",
+    "GH-20 Tasks 6-7 alignment (2026-09-02): required component set converges on the frozen contracts. Runtime collection now includes the nested regulator_3v3.device (AP63203WU-7) alongside the direct SS34 declaration, so missing_requirements lists POWER plus five component evidence items.",
+    "SS34 evidence id ESPRESSIF_S3_LCD_EV_BOARD is declared by frozen USB contract rule USB_VBUS_REVERSE_PROTECTION (source_ids). Mapping check (2026-09-02, GH-20 tail): the official ESP32-S3-LCD-EV-Board user guide schematic page 'Power Supply over USB' shows D1 = SS34 in the USB VBUS to USB_5V path; the mapping is corroborated at reference-design level and no frozen contract content change is needed. Per the source classification below, this is authoritative reference design evidence, not exact-component evidence; freezing the SS34 vendor datasheet itself remains W4A (Issue #2).",
+    "ESPRESSIF_S3_LCD_EV_BOARD source classification (Owner adjudication 2026-09-02): source_role=authoritative_reference_design; exact_component_evidence=false. applicable_to: ESP32-S3-WROOM-1 family reference / USB-C device-side topology / native USB D+/D- reference / BOOT-RESET circuitry / UART auto-download architecture / board-level power-entry and protection reference. not_valid_for: exact ESP32-S3-WROOM-1-N8R8 SKU evidence / SHT40 component evidence / 3.3V regulator current-thermal qualification / exact BOM equivalence. Version boundary: the referenced ESP32-S3-LCD-EV-Board revisions use different ESP32-S3-WROOM-1 variants from the project target N8R8 (legacy DigiKey PDF = N16R8; v1.5 = N16R16V with a 1.8V rail and IO47/48 handling absent on this board); therefore the material is authoritative as a reference design, but not as exact-component evidence. The v1.5 regulators (SY8088/ETA3409/ME6211, where ME6211 powers the 1.8V rail) are NOT precedent for this board's AP63203WU-7 3.3V buck."
   ]
 }
