@@ -3034,3 +3034,99 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
   manifest.json 为准（三视图一致性由 BundleReceiptDiscoveryTests 机器锁定）。
   committed-delta scope（envelope base df138d9..HEAD）复核结果见 PR #27 描述。
 - 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260903-001
+- 日期：2026-09-03
+- 任务：AEDL-R1（渲染图新鲜度门禁，AECP 流程交付）
+- 会话：WorkBuddy Worker Agent（ZCode/GLM）
+- 参与：DEBUG / DOCUMENT
+- 关键结论（撞车仲裁，COLLABORATION §0.3）：TASK-R1 的全部领地实现（`tools/board_review.py`
+  渲染步骤 + `render_evidence` 写入、`gates/gate_core.py::validate_render_evidence` 四项
+  sha256 检查、`gates/run_gates.py::_evaluate_board_review` 挂载、`RenderEvidenceTests` 6 用例）
+  已由 AI-20260831-007/008（Qoder，渲染证据部分 commit `4e0922a`）完成并随 tarball 快照进入
+  本地 master。本会话按"立即停手、不 revert 不覆盖"仲裁，转为**现状核实 + 流程交付**，
+  未重做、未修改任何领地代码/证据字节。
+- 本会话实际产物：
+  - `tasks/AEDL-R1.yaml`（AEW envelope：AEDL-R1，base.sha=5c1dff5，allowed_paths 6 项领地
+    + 2 项任务书授权的流程文件；allow_dirty 预授权 granted_by=Yenefa）
+  - admit receipt（verdict ADMIT，envelope_sha256 bd4557a16117…，存仓库外）
+  - dev_gate receipt（exit 0：syntax/main_tests/sandbox_tests/secret_scan/scope_check/binding_check 全 pass）
+  - 本条台账 + HANDOFF 并行会话小节
+- 验证（全部真实运行）：
+  - `py -m unittest tests.test_board_review` → 18/18 OK（含 render_evidence 4 类失败用例）
+  - `py -m unittest discover -s tests` → 322/322 OK（零回归）
+  - `gates/run_gates.py` → 如实记录快照现状：board_review FAIL 含
+    `render_evidence pcb_sha256 does not match the current PCB (render images are stale)`
+    ——门禁对"PCB 已变、图未重渲"的 fail-closed 实测命中（快照 PCB 与 8-31 渲染证据
+    天然失配，非人为篡改）；另 ops/schematic 语义哈希漂移、datasheet 32 项待签、
+    kicad-cli 缺失均为既有状态。run_gates 的 4 个 `*_current.json` 运行副作用已还原。
+  - 临时副本演练（不碰冻结证据）：新鲜证据+当前 PCB → 无 error；手动改 PCB 不重渲 →
+    报 `pcb_sha256 does not match`。
+- 已知限制：真实 kicad-cli 重渲与 `tools/board_review.py` 端到端验收 NOT_RUN（本机无 KiCad）；
+  未 commit（未获授权）。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 补记（同日，人工问询"bundle呢？走AECP了吗"后复查，fix-closed）：
+  ① 回执时效缺口自查发现：首轮 dev_gate exit 0 回执跑在 HANDOFF 小节补写之前，
+  事后改树未重新 admit——按 binding 语义"envelope 变更/树变更须重新绑定"重走：
+  envelope allowed_paths 补 docs/HANDOFF.md（授权依据 COLLABORATION §2 交接规范，
+  追加型文件）→ 重新 admit（ADMIT，envelope 54c372710b43…）→ 重新 gate。
+  ② 回执存放位置修正：按上批 bundle 惯例（HANDOFF 记录 admit/gate-receipt.json 存于
+  bundle 内），两份回执拷入 review-bundles/master/ 后重新生成 bundle（此前 receipt 区空）。
+  ③ 最终 gate 的 scope_check 如实报 1 项 finding：`.aew/`——AEW 决策层自有状态目录
+  （aew/state.py 文档化；focus.json 内容为主会话并行跟踪本任务状态），本会话未写，
+  按 COLLABORATION §0.3 不动不改，报大统领取决（如 .gitignore 收纳），不自行变通。
+  除该项外 syntax/main_tests/sandbox_tests/secret_scan/binding_check 全 pass。
+
+## AI-20260903-002
+
+- 日期：2026-09-03
+- 任务名称：AEDL-CPL —— M2 板 6 方向敏感件 footprint 0° 朝向 / CPL Rotation / JLC 修正审计（只审计不改 delivery）
+- 模块/路径：
+  - `notes/m2-evidence-reset/cpl-rotation-audit.md`（rev2 追加，rev1 原文未删改一字仅加过期横幅）
+  - `tasks/AEDL-CPL.yaml`（envelope，手写自 `aew.cli envelope AEDL 4` 输出 + 任务卡领地表）
+  - 本条台账
+- AI 工具/平台：ZCode（WorkBuddy Worker 会话，AEW Terminal Agent 派发）
+- 模型：`z-ai/glm-5.3-flash`（任务卡 §7 指定档位 simple）
+- AI 参与类型：
+  - [x] ADVISE
+  - [ ] GENERATE_CODE
+  - [ ] REFACTOR
+  - [ ] DEBUG
+  - [ ] GENERATE_TEST
+  - [x] RESEARCH
+  - [x] DOCUMENT
+  - [ ] BENCHMARK
+  - [ ] MEDIA
+- 任务目标：对 D1/U2/U3/J1/U1+复核件逐器件对齐「footprint 0° 朝向 + CPL 旋转值 + JLC 是否需修正」，产出审计报告；不改 `delivery/pos.csv`。
+- 方法（任务卡 §3.1 修正后）：本机无 KiCad（旧机 `fuker` 路径不存在、无 kicad-cli、仓库无 .kicad_mod），改从 in-repo `m2_board.kicad_pcb` 解析 pad 坐标+网络名+丝印几何还原 0° 朝向；JLC 约定用 WebFetch 取官方文档原文。
+- AI 实际产出（要点，全文见审计报告 §7 rev2）：
+  - **21/21 全量核对**：脚本解析 PCB 全部 21 个 footprint 的 `(at x y rot)` 与 `delivery/pos.csv` 逐行比对，旋转 0 mismatch，坐标满足 pos_Y = -PCB_Y（位置文件 Y 翻转）；导出链 `make_jlc_cpl.py` Rotation 原样拷贝不修正，manifest `rotation_correction_applied:false` 一致。
+  - **关键发现**：既有报告（rev1，2026-08-31）"全 0°"结论已过期——D1 经 TASK-FIX-D1（AI-20260831-007）原地旋转 180°，当前 PCB 与 CPL 均为 180°（pad1=K 落 GND 铜皮），rev2 已按撞车仲裁（COLLABORATION §0.3）以追加修订方式更正，rev1 原文零删改。
+  - 逐器件结论：D1=180°（极性修复后对）、U2/U3/J1/U1=0°（网络映射对）、复核件 SW1/SW2=0°（机械件低风险）；5 极性件+U1 全落 {0°,180°}，对位置文件 Y 翻转免疫（0°恒等、180°无手性问题）；C5/R7/R8/R9 的 90° 均为对称无源件，电气等效。
+  - JLC 约定取证：官方《Pick & Place File for PCB Assembly》原文"Rotation - The rotation of the component given in degrees. Positive values are counter clockwise."（https://jlcpcb.com/help/article/46-pick-place-file-for-pcb-assembly，WebFetch 实抓）；官方未定义 0° 参考朝向；KiCad↔JLC 逐件数字偏移表多轮抓取未得 → `待核实`（不引用社区工具的未经核实数字）。
+- 团队自主部分：任务卡由 AEW Terminal Agent 生成、人工批准派发；结论"打板前用 rev1 §5 路径②（JLC 装配预览目检）兜底"沿 rev1 人工已核路线；最终采纳由人工定。
+- 验证（真实运行）：解析脚本（仓库外任务卡目录，未入仓）对当前工作树实测；`python -m tools.admit --envelope tasks/AEDL-CPL.yaml --allow-dirty` → ADMIT（allow_dirty 依据 R1 先例写入 envelope exceptions.granted_by=Yenefa）；unittest 见本条下方补记。
+- 已知限制：JLC 库件自身 pin1 朝向仍 `待核实`（需 JLC 组件库数据）；kicad-cli 渲染 / 官方 .kicad_mod 直读 / Fabrication Toolkit 实操 NOT_RUN（本机无 KiCad）；HANDOFF 未获人工写入授权（任务卡 §2 要求显式授权），本次交接内容以审计报告 §7 + RESULT CARD 替代，未写 HANDOFF。
+- 未 commit（未获授权）。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 补记二（同日，人工 Review 判定"通过 + 3 必修"后执行，fix-closed）：
+  ① 必修#1：`/.aew/` 入 `.gitignore`（AEW 决策层本地运行态与 AEDL 工程树分层，
+  Git 层落实"本地个人状态不入 task scope"），独立 housekeeping commit `a7b6a2c`
+  （逐路径暂存仅 .gitignore，依据 = 本次人工 Review）；
+  ② 必修#3：envelope 收窄为 least-privilege v3——撞车仲裁后本 run 实际只写流程文件，
+  allowed_paths 从 9 收窄至 3（AI_USAGE_LOG / HANDOFF / envelope 本体），领地代码路径
+  降为只读验证（要写须开新 envelope）；change_budget 同步 3 files/[docs,tasks]/cross_module=false；
+  base.sha 重锚 `5c1dff5` → `a7b6a2c`（housekeeping 后新 HEAD，避免 drift BLOCKED）；
+  ③ 必修#2：回执代际定性（本条为权威叙述，此后不再补改）——
+    - 首轮 admit（envelope `bd4557a16117…`）+ 首轮 gate exit 0 回执：SUPERSEDED
+     （跑在 HANDOFF 补写前，树状态过期，仅存于本条历史叙述，无文件留存）；
+    - 二轮 admit（envelope `54c372710b43…`）+ gate（scope_check FAIL on .aew/）：
+      SUPERSEDED（.aew/ 已由必修#1 隔离）；
+    - 三轮（v3 envelope）admit + gate 回执：authoritative，随 bundle 归档于
+      `review-bundles/master/{admit,gate}-receipt.json`，envelope 唯一权威哈希以
+      该对回执为准。
+- 补记三（同日，人工指令固化）：大统领指定 Review Bundle 增设桌面收藏位
+  `C:\Users\Ryan Gosling\Desktop\Bundle-Lap\`（一 run 一子夹 + INDEX.md 索引），
+  优先级依据 AGENTS.md §0 第 1 条（人类明确指令 > 规范默认值）；CONTROL_PLANE §8
+  权威生成位不变（仓库外 review-bundles/，不进 git）。已记入 HANDOFF「环境关键事实」，
+  后续会话收尾照惯例执行：生成 → 拷 Bundle-Lap → INDEX.md 加行。
