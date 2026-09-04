@@ -16,10 +16,12 @@ on the M2 board files.
 
 from __future__ import annotations
 
+import http.client
 import json
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -185,20 +187,33 @@ class _HttpServerCase(_TempRepoCase):
         self.thread.join(timeout=5)
 
     def _post(self, path: str, payload=None, raw: bytes | None = None):
+        # GH-31: transient connection failures (reset/aborted) have been observed
+        # against this test-local HTTPServer on some interpreter/thread-timing
+        # combinations, unrelated to the assertions under test - each test method
+        # spins up and tears down its own real server+thread. Retry only on
+        # connection-level failures, never on a real HTTP error response (that is
+        # a valid, meaningful test outcome and must not be retried away).
         data = raw if raw is not None else json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(
             self.url + path, data=data, method="POST",
             headers={"Content-Type": "application/json"},
         )
-        try:
-            with urllib.request.urlopen(request, timeout=10) as response:
-                return response.status, json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as error:
-            body = error.read().decode("utf-8")
+        attempts = 3
+        for attempt in range(attempts):
             try:
-                return error.code, json.loads(body)
-            except json.JSONDecodeError:
-                return error.code, {"_raw": body}
+                with urllib.request.urlopen(request, timeout=10) as response:
+                    return response.status, json.loads(response.read().decode("utf-8"))
+            except urllib.error.HTTPError as error:
+                body = error.read().decode("utf-8")
+                try:
+                    return error.code, json.loads(body)
+                except json.JSONDecodeError:
+                    return error.code, {"_raw": body}
+            except (ConnectionError, http.client.HTTPException, urllib.error.URLError):
+                if attempt == attempts - 1:
+                    raise
+                time.sleep(0.05 * (attempt + 1))
+        raise AssertionError("unreachable")  # pragma: no cover
 
 
 class FinalizeEndpointTests(_HttpServerCase):
