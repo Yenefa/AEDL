@@ -8,7 +8,7 @@ task: AEDL-CPL
 
 base:
   branch: master
-  sha: a7b6a2c1718624ef41ab78bacea4a3ebc2afe9af  # HEAD drift = BLOCKED
+  sha: bf593f406e9eb7a4e925e14c6aebb1f0eaf25fa5  # rebaselined to accepted W4 batch (Yenefa 2026-09-04)
 
 goal: |
   CPL 旋转 vs JLC 约定核对（板子最隐蔽的雷）——6 方向敏感件逐器件对齐
