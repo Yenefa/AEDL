@@ -1,0 +1,52 @@
+# Task Envelope — auto-generated from AEW TaskCard AEDL-CPL
+# Human review + admission required before execution.
+# Hand-written from `python -m aew.cli envelope AEDL 4` output (CLI prints, does not
+# write) + task card §2 territory table: the CLI card carries only the report file,
+# the task card additionally authorizes the three process files below.
+
+task: AEDL-CPL
+
+base:
+  branch: master
+  sha: a7b6a2c1718624ef41ab78bacea4a3ebc2afe9af  # HEAD drift = BLOCKED
+
+goal: |
+  CPL 旋转 vs JLC 约定核对（板子最隐蔽的雷）——6 方向敏感件逐器件对齐
+  footprint 0° 朝向 / CPL Rotation / JLC 是否需修正，产出审计报告（只审计不改 delivery）。
+
+scope: |
+  Writable paths are whitelisted in allowed_paths; everything else is FOREIGN (read-only).
+
+dependencies: []
+
+allowed_paths:
+  - notes/m2-evidence-reset/cpl-rotation-audit.md
+  - docs/compliance/AI_USAGE_LOG.md
+  - tasks/AEDL-CPL.yaml
+  # docs/HANDOFF.md NOT whitelisted: task card §2 says human must explicitly
+  # authorize it before dispatch. This run therefore treats HANDOFF as FOREIGN:
+  # the closing handoff note goes into the audit report + RESULT CARD instead,
+  # or a human adds this path to allowed_paths and admits again.
+
+forbidden_paths: []
+
+acceptance: |
+  - 6 器件各有一行结论，footprint 0° 朝向注明推断依据与来源（PCB pad / 官方库 / 待核实）
+  - JLC 旋转约定有出处链接；无出处的一律标待核实
+  - 报告文件落在 notes/m2-evidence-reset/cpl-rotation-audit.md
+  - 台账追加一条 AI-YYYYMMDD-NNN，人工审核：PENDING_HUMAN_REVIEW
+  - dev_gate 绿；unittest discover -s tests 基线 322/322 零回归
+
+change_budget:
+  expected_files: 4
+  expected_modules: [notes, docs, tasks]
+  cross_module: true
+  contract_change: false
+  evidence_semantics_change: false
+
+exceptions:
+  # Agent cannot self-authorize. Add allow_dirty / allow_drift / skip_deps
+  # only with a human-granted authority (permitted+authority or granted_by+decision_ref).
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "2026-09-03 AEW 派发先于 admit 的既定模式（同 AEDL-R1 envelope 先例，R1 允许脏树现场 2改+2未跟踪）"
