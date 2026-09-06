@@ -10,7 +10,8 @@
 
 - 只开放 AEDL **团队自主创作**的部分；第三方内容（KiCad 库、akcli、jlcpcb 数据、数据手册、被借鉴项目的代码）**不随项目再分发**，只给引用与安装方式。
 - 每个成果标注：准备开放什么 / 团队自主创作边界 / 许可证（`TO_VERIFY` 未定）/ 哪些第三方内容不随项目再分发 / 最小安装与运行方式 / 外部用户如何复现最小 Demo / 已知限制 / 维护状态。
-- 项目当前无 LICENSE（RES-003 再分发权 `TO_VERIFY`），仓库为 private（ADR-003），公开化是独立决策，本文件只登记"准备开放"清单。
+- 项目根目录**已有 `LICENSE`（Apache-2.0）**（2026-09-06 核实；本条原记载"当前无 LICENSE"为过期信息）。但下表各成果的许可证栏**保持 `TO_VERIFY` 不变**——仓库级 LICENSE 不自动等于每项成果的再分发权，各项仍需按第三方边界（RES-003）逐项核实后才能定稿。
+- 仓库仍为 **private**（ADR-003，2026-09-06 以未认证请求实测确认：匿名访问返回 404）。公开化是独立决策，本文件只登记"准备开放"清单，**尚不构成"已开放成果"**。
 
 ---
 
@@ -32,6 +33,14 @@
 - **许可证**：`TO_VERIFY`。
 - **不随项目再分发**：KiCad、akcli-kicad、jlcpcb CLI、freerouting 二进制与数据。
 - **最小安装与运行**：`py -3 gates\run_gates.py`（需本机 KiCad 10.0.5 路径可读；`--skip-kicad` 可跳过工具层只跑证据门禁）。
+  **全新机器必须先初始化 KiCad 全局库表**——headless `kicad-cli` 不会触发 GUI 首次启动时的库表生成，缺这一步 ERC 会报 39 条 `lib_symbol_issues` / `footprint_link_issues` 假警告（全为 warning，非 error，但外部用户无法据此判断是环境问题还是设计缺陷）：
+  ```
+  复制 <KiCad安装目录>/share/kicad/template/sym-lib-table
+       <KiCad安装目录>/share/kicad/template/fp-lib-table
+  到   %APPDATA%\kicad\10.0\
+  ```
+  版本必须锁 **10.0.5**（与 `delivery/manifest_v1.json` 的 `kicad_version` 一致）；winget 默认给 10.0.6，需 `--version 10.0.5 --exact` 显式指定。跨补丁版可能改变导出与哈希。
+  实测记录见 `notes/m2-evidence-reset/independent-reproduction-20260906.md`（补库表后 ERC 39→2 warning，2 条与冻结证据逐条一致；DRC 0/0 一致）。
 - **外部用户如何复现最小 Demo**：`py -3 -m unittest discover -s tests`（95/95，AI-20260831-002 记录）验证门禁自测；`notes/m2-evidence-reset/run_manifest.json` 为每次 run 的完整审计清单。
 - **已知限制**：门禁验证的是静态/软件证据，不构成实体硬件验证（EVID-20260829-001/20260830-001 已知限制）。
 - **维护状态**：活跃维护中；门禁集合断言 9→10 为预期变更（AI-20260831-002）。
