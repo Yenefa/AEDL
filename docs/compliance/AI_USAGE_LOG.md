@@ -3035,6 +3035,52 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
   committed-delta scope（envelope base df138d9..HEAD）复核结果见 PR #27 描述。
 - 人工审核：`PENDING_HUMAN_REVIEW`
 
+
+## AI-20260902-006
+
+- **台账 ID 改号说明（2026-09-06，PR #14 解决 master 合并冲突时补记）**：本条目原领用
+  `AI-20260902-005`。合并时发现 master 已有并行会话的 `AI-20260902-005`（W4A Collision 1，
+  PR #27），台账 ID 撞号。裁定：master 先占 005，本 W4B 工作单元改号 **006**
+  （先合先占，沿用 W4A 004→005 先例；开放 PR #30 所领 006 号在其合并时另改 007，
+  由大统领裁定）。`notes/open_source_intake/kicad-happy.md` 尾注同步改指 006。
+- 日期：2026-09-02
+- 任务名称：kicad-happy 六步 intake（Issue #3 / W4B）
+- 关联工作项：`Yenefa/AEDL#3`
+- 参与标签：`ADVISE`、`DOCUMENT`、`GENERATE_TEST`（对 kicad-happy 分析器本身执行，非新增 AEDL 测试）
+- AI 系统：Claude Code (Anthropic)；模型 `claude-sonnet-5`
+- 人类授权：项目负责人（经 Percy 代为确认）指派 Issue #3 给 `la4876949-bot`；本轮为该任务的实际交付，并按 Yenefa 对首版 PR #14 的审查意见（6 blockers + 2 必修）返工。
+- 模块/路径：
+  - `notes/open_source_intake/kicad-happy.md`（新）
+  - `notes/open_source_intake/README.md`（目录表新增一行、已完成清单更新、附属说明新增一条）
+  - `docs/COLLABORATION.md`（TASK-W4B 状态行更新为完成）
+  - `docs/WAVE4_TASKS_20260901.md`（W4B 跟踪表状态行更新为完成）
+  - 本台账本条目
+- 做了什么：
+  - 六步 intake 内容见 `kicad-happy.md`：`aklofas/kicad-happy`（MIT，`d5fd7da`），`sexp_parser.py`/`finding_schema.py` 全文核实，`analyze_schematic.py`/`analyze_pcb.py` 结构核实，两个核心分析器均对 AEDL 真实 `src/hardware/m2-board/` 文件实际运行（21+13 findings），逐条与 `tools/board_review.py`（全文，624 行）/`gates/schematic_semantics.py`（全文，518 行）做碰撞分析。
+  - 返工修正首版 PR #14 的审查发现：
+    - CRLF 字节契约违规（B1）：定位根因为本机 clone 未设 `core.autocrlf false`（`docs/CONTROL_PLANE.md` 明确要求的环境前提），本轮已修正 `git config` 并对三个受影响文件做 CRLF→LF 显式转换核实（`\r` 计数=0）。
+    - base 分支过期（B2）：`fix/m2-schematic-semantic-release` 相对 master 已无独有 commit（Issue #8 稳定化已合并），本轮从 `origin/master` 重建分支。
+    - AI 编号与实际不符（B3）：master 当前最新为 `AI-20260902-004`，本条目改用 `-005`；此前草稿中关于 `a130d7e`/`-007` 归属的断言已确认不准确（`-007` 实际属身份映射 commit `4142059`），一并撤回该断言。
+    - 遗漏 Issue #3 原始 scope 两个状态行文件（R1）：本轮补齐 `docs/COLLABORATION.md`、`docs/WAVE4_TASKS_20260901.md`。
+    - Review gate 复选框（B6）：首版提交时该框为未勾选（`- [ ]`），提交后被外部操作勾选为 `[x]`，与 `reviews=[]` 的实际状态不符；本轮已取消勾选，并在 PR 回复中说明非本方所为。
+- 技术实现改动：`NO`——本任务仅产出研究文档与状态行更新，未修改 AEDL 任何代码、门禁、硬件文件。
+- 现有 Evidence 字节改动：`NO`。
+- 新技术 Evidence 生成：`NO`（`notes/open_source_intake/` 下的报告本身不构成比赛 Evidence，见文件内声明）。
+- 第三方选型或许可证变化：`NO`（kicad-happy 未被代码级复用进 AEDL；如未来 Adapt `sexp_parser.py`，需另行登记 `THIRD_PARTY.md`）。
+- 验证：
+  - `analyze_schematic.py`、`analyze_pcb.py` 对 AEDL 真实硬件文件运行，均 exit 0。
+  - 三个受影响文件 CRLF 显式核实为 0（`\r` byte count）。
+  - `git diff --diff-filter=M` 核对 `notes/open_source_intake/kicad-happy.md`、`README.md`、本台账为新增/追加，无对既有条目的修改。
+- 已知限制：
+  - `analyze_schematic.py`（10271 行）、`analyze_pcb.py`（7145 行）未逐行审计，仅结构层 + 实际运行验证；`skills/emc/`、`skills/spice/`、供应商集成 skills（digikey/element14/jlcpcb/lcsc/mouser/pcbway）本轮未核实源码，标注 `未核实`。
+  - 嘉立创实际工艺能力表（环宽 DFM-001/002 finding 的严重程度判定）因浏览器工具渲染问题未能核实到具体数值，如实标注未核实。
+  - kicad-happy 本地克隆未纳入本仓库工作树（`.gitignore` 尚无排除规则，与 `_neuroboard_repo/` 已知问题相同），放在仓库外临时路径。
+  - Review Bundle 生成方式（post-commit 钩子 vs 手动 `tools.make_review_bundle`）本轮首次接触，如生成路径与既有惯例不符，以 Yenefa 复核意见为准调整。
+  - 本任务未实装任何吸收建议，按 Issue #3 要求"不实装"。
+- Commit / PR：分支 `docs/3-kicad-happy-intake`（从 `origin/master` 重建），PR #14 已存在，本轮更新其内容与 base；已请求 `Yenefa` Review；AI 不 Approve、不 merge。
+- AIC Score Target：`AI 与开源融合`（对应 `docs/competition/FUSION_MAP.md` "AI+开源"评分项的证据资产之一）
+- 最终状态：`PENDING_HUMAN_REVIEW`
+
 ## AI-20260903-001
 - 日期：2026-09-03
 - 任务：AEDL-R1（渲染图新鲜度门禁，AECP 流程交付）
@@ -3130,3 +3176,22 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
   优先级依据 AGENTS.md §0 第 1 条（人类明确指令 > 规范默认值）；CONTROL_PLANE §8
   权威生成位不变（仓库外 review-bundles/，不进 git）。已记入 HANDOFF「环境关键事实」，
   后续会话收尾照惯例执行：生成 → 拷 Bundle-Lap → INDEX.md 加行。
+## AI-20260906-001
+
+- 日期：2026-09-06
+- 任务名称：W1 竞赛任务包入库 — AEW 领地表（W1_TASKS）+ 内部研究资料导入 + 双人任务卡分发
+- 模块/路径：
+  - `docs/competition/internal/`（新增目录：`W1_TASKS_20260907.md`、`W1_CARD_Percy_20260907.md`、
+    `W1_CARD_Yenefa_20260907.md`、`INTERNAL_CLEANUP.md`、`AEDL竞赛策略矩阵.xlsx`、
+    `2026-09-06_研究审查与架构判断.md`、`2026-09-06_证据与阅读清单.md`、原始 `AEDL_W1任务卡_20260906.md`）
+  - `docs/competition/SUBMISSION_CHECKLIST.md`（截止时间更正：约 2026-10-03 → 官方开源初赛
+    2026-10-15 20:00，依据研究审查 §F 官网核实）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 内容：把 2026-09-06 Percy 会话产出的 W1 任务卡、Codex 研究两件套与竞赛策略矩阵以
+  developer-facing 内部资料入库；全部文件标注 INTERNAL 并建清理台账
+  （`INTERNAL_CLEANUP.md`，公开/提交前移除）。`W1_TASKS_20260907.md` 按 AEW v0 解析格式
+  写 12 任务领地表（P1–P6 Percy、Y1–Y5 Yenefa、J1 双方；状态/领地/依赖显式声明），
+  供 AEW 快照与并行判定消费。
+- AI 参与：ZCode（GLM）DOCUMENT —— 结构化改写与入库执行；任务内容来源为人类与
+  Percy 会话（Claude）已确认的 W1 任务卡与既档研究材料，不新增技术主张。
+- 人工审核：`PENDING_HUMAN_REVIEW`
