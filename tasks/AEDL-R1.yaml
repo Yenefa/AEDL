@@ -1,0 +1,46 @@
+# Task Envelope — auto-generated from AEW TaskCard AEDL-R1
+# Human review + admission required before execution.
+
+task: AEDL-R1
+
+base:
+  branch: master
+  sha: a7b6a2c1718624ef41ab78bacea4a3ebc2afe9af  # HEAD drift = BLOCKED (housekeeping a7b6a2c: /.aew/ isolated)
+
+goal: |
+  渲染图新鲜度门禁（主线，防板子错）
+
+scope: |
+  Writable paths are whitelisted in allowed_paths; everything else is FOREIGN (read-only).
+
+dependencies: []
+
+allowed_paths:
+  # Least-privilege envelope (v3, 2026-09-03 human review): collision arbitration
+  # (COLLABORATION §0.3) established that TASK-R1 territory code was already
+  # implemented by AI-20260831-007, so this run is "verify + AECP process delivery"
+  # and authorizes ONLY the process artifacts it actually writes. Territory code
+  # paths are read-only for verification; writing them requires a new envelope.
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/HANDOFF.md
+  - tasks/AEDL-R1.yaml
+
+forbidden_paths: []
+
+acceptance: |
+  - tests pass
+  - task marked DONE
+
+change_budget:
+  expected_files: 3
+  expected_modules: [docs, tasks]
+  cross_module: false
+  contract_change: false
+  evidence_semantics_change: false
+
+exceptions:
+  # Agent cannot self-authorize. Add allow_dirty / allow_drift / skip_deps
+  # only with a human-granted authority (permitted+authority or granted_by+decision_ref).
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "2026-09-03 in-session go-ahead (AEW envelope precedes admit by design)"

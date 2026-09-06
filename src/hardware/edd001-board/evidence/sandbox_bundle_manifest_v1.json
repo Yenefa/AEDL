@@ -79,37 +79,37 @@
       "id": "EDD001_POWER_CONTRACT",
       "kind": "contract",
       "reason_code": "EVIDENCE_MISSING",
-      "description": "EDD-001 power contract has not been authored; the +5V/+3V3 power tree is unconstrained by a frozen contract"
+      "description": "EDD-001 power contract not yet authored as FROZEN; a DRAFT exists from W4A collision 1 (gates/contracts/edd001_power_contract_v1.json, based on DS41326 Rev. 3-2 with provenance-pinned sources) but a draft cannot satisfy this requirement"
     },
     {
       "id": "ESP32_S3_WROOM_1_N8R8_DATASHEET",
       "kind": "datasheet",
       "reason_code": "EVIDENCE_MISSING",
-      "description": "ESP32-S3-WROOM-1-N8R8 datasheet not frozen as local evidence; MCU pin/electrical constraints unverifiable"
+      "description": "ESP32-S3-WROOM-1-N8R8 datasheet provenance pinned (Espressif official, sha256 27d71971..., see metadata.remote_evidence); binary NOT committed pending redistribution VERIFIED - local frozen evidence still missing"
     },
     {
       "id": "AP63203WU_7_DATASHEET",
       "kind": "datasheet",
       "reason_code": "EVIDENCE_MISSING",
-      "description": "AP63203WU-7 buck regulator datasheet not frozen as local evidence; power-stage constraints unverifiable"
+      "description": "AP63203WU-7 datasheet provenance pinned (Diodes DS41326 Rev. 3-2 via LCSC C780769, sha256 ef99daa3..., see metadata.remote_evidence); binary NOT committed pending redistribution VERIFIED - local frozen evidence still missing"
     },
     {
       "id": "TYPE_C_31_M_12_DRAWING",
       "kind": "mechanical_drawing",
       "reason_code": "EVIDENCE_MISSING",
-      "description": "TYPE-C-31-M-12 mechanical drawing not frozen as local evidence; connector footprint constraints unverifiable"
+      "description": "TYPE-C-31-M-12 drawing provenance pinned (LCSC C165948, Korean Hroparts Elec verified at catalog level with no HIROSE/elecfans markers, sha256 6ae33d50..., see metadata.remote_evidence); binary NOT committed pending redistribution VERIFIED - local frozen evidence still missing"
     },
     {
       "id": "USBLC6_2SC6_DATASHEET",
       "kind": "datasheet",
       "reason_code": "EVIDENCE_MISSING",
-      "description": "USBLC6-2SC6 ESD protector datasheet not frozen as local evidence; USB protection constraints unverifiable"
+      "description": "USBLC6-2SC6 datasheet provenance pinned (ST official, sha256 bc30154f..., see metadata.remote_evidence); binary NOT committed pending redistribution VERIFIED - local frozen evidence still missing"
     },
     {
       "id": "SS34_DATASHEET",
       "kind": "datasheet",
       "reason_code": "EVIDENCE_MISSING",
-      "description": "SS34 Schottky diode datasheet not frozen as local evidence; VBUS reverse-protection constraints unverifiable"
+      "description": "SS34 datasheet provenance pinned (MDD C8678, sha256 fb497087..., see metadata.remote_evidence); binary NOT committed pending redistribution VERIFIED - local frozen evidence still missing"
     }
   ],
   "tool_coverage": {
@@ -124,6 +124,149 @@
     "V2 protocol frozen 2026-09-01 (sha256 f7d44732785d17a20283f3a18fde7689eebfee78f10a93ae899e1dd116383cad): approval authority now requires a candidate-bound HumanApprovalReceipt; this manifest's approval_status=PENDING remains truthful - no human approval receipt exists for EDD-001.",
     "GH-20 Tasks 6-7 alignment (2026-09-02): required component set converges on the frozen contracts. Runtime collection now includes the nested regulator_3v3.device (AP63203WU-7) alongside the direct SS34 declaration, so missing_requirements lists POWER plus five component evidence items.",
     "SS34 evidence id ESPRESSIF_S3_LCD_EV_BOARD is declared by frozen USB contract rule USB_VBUS_REVERSE_PROTECTION (source_ids). Mapping check (2026-09-02, GH-20 tail): the official ESP32-S3-LCD-EV-Board user guide schematic page 'Power Supply over USB' shows D1 = SS34 in the USB VBUS to USB_5V path; the mapping is corroborated at reference-design level and no frozen contract content change is needed. Per the source classification below, this is authoritative reference design evidence, not exact-component evidence; freezing the SS34 vendor datasheet itself remains W4A (Issue #2).",
-    "ESPRESSIF_S3_LCD_EV_BOARD source classification (Owner adjudication 2026-09-02): source_role=authoritative_reference_design; exact_component_evidence=false. applicable_to: ESP32-S3-WROOM-1 family reference / USB-C device-side topology / native USB D+/D- reference / BOOT-RESET circuitry / UART auto-download architecture / board-level power-entry and protection reference. not_valid_for: exact ESP32-S3-WROOM-1-N8R8 SKU evidence / SHT40 component evidence / 3.3V regulator current-thermal qualification / exact BOM equivalence. Version boundary: the referenced ESP32-S3-LCD-EV-Board revisions use different ESP32-S3-WROOM-1 variants from the project target N8R8 (legacy DigiKey PDF = N16R8; v1.5 = N16R16V with a 1.8V rail and IO47/48 handling absent on this board); therefore the material is authoritative as a reference design, but not as exact-component evidence. The v1.5 regulators (SY8088/ETA3409/ME6211, where ME6211 powers the 1.8V rail) are NOT precedent for this board's AP63203WU-7 3.3V buck."
-  ]
+    "ESPRESSIF_S3_LCD_EV_BOARD source classification (Owner adjudication 2026-09-02): source_role=authoritative_reference_design; exact_component_evidence=false. applicable_to: ESP32-S3-WROOM-1 family reference / USB-C device-side topology / native USB D+/D- reference / BOOT-RESET circuitry / UART auto-download architecture / board-level power-entry and protection reference. not_valid_for: exact ESP32-S3-WROOM-1-N8R8 SKU evidence / SHT40 component evidence / 3.3V regulator current-thermal qualification / exact BOM equivalence. Version boundary: the referenced ESP32-S3-LCD-EV-Board revisions use different ESP32-S3-WROOM-1 variants from the project target N8R8 (legacy DigiKey PDF = N16R8; v1.5 = N16R16V with a 1.8V rail and IO47/48 handling absent on this board); therefore the material is authoritative as a reference design, but not as exact-component evidence. The v1.5 regulators (SY8088/ETA3409/ME6211, where ME6211 powers the 1.8V rail) are NOT precedent for this board's AP63203WU-7 3.3V buck.",
+    "W4A collision 1 (2026-09-02): six remote evidence records pinned in metadata.remote_evidence (5 exact-component + 1 reference-design). All six carry redistribution TO_VERIFY (in-document copyright notices reserve rights; no redistribution grants found), so per the Owner ruling binaries stay OUT of the repository and missing_requirements intentionally remain - provenance debt cleared, local-freeze debt honestly red. Reviewer implementation note honored: TO_VERIFY remote sources never masquerade as local frozen files.",
+    "POWER contract DRAFT (2026-09-02): gates/contracts/edd001_power_contract_v1.json + evidence/contracts mirror, evidence-first per DS41326 Rev. 3-2 Table 2 (Cin 10uF / Cout 2x22uF / L 3.9uH / CBST 100nF; EN UVLO 1.18V; USBLC6 as USB data/VBUS protection network, not a series power element; SS34 as VBUS reverse-protection diode). DRAFT is not frozen and does not satisfy EDD001_POWER_CONTRACT; freeze requires human review in a follow-up collision.",
+    "Review iteration 1 correction (2026-09-02): POWER DRAFT inductor was mis-copied as 4.7uH from DS41326 Rev. 3-2 Figure 2 (drawn for AP63205/5V); Table 2 for AP63203/3.3V specifies L = 3.9uH. Corrected across the contract, its mirror, and ledgers. EV-board corroboration narrowed to the USB VBUS -> SS34 -> protected rail segment only."
+  ],
+  "metadata": {
+    "remote_evidence": [
+      {
+        "id": "ESP32_S3_WROOM_1_N8R8_DATASHEET",
+        "role": "exact_component",
+        "component_mpn": "ESP32-S3-WROOM-1-N8R8",
+        "contract_evidence_id": "WROOM1_DATASHEET",
+        "source_url": "https://documentation.espressif.com/esp32-s3-wroom-1_wroom-1u_datasheet_en.pdf",
+        "source_tier": "manufacturer_official",
+        "manufacturer": "Espressif Systems",
+        "sha256": "27d71971da07c280c6068d08c74720d1a25b8f20cf8494dc1765bdd28d40d435",
+        "size_bytes": 1280501,
+        "retrieved_at": "2026-09-02T01:28:49Z",
+        "pdf_metadata": {
+          "header": "%PDF-1.5",
+          "content_markers": "espressif.com x129"
+        },
+        "redistribution_status": "TO_VERIFY",
+        "binary_committed": false,
+        "manufacturer_verification": "official espressif.com distribution channel"
+      },
+      {
+        "id": "AP63203WU_7_DATASHEET",
+        "role": "exact_component",
+        "component_mpn": "AP63203WU-7",
+        "contract_evidence_id": "ESP32_S3_TECHPEDIA",
+        "contract_evidence_note": "frozen pin contract cites the ESP32_S3_TECHPEDIA web page for POWER_SOURCE_SEPARATION; this datasheet is the engineering-grade component evidence for the regulator itself (DS41326 Rev. 3-2, Nov 2024, 18 pages)",
+        "source_url": "https://datasheet.lcsc.com/datasheet/pdf/94820cc9e44613233ddcc1a15801eca3.pdf?productCode=C780769",
+        "source_tier": "lcsc_catalog_hosted_manufacturer_datasheet",
+        "manufacturer": "Diodes Incorporated",
+        "sha256": "ef99daa3789d835bc025dfcb4c605c5c2e6d3e7223e86d40b33e6b497ea5a722",
+        "size_bytes": 1226090,
+        "retrieved_at": "2026-09-02T01:33:36Z",
+        "pdf_metadata": {
+          "header": "%PDF-1.7",
+          "title": "AP63200/AP63201/AP63203/AP63205",
+          "author": "Diodes Incorporated",
+          "creation_date": "D:20241113134242+08'00'",
+          "pages": 18
+        },
+        "redistribution_status": "TO_VERIFY",
+        "binary_committed": false,
+        "manufacturer_verification": "PDF /Author = Diodes Incorporated; diodes.com referenced x22; document number DS41326 Rev. 3-2"
+      },
+      {
+        "id": "TYPE_C_31_M_12_DRAWING",
+        "role": "exact_component",
+        "component_mpn": "TYPE-C-31-M-12",
+        "contract_evidence_id": "LCSC_C165948",
+        "source_url": "https://datasheet.lcsc.com/datasheet/pdf/9e56b777c022540fcce7c7f67825f55e.pdf?productCode=C165948",
+        "source_tier": "lcsc_catalog_hosted_manufacturer_datasheet",
+        "manufacturer": "Korean Hroparts Elec",
+        "sha256": "6ae33d50ac47820114661138dc4e4659f40fdc5d4f485b46685dfec338da1a9e",
+        "size_bytes": 118176,
+        "retrieved_at": "2026-09-02T01:32:27Z",
+        "pdf_metadata": {
+          "header": "%PDF-1.6",
+          "title": "Model",
+          "producer": "pdfplot11.hdi 11.1.18.0",
+          "creation_date": "D:20201208111634",
+          "mod_date": "D:20220525141410+08'00'",
+          "pages": 1
+        },
+        "redistribution_status": "TO_VERIFY",
+        "binary_committed": false,
+        "manufacturer_verification": "LCSC catalog page for C165948 lists Korean Hroparts Elec as manufacturer; PDF carries ZERO occurrences of HIROSE/elecfans markers (negative check against the M2 J1 watermark precedent); drawing body is vector CAD text, not machine-readable"
+      },
+      {
+        "id": "USBLC6_2SC6_DATASHEET",
+        "role": "exact_component",
+        "component_mpn": "USBLC6-2SC6",
+        "contract_evidence_id": "ST_USBLC6_2",
+        "source_url": "https://www.st.com/resource/en/datasheet/usblc6-2.pdf",
+        "source_tier": "manufacturer_official",
+        "manufacturer": "STMicroelectronics",
+        "sha256": "bc30154f310cd631043214ed52571daefe04270587ec55072d49a23bd18b9068",
+        "size_bytes": 575521,
+        "retrieved_at": "2026-09-02T01:28:52Z",
+        "pdf_metadata": {
+          "header": "%PDF-1.3",
+          "title": "@NA Cover image",
+          "author": "STMICROELECTRONICS",
+          "creation_date": "D:20211224104115+01'00'",
+          "mod_date": "D:20220104092608+01'00'",
+          "pages": 20
+        },
+        "redistribution_status": "TO_VERIFY",
+        "binary_committed": false,
+        "manufacturer_verification": "PDF /Author = STMICROELECTRONICS; st.com referenced x6"
+      },
+      {
+        "id": "SS34_DATASHEET",
+        "role": "exact_component",
+        "component_mpn": "SS34",
+        "contract_evidence_id": "ESPRESSIF_S3_LCD_EV_BOARD",
+        "contract_evidence_note": "frozen USB contract cites ESPRESSIF_S3_LCD_EV_BOARD for USB_VBUS_REVERSE_PROTECTION; per the 2026-09-02 Owner ruling the EV-board schematic is NOT a substitute for the SS34 exact-component datasheet identity - it is registered separately below as reference_design evidence",
+        "source_url": "https://datasheet.lcsc.com/datasheet/pdf/dfa1ff67dea875d0135103ba9ada713a.pdf?productCode=C8678",
+        "source_tier": "lcsc_catalog_hosted_manufacturer_datasheet",
+        "manufacturer": "MDD (Microdiode Semiconductor)",
+        "sha256": "fb4970875779696914d235bcf954240569302fb325399838f2861d474cbf9760",
+        "size_bytes": 1300729,
+        "retrieved_at": "2026-09-02T01:32:29Z",
+        "pdf_metadata": {
+          "header": "%PDF-1.7",
+          "author": "Elaine_Lee",
+          "producer": "PrimoPDF",
+          "creation_date": "D:20100927101840Z",
+          "mod_date": "D:20240930173600+08'00'",
+          "pages": 3
+        },
+        "redistribution_status": "TO_VERIFY",
+        "binary_committed": false,
+        "manufacturer_verification": "LCSC catalog page for C8678 lists MDD (Microdiode Semiconductor); parameters (40V / 3A / SMA DO-214AC) match the USB contract's usage context"
+      },
+      {
+        "id": "ESPRESSIF_S3_LCD_EV_BOARD_SCHEMATIC",
+        "role": "reference_design",
+        "component_mpn": null,
+        "contract_evidence_id": "ESPRESSIF_S3_LCD_EV_BOARD",
+        "source_url": "https://dl.espressif.com/dl/schematics/SCH_ESP32-S3-LCD-Ev-Board-MB_V1.5_20231009.pdf",
+        "source_tier": "manufacturer_official",
+        "manufacturer": "Espressif Systems",
+        "sha256": "384f0639b2c38e90e0065ec80722c2dd801d1f69476f85465d02e834a8915fd3",
+        "size_bytes": 1607358,
+        "retrieved_at": "2026-09-02T01:55:25Z",
+        "pdf_metadata": {
+          "header": "%PDF-1.4"
+        },
+        "redistribution_status": "TO_VERIFY",
+        "binary_committed": false,
+        "manufacturer_verification": "official dl.espressif.com distribution; classified per the 2026-09-02 Owner adjudication: authoritative_reference_design / exact_component_evidence=false (source classification recorded in manifest notes)"
+      }
+    ],
+    "w4a_collision_1": {
+      "date": "2026-09-02",
+      "owner_ruling": "metadata-only freeze: all six remote evidence records carry redistribution TO_VERIFY, so binaries are NOT committed to the repository; provenance (URL / sha256 / size / retrieved_at / PDF metadata) is pinned in metadata.remote_evidence instead",
+      "missing_requirements_policy": "all six missing_requirements intentionally remain (no premature clearing): local frozen evidence is still absent, and per the reviewer implementation note a TO_VERIFY remote source must not masquerade as a local frozen file",
+      "power_contract_draft": "gates/contracts/edd001_power_contract_v1.json (+ evidence/contracts mirror), DRAFT status, evidence-first per DS41326 Rev. 3-2; a DRAFT does not satisfy EDD001_POWER_CONTRACT"
+    }
+  }
 }

@@ -1,0 +1,53 @@
+task: GH-31
+
+base:
+  branch: master
+  sha: d2a2ced46ea4fc65b17c831160c59c671cdb2973
+
+goal: |
+  Make tests/test_requirements_runtime_server.py's HTTP client calls resilient
+  to the transient connection failure observed under Python 3.13 (2 failures
+  out of 6 total runs across two machines/interpreters; 0 failures across
+  repeated runs under the required Python 3.9). Root cause not fully pinned
+  down (HTTPServer binds synchronously in __init__, so it isn't an obvious
+  listen-before-serve race) - fix targets robustness, not a proven single
+  cause.
+
+scope: |
+  In scope: tests/test_requirements_runtime_server.py only - add a small
+  bounded retry around the client-side urlopen call in _post(), so a
+  transient connection hiccup doesn't fail the test outright.
+  Out of scope: gates/requirements_runtime_server.py (server implementation)
+  unless the retry approach turns out to be insufficient; no change to any
+  other test file; no change to server behavior/response semantics.
+
+dependencies: []
+
+allowed_paths:
+  - tests/test_requirements_runtime_server.py
+
+forbidden_paths:
+  - gates/**
+  - docs/evidence/**
+  - docs/compliance/**
+  - src/**
+  - sandbox_runtime/**
+
+acceptance: |
+  - Suite passes cleanly under py -3.9 (already does, used as baseline).
+  - Suite run 10x in a row under py -3.13 with zero failures (vs. baseline
+    ~2/6 failure rate observed pre-fix).
+  - No change to what the tests actually assert - only how the client
+    tolerates a transient connection failure while making the request.
+
+change_budget:
+  expected_files: 1
+  expected_modules: [tests]
+  cross_module: false
+  contract_change: false
+  evidence_semantics_change: false
+
+exceptions: {}
+
+escalation:
+  owner: Percy

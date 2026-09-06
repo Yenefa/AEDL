@@ -259,7 +259,7 @@ GitHub 模板：`.github/ISSUE_TEMPLATE/task.md`、`.github/PULL_REQUEST_TEMPLAT
 ## 5. 当前活动任务（Wave 4，2026-09-01 发卡）
 
 - **COLLAB-BASELINE**：两人协作入口 → GitHub Issue #1 / Draft PR #6；分支 `codex/collaboration-onboarding`；已请求 `la4876949-bot` Review，状态 `PENDING_HUMAN_REVIEW`。
-- **TASK-W4A**：EDD-001 证据冻结 + POWER 合同草案 → GitHub Issue #2；`TO_ASSIGN`，身份核实前不得领取（难度★★）。
+- **TASK-W4A**：EDD-001 证据冻结 + POWER 合同草案 → GitHub Issue #2；**Owner：`Yenefa`**（2026-09-02 指派；碰撞 1 已交付：六份 provenance 元数据冻结 + POWER DRAFT，`PENDING_HUMAN_REVIEW`；难度★★）。
 - **TASK-W4B**：kicad-happy 六步 intake + 吸收方案 → GitHub Issue #3；Owner `la4876949-bot`，贡献分类 `AEDL_TEAM`（难度★★★）。
 - **TASK-W4C**：U3 ECO 准备 + 治理杂项 → GitHub Issue #4；旧文档属主为 ZCode 主会话，GitHub 真人 Owner `TO_ASSIGN`。
 - **SANDBOX-V3**：外部信任锚 + orchestrator 注入闭环 → GitHub Issue #5；与 Wave 4 硬件任务独立领取。

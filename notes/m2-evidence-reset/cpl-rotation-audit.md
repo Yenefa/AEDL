@@ -1,5 +1,10 @@
 # M2 CPL 旋转审计报告（打板前核对）
 
+> ⚠️ **过期提示（2026-09-03，AI-20260903-002）**：以下 2026-08-31 原文（rev1）的核心前提已过期——
+> D1 已在 AI-20260831-007（TASK-FIX-D1）极性三层修复中被原地旋转 180°，当前 PCB 与 CPL 均为
+> **180° 而非 0°**；且本机 KiCad 库（`C:\Users\fuker\...`）已不存在，rev1 §2 的库路径不再可用。
+> rev1 原文一个字未删，仅加本横幅；**现行有效结论见文末 §7（rev2，2026-09-03 数据级实测）**。
+
 > 日期：2026-08-31
 > 任务：TASK-CPL — 核对极性器件在 CPL（pos.csv）中的旋转角度是否会导致贴片方向错误
 > 方法：本机 KiCad footprint 库逐器件读 pin1/极性标记方位 + 比对 PCB 与 CPL 旋转 + 联网核实 JLC 约定
@@ -104,3 +109,69 @@ CPL 的 Rotation 告诉机器"把 JLC 库件转多少度对齐到我的 footprin
 - 搜索通道（豆包/Go 网关）均不可用是客观事实；JLC 数字偏移表未取到。
 - 未修改 pos.csv 或任何交付文件（本报告仅审计）。
 - 若 Fabrication Toolkit 重新导出后发现某件旋转值变化，应以新导出的 CPL 为准并重跑门禁。
+
+---
+
+# §7 rev2（2026-09-03，AI-20260903-002，WorkBuddy Worker 会话）
+
+> 任务卡 AEDL-CPL（AEW 派发）。方法变更：本机无 KiCad（旧机 `fuker` 路径不存在、无
+> `kicad-cli`、仓库无 `.kicad_mod`），按任务卡 §3.1 修正后的替代方案，改从 in-repo
+> `src/hardware/m2-board/m2_board.kicad_pcb` 直接解析 pad 坐标 + 网络名 + 丝印几何，
+> 数据级还原 footprint 0° 朝向。全部为本次实测读文件，非训练记忆。
+> 与 rev1 的关系：rev1 结论「全 0°」基于修复前的旧 PCB；D1 极性修复（AI-20260831-007）
+> 后 D1 已旋转 180°，rev2 以当前快照 `5c1dff5`/工作树为准重新逐器件核对。
+
+## 7.1 逐器件三要素对齐（6 器件，当前工作树实测）
+
+| 位号 | footprint 0° 朝向（pin1/极性标记方位 + 推断依据） | CPL Rotation | JLC 是否需修正 | 结论 |
+|---|---|---|---|---|
+| D1（LED 0603，KT-0603R/C2286） | 0° 时 pad1 在 -X（-0.7875,0）= **阴极 K**、pad2 +X=阳极 A；丝印极性条在 -X 侧（x=-1.485 竖线）；依据：PCB pad 坐标+网络（pad1→GND）+fp_line 丝印几何（`m2_board.kicad_pcb` L2967+） | **180.0**（pad1 落板坐标 +X 侧 GND 铜皮） | 无.rotation_correction_applied=false（manifest），无逐件偏移表 → `待核实`（7.3） | **PCB↔CPL 一致；极性方向已由 TASK-FIX-D1 全链修复并经人工复核（rev3 承认书冻结）→ 对** |
+| U2（SHT30，DFN-8-1EP/C2687423） | 0° 时 pin1=(-1.175,-0.75)=**左上角**（-X,-Y），pin1 角有实心三角丝印 fp_poly(-1.65,-1.05)；pin2=GND、pin4=SCL 左列，pin5=+3V3 右列，pin9=中心 EP 接 GND；依据：PCB pad 坐标+网络+丝印三角（L2276+） | 0.0 | 同上 `待核实` | **PCB↔CPL 一致；I²C/电源网络映射符合数据手册（既有 schematic_semantics PASS + polarity-verification §"U2 方向正确"）→ 对** |
+| U3（ME6211C33R5G，SOT-353/C235316） | 0° 时 pin1=(-0.8375,-0.65)=**左下角**，pin1-3 左列（+5V/GND/+5V），pin5 右下=+3V3；依据：PCB pad 坐标+网络（L966+） | 0.0 | 同上 `待核实` | **PCB↔CPL 一致；引脚序 pin1=VIN/pin2=GND/pin3=CE/pin5=VOUT 与 V20 datasheet 一致（AI-20260831-010 冻结原件人工核过）→ 对** |
+| J1（TYPE-C-31-M-12/C165948） | 0° 时 A1/B1 GND 焊盘列在 -Y（y=-4.045）一端，A4/A9/B4/B9=+5V、A5=CC1、B5=CC2、A6/B6=DP、A7/B7=DM；4 个 SH 屏蔽孔接地；依据：PCB pad 坐标+网络（L1886+） | 0.0 | 同上 `待核实` | **PCB↔CPL 一致；USB 极性（DP/DM/CC1/CC2）经 PIT-20260830-001 修复 + schematic_semantics PASS → 对** |
+| U1（ESP32-C3-WROOM-02/C2934560） | 0° 时 pin1=(-8.75,-6.0)=**左侧上端**（-X 列 pin1-9 自 -Y 向 +Y：3V3/EN/SDA/SCL/…/GND），pin10-18 右列，pin19=背面接地焊盘阵列；天线区在本地 -Y 端（courtyard 延伸至 y=-18.35）；依据：PCB pad 坐标+网络+courtyard 几何（L3454+） | 0.0 | 同上 `待核实` | **PCB↔CPL 一致；天线朝板边（board_review antenna 项按本地 -Y 判定）→ 对** |
+| 复核件：SW1/SW2（TS-1088R-02026/C455280） | 0° 时 pad1=-X（-2.225,0）、pad2=+X；无电子极性但有触点朝向；依据：PCB pad 坐标（L1493/L2720） | 0.0 / 0.0 | 同上 `待核实` | **PCB↔CPL 一致；机械件无贴反风险，rotation 无关紧要 → 对（低风险）** |
+
+复核件说明：任务卡第 6 件未指名，取 BOM 中剩余的两个非纯无源且带 pad1 语义的 SW1/SW2 补位（其余 R/C 为对称无源件，0°/180° 电气等效，不在极性风险内；C5/R7/R8/R9 的 90°/180° 旋转同为对称件摆放需要，已并入 §7.2 全量核对）。
+
+## 7.2 全量 21 行核对（CPL ↔ PCB 旋转逐位号一致）
+
+脚本解析 `m2_board.kicad_pcb` 全部 21 个 footprint 的 `(at x y rot)` 与 `delivery/pos.csv`
+逐行比对：**21/21 旋转完全一致，0 个 mismatch**；坐标 Y 满足 `pos_Y = -PCB_Y`
+（KiCad 位置文件 +Y-up → JLC CPL +Y-down 的标准翻转），X 完全相等。
+即：不存在「PCB 里转了、CPL 没转」或反之的内部错位；D1 的 180° 已正确带入 CPL。
+导出链复核：`gates/make_jlc_cpl.py` 仅做格式转换，Rotation **原样拷贝不修正**
+（docstring 明言 no rotation correction），`export_delivery.py` manifest 的
+`rotation_correction_applied: false` 与此一致——CPL 数字 = KiCad 旋转数字。
+
+## 7.3 JLC 旋转约定联网取证（本次新增出处）
+
+| 断言 | 状态 | 出处 |
+|---|---|---|
+| JLC CPL Rotation 列「正值为逆时针（Positive values are counter clockwise）」 | **已核实**（官方原文，WebFetch 抓取） | JLCPCB Help Center《Pick & Place File for PCB Assembly》：https://jlcpcb.com/help/article/46-pick-place-file-for-pcb-assembly |
+| JLC 官方文档未定义 0° 的参考朝向（pin1 位置无官方文字） | **已核实（缺席性事实）** | 同上页面全文：仅规定 Designator/Mid X/Mid Y/Layer/Rotation 四要素与 mm 单位，无 0° 定义 |
+| KiCad↔JLC 逐件旋转修正表（哪类封装偏多少度） | **待核实** | JLC 帮助中心多页抓取均无数字偏移表（PCBA Files Preparation 系列页面正文为空壳/账户限制页）；KiCad 官方 docs 对 .pos 文件 Rot 的符号约定未在可达章节内给出。社区工具（Bouni/kicad-jlcpcb-tools README 自认"JLCPCB seems to need corrected rotation information"，修正表源自 matthewlai/JLCKicadTools）**间接证明差异存在**，但表本体本轮未取到，不引用其数字 |
+| KiCad 侧 0° 朝向 = footprint 库文件原始朝向（pad 几何即 0°） | **已核实**（文件级事实） | S-expression `(at X Y [ANGLE])` 语义：ANGLE 为对象相对库文件原始几何的旋转角（dev-docs.kicad.org sexpr-intro「at token defines the positional coordinates and rotation of an object」）；本报告 7.1 的 0° 方位即库文件几何本身，不依赖外部库文件 |
+
+方向关系推论（第一性原理，7.3-1+7.3-4 组合）：KiCad 与 JLC 旋转同为 CCW 正号
+→ 同号无符号翻转问题；唯一系统性差异源是位置文件 Y 轴翻转（7.2 已实测存在于本链路），
+Y 翻转使 90°↔270° 语义互换、90°/270° 件在 JLC 预览中左右镜像，但 **0°/180° 不受影响**
+（0° 恒等；180° 在任何手性下都转到对侧）。本板 5 个极性件 + U1 + SW×2 全部落在
+{0°, 180°}，C5/R7/R8/R9 四个 90° 件均为对称无源件（0°/180°/90°/270° 电气等效），
+故 Y 翻转对**电气方向无影响**——这一推论把 rev1 §3 的定性判断升级为覆盖全 21 行的枚举结论。
+
+## 7.4 残余风险与兜底路径（沿 rev1 §4/§5，未变化的部分不再重写）
+
+- 残余风险不变：JLC 库件自身 pin1 朝向 vs KiCad footprint 是否一致（`待核实`，需 JLC 组件库数据）。
+- 兜底路径仍以 rev1 §5 两条为准：① Fabrication Toolkit 重导对比；② **下单前 JLC 装配预览目检（最低成本、ground truth）**。
+- 新增第 3 条（本轮顺带发现）：`delivery/pos.csv` 的 Y 取负映射与 0°/180° 全量一致性已被脚本核对，若未来重导 delivery，可直接重跑该核对（本会话脚本存于仓库外任务卡目录，未入仓）。
+
+## 7.5 rev2 结论（替代 rev1 §0 的一句话结论）
+
+**6 器件（D1/U2/U3/J1/U1/SW 复核）PCB↔CPL 旋转全部一致、全 21 行零错位、5 极性件+U1 全落 {0°,180°} 免疫 Y 翻转，已知系统性旋转错误类全部排除；JLC 官方"正值为逆时针"有出处，JLC 库件自身 pin1 朝向仍 `待核实`——打板前用 rev1 §5 路径②（装配预览目检）兜底。**
+
+## 附：rev2 诚实边界
+
+- 本机无 KiCad：`kicad-cli` 渲染、官方 `.kicad_mod` 直读、Fabrication Toolkit 实操均 NOT_RUN。
+- JLC 数字偏移表未取到：不影响本板结论的成立（全部落在免疫区间），但该表本身仍是 `待核实`。
+- 未改 `delivery/pos.csv` 及任何交付文件；冻结证据零触碰；本报告为 rev1 的追加修订（rev1 原文未删改一字，仅加横幅）。

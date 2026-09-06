@@ -60,6 +60,14 @@
 - 下一步（交人工）：① 按 datasheet_contract 34 项 BLOCK 逐项取证，优先 D1（KT-0603R/C2286 datasheet，反向耐压未知）与 J1（TYPE-C-31-M-12/C165948 mechanical drawing）——本环境 LCSC 直链 TLS 拦截，需人工下载后放入 `evidence/datasheets/` 并更新 manifest sha256；② U3 电源：400mA@SOT353 声明仅有 V20 出处（本地只取到 V14，V14 无按封装电流表且 features 写 500mA@4.3V），两版冲突须按最终版 datasheet 定案；5V→3.3V 压差 1.7V×150mA≈255mW 已触 SOT-353 250mW absmax，热复核或换 ≥1A 级电源方案（正式选型流程）前保持 BLOCK；③ U1/U2 各项 check_evidence 需工程师对照 datasheet 签发后才能转绿。
 - 补记（AI-20260831-010，同会话）：两份原件已补取冻结，上条①②的取证阻塞已消除大半——① ME6211 V20 原件经 LCSC 直链取到（上轮 TLS 拦截为瞬态），865046 B，sha256 23084e9d…fae5e6，逐页核对为真：p9『ME6211C33 (SOT343R, FBP1*1-4L, SOT353)』I_OUTMAX=400mA（同页标准封装表 500mA）、p5 SOT353 Pd=250mW，人工裁决获一手背书，合同 fact_verification 升级 verified_locally_from_frozen_original；② TYPE-C drawing 从 elecfans 镜像提取到原始 PDF，118108 B，sha256 ef0e00dd…0294b（16-pin/0.5mm pitch/20V/-30~+80C/280C 10s/PCB EDGE/RECOMMEND P.C.B LAYOUT），**但水印/标题栏为 HIROSE，与 BOM 制造商 Korean Hroparts Elec（HRO）不符**——疑似仿制厂文档或镜像站误标，已标 FROZEN_PROVENANCE_QUESTIONABLE，只作几何参考，签发须取得 HRO 官方图纸（此前预警的同名仿制风险在此具象化）。门禁重跑：DS1 清零，datasheet_contract 余 32 项，全部为待人工签发类别。
 
+### AEDL-R1 渲染图新鲜度门禁——现状核实 + AECP 流程交付（AI-20260903-001，WorkBuddy Worker 会话，2026-09-03）
+- 做了什么：领取 AEW 任务 AEDL-R1（TASK-R1）。开工核实发现：TASK-R1 领地内的全部实现（`tools/board_review.py` kicad-cli 渲染步骤 + `render_evidence` 写入、`gates/gate_core.py::validate_render_evidence` 四项 sha256 检查、`gates/run_gates.py::_evaluate_board_review` 挂载、`tests/test_board_review.py::RenderEvidenceTests` 6 用例）**已由上节 AI-20260831-007（Qoder）完成**并随 tarball 快照进入本地 master `5c1dff5`。按 COLLABORATION §0.3 撞车仲裁停手，不重做不覆盖，转为现状核实 + AECP 流程交付：生成 `tasks/AEDL-R1.yaml`（envelope，base.sha=5c1dff5，allow_dirty 预授权 granted_by=Yenefa）→ admit ADMIT → dev_gate 全 pass（exit 0，binding 用 admit 回执绑定 envelope+HEAD）→ Review Bundle 生成（`review-bundles/master/`，base=HEAD，changed 仅 2 个流程文件）→ 台账 AI-20260903-001。
+- 验证（真实运行）：`unittest tests.test_board_review` 18/18（含 render_evidence 4 类失败用例）；全量 322/322 零回归；`gates/run_gates.py` 如实记录快照现状——board_review FAIL 列表含 `render_evidence pcb_sha256 does not match the current PCB (render images are stale)`，即门禁对"PCB 已变、图未重渲"的 fail-closed **实测命中**（快照 PCB 与 8-31 渲染证据天然失配，非篡改演练；ops/schematic 语义哈希漂移、datasheet 32 项待签、kicad-cli 缺失均为既有状态）；另以临时目录副本演练"手动改 PCB 不重渲 → 报 pcb_sha256 失配、新鲜证据 → 无 error"闭环，冻结证据零触碰。run_gates 的 4 个 `*_current.json` 运行副作用已还原。
+- 已知限制 / 工具缺口（如实报告）：① 真实 kicad-cli 重渲与 `board_review.py` 端到端 NOT_RUN（本机无 KiCad）；② `tools/make_review_bundle.py` L326 的 origin/master 探测在无远端快照仓上抛异常，CLI 的"否则用 HEAD"回退不可达——本会话不改 FOREIGN 代码，直接以 base=HEAD 调 `build_bundle()` 走文档化回退生成 bundle，修法建议留给工具 Owner（`has_master` 探测改用 `git_ok` 式 rc 容错）；③ run name 取 `run_name_from_branch("master")`="master"，bundle 落 `review-bundles/master/`。
+- 下一步（交人工）：① 审阅 `tasks/AEDL-R1.yaml` + admit/dev_gate/bundle 产物，确认 AEDL-R1 以"已实现+已验证"状态关闭；② 在有 KiCad 的机器跑 `py -3 tools\board_review.py` 重渲并刷新 render_evidence（当前快照证据对当前 PCB 是过期态，board_review 门禁会如实 FAIL 直到重渲）；③ `manufacturing_release` 重签与 datasheet 签发仍独立保留。
+- 补记（同日，人工问询后复查）：① 自查发现首轮 dev_gate 回执跑在 HANDOFF 补写之前、事后改树未重新 admit——已重走 envelope 补授权（`docs/HANDOFF.md`，依据 COLLABORATION §2 追加型文件）→ 重 admit（ADMIT，envelope `54c372710b43…`）→ 重 gate，详见台账 AI-20260903-001 补记；② admit/gate 回执已按上批惯例拷入 `review-bundles/master/`（此前 bundle receipt 区为空）；③ 最终 gate scope_check 如实报 1 项 finding：`.aew/focus.json` 为 **AEW 决策层自有状态目录**（`aew/state.py` 文档化，主会话 23:03 并行写入，内容为"R1 已实现+已验证勿重派"），本会话未写、未删、未入 envelope，报大统领裁决（如收纳 .gitignore）。
+- 补记二（同日，人工 Review "通过 + 3 必修"后执行）：① 必修#1 `.aew/` 隔离：`/.aew/` 入 `.gitignore`，独立 housekeeping commit **`a7b6a2c`**（人工批准的 repo 变更，非"顺手改"）；② 必修#3 envelope v3：allowed_paths 9 → **3**（least-privilege：仅 AI_USAGE_LOG / HANDOFF / envelope 本体；领地代码降为只读验证），change_budget 同步，base.sha 重锚 `a7b6a2c`；③ 必修#2 审计定性：历史回执代际以台账 AI-20260903-001 补记二为权威——首轮（envelope `bd4557…`，gate exit 0）与二轮（envelope `54c372…`，scope FAIL on `.aew/`）均 **SUPERSEDED**，v3 envelope 的 admit/gate 回执为唯一 **authoritative**（随 bundle 归档）；本小节此前叙述的"dev_gate 全 pass（exit 0）"指首轮 SUPERSEDED 代，读账时以补记二为准。
+
 ## 当前状态（2026-08-31，AI-20260831-002 会话末）
 
 **一键门禁现为 10 gate**（新增 requirements_contract，见下）：9 PASS + board_review FAIL（仍仅为 `manufacturing_release=false` 等待人工重签，与 AI-20260830-002 交接时语义一致，零回归）。
@@ -207,3 +215,9 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
   `tools/probe_pads.py`（freerouting_run2/3.log、g4_drc_probe.json 此前已不存在）。
 - （P3 会话补，2026-08-31）GitHub 克隆 KiCadAI 这类深路径仓库在 Windows 检出会因路径
   长度失败（exit 128），需 `git clone -c core.longpaths=true`。
+- （2026-09-03，人工指令，优先级依据 AGENTS.md §0 第 1 条：人类明确指令 > 规范默认值）
+  Review Bundle 收藏位迁到桌面：`C:\Users\Ryan Gosling\Desktop\Bundle-Lap\`（一 run 一子夹
+  + `INDEX.md` 索引），因默认位 `<repo 父目录>\review-bundles\<run>\` 埋在 WorkBuddy 深路径
+  不便人工查阅。**权威生成位不变**（仍是 CONTROL_PLANE §8 的仓库外 `review-bundles/`，
+  不进 git，.patch 基线可回溯）；收藏位收审查用副本。会话收尾惯例：生成 → 拷一份到
+  Bundle-Lap → INDEX.md 加一行。
