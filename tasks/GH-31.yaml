@@ -58,6 +58,11 @@ exceptions:
   allow_dirty:
     granted_by: Yenefa
     decision_ref: "大统领 2026-09-06 指令「进军 Issue #31 / PR #33」（本会话定稿收尾）+ R1/CPL/W1-Y1 先例"
+  # amendment 2 (2026-09-07): master 并行合并（W1 批次）后 base 需再重锚；
+  # 44bcea9 为 merge origin/master 后的验证终态 HEAD（322 OK + gate pass），照 CPL rebaseline 先例。
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "大统领 2026-09-06 指令「进军 Issue #31 / PR #33」延续（PR #33 冲突解决收尾）+ AEDL-CPL rebaseline 先例"
 
 escalation:
   owner: Percy
