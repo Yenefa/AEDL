@@ -54,7 +54,8 @@ AEDL 探索如何在明确的人类审批边界内，把自然语言需求转化
 
 ### AI Agent
 
-在产生任何实质贡献前，必须依次完整读取：
+新会话 / 新 clone 先读根目录 [AGENT_ONBOARDING.md](AGENT_ONBOARDING.md)：环境自检（autocrlf /
+Python 3.9 / uv / gh）、AECP 生命周期速查与红线。然后，在产生任何实质贡献前，必须依次完整读取：
 
 1. 根目录 [AGENTS.md](AGENTS.md)；
 2. [docs/HANDOFF.md](docs/HANDOFF.md)；

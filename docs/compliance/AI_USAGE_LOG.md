@@ -3081,6 +3081,42 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - AIC Score Target：`AI 与开源融合`（对应 `docs/competition/FUSION_MAP.md` "AI+开源"评分项的证据资产之一）
 - 最终状态：`PENDING_HUMAN_REVIEW`
 
+## AI-20260902-007
+
+- **台账 ID 改号说明（2026-09-06，PR #30 合并冲突解决时执行）**：本条目原领用
+  `AI-20260902-006`。PR #14 于 2026-09-06 先行合入 master 时，其条目已由 Yenefa 改号占用
+  `-006`，并在该条目的改号说明中明确裁定「开放 PR #30 所领 006 号在其合并时另改 **007**」。
+  本次按该裁定执行，改号为 **`AI-20260902-007`**；先合先占，与 W4A 004→005、W4B 005→006
+  同一先例。历史 commit message 中的 `[AI-20260902-006]` 不改写（改号事实以本说明为准）。
+  注：本条为 `20260902` 日序，与同日另行改号的 `AI-20260906-007`（PR #36）分属不同日期，不冲突。
+- 日期：2026-09-02
+- 任务名称：AGENT_ONBOARDING 引导文档（to AI coding agents）+ README 链接（重建版）
+- 模块/路径：
+  - `AGENT_ONBOARDING.md`（新增，仓库根）
+  - `README.md`（AI Agent 节加引导入口）
+  - 本台账本条目
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash`
+- 参与标签：DOCUMENT
+- 任务目标：让任何 AI coding agent（Claude Code / Codex / zcode / DSH / opencode / Hermes /
+  Trae / Work Buddy / Qoder / OpenClaw 等）clone 后按引导完成环境自检（autocrlf / Python 3.9 /
+  uv / gh）、必读顺序、AECP 生命周期速查与红线。
+- AI 实际产出：
+  - AGENT_ONBOARDING.md：0 身份与定位 / 1 环境自检 4 项命令 + dev_gate 基线 / 2 必读顺序 /
+    3 AECP 速查（含 `python -m tools.make_review_bundle`，引用 #24 工具）/ 4 红线 / 5 台账指针。
+- 版本沿革：首版曾标 AI-20260902-003（PR #28），与并行推进的 #25（Tasks 6-7 实现）撞号；
+  关闭重建于 master f53f2a8（#24/#25/#26 之后）；重建版初标 005 又与 #27（W4A Collision 1）
+  撞号，最终定号 006。内容取材自仓库既有规范（AGENTS.md / CONTROL_PLANE.md / README），
+  未发明新规则。
+- 团队自主部分：Yenefa 在席特殊授权（一路推进）下重建；撞号与并行撞车已如实记录。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 验证：`py -3 -m tools.dev_gate` exit 0（syntax / main 312 / sandbox 274 / secret_scan 307）；
+  `git diff --check` RC 0。
+- Compliance：Third-party none；ADR none。
+- AIC Score Target：`NONE`（内部协作引导，不包装成比赛创新）
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`（PR 待人工 review）
+
 ## AI-20260903-001
 - 日期：2026-09-03
 - 任务：AEDL-R1（渲染图新鲜度门禁，AECP 流程交付）
@@ -3212,7 +3248,13 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - AI 参与：DOCUMENT —— 入库执行与领地表挂接；方案内容为 Codex 会话产出，本会话未改其实质。
 - 人工审核：`PENDING_HUMAN_REVIEW`
 
-## AI-20260906-005
+## AI-20260906-010
+
+- **台账 ID 改号说明（2026-09-06，Percy 侧接管合并时执行）**：本条目原领用 `AI-20260906-005`，
+  与并行推进的 PR #40（P2 用户试用协议）撞号——该号在本条推送前已被占用。裁定：**本条改号为 `-010`**
+  （`-002`~`-009` 当日已占满），PR #40 保留 `-005` 不动。历史 commit message 中的
+  `[AI-20260906-005]` 不改写（改号事实以本说明为准，沿用 AI-20260902-005 先例）。
+  本日累计第四次并行撞号；顺序编号在多分支并行下系统性失效，建议改按作者编号，另议。
 
 - 日期：2026-09-06
 - 任务名称：Y4 实验方案 v1.0 → v1.1 修订入库 + 复核说明（人类指令「最新修订版重新提交」，在 PR #42 分支上更新）
