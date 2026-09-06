@@ -17,6 +17,21 @@ PIT-20260830-001 的根因不是修复能力不足，而是**没有独立真值�
 - 原件里读不到的，一律标 `TO_VERIFY`，**不脑补、不引用社区二手数据**。
 - 本目录的期望值**不对修复模型开放**，也不用于调提示词。
 
+### 1.1 核验状态（本目录当前整体为「候选」）
+
+本目录的条目由 **pypdf 机械提取**，按任务卡纪律，**模型抽取只是待审候选，不构成已核实事实**。因此每条事实带一个状态：
+
+| 状态 | 含义 |
+|---|---|
+| `AI_EXTRACTED_UNVERIFIED` | 已从原件机械提取并记录页码，**尚无人打开 PDF 目视确认** |
+| `HUMAN_VERIFIED` | 已有人打开原件、核对该页内容与本文摘录一致，并署名 |
+
+**当前全部条目为 `AI_EXTRACTED_UNVERIFIED`。** 核验清单见 §7.1。
+
+文本提取会出的错，重跑提取查不出来——**表格单元格错位**（例如把「0x44 = logic low」读成「= logic high」）、漏掉脚注中的适用条件、跨栏合并。这类错误只能靠人眼对着原件发现。
+
+已由机械手段排除的一类风险：**PDF 页序与文档印刷页码一致**（U1 第 11 页页脚 `Espressif Systems 11`；U2 第 9 页页脚 `9/22`），引用不存在 off-by-one 偏移。
+
 ## 2. 来源等级
 
 | 等级 | 含义 | 本轮涉及 |
@@ -29,7 +44,9 @@ PIT-20260830-001 的根因不是修复能力不足，而是**没有独立真值�
 
 ## 3. U1 — ESP32-C3-WROOM-02-N4
 
-**来源 A**：`src/hardware/m2-board/evidence/datasheets/U1_ESP32-C3-WROOM-02/esp32-c3-wroom-02_datasheet_en.pdf`（47 页，PDF CreationDate `D:20260305022759Z`）
+**来源 A**：`src/hardware/m2-board/evidence/datasheets/U1_ESP32-C3-WROOM-02/esp32-c3-wroom-02_datasheet_en.pdf`
+**版本：`v1.7`**（页眉原文 `ESP32-C3-WROOM-02 & WROOM-02U Datasheet v1.7`；47 页，PDF CreationDate `D:20260305022759Z`）
+**页码基准**：PDF 页序 **=** 文档印刷页码（第 11 页页脚为 `Espressif Systems 11`，12/13 页同），本节引用无偏移。
 **来源 B**：同目录 `esp32c3_schematic_checklist_power_supply_2026-08-31.html`（乐鑫原理图检查清单，2026-08-31 抓取）
 
 ### F-U1-01　USB 差分对引脚身份　【强制事实 · A】
@@ -96,7 +113,9 @@ PIT-20260830-001 的根因不是修复能力不足，而是**没有独立真值�
 
 ## 4. U2 — SHT30-DIS-B10KS
 
-**来源 A**：`src/hardware/m2-board/evidence/datasheets/U2_SHT30-DIS-B10KS/Sensirion_SHT3x_DIS_datasheet.pdf`（22 页）
+**来源 A**：`src/hardware/m2-board/evidence/datasheets/U2_SHT30-DIS-B10KS/Sensirion_SHT3x_DIS_datasheet.pdf`
+**版本：`December 2022 – Version 7`**（页脚原文 `www.sensirion.com December 2022- Version 7 9/22`；共 22 页）
+**页码基准**：PDF 页序 **=** 文档印刷页码（第 9 页页脚为 `9/22`），本节引用无偏移。
 
 ### F-U2-01　ADDR 引脚不得悬空　【强制事实 · A，手册两处明文】
 
@@ -179,10 +198,28 @@ PIT-20260830-001 的根因不是修复能力不足，而是**没有独立真值�
 | ⑤ 缺 EN 1µF | F-U1-02（强制不得悬空）+ F-U1-03（建议 RC） | ✅ 两级要求须区分 |
 | ⑥ U3 资料不足 → 拒绝修复 | §6 | ✅ 缺失属实，应保持 BLOCKED |
 
+## 7.1 人工核验清单
+
+核验方式：打开对应 PDF，翻到该页，**目视确认本文摘录与页面内容一致**，重点看表格是否被提取工具错位。确认后把状态改为 `HUMAN_VERIFIED` 并署名。
+
+| 事实 | 原件 | 页 | 核验要点 | 状态 | 核验人 |
+|---|---|---|---|---|---|
+| F-U1-01 USB 差分对身份 | U1 v1.7 | 11 | **IO18 是否对 USB_D−、IO19 是否对 USB_D+**（若这两行被读反，DC-01 的答案就是错的） | `AI_EXTRACTED_UNVERIFIED` | |
+| F-U1-02 EN 不得悬空 | U1 v1.7 | 11 | `Note:` 原文是否确为 "Do not leave the EN pin floating" | `AI_EXTRACTED_UNVERIFIED` | |
+| F-U1-03 EN 的 RC | checklist HTML | — | 措辞是否确为 `advised`（而非 must/shall）；R/C 取值 | `AI_EXTRACTED_UNVERIFIED` | |
+| F-U1-04 USB 串阻 | checklist HTML | — | 措辞是否确为 `recommended`；**并确认 U1 datasheet 原件里确实没有此条**（这是 DC-03 判定的基础） | `AI_EXTRACTED_UNVERIFIED` | |
+| F-U1-05 Strapping 默认 | U1 v1.7 | 12 | Table 4-1 中 **GPIO9 是否确为 Weak pull-up / Bit 1**（DC-04 的判定基础） | `AI_EXTRACTED_UNVERIFIED` | |
+| F-U1-06 启动模式 | U1 v1.7 | 13 | Table 4-3 各列是否对齐（表格易错位） | `AI_EXTRACTED_UNVERIFIED` | |
+| F-U2-01 ADDR 不得悬空 | U2 Ver.7 | 8, 9 | 两处原文是否都在 | `AI_EXTRACTED_UNVERIFIED` | |
+| F-U2-02 地址映射 | U2 Ver.7 | 9 | **Table 8：0x44 是否确对 logic low、0x45 对 logic high**（读反则 DC-02 全错） | `AI_EXTRACTED_UNVERIFIED` | |
+| F-U2-03 引脚定义 | U2 Ver.7 | 8 | 引脚号与名称是否逐行对应 | `AI_EXTRACTED_UNVERIFIED` | |
+
+**三条最要紧**（读反会让下游案例的标准答案整体错误）：**F-U1-01**、**F-U2-02**、**F-U1-05**。时间有限就先核这三条。
+
 ## 8. 本轮明确未做
 
 - 未从来源 C（J1 镜像图纸）提取任何事实。
-- 未核实 U1 datasheet 的版本号字段（PDF 无 `/Title`，仅有 CreationDate；**版本号 `TO_VERIFY`**）。
+- ~~未核实 U1 datasheet 版本号~~ **已解决**：版本印在每页页眉（U1 `v1.7`、U2 `December 2022 – Version 7`），PDF 元数据无 `/Title` 不代表版本不可得——原记载是查得不够。
 - 未覆盖 D1、SW1/SW2、无源件参数——本轮范围限定为两类修复所需的最小事实集。
 - 未做任何设计判断或修复建议；本目录只陈述手册事实。
 
