@@ -26,7 +26,9 @@ PIT-20260830-001 的根因不是修复能力不足，而是**没有独立真值�
 | `AI_EXTRACTED_UNVERIFIED` | 已从原件机械提取并记录页码，**尚无人打开 PDF 目视确认** |
 | `HUMAN_VERIFIED` | 已有人打开原件、核对该页内容与本文摘录一致，并署名 |
 
-**当前全部条目为 `AI_EXTRACTED_UNVERIFIED`。** 核验清单见 §7.1。
+**当前进度（2026-09-06）**：9 条中 **6 条已由 Percy 人工核验通过**（F-U1-01/02/05/06、F-U2-01/02/03，覆盖 U1 第 11/12/13 页与 U2 第 8/9 页，逐页对照原件，**无误**）。**下游三个关键判定所依赖的事实全部已核**：F-U1-01（DC-01）、F-U2-02（DC-02）、F-U1-05（DC-04）。
+
+未核验的 3 条见 §7.1：F-U1-03（p34）、F-U1-04（图形内容）、F-U1-05b（p22 的 45 kΩ）。
 
 文本提取会出的错，重跑提取查不出来——**表格单元格错位**（例如把「0x44 = logic low」读成「= logic high」）、漏掉脚注中的适用条件、跨栏合并。这类错误只能靠人眼对着原件发现。
 
@@ -220,15 +222,16 @@ R_PD  Internal weak pull-down resistor  —  45  —  kΩ
 
 | 事实 | 原件 | 页 | 核验要点 | 状态 | 核验人 |
 |---|---|---|---|---|---|
-| F-U1-01 USB 差分对身份 | U1 v1.7 | 11 | **IO18 是否对 USB_D−、IO19 是否对 USB_D+**（若这两行被读反，DC-01 的答案就是错的） | `AI_EXTRACTED_UNVERIFIED` | |
-| F-U1-02 EN 不得悬空 | U1 v1.7 | 11 | `Note:` 原文是否确为 "Do not leave the EN pin floating" | `AI_EXTRACTED_UNVERIFIED` | |
+| F-U1-01 USB 差分对身份 | U1 v1.7 | 11 | **IO18 是否对 USB_D−、IO19 是否对 USB_D+**（若这两行被读反，DC-01 的答案就是错的） | `HUMAN_VERIFIED` | Percy |
+| F-U1-02 EN 不得悬空 | U1 v1.7 | 11 | `Note:` 原文是否确为 "Do not leave the EN pin floating" | `HUMAN_VERIFIED` | Percy |
 | F-U1-03 EN 的 RC | **U1 v1.7**（更正） | **34** | 措辞是否确为 `advised`/`recommended`（而非 must/shall）；R/C 取值。**本条来源等级已由 B 更正为 A** | `AI_EXTRACTED_UNVERIFIED` | |
 | F-U1-04 USB 串阻 | checklist HTML | — | 措辞是否确为 `recommended`。datasheet 无此条已由机械检索复核（见 F-U1-04 正文）；**剩余需人眼的部分**：p34 Figure 9-1 参考原理图中 IO18/IO19 上是否真的没有串阻（图形内容检索读不到） | `AI_EXTRACTED_UNVERIFIED` | |
-| F-U1-05 Strapping 默认 | U1 v1.7 | 12（+ **22**） | Table 4-1 中 **GPIO9 是否确为 Weak pull-up / Bit 1**（DC-04 的判定基础）；p22 电气特性表内部上下拉是否确为 **45 kΩ** | `AI_EXTRACTED_UNVERIFIED` | |
-| F-U1-06 启动模式 | U1 v1.7 | 13 | Table 4-3 各列是否对齐（表格易错位） | `AI_EXTRACTED_UNVERIFIED` | |
-| F-U2-01 ADDR 不得悬空 | U2 Ver.7 | 8, 9 | 两处原文是否都在 | `AI_EXTRACTED_UNVERIFIED` | |
-| F-U2-02 地址映射 | U2 Ver.7 | 9 | **Table 8：0x44 是否确对 logic low、0x45 对 logic high**（读反则 DC-02 全错） | `AI_EXTRACTED_UNVERIFIED` | |
-| F-U2-03 引脚定义 | U2 Ver.7 | 8 | 引脚号与名称是否逐行对应 | `AI_EXTRACTED_UNVERIFIED` | |
+| F-U1-05 Strapping 默认 | U1 v1.7 | 12 | Table 4-1 中 GPIO9 = Weak pull-up / Bit 1 | `HUMAN_VERIFIED` | Percy |
+| F-U1-05b 内部上下拉阻值 | U1 v1.7 | 22 | 电气特性表内部上下拉是否确为 **45 kΩ** | `AI_EXTRACTED_UNVERIFIED` | |
+| F-U1-06 启动模式 | U1 v1.7 | 13 | Table 4-3 各列是否对齐（表格易错位） | `HUMAN_VERIFIED` | Percy |
+| F-U2-01 ADDR 不得悬空 | U2 Ver.7 | 8, 9 | 两处原文是否都在 | `HUMAN_VERIFIED` | Percy |
+| F-U2-02 地址映射 | U2 Ver.7 | 9 | **Table 8：0x44 是否确对 logic low、0x45 对 logic high**（读反则 DC-02 全错） | `HUMAN_VERIFIED` | Percy |
+| F-U2-03 引脚定义 | U2 Ver.7 | 8 | 引脚号与名称是否逐行对应 | `HUMAN_VERIFIED` | Percy |
 
 **三条最要紧**（读反会让下游案例的标准答案整体错误）：**F-U1-01**、**F-U2-02**、**F-U1-05**。时间有限就先核这三条。
 
