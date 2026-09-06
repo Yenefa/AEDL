@@ -176,3 +176,43 @@
 - 是否再分发：否（依赖声明，不随仓库分发源码）
 - AEDL 自研边界：三层沙盒（Design/Execution/Trust）、协议 V2、策略引擎、信任存储、promotion 真值表全部自研；LangGraph 仅为外层循环载体
 - 关联模块：sandbox_runtime/
+## RES-010
+
+- 名称：EDD-001 组件证据远程来源（六份，W4A Collision 1）
+- 类型：第三方文档（数据手册 ×5 + 参考设计原理图 ×1，均为 provenance-pinned 远程来源）
+- 版本：见下述逐份 sha256；AP63203 为 Diodes DS41326 Rev. 3-2（2024-11）
+- 来源：
+  - ESP32-S3-WROOM-1 datasheet — Espressif 官方
+    （`https://documentation.espressif.com/esp32-s3-wroom-1_wroom-1u_datasheet_en.pdf`，
+    sha256 27d71971…，1280501 B，UTC 2026-09-02T01:28:49Z）
+  - AP63203WU-7 datasheet — Diodes Incorporated 官方文档的 LCSC C780769 托管副本
+    （`https://datasheet.lcsc.com/datasheet/pdf/94820cc9e44613233ddcc1a15801eca3.pdf?productCode=C780769`，
+    sha256 ef99daa3…，1226090 B，UTC 2026-09-02T01:33:36Z）
+  - TYPE-C-31-M-12 drawing — Korean Hroparts Elec 官方图纸的 LCSC C165948 托管副本
+    （`https://datasheet.lcsc.com/datasheet/pdf/9e56b777c022540fcce7c7f67825f55e.pdf?productCode=C165948`，
+    sha256 6ae33d50…，118176 B，UTC 2026-09-02T01:32:27Z；全文零 HIROSE/elecfans 标记）
+  - USBLC6-2SC6 datasheet — ST 官方
+    （`https://www.st.com/resource/en/datasheet/usblc6-2.pdf`，
+    sha256 bc30154f…，575521 B，UTC 2026-09-02T01:28:52Z）
+  - SS34 datasheet — MDD (Microdiode) 官方文档的 LCSC C8678 托管副本
+    （`https://datasheet.lcsc.com/datasheet/pdf/dfa1ff67dea875d0135103ba9ada713a.pdf?productCode=C8678`，
+    sha256 fb497087…，1300729 B，UTC 2026-09-02T01:32:29Z）
+  - ESP32-S3-LCD-EV-Board-MB V1.5 原理图 — Espressif 官方（参考设计证据）
+    （`https://dl.espressif.com/dl/schematics/SCH_ESP32-S3-LCD-Ev-Board-MB_V1.5_20231009.pdf`，
+    sha256 384f0639…，1607358 B，UTC 2026-09-02T01:55:25Z）
+- License / 授权类型：`TO_VERIFY`（SS34 与 TYPE-C 两份 PDF 未核实到明确的再分发授权——
+  授权原文以各自 PDF 为准，未逐字复核前不作"均有版权声明"的强表述；保守结论不变：
+  再分发边界 TO_VERIFY、binary 不入仓。四份已复核文档为保留权利式版权声明）
+- 融合角色：SUPPORT（EDD-001 证据链输入；POWER DRAFT 合同的事实基础）
+- 用途与使用方式：provenance 冻结（URL/sha256/bytes/retrieved_at/PDF 元数据登记于
+  `src/hardware/edd001-board/evidence/sandbox_bundle_manifest_v1.json` 的
+  `metadata.remote_evidence`）；为 POWER 合同草案（`gates/contracts/edd001_power_contract_v1.json`，
+  DRAFT）提供 evidence-first 输入
+- 是否修改上游源码：否
+- 是否随 AEDL 再分发：**否**——Owner 裁定（2026-09-02）：redistribution TO_VERIFY 期间
+  binary 不入仓，仅元数据冻结；公开前须逐份复审再分发边界
+- AEDL 自研边界：六份均为第三方文档；本地二进制副本暂存于仓库外（不入 git）
+- 合规状态：`TO_VERIFY`
+- 关联模块：`src/hardware/edd001-board/evidence/sandbox_bundle_manifest_v1.json`、
+  `gates/contracts/edd001_power_contract_v1.json`（DRAFT）
+- 关联 AI Usage：AI-20260902-005（原 004，撞号改号，见台账该条目说明）；关联 Evidence：EVID-20260902-002

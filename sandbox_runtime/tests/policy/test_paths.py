@@ -27,9 +27,13 @@ class PathContainmentTests(unittest.TestCase):
             real = base / "real"
             real.mkdir()
             link = base / "link"
+            # cmd.exe emits localized ANSI/OEM-codepage bytes (never UTF-8);
+            # text=True without an errors strategy crashed a subprocess reader
+            # thread inside the gate (review iteration 4, 2026-09-02). Only the
+            # return code drives logic, so undecodable bytes are replaced.
             result = subprocess.run(
                 ["cmd", "/c", "mklink", "/J", str(link), str(real)],
-                capture_output=True, text=True,
+                capture_output=True, text=True, errors="replace",
             )
             if result.returncode != 0:
                 self.skipTest(f"junction creation failed: {result.stderr}")

@@ -36,3 +36,7 @@ notes/open_source_intake/_circuitbot_venv/
 notes/open_source_intake/_neuroboard_repo/
 spike/
 spike_stage2/
+
+# AEW 决策层本地运行状态（AEW Hub/focus 等个人 memory，非 AEDL 工程产物，
+# 不入 task scope；裁决来源：AEDL-R1 人工 Review 2026-09-03 必修#1）
+/.aew/

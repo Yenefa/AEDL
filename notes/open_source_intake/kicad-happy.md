@@ -145,4 +145,4 @@ DFM-001/002（环宽 0.1mm）的严重程度依赖嘉立创的实际工艺能力
 - 综述文档未提及供应商集成 skills（digikey/element14/jlcpcb/lcsc/mouser/pcbway）范围——本报告新发现，`未核实`具体实现，建议单独立项评估，可能与 AEDL 自己的 `jlcpcb-mcp` 工具链有重叠或互补关系。
 - 本报告新增（综述文档未做）：对 AEDL 真实 M2 板硬件文件的实际执行验证，产出 34 条具体 finding，并逐条与 AEDL 现有 `tools/board_review.py`/`gates/schematic_semantics.py` 做了真实碰撞分析，而非仅基于代码阅读的推测性判断。
 
-（本文件为内部工作分析，按 AGENTS.md 留痕规则，关联 AI-20260902-005，Issue `Yenefa/AEDL#3`，PENDING_HUMAN_REVIEW。Review Bundle: 见随 PR 附带的 bundle_manifest。）
+（本文件为内部工作分析，按 AGENTS.md 留痕规则，关联 AI-20260902-006，Issue `Yenefa/AEDL#3`，PENDING_HUMAN_REVIEW。Review Bundle: 见随 PR 附带的 bundle_manifest。）
