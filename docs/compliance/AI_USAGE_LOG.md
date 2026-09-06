@@ -3231,3 +3231,19 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - AI 参与：ZCode（GLM）DOCUMENT —— 结构化改写与入库执行；任务内容来源为人类与
   Percy 会话（Claude）已确认的 W1 任务卡与既档研究材料，不新增技术主张。
 - 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260906-004
+
+- 日期：2026-09-06
+- 任务名称：Y4 预注册实验方案入库（AI vs Script 实验设计，人类指令「上传上去免得以后没方案」）
+- 模块/路径：
+  - `docs/competition/internal/AEDL_W1_Y4_AI_vs_Script_实验方案.md`（新增，Codex 会话 2026-09-06
+    产出；加 INTERNAL banner；37 条轨迹设计/预算/指标/失败归因表/W3 投入判据/结果模板，
+    实验结果 NOT_RUN）
+  - `docs/competition/internal/W1_TASKS_20260907.md`（TASK-Y4 增预注册方案引用行）
+  - `docs/competition/internal/W1_CARD_Yenefa_20260907.md`（Y4 同步引用）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 说明：随附摘要文件 `Y4.md` 为同一方案的对话摘要，无独有信息，未入库。方案的独立验收细则
+  以 Percy P3/P4 交付为准；方案自身声明「依据 master@ed6dc61，P3/P4 目录尚未见，运行前须冻结」。
+- AI 参与：DOCUMENT —— 入库执行与领地表挂接；方案内容为 Codex 会话产出，本会话未改其实质。
+- 人工审核：`PENDING_HUMAN_REVIEW`
