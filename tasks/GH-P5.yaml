@@ -57,7 +57,19 @@ change_budget:
   contract_change: false
   evidence_semantics_change: false
 
-exceptions: {}
+exceptions:
+  allow_drift:
+    granted_by: Percy
+    decision_ref: |
+      W1/P5 session 2026-09-06. The drift is self-inflicted and benign: HEAD
+      differs from base.sha only because this envelope was committed onto the
+      task branch, and a file cannot contain the sha of its own commit. The
+      tree is otherwise exactly master@7daf86a. The repo's usual route (land
+      the envelope on master first, then branch from it) needs a direct push
+      to a shared branch, which the agent must not do unilaterally; the
+      escalation owner named in this envelope granted this exception instead.
+      Ledger precedent for a human-granted flag exception: AI-20260903-001
+      (allow_dirty, granted_by=Yenefa).
 
 escalation:
   owner: Percy
