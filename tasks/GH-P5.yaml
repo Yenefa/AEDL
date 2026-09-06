@@ -1,0 +1,63 @@
+task: GH-P5
+
+base:
+  # base.sha pins the real baseline (master @ 7daf86a). base.branch is set to
+  # the working branch because tools/admit.py compares this field against the
+  # CURRENT checked-out branch, not the eventual merge target; the PR still
+  # targets master.
+  branch: fix/p5-u3-footprint
+  sha: 7daf86a61423e26ca0a56fa9e2c19335c49c4930
+
+goal: |
+  W1 task card P5. tools/build_board.py maps U3 to Package_TO_SOT_SMD:SOT-23-5
+  while every authoritative source (intent_v1.json, ops_gen.json, BOM,
+  m2_component_contracts.json, board_review_v1.json) carries SOT-353 after the
+  C82942 -> C235316 substitution. Anyone regenerating the board from the
+  builder would silently reintroduce the pre-substitution footprint.
+
+  Fix the mapping and add a regression test that catches the CLASS of defect
+  ("builder footprint map disagrees with the design intent"), not just this
+  one reference.
+
+scope: |
+  In scope: correct the U3 entry in FP_MAP, and add a test asserting that for
+  every component where intent_v1.json declares a footprint, FP_MAP agrees.
+  Verified before starting that U3 is the only current mismatch (15 of 16
+  declared footprints already agree).
+  Out of scope: the 7 components intent does not declare a footprint for
+  (U1, U2, J1, SW1, SW2 and the two power flags) - adding those declarations
+  is a design-intent change, not a builder fix. No regeneration of the board.
+  No change to the schematic, PCB, BOM or any evidence file.
+
+dependencies: []
+
+allowed_paths:
+  - tools/build_board.py
+  - tests/test_build_board_footprints.py
+  - tasks/GH-P5.yaml
+  - docs/compliance/AI_USAGE_LOG.md
+
+forbidden_paths:
+  - src/hardware/**
+  - gates/**
+  - delivery/**
+  - notes/m2-evidence-reset/generated/**
+  - sandbox_runtime/**
+
+acceptance: |
+  - FP_MAP[U3] == Package_TO_SOT_SMD:SOT-353, matching intent_v1.json.
+  - A regression test fails if ANY builder footprint diverges from an
+    intent-declared footprint, verified by temporarily perturbing the map.
+  - Full main test suite stays green; no evidence or hardware file touched.
+
+change_budget:
+  expected_files: 4
+  expected_modules: [tools, tests, docs]
+  cross_module: false
+  contract_change: false
+  evidence_semantics_change: false
+
+exceptions: {}
+
+escalation:
+  owner: Percy
