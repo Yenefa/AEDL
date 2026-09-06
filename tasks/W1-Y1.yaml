@@ -1,0 +1,62 @@
+# Task Envelope — W1-Y1 范围冻结（hand-written from W1_TASKS 领地表 TASK-Y1，
+# 格式照 AEDL-CPL/AEDL-R1 先例；AEW v2.1 plan 只列 OPEN 任务，故不走序号生成）
+# Human review + admission required before execution.
+
+task: W1-Y1
+
+base:
+  branch: docs/w1-y1-scope-freeze
+  sha: 7daf86a61423e26ca0a56fa9e2c19335c49c4930  # 自 master PR #35 squash（7daf86a）分叉
+
+goal: |
+  Y1 范围冻结（W1_TASKS TASK-Y1，3h）——用文件形式冻结本期（W1，2026-09-07 ~ 09-12）
+  适用范围，防止范围蔓延：支持哪两类修复及各自边界、不支持什么、判定结果六态语义
+  （零覆盖不算通过）。同时落实同日人类指令：Y4 增测「AI 解释价值」维度。
+
+scope: |
+  Writable paths are whitelisted in allowed_paths; everything else is FOREIGN (read-only).
+  实现代码（src/gates/tools/tests/sandbox_runtime）与证据目录（notes/delivery）一概不改——
+  Y1 是纯治理文档任务，也是「Percy 不碰实现代码」角色纪律的实现侧对应物。
+
+dependencies: []
+
+allowed_paths:
+  - docs/competition/SCOPE_FREEZE_W1.md
+  - docs/competition/internal/W1_TASKS_20260907.md
+  - docs/competition/internal/W1_CARD_Yenefa_20260907.md
+  - docs/competition/internal/W1_CARD_Percy_20260907.md
+  - docs/compliance/AI_USAGE_LOG.md
+  - tasks/W1-Y1.yaml
+
+forbidden_paths:
+  - src/
+  - gates/
+  - tools/
+  - tests/
+  - sandbox_runtime/
+  - delivery/
+  - notes/
+
+acceptance: |
+  - SCOPE_FREEZE_W1.md 存在且写明：两类修复（信号接线关系 / 已核实器件参数）各自边界、
+    不支持清单（含后置去向）、六态判定语义（PASS/FAIL/UNKNOWN/NOT_RUN/TOOL_ERROR/
+    NOT_APPLICABLE，零覆盖不算通过）、E2 主指标 + AI 解释价值维度、范围变更协议
+  - Y4「AI 解释价值」增补同步进领地表与双人卡，评审方 = Percy（独立验收侧）
+  - 完成条件（任务卡原文）：范围文档经双方交叉复核 → 本 PR 即复核载体，PENDING_HUMAN_REVIEW
+  - 台账追加一条 AI-20260906-NNN，人工审核：PENDING_HUMAN_REVIEW
+  - dev_gate 绿；unittest discover -s tests 基线 322/322 零回归
+
+change_budget:
+  expected_files: 6
+  expected_modules: [docs, tasks]
+  cross_module: false
+  contract_change: false
+  evidence_semantics_change: false
+
+exceptions:
+  # Agent cannot self-authorize. Add allow_dirty / allow_drift / skip_deps
+  # only with a human-granted authority (permitted+authority or granted_by+decision_ref).
+  # 脏树来源 = envelope 本体未跟踪（admit 先于其余改动的必然状态），同 AEDL-R1 / AEDL-CPL 先例。
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "大统领 2026-09-06 指令「直接开 Y1」（本会话执行）+ AEDL-R1/CPL envelope 先例"

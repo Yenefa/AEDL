@@ -3149,3 +3149,26 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - AI 参与：ZCode（GLM）DOCUMENT —— 结构化改写与入库执行；任务内容来源为人类与
   Percy 会话（Claude）已确认的 W1 任务卡与既档研究材料，不新增技术主张。
 - 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260906-002
+
+- 日期：2026-09-06
+- 任务名称：W1-Y1 范围冻结（SCOPE_FREEZE_W1 v1.0 DRAFT）+ Y4「AI 解释价值」指标增补（人类同日指令）
+- 会话：ZCode 主会话（Yenefa 指令「直接开 Y1」，AECP 流程交付）
+- 模块/路径：
+  - `docs/competition/SCOPE_FREEZE_W1.md`（新增：两类修复边界 + 八项 out-of-scope 表 +
+    六态判定语义 + E2 主指标/AI 解释价值维度 + 角色领地重申 + 范围变更协议）
+  - `docs/competition/internal/W1_TASKS_20260907.md`（Y4 增补解释价值评估维度；Y1 状态行更新）
+  - `docs/competition/internal/W1_CARD_Yenefa_20260907.md` / `W1_CARD_Percy_20260907.md`
+    （Y4 指标同步；解释价值评审方 = Percy 独立验收侧）
+  - `tasks/W1-Y1.yaml`（envelope，手写自领地表，格式照 AEDL-CPL/R1 先例；base=7daf86a；
+    admit ADMIT，envelope sha256 05700f117a64da01，allow_dirty granted_by=Yenefa）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条）
+- AI 参与：DOCUMENT —— 范围文档起草（内容来源 = 任务卡 Y1 要求 + 策略矩阵 + 人类指令，
+  不新增技术主张）与流程执行；验收语义（六态/零覆盖）沿用任务卡既定定义。
+- 验证（真实运行）：`python -m tools.admit --envelope tasks/W1-Y1.yaml --allow-dirty` → ADMIT；
+  `python -X utf8 -S -m unittest discover -s tests` → 322/322 OK；`python -m tools.dev_gate`
+  → pass（回执随 bundle 归档）。
+- 已知限制：范围文档为 DRAFT，Y1 完成条件（双方交叉复核）待 Percy + Yenefa 在 PR 上完成；
+  U3 ECO 归属、仓库公开时点、容量重排三事仍待大统领拍板（见任务卡）。
+- 人工审核：`PENDING_HUMAN_REVIEW`
