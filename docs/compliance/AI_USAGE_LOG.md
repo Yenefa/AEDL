@@ -3149,3 +3149,26 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - AI 参与：ZCode（GLM）DOCUMENT —— 结构化改写与入库执行；任务内容来源为人类与
   Percy 会话（Claude）已确认的 W1 任务卡与既档研究材料，不新增技术主张。
 - 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260906-008
+
+- 日期：2026-09-06
+- 任务名称：角色纪律 v2 落文（功能域隔离，取代「Percy 不碰实现代码」）
+- 模块/路径：
+  - `docs/competition/internal/W1_CARD_Percy_20260907.md`（开头角色纪律段）
+  - `docs/competition/internal/W1_TASKS_20260907.md`（第 14 行角色纯度段）
+  - 本条台账
+- AI 工具/平台：Claude Code
+- 模型：`claude-opus-5`
+- AI 参与类型：DOCUMENT
+- 背景：2026-09-06 会话中，双方（含 ChatGPT 独立复盘）收敛到同一结论——初版「Percy = 独立验收侧，不碰实现代码」划错了界线。**真正需要独立的不是「代码」，是「答案的来源」。**若验收侧完全不写代码，E1 的 case generator / oracle / checker / regression 就无人可造，验收侧根本没有能力构建真 benchmark。
+- v2 内容：
+  - 按**功能域**隔离：Yenefa = 修复侧（提议答案）；Percy = 验收侧（判断答案）。**两侧都写代码。**
+  - 唯一单向永久不可交叉：**谁写答案**——期望值只能验收侧撰写，且只能从数据手册推导，不得从实现或现有设计文件反推（反推即重演 PIT-20260830-001 的循环举证）。
+  - **非对称权限**：Percy 可直接改 Yenefa 的实现；Yenefa 对 Percy 的 oracle/checker **只能报告不能直接改**——「修 bug」与「放宽标准」在代码层面无法区分。
+- 同时标注一处 v2 引入的缺口（**未代为决定**）：领地表给验收侧的全是文档路径，而 v2 下 oracle/checker/benchmark 是代码，无落脚点；W4 建 E1 前需划定验收侧代码领地。
+- 冲突规避：本次改动位于 `W1_TASKS` 第 14 行与 `W1_CARD_Percy` 第 9 行；PR #37 对同两文件的改动分别在第 25/144 行与第 50 行，**位置不重叠，可自动合并**（开工前实测确认）。
+- 未覆盖：`docs/competition/SCOPE_FREEZE_W1.md` §5 的同一处旧表述仅存在于 PR #37 分支（该文件尚未进 master），**只能由 Yenefa 在其 PR 内修改**；已在 PR #37 评审意见中提出，并说明「冻结文档 ACCEPTED 后再改需走 §6 变更协议，现在改是免费的」。
+- 团队自主部分：v2 由 Percy 与 Yenefa 议定；本次仅落文，未改变任何已议定内容。
+- 验证：`py -3.9 -m tools.dev_gate`（见本 PR）。纯文档改动，无代码路径影响。
+- 人工审核：`PENDING_HUMAN_REVIEW`
