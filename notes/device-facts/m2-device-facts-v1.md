@@ -71,20 +71,27 @@ PIT-20260830-001 的根因不是修复能力不足，而是**没有独立真值�
 
 "不得悬空"是手册明文**强制**要求。
 
-### F-U1-03　EN 的 RC 延时　【建议 · B，非强制】
+### F-U1-03　EN 的 RC 延时　【建议 · **A（datasheet 正文）**，非强制】
 
-> **来源 B**："it is advised to add an RC delay circuit at the CHIP_EN pin. The recommended setting for the RC delay circuit is usually **R = 10 kΩ and C = 1 μF**. However, specific parameters should be adjusted…"
+> **来源 A，p34（§9 外围设计，Figure 9-1 下方）**：
+> "To ensure that the power supply to the ESP32-C3 chip is stable during power-up, it is **advised** to add an RC delay circuit at the EN pin. The **recommended** setting for the RC delay circuit is usually **R = 10 kΩ and C = 1µF**. However, specific parameters should be adjusted based on the power-up timing of the module…"
 
-- 措辞是 `advised` / `recommended`，**不是** datasheet 的强制条款。
-- M2 的 `C5 = 1µF/16V X7R 0603` 对应此条。
-- **判据写法**：缺 C5 应报"未采纳原厂建议的 EN RC 延时"，**不得报"违反数据手册强制要求"**。F-U1-02（不得悬空）才是强制项。
+> **来源 B** 复述同一条，措辞一致。
+
+- **来源等级更正（2026-09-06 核验时发现）**：本条初版被标为「来源 B，datasheet 中没有」——**该判断是错的**，条款就在 datasheet 正文第 34 页。初版的机械检索只搜了 `22Ω` 一类模式，没有覆盖 `RC delay`，因此漏掉。分级（建议 ≠ 强制）不受影响，**来源等级由 B 更正为 A**。
+- 措辞是 `advised` / `recommended`，仍**不是**强制条款。
+- M2 的 `C5 = 1µF/16V X7R 0603` + `R3 = 10kΩ` 与推荐值一致。
+- **判据写法**：缺 C5 应报"未采纳原厂**建议**的 EN RC 延时"，**不得报"违反数据手册强制要求"**。F-U1-02（不得悬空）才是强制项。
 
 ### F-U1-04　USB 串联电阻　【建议 · B，非强制】
 
-> **来源 B**："It is recommended to reserve **series resistors (initial value can be 22/33 Ω)**"
+> **来源 B**："GPIO18 and GPIO19 can be used as D- and D+ of USB respectively. It is **recommended** to reserve **series resistors (initial value can be 22/33 Ω)**"
 
 - 同样是 `recommended`。M2 的 `R7/R8 = 22Ω ±1% 100mW` 对应此条，取值落在建议区间内。
-- U1 的 datasheet 原件（来源 A）中**未检索到** 22Ω 串阻条款——该要求的权威来源是设计指南，不是 datasheet。
+- **datasheet 原件中确无此条（2026-09-06 复核，机械检索）**：全 47 页检索 `22Ω` / `33Ω` / `termination` **均无命中**；`resistor` 仅出现在 p12（strapping 的内部弱上拉/下拉）与 p22（电气特性表的内部上下拉阻值）；`Ω` 仅出现在 p22（45 kΩ 内部上下拉）、p25 与 p37（射频 50 Ω 阻抗）、p34（EN 的 RC 推荐值 10 kΩ）。
+- p34 的 **Figure 9-1「Peripheral Schematics」**（乐鑫官方外围参考原理图）中，IO18/IO19 上**未画串联电阻**，与上述检索结果一致。
+- 因此该要求的权威来源是**设计指南（B）**，不是 datasheet——这是 DC-03 判定"报成强制要求即属错误定性"的依据。
+- **剩余局限**：文本检索无法读取图片化内容。上述 Figure 9-1 的判断基于可提取文本，**图形部分仍需人眼确认**（见 §7.1）。
 
 ### F-U1-05　Strapping 引脚默认电平　【强制事实 · A】
 
@@ -95,6 +102,15 @@ PIT-20260830-001 的根因不是修复能力不足，而是**没有独立真值�
 | GPIO2 | Floating | – |
 | GPIO8 | Floating | – |
 | **GPIO9** | **Weak pull-up** | **1** |
+
+**内部上下拉阻值（来源 A，p22 电气特性表；2026-09-06 核验时补录）**：
+
+```
+R_PU  Internal weak pull-up resistor    —  45  —  kΩ
+R_PD  Internal weak pull-down resistor  —  45  —  kΩ
+```
+
+即 GPIO9 的内部弱上拉典型值为 **45 kΩ**。M2 的外部 `R9 = 10 kΩ` 与之并联后主导电平，属加固而非提供缺失的默认值。
 
 ### F-U1-06　启动模式与 GPIO9　【强制事实 · A】
 
@@ -206,9 +222,9 @@ PIT-20260830-001 的根因不是修复能力不足，而是**没有独立真值�
 |---|---|---|---|---|---|
 | F-U1-01 USB 差分对身份 | U1 v1.7 | 11 | **IO18 是否对 USB_D−、IO19 是否对 USB_D+**（若这两行被读反，DC-01 的答案就是错的） | `AI_EXTRACTED_UNVERIFIED` | |
 | F-U1-02 EN 不得悬空 | U1 v1.7 | 11 | `Note:` 原文是否确为 "Do not leave the EN pin floating" | `AI_EXTRACTED_UNVERIFIED` | |
-| F-U1-03 EN 的 RC | checklist HTML | — | 措辞是否确为 `advised`（而非 must/shall）；R/C 取值 | `AI_EXTRACTED_UNVERIFIED` | |
-| F-U1-04 USB 串阻 | checklist HTML | — | 措辞是否确为 `recommended`；**并确认 U1 datasheet 原件里确实没有此条**（这是 DC-03 判定的基础） | `AI_EXTRACTED_UNVERIFIED` | |
-| F-U1-05 Strapping 默认 | U1 v1.7 | 12 | Table 4-1 中 **GPIO9 是否确为 Weak pull-up / Bit 1**（DC-04 的判定基础） | `AI_EXTRACTED_UNVERIFIED` | |
+| F-U1-03 EN 的 RC | **U1 v1.7**（更正） | **34** | 措辞是否确为 `advised`/`recommended`（而非 must/shall）；R/C 取值。**本条来源等级已由 B 更正为 A** | `AI_EXTRACTED_UNVERIFIED` | |
+| F-U1-04 USB 串阻 | checklist HTML | — | 措辞是否确为 `recommended`。datasheet 无此条已由机械检索复核（见 F-U1-04 正文）；**剩余需人眼的部分**：p34 Figure 9-1 参考原理图中 IO18/IO19 上是否真的没有串阻（图形内容检索读不到） | `AI_EXTRACTED_UNVERIFIED` | |
+| F-U1-05 Strapping 默认 | U1 v1.7 | 12（+ **22**） | Table 4-1 中 **GPIO9 是否确为 Weak pull-up / Bit 1**（DC-04 的判定基础）；p22 电气特性表内部上下拉是否确为 **45 kΩ** | `AI_EXTRACTED_UNVERIFIED` | |
 | F-U1-06 启动模式 | U1 v1.7 | 13 | Table 4-3 各列是否对齐（表格易错位） | `AI_EXTRACTED_UNVERIFIED` | |
 | F-U2-01 ADDR 不得悬空 | U2 Ver.7 | 8, 9 | 两处原文是否都在 | `AI_EXTRACTED_UNVERIFIED` | |
 | F-U2-02 地址映射 | U2 Ver.7 | 9 | **Table 8：0x44 是否确对 logic low、0x45 对 logic high**（读反则 DC-02 全错） | `AI_EXTRACTED_UNVERIFIED` | |
