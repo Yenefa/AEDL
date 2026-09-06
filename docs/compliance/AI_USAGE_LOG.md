@@ -3130,3 +3130,22 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
   优先级依据 AGENTS.md §0 第 1 条（人类明确指令 > 规范默认值）；CONTROL_PLANE §8
   权威生成位不变（仓库外 review-bundles/，不进 git）。已记入 HANDOFF「环境关键事实」，
   后续会话收尾照惯例执行：生成 → 拷 Bundle-Lap → INDEX.md 加行。
+## AI-20260906-001
+
+- 日期：2026-09-06
+- 任务名称：W1 竞赛任务包入库 — AEW 领地表（W1_TASKS）+ 内部研究资料导入 + 双人任务卡分发
+- 模块/路径：
+  - `docs/competition/internal/`（新增目录：`W1_TASKS_20260907.md`、`W1_CARD_Percy_20260907.md`、
+    `W1_CARD_Yenefa_20260907.md`、`INTERNAL_CLEANUP.md`、`AEDL竞赛策略矩阵.xlsx`、
+    `2026-09-06_研究审查与架构判断.md`、`2026-09-06_证据与阅读清单.md`、原始 `AEDL_W1任务卡_20260906.md`）
+  - `docs/competition/SUBMISSION_CHECKLIST.md`（截止时间更正：约 2026-10-03 → 官方开源初赛
+    2026-10-15 20:00，依据研究审查 §F 官网核实）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 内容：把 2026-09-06 Percy 会话产出的 W1 任务卡、Codex 研究两件套与竞赛策略矩阵以
+  developer-facing 内部资料入库；全部文件标注 INTERNAL 并建清理台账
+  （`INTERNAL_CLEANUP.md`，公开/提交前移除）。`W1_TASKS_20260907.md` 按 AEW v0 解析格式
+  写 12 任务领地表（P1–P6 Percy、Y1–Y5 Yenefa、J1 双方；状态/领地/依赖显式声明），
+  供 AEW 快照与并行判定消费。
+- AI 参与：ZCode（GLM）DOCUMENT —— 结构化改写与入库执行；任务内容来源为人类与
+  Percy 会话（Claude）已确认的 W1 任务卡与既档研究材料，不新增技术主张。
+- 人工审核：`PENDING_HUMAN_REVIEW`
