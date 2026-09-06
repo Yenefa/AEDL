@@ -3195,3 +3195,21 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - AI 参与：ZCode（GLM）DOCUMENT —— 结构化改写与入库执行；任务内容来源为人类与
   Percy 会话（Claude）已确认的 W1 任务卡与既档研究材料，不新增技术主张。
 - 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260906-003
+
+- 日期：2026-09-06
+- 任务名称：Issue #31 — test_requirements_runtime_server 非 3.9 解释器下间歇失败：修复审核、验收复跑与定稿（PR #33）
+- 会话：ZCode 主会话（大统领指令「进军」）；修复本体由 `la4876949-bot` 会话完成（PR #33 既有 commit）
+- 参与：DEBUG / DOCUMENT
+- 模块/路径：
+  - `tests/test_requirements_runtime_server.py`（`_post()` 连接级失败 3 次有界重试 + 线性退避；HTTP 错误响应不重试——修复本体，本会话未改一字节）
+  - `tasks/GH-31.yaml`（amendment：base 重锚 d2a2ced → 46d6242（master 合并后 HEAD），allowed_paths 补台账与 envelope 本体，照 AEDL-CPL amendment 先例）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 审核结论：修复方向正确——只重试连接级失败（ConnectionError/HTTPException/URLError），HTTPError 照常返回（不掩盖真实断言信号）；有界 3 次。已知理论边界：POST 非幂等场景下重试可能二次执行，但这些用例的语义（finalize/404）二次执行会得到不同响应并使断言显式失败，不会静默假通过。
+- 验收复跑（真实运行，本机，对照 envelope 验收标准）：
+  - `py -3.13 -m unittest tests.test_requirements_runtime_server` × 10 → **10/10 OK**（修复前基线 ~2/6 失败率；满足"10 次零失败"验收）
+  - `py -3.9 -m unittest tests.test_requirements_runtime_server` → OK（3.9 基线不受影响）
+  - `python -m tools.dev_gate --envelope tasks/GH-31.yaml` → 结果随回执归档（run 结果见 bundle）
+- 已知限制：竞态根因未完全定位（envelope 如实记载"HTTPServer 同步 bind，非明显 listen-before-serve race"），本修复属鲁棒性兜底而非根因修复；3.13-32bit/其他平台组合未测。
+- 人工审核：`PENDING_HUMAN_REVIEW`
