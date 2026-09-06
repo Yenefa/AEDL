@@ -3081,6 +3081,42 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - AIC Score Target：`AI 与开源融合`（对应 `docs/competition/FUSION_MAP.md` "AI+开源"评分项的证据资产之一）
 - 最终状态：`PENDING_HUMAN_REVIEW`
 
+## AI-20260902-007
+
+- **台账 ID 改号说明（2026-09-06，PR #30 合并冲突解决时执行）**：本条目原领用
+  `AI-20260902-006`。PR #14 于 2026-09-06 先行合入 master 时，其条目已由 Yenefa 改号占用
+  `-006`，并在该条目的改号说明中明确裁定「开放 PR #30 所领 006 号在其合并时另改 **007**」。
+  本次按该裁定执行，改号为 **`AI-20260902-007`**；先合先占，与 W4A 004→005、W4B 005→006
+  同一先例。历史 commit message 中的 `[AI-20260902-006]` 不改写（改号事实以本说明为准）。
+  注：本条为 `20260902` 日序，与同日另行改号的 `AI-20260906-007`（PR #36）分属不同日期，不冲突。
+- 日期：2026-09-02
+- 任务名称：AGENT_ONBOARDING 引导文档（to AI coding agents）+ README 链接（重建版）
+- 模块/路径：
+  - `AGENT_ONBOARDING.md`（新增，仓库根）
+  - `README.md`（AI Agent 节加引导入口）
+  - 本台账本条目
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash`
+- 参与标签：DOCUMENT
+- 任务目标：让任何 AI coding agent（Claude Code / Codex / zcode / DSH / opencode / Hermes /
+  Trae / Work Buddy / Qoder / OpenClaw 等）clone 后按引导完成环境自检（autocrlf / Python 3.9 /
+  uv / gh）、必读顺序、AECP 生命周期速查与红线。
+- AI 实际产出：
+  - AGENT_ONBOARDING.md：0 身份与定位 / 1 环境自检 4 项命令 + dev_gate 基线 / 2 必读顺序 /
+    3 AECP 速查（含 `python -m tools.make_review_bundle`，引用 #24 工具）/ 4 红线 / 5 台账指针。
+- 版本沿革：首版曾标 AI-20260902-003（PR #28），与并行推进的 #25（Tasks 6-7 实现）撞号；
+  关闭重建于 master f53f2a8（#24/#25/#26 之后）；重建版初标 005 又与 #27（W4A Collision 1）
+  撞号，最终定号 006。内容取材自仓库既有规范（AGENTS.md / CONTROL_PLANE.md / README），
+  未发明新规则。
+- 团队自主部分：Yenefa 在席特殊授权（一路推进）下重建；撞号与并行撞车已如实记录。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 验证：`py -3 -m tools.dev_gate` exit 0（syntax / main 312 / sandbox 274 / secret_scan 307）；
+  `git diff --check` RC 0。
+- Compliance：Third-party none；ADR none。
+- AIC Score Target：`NONE`（内部协作引导，不包装成比赛创新）
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`（PR 待人工 review）
+
 ## AI-20260903-001
 - 日期：2026-09-03
 - 任务：AEDL-R1（渲染图新鲜度门禁，AECP 流程交付）
@@ -3212,4 +3248,45 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
   - `py -3.9 -m unittest tests.test_requirements_runtime_server` → OK（3.9 基线不受影响）
   - `python -m tools.dev_gate --envelope tasks/GH-31.yaml` → 结果随回执归档（run 结果见 bundle）
 - 已知限制：竞态根因未完全定位（envelope 如实记载"HTTPServer 同步 bind，非明显 listen-before-serve race"），本修复属鲁棒性兜底而非根因修复；3.13-32bit/其他平台组合未测。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260906-004
+
+- 日期：2026-09-06
+- 任务名称：Y4 预注册实验方案入库（AI vs Script 实验设计，人类指令「上传上去免得以后没方案」）
+- 模块/路径：
+  - `docs/competition/internal/AEDL_W1_Y4_AI_vs_Script_实验方案.md`（新增，Codex 会话 2026-09-06
+    产出；加 INTERNAL banner；37 条轨迹设计/预算/指标/失败归因表/W3 投入判据/结果模板，
+    实验结果 NOT_RUN）
+  - `docs/competition/internal/W1_TASKS_20260907.md`（TASK-Y4 增预注册方案引用行）
+  - `docs/competition/internal/W1_CARD_Yenefa_20260907.md`（Y4 同步引用）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 说明：随附摘要文件 `Y4.md` 为同一方案的对话摘要，无独有信息，未入库。方案的独立验收细则
+  以 Percy P3/P4 交付为准；方案自身声明「依据 master@ed6dc61，P3/P4 目录尚未见，运行前须冻结」。
+- AI 参与：DOCUMENT —— 入库执行与领地表挂接；方案内容为 Codex 会话产出，本会话未改其实质。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260906-010
+
+- **台账 ID 改号说明（2026-09-06，Percy 侧接管合并时执行）**：本条目原领用 `AI-20260906-005`，
+  与并行推进的 PR #40（P2 用户试用协议）撞号——该号在本条推送前已被占用。裁定：**本条改号为 `-010`**
+  （`-002`~`-009` 当日已占满），PR #40 保留 `-005` 不动。历史 commit message 中的
+  `[AI-20260906-005]` 不改写（改号事实以本说明为准，沿用 AI-20260902-005 先例）。
+  本日累计第四次并行撞号；顺序编号在多分支并行下系统性失效，建议改按作者编号，另议。
+
+- 日期：2026-09-06
+- 任务名称：Y4 实验方案 v1.0 → v1.1 修订入库 + 复核说明（人类指令「最新修订版重新提交」，在 PR #42 分支上更新）
+- 模块/路径：
+  - `docs/competition/internal/AEDL_W1_Y4_AI_vs_Script_实验方案.md`（v1.1 替换 v1.0：新增 B 定性正确
+    独立记分 n/6 与 A n/5 不互偿；事实/案例定义直引 P3 PR #38@3d4268a、P4 PR #39@ad907ae 精确提交；
+    D 作者/C 开发的知题曝光如实记录、信息不对称主张条件化；失败归因表增 B 行；结果模板增 B 列。
+    A 修复分母、轮数、投入阈值不变）
+  - `docs/competition/internal/AEDL_Y4_复核与修订说明.md`（新增：三项用户反馈的裁定与原件核查记录；
+    查出 P3 F-U1-04 勘误——datasheet p34 Figure 9-1 实有 R4/R6 0Ω，"未画串阻"旁证不采用；
+    P3 核验表实为 10 项/7 人工核验，摘要 6/9 过期；P4 §0 开发曝光口径与旧 W1 卡不一致，本批计分协议内显式择定）
+  - `docs/competition/internal/W1_TASKS_20260907.md` / `W1_CARD_Yenefa_20260907.md`（Y4 引用行升 v1.1）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 说明：随附摘要 `Y4-V1.1.md` 为对话摘要无独有信息，未入库。复核说明对 P3/P4 的勘误**不回写上游 PR**
+  （Percy 领地保持原样，人工核验状态不被 AI 改写），差异以本文件为准。实验仍 NOT_RUN。
+- AI 参与：DOCUMENT —— 入库执行与引用挂接；方案及核查内容为 Codex 会话产出，本会话未改其实质。
 - 人工审核：`PENDING_HUMAN_REVIEW`
