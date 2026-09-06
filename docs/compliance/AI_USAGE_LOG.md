@@ -3149,3 +3149,30 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - AI 参与：ZCode（GLM）DOCUMENT —— 结构化改写与入库执行；任务内容来源为人类与
   Percy 会话（Claude）已确认的 W1 任务卡与既档研究材料，不新增技术主张。
 - 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260906-003
+
+- 日期：2026-09-06
+- 任务名称：W1/P3 —— M2 器件事实目录 v1（两类修复的独立真值源）
+- 模块/路径：
+  - `notes/device-facts/m2-device-facts-v1.md`（新增）
+  - 本条台账
+- AI 工具/平台：Claude Code
+- 模型：`claude-opus-5`
+- AI 参与类型：RESEARCH（数据手册原件提取）、DOCUMENT
+- 任务目标：W1 任务卡 P3。为「信号接线关系」「已核实器件参数」两类修复建立独立于设计文件与实现代码的事实源，每条带页码与原文摘录。
+- 方法：用 `pypdf` 从仓库内冻结的 datasheet 原件逐页提取；**不从 `intent_v1.json`、原理图、BOM 或既有合同反推**（PIT-20260830-001 的根因即循环举证）。
+- AI 实际产出（事实均取自原件，页码可复核）：
+  - **F-U1-01 USB 差分对身份**（p11 §3）：`IO18/pin13 = GPIO18, USB_D-`、`IO19/pin14 = GPIO19, USB_D+`。乐鑫原理图检查清单独立佐证，两来源一致。**顺带纠正一处外部误记**：ESP32-S3 的 USB 引脚是 GPIO19/20，与 C3 不同，M2 用 C3。
+  - **F-U1-02 EN 不得悬空**（p11，手册明文 `Note: Do not leave the EN pin floating`）——**强制**。
+  - **F-U1-03 EN 的 RC 延时**（检查清单：`advised`，`R=10kΩ / C=1µF`）——**建议，非强制**。缺 C5 不得报"违反手册强制要求"。
+  - **F-U1-04 USB 串阻 22/33Ω**（检查清单 `recommended`）——**建议，非强制**；datasheet 原件中未检索到该条款。
+  - **F-U1-05/06 Strapping 与启动模式**（p12 Table 4-1、p13 Table 4-3）：GPIO9 默认 **Weak pull-up = 1**（SPI boot）。据此推论 R9 外部上拉属**加固**而非强制，缺失不得直接判 FAIL。
+  - **F-U2-01 ADDR 不得悬空**（p8 引脚表 + p9 正文，手册两处明文）——最强等级强制条款。
+  - **F-U2-02 地址映射**（p9 Table 8）：`0x44`(default)=ADDR 接 logic low；`0x45`=接 logic high。构成硬件↔固件跨视图判据。
+  - **J1 不提取**：`datasheet_manifest.json` 标 `FROZEN_PROVENANCE_QUESTIONABLE`（elecfans 镜像，非原厂），本轮零提取，标 `TO_VERIFY`。
+  - **U3 保持 BLOCKED**：V20 未给厂家 θJA，无法核算结温；耗散 0.310W(150mA)/0.6415W(345mA) 均超 250mW 上限。该缺失属实，正好构成 P4 第 6 案例。
+- 团队自主部分：无。本目录只陈述手册事实，不做设计判断与修复建议；强制/建议两级区分为按手册措辞（must vs advised/recommended）如实标注。
+- 验证（真实运行）：`py -3.9 -m tools.dev_gate` → 见本 PR。事实条目均可按所记页码在仓库内原件复核。
+- 已知限制：U1 datasheet 无 `/Title` 元数据，**版本号 `TO_VERIFY`**（仅有 CreationDate）；未覆盖 D1/SW1/SW2/无源件；未从来源 C（J1 镜像）提取任何事实。
+- 人工审核：`PENDING_HUMAN_REVIEW`
