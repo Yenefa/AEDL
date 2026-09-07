@@ -21,6 +21,7 @@ import json
 import sys
 import tempfile
 import threading
+from datetime import datetime, timezone
 import time
 import unittest
 import urllib.error
@@ -250,7 +251,14 @@ class ValidateEndpointRealContractTests(_HttpServerCase):
         _TempRepoCase.setUp(self)  # skip _HttpServerCase's temp intent setup
         repo_root = Path(__file__).resolve().parents[1]
         self.server = HTTPServer(("127.0.0.1", 0), _Handler)
-        _Handler.runtime = RequirementsRuntime()
+        # Fixed clock pinned INSIDE the contract's 7-day freshness window (signed
+        # 2026-08-30T16:37:37Z). The test asserts the production validate path,
+        # not the calendar: without this injection the test rots on 2026-09-07+
+        # and turns CI deterministically red (contract is stale by design, C5).
+        # The stale behavior itself is still covered below by the fixed-future
+        # clock counterpart.
+        fresh_clock = lambda: datetime(2026, 9, 1, tzinfo=timezone.utc)  # noqa: E731
+        _Handler.runtime = RequirementsRuntime(clock=fresh_clock)
         _Handler.root = repo_root
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -261,6 +269,19 @@ class ValidateEndpointRealContractTests(_HttpServerCase):
         status, body = self._post("/api/validate", {})
         self.assertEqual(status, 200)
         self.assertEqual(body["status"], "pass", body["errors"])
+
+    def test_validate_endpoint_reports_stale_contract_when_clock_is_past_window(self):
+        # Proves the injected clock is not bypassing the freshness gate: a date
+        # past the 7-day window must still produce the designed stale failure.
+        stale_clock = lambda: datetime(2026, 10, 1, tzinfo=timezone.utc)  # noqa: E731
+        _Handler.runtime = RequirementsRuntime(clock=stale_clock)
+        status, body = self._post("/api/validate", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(body["status"], "fail")
+        self.assertTrue(any("stale" in e for e in body["errors"]), body["errors"])
+        # restore the fresh-clock runtime for any test ordering
+        fresh_clock = lambda: datetime(2026, 9, 1, tzinfo=timezone.utc)  # noqa: E731
+        _Handler.runtime = RequirementsRuntime(clock=fresh_clock)
 
     def test_validate_endpoint_reports_missing_contract_file_as_fail(self):
         status, body = self._post("/api/validate", {"path": "gates/requirements/nope.json"})
