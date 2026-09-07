@@ -22,11 +22,21 @@
   1. 命令默认 dry-run，退出码 0 ≠ 已写入——必须 `applied` 字段 + 重新读取 + 字节哈希三重核对；
   2. 重复 apply 会移动回滚快照位置——用固定快照回滚，**别依赖 undo**。
 - 完成：一次真实修改能写入、重读确认、按基准版本字节级还原。评分关联 S3、S4。
+- **工程拆分（2026-09-07 执行计划）**：Y2 = PR-1，最小新增 `src/repair/patch_schema_v1.json`、
+  `tools/akcli_adapter.py`、`tools/repair_pipeline.py` + 两套测试；commit 顺序：必要操作资格测试 →
+  patch 合同/adapter → 快照与恢复 → 异常路径。**首个工作项必须是 strict-nets 资格测试**
+  （DC-01 端点交换/DC-03 拆网按 0.21.0 源码会被 strict 拒——资格不通过则通道 BLOCKED，
+  需 Y1 批准"白名单内预期拓扑差分"，不得静默关 strict）。C1 改值成功 ≠ 通道就绪。
+  详细文件级任务见 `internal/AEDL_W1_工程执行计划.md` §1。
 
 ### Y3｜KiCad 独立重验链路　6h　依赖 Y2
 - 补丁写入后用**独立的** KiCad 原生解析/导出/ERC 重读验证，不复用写入方解析结果（ADR-008：compiler 与 verifier 不得只消费同一份数据互相证明）。
 - 完成：改一处 → 重新导出 → 独立 ERC → 可与改动前对比。
 - Percy 的 KiCad 10.0.5 环境已装好并复现成功，可作第二套独立环境交叉核对。
+- **工程拆分（2026-09-07 执行计划）**：Y3 = PR-2，新增 `gates/repair_verification.py` +
+  `run_gates.py` 加 m2-repair 范围 + `schematic_semantics.py` 加结构化差分接口；四个连接点：
+  候选目录适配、ERC 报告新鲜度（现有 netlist_fresh 无 ERC 等价物）、源哈希绑定、
+  全部受保护关系差分（五条规则不覆盖全部 29 网）。详见执行计划 §2。
 
 ### Y4｜6 案例 AI vs 脚本小试　4h　依赖 P4 + Y2　★W1 止损闸门
 - 用 Percy 的 6 个开发案例跑两组：**D 固定规则脚本 vs C AI 结构化定位反馈**，各限 3 轮。
