@@ -3309,3 +3309,30 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
   未列为待编写。B09（P3 三条待核验）与 Y1 范围 DRAFT 为并行推进项，不阻塞 PR-1 开工。
 - AI 参与：DOCUMENT —— 入库执行与挂接。
 - 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260907-002
+
+- 日期：2026-09-07
+- 任务名称：PR-1 akcli 裁决三件套 + 大统领战略裁决入库（Y2 开工依据冻结）
+- 模块/路径：
+  - `docs/competition/internal/AEDL_PR1_技术裁决_20260907.md`（新增，INTERNAL banner；Codex
+    2026-09-07 原生资格实测报告：三层拒绝机制源码定位、E1/E2/E3/DC-04/05 精确拓扑差分与
+    protected-diff 定义、最小例外架构（AEDL adapter 包原生 writer）、patch envelope 契约、
+    快照/字节级回滚事务设计、PR-1 文件级任务与测试集、Go/No-Go 判据、降级条款）
+  - `docs/competition/internal/AEDL_PR1_原生资格记录_20260907.json`（实测原始记录：5 案例注入/
+    strict dry-run/apply 退出码、DC-03 旁路负例、序列与重放、上游 netdiff 23 测试、probe 文件哈希）
+  - `docs/competition/internal/AEDL_PR1_裁决矩阵_20260907.csv`（READY / READY_WITH_CONSTRAINED_EXCEPTION）
+  - `docs/competition/internal/AEDL_PR1_大统领裁决_20260907.md`（新增：大统领会话裁决记录——akcli
+    身份重定义为受控 writer、Repair Executor 冻结定义、"执行成功≠工程正确性证据"升格为核心
+    设计原则、Y4 答案泄漏防线（proposal-visible vs host-only policy 分离）、PR-1/PR-2 边界修订、
+    能力表、下一步顺序冻结、降级条款；ZCode 代笔入库）
+  - `docs/competition/internal/W1_TASKS_20260907.md`（TASK-Y2 挂裁决引用）
+  - `docs/competition/internal/W1_CARD_Yenefa_20260907.md`（开工前必读段）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 关键结论（实测支撑）：strict-nets 只是 named-net split/merge 检测器而非修复策略；DC-03 旁路
+  负例（exit 0 + applied=true 但电阻两端短接）为"工具执行成功≠拓扑修复正确"提供真实实验证据；
+  DC-04/05 须 place+connect 同一 op-list 单批提交（事务原子性）。
+- AI 参与：DOCUMENT —— 大统领裁决代笔结构与三件套入库执行；实测与源码审查为 Codex 会话产出。
+- 已知限制：独立 KiCad 验证 NOT_RUN（该环境无 kicad-cli）；资格样本非封存 Y4 计分输入；
+  生产启用 NO-GO。
+- 人工审核：`PENDING_HUMAN_REVIEW`
