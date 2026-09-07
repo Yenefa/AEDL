@@ -9,6 +9,14 @@
 - **Yenefa = 实现侧**：主链路、akcli 适配、模型适配。Percy 负责独立验收，**不要把验收判据的编写混进你的实现工作**——25 分证据链靠的是人 separation。
 - W1 是止损闸门：你的 Y4 是全周最重要的一张卡，结论决定 W3 的 36 人时投不投。
 
+## 2026-09-07 裁决更新（开工 Y2 前必读）
+
+资格实测已完成：akcli 身份定为**受控 writer**（不是 Repair Executor）；DC-01/02/03 走受控例外
+（原生 writer + 精确差分验收），DC-04/05 单批 strict（place+connect 同一 op-list）。PR-1 =
+Minimum Safe Repair Transaction（最薄验证前移）。**下一张卡是"审查并冻结 PR-1 implementation
+contract"，不是直接开写**；关键红线：topology policy 的 expected after 拓扑**只进 host 验收侧，
+绝不进 C/D 输入包**（Y4 答案泄漏防线）。详见 `internal/AEDL_PR1_大统领裁决_20260907.md`。
+
 ## 你的任务
 
 ### Y1｜范围冻结　3h

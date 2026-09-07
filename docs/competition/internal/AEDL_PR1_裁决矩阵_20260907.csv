@@ -1,0 +1,6 @@
+﻿operation,native_supported,strict_result,safe_path,required_policy_delta,verdict
+DC-01 交换 U1 USB 端点,YES，精确删除旧局部标签/连接对象，再接回正确端点,拒绝，2 split + 2 merge，exit 6,原版 strict 无路径；受控 stage 使用原生 writer，按 E1 精确验收,只允许 U1.13/U1.14 的指定归属交换,READY_WITH_CONSTRAINED_EXCEPTION
+DC-02 ADDR 恢复低电平,YES，原生标签或连线接入 GND,拒绝，GND 与 U2.2 单点网 merge，exit 6,原版 strict 无路径；受控 stage 使用原生 writer，按 E2 精确验收,只允许单点 U2.2 并入现有 GND，固件不变,READY_WITH_CONSTRAINED_EXCEPTION
+DC-03 插回两只 USB 串阻,YES，删除准确旁路对象并放置/连接 R7、R8,拒绝，两条命名 USB 网 split，exit 6,原版 strict 无路径；受控 stage 使用原生 writer，按 E3 精确验收,只允许两条指定拆网及 R7/R8 恢复；必须无旁路,READY_WITH_CONSTRAINED_EXCEPTION
+DC-04 恢复 GPIO9 上拉,YES,一批 place+connect：通过，2 modified；分两次则接线拒绝,一个 protocol-2 op-list，一次 draw --apply --strict-nets,无 strict 豁免；允许准确增加 R9 及两端归属,READY
+DC-05 恢复 EN 电容,YES,一批 place+connect：通过，2 modified；分两次则接线拒绝,一个 protocol-2 op-list，一次 draw --apply --strict-nets,无 strict 豁免；允许准确增加 C5 及两端归属,READY
