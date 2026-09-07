@@ -936,7 +936,14 @@ def load_patch_schema(path: Optional[Path] = None) -> Dict[str, Any]:
 
 def load_topology_policy(path: Optional[Path] = None) -> Dict[str, Any]:
     target = Path(path) if path is not None else TOPOLOGY_POLICY_PATH
-    document = load_json_strict(target.read_text(encoding="utf-8"))
+    try:
+        document = load_json_strict(target.read_text(encoding="utf-8"))
+    except (OSError, RepairContractError) as exc:
+        # load_json_strict wraps its own strict-JSON failures as
+        # ProposalInvalidError; a policy file failing to parse is a POLICY
+        # error, not a proposal one.  Every policy failure exits through
+        # PolicyInvalidError so callers/tests have exactly one path to catch.
+        raise PolicyInvalidError([_finding(REASON_SCHEMA_INVALID, "topology policy unreadable: %s" % exc)])
     if not isinstance(document, Mapping):
         raise PolicyInvalidError([_finding(REASON_SCHEMA_INVALID, "topology policy must be an object")])
     return dict(document)
@@ -1364,6 +1371,21 @@ def make_public_context(
         if key not in host_context:
             raise KeyError("host_context is missing %r" % key)
 
+    def _frozen_copy(value: Any, label: str) -> Any:
+        # Deep snapshot via canonical JSON round-trip: the proposer-visible
+        # context must never alias host-owned structures, otherwise a later
+        # host-side mutation (or in-place tool output) leaks into an already
+        # issued PublicContext (aliasing/TOCTOU).  Round-trip through the same
+        # strict rules also guarantees the snapshot is JSON-faithful; anything
+        # non-serialisable fails loudly instead of silently sharing a reference.
+        payload = {"v": value}
+        try:
+            return json.loads(json.dumps(payload, allow_nan=False))["v"]
+        except (TypeError, ValueError) as exc:
+            raise ProposalInvalidError(
+                [_finding(REASON_SCHEMA_INVALID, "%s is not JSON-serialisable: %s" % (label, exc))]
+            )
+
     context = {
         "schema_version": SCHEMA_VERSION,
         "context_id": _identifier(host_context["context_id"], "host_context.context_id"),
@@ -1371,12 +1393,10 @@ def make_public_context(
         "base_source_sha256": _sha256(
             host_context["base_source_sha256"], "host_context.base_source_sha256"
         ),
-        "current_observation": current_observation,
-        "public_facts": public_facts,
+        "current_observation": _frozen_copy(current_observation, "current_observation"),
+        "public_facts": _frozen_copy(public_facts, "public_facts"),
         "generic_op_schema": load_public_op_schema(),
-        "limits": json.loads(json.dumps(dict(host_context["limits"])))
-        if isinstance(host_context["limits"], Mapping)
-        else host_context["limits"],
+        "limits": _frozen_copy(dict(host_context["limits"]) if isinstance(host_context["limits"], Mapping) else host_context["limits"], "host_context.limits"),
     }
     _assert_public_clean(context, "$")
     return context

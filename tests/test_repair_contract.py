@@ -20,6 +20,7 @@ from tools.repair_pipeline import (
     STRICT_RULE_IDS,
     Finding,
     ProposalInvalidError,
+    PolicyInvalidError,
     canonical_sha256,
     hash_bytes,
     load_patch_schema,
@@ -475,6 +476,25 @@ class PolicyDocumentTests(unittest.TestCase):
         mutated["enabled_by_default"] = True
         self.assertTrue(validate_topology_policy(mutated))
 
+    def test_load_topology_policy_errors_are_policy_errors(self):
+        """All policy load failures exit as PolicyInvalidError — one path to catch.
+
+        Regression for the C1 review finding: strict-JSON parse failures used to
+        escape as ProposalInvalidError (load_json_strict's own wrapping), and
+        unreadable paths escaped as raw OSError.
+        """
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            bad = Path(td) / "bad.json"
+            bad.write_text('{"policy_version": 1, "dup": 1, "dup": 2}', encoding="utf-8")
+            with self.assertRaises(PolicyInvalidError):
+                load_topology_policy(bad)
+
+            missing = Path(td) / "missing.json"
+            with self.assertRaises(PolicyInvalidError):
+                load_topology_policy(missing)
+
     def test_five_rules_with_unique_ids(self):
         ids = [rule["id"] for rule in self.policy["rules"]]
         self.assertEqual(len(ids), len(set(ids)))
@@ -719,6 +739,30 @@ class PublicProjectionTests(unittest.TestCase):
         context = make_public_context(self.host_context, self.observation, self.facts)
         ops = [entry["op"] for entry in context["generic_op_schema"]["operations"]]
         self.assertEqual(ops, ["delete_object", "add_net_label", "place_component"])
+
+    def test_public_context_snapshots_observation_no_aliasing(self):
+        """Host-side mutation AFTER issuing must not leak into the context."""
+        observation = {"pins": [{"ref": "U1", "net": "/USB_DM"}]}
+        context = make_public_context(self.host_context, observation, self.facts)
+        observation["pins"][0]["net"] = "/MUTATED"
+        self.assertEqual(
+            context["current_observation"]["pins"][0]["net"], "/USB_DM"
+        )
+
+    def test_public_context_snapshots_facts_no_aliasing(self):
+        facts = [{"id": "F1", "entries": [1, 2]}]
+        context = make_public_context(self.host_context, self.observation, facts)
+        facts[0]["entries"].append(3)
+        self.assertEqual(context["public_facts"][0]["entries"], [1, 2])
+
+    def test_public_context_limits_are_snapshotted(self):
+        context = make_public_context(self.host_context, self.observation, self.facts)
+        self.host_context["limits"]["max_ops"] = 999
+        self.assertEqual(context["limits"]["max_ops"], 8)
+
+    def test_public_context_rejects_unserialisable_observation(self):
+        with self.assertRaises(ProposalInvalidError):
+            make_public_context(self.host_context, {"handle": object()}, self.facts)
 
     def test_patch_schema_has_no_per_case_answers(self):
         schema_text = PATCH_SCHEMA.read_text(encoding="utf-8")
