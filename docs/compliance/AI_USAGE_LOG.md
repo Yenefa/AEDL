@@ -3336,3 +3336,27 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - 已知限制：独立 KiCad 验证 NOT_RUN（该环境无 kicad-cli）；资格样本非封存 Y4 计分输入；
   生产启用 NO-GO。
 - 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260907-004
+
+- 日期：2026-09-07
+- 任务名称：CI 时间炸弹修复——requirements runtime validate 注入时钟（大统领拍板方案 B）
+- 会话：ZCode 主会话（独立 CI/test-infra 修复，不属 #46）
+- 参与：DEBUG
+- 模块/路径：
+  - `gates/requirements_runtime_server.py`（RequirementsRuntime.__init__ 增 clock 可注入参数，
+    默认 None=真实墙钟，生产行为不变；validate() 把 now 透传给 validate_requirements_contract——
+    该函数本就支持 now= 参数，属接线而非新语义）
+  - `tests/test_requirements_runtime_server.py`（ValidateEndpointRealContractTests 注入固定时钟
+    2026-09-01（合同 8/30 签发的 7 天窗口内）；新增反向用例
+    test_validate_endpoint_reports_stale_contract_when_clock_is_past_window——固定 2026-10-01 时钟
+    必须如实报 stale fail，证明注入没有绕过 C5 新鲜度门禁）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 背景：合同 8/30 签发、7 天设计过期，2026-09-07 起该测试随日历确定性变红（master 与全部
+  PR 的 CI 同红，job 101521379908/101777728708 均确认此唯一根因）。方案 A（重签合同）7 天后再炸；
+  方案 B（注入固定时钟）一次根治，反向用例保证门禁语义不被测试架空。
+- 验证（真实运行）：模块 13/13 OK（含新增反向用例）；全量 `unittest discover -s tests`
+  → **323/323 OK**（322 + 新增 1，时间炸弹拆除）；`py -3.9` 与 `py -3.13` 双解释器 OK。
+- 已知限制：合同过期本身的治理语义（7 天后需要人工 re-confirm）不变——生产环境仍会在
+  真实时间过期时报 fail，这是设计行为；本修复只让回归测试不再随日历腐烂。
+- 人工审核：`PENDING_HUMAN_REVIEW`
