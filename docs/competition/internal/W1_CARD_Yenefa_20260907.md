@@ -17,6 +17,16 @@ Minimum Safe Repair Transaction（最薄验证前移）。**下一张卡是"审�
 contract"，不是直接开写**；关键红线：topology policy 的 expected after 拓扑**只进 host 验收侧，
 绝不进 C/D 输入包**（Y4 答案泄漏防线）。详见 `internal/AEDL_PR1_大统领裁决_20260907.md`。
 
+## 2026-09-07 实现合同冻结（PR-1 开写入口）
+
+**下一张卡已完成**：Implementation Contract v1 + Ready-to-Code 任务卡 + topology policy 草案已入库
+（`internal/AEDL_PR1_实现合同/开发任务卡/topology_policy_v1_draft`），五查通过（Y4 泄漏/绕过
+Sandbox/policy 自授权/过宽例外/回滚漏洞；结论见 PR）。**PR-1 现在按
+`AEDL_PR1_开发任务卡_20260907.md` 直接开写**：五个生产文件、四套测试、C1→C6 commit 顺序、
+原生验收走 `AEDL_PR1_NATIVE=1` opt-in。实现红线：只按合同第 4/5/8/9/10 节数据形状编码；
+Proposal 三原语之外一律拒绝；host-only policy 的 after/expected 绝不进 C/D 输入（三层可见性）；
+commit 谓词是合取没有例外。akcli 身份裁决见 `AEDL_PR1_大统领裁决_20260907.md`（PR #45，待合）。
+
 ## 你的任务
 
 ### Y1｜范围冻结　3h
