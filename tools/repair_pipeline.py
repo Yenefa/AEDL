@@ -14,17 +14,21 @@ snapshot/stage/commit, rollback/recovery/replay, adapter and verifier
 integration (C2-C5).  They must not be faked or stubbed here.
 
 NOTE on hash helpers: contract section 8 assigns hash_bytes/canonical_sha256 to
-gates.repair_verification (C2).  Until that module exists the identical helpers
-live here so C1 stays independently verifiable; C2 will make the verifier the
-single home and this module will import from it.
+gates.repair_verification.  Since C2 landed, that module is the single home and
+this module imports from it (digest semantics verified identical 74/74).
 """
 
-import hashlib
 import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+
+from gates.repair_verification import (  # single home for digests since C2
+    canonical_json_bytes,
+    canonical_sha256,
+    hash_bytes,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PATCH_SCHEMA_PATH = REPO_ROOT / "src" / "repair" / "patch_schema_v1.json"
@@ -390,19 +394,6 @@ REFUSAL_BOUNDARY_KEYS = (
     "design_bytes_must_remain_unchanged",
 )
 
-DIGEST_KINDS = (
-    "manifest",
-    "proposal",
-    "patch",
-    "policy-bound",
-    "topology",
-    "delta",
-    "protected",
-    "toolchain",
-    "context",
-    "receipt",
-)
-
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _PATH_SEGMENT_RE = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -462,30 +453,6 @@ def _reject(code: str, detail: str, object_id: Optional[str] = None):
 # --------------------------------------------------------------------------
 # canonical JSON, hashing, strict parsing
 # --------------------------------------------------------------------------
-
-
-def hash_bytes(raw: bytes) -> str:
-    """SHA256 over raw bytes. No decoding, no newline translation."""
-    return hashlib.sha256(raw).hexdigest()
-
-
-def canonical_json_bytes(value: Any) -> bytes:
-    """UTF-8, keys sorted lexicographically, compact separators, no floats."""
-    _reject_non_canonical(value, "$")
-    return json.dumps(
-        value,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    ).encode("utf-8")
-
-
-def canonical_sha256(kind: str, value: Any) -> str:
-    if kind not in DIGEST_KINDS:
-        raise ValueError("unknown digest kind: %r" % (kind,))
-    prefix = ("AEDL-PR1:" + kind + ":1\x00").encode("utf-8")
-    return hashlib.sha256(prefix + canonical_json_bytes(value)).hexdigest()
 
 
 def _reject_non_canonical(value: Any, path: str) -> None:

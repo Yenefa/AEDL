@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "classification": "ACCEPTANCE_PRIVATE_TEST_ONLY",
+  "scope": "PR1_C2_COMPARISON_TESTS_NOT_Y4",
+  "expected_values_source": "https://github.com/Yenefa/AEDL/blob/0e84912dd3cd56f1364c7ffc69fd7a9a68ca9ba0/notes/dev-cases/m2-dev-cases-v1.md",
+  "geometry_source": "docs/competition/internal/AEDL_PR1_实现合同_20260907.md#7",
+  "cases": {
+    "DC-01": {"after": [{"names": ["/USB_DM"], "members": ["R8.2", "U1.13"]}, {"names": ["/USB_DP"], "members": ["R7.2", "U1.14"]}], "add_components": []},
+    "DC-02": {"after": [{"capture": "/GND", "add": ["U2.2"]}], "add_components": [], "firmware_address": 68},
+    "DC-03": {"after": [{"names": ["/USB_DP_CONN"], "members": ["J1.A6", "J1.B6", "R7.1"]}, {"names": ["/USB_DP"], "members": ["R7.2", "U1.14"]}, {"names": ["/USB_DM_CONN"], "members": ["J1.A7", "J1.B7", "R8.1"]}, {"names": ["/USB_DM"], "members": ["R8.2", "U1.13"]}], "add_components": [{"reference": "R7", "lib_id": "Device:R", "value": "22R", "footprint": "Resistor_SMD:R_0603_1608Metric", "position_nm": [218440000, 193040000]}, {"reference": "R8", "lib_id": "Device:R", "value": "22R", "footprint": "Resistor_SMD:R_0603_1608Metric", "position_nm": [276860000, 193040000]}]},
+    "DC-04": {"after": [{"capture": "/+3V3", "add": ["R9.1"]}, {"names": ["/BOOT"], "members": ["R9.2", "SW2.1", "U1.8"]}], "add_components": [{"reference": "R9", "lib_id": "Device:R", "value": "10k", "footprint": "Resistor_SMD:R_0603_1608Metric", "position_nm": [34290000, 257810000]}]},
+    "DC-05": {"after": [{"names": ["/EN"], "members": ["C5.1", "R3.2", "SW1.1", "U1.2"]}, {"capture": "/GND", "add": ["C5.2"]}], "add_components": [{"reference": "C5", "lib_id": "Device:C", "value": "1uF", "footprint": "Capacitor_SMD:C_0603_1608Metric", "position_nm": [267970000, 36830000]}]}
+  },
+  "limitations": ["Test-only expectations; not runtime authorization", "Source inventories are tested separately on original fault bytes", "No fresh KiCad export, candidate transaction, Y4 score or physical result is asserted"]
+}
