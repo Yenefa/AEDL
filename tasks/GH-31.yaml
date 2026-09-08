@@ -1,8 +1,9 @@
 task: GH-31
 
 base:
-  branch: master
-  sha: d2a2ced46ea4fc65b17c831160c59c671cdb2973
+  branch: fix/gh-31-http-test-flakiness
+  sha: 46d62432dacd853e926dd1c3d882b5ae30c03ffb  # amendment (2026-09-06, ZCode 主会话): 重锚至
+    # master 合并后 HEAD（原 base d2a2ced 已过期，含 W4 批次/W1 任务包/kicad-happy intake），照 AEDL-CPL amendment 先例
 
 goal: |
   Make tests/test_requirements_runtime_server.py's HTTP client calls resilient
@@ -25,11 +26,14 @@ dependencies: []
 
 allowed_paths:
   - tests/test_requirements_runtime_server.py
+  - docs/compliance/AI_USAGE_LOG.md
+  - tasks/GH-31.yaml
 
 forbidden_paths:
   - gates/**
   - docs/evidence/**
-  - docs/compliance/**
+  # docs/compliance/** 原整体禁写；amendment (2026-09-06) 放行 AI_USAGE_LOG.md 单文件——
+  # AGENTS §4 AI 实质参与必须留痕，照 AEDL-CPL envelope 先例（allowed 含台账单文件）。
   - src/**
   - sandbox_runtime/**
 
@@ -41,13 +45,24 @@ acceptance: |
     tolerates a transient connection failure while making the request.
 
 change_budget:
-  expected_files: 1
-  expected_modules: [tests]
+  # amendment (2026-09-06): +2 流程文件（台账 + envelope 本体），照 AEDL-CPL 必修#3 先例
+  expected_files: 3
+  expected_modules: [tests, docs, tasks]
   cross_module: false
   contract_change: false
   evidence_semantics_change: false
 
-exceptions: {}
+exceptions:
+  # Agent cannot self-authorize. 脏树来源 = envelope 修订与台账条目未提交（定稿 run 必然状态），
+  # 同 AEDL-R1 / AEDL-CPL / W1-Y1 先例。
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "大统领 2026-09-06 指令「进军 Issue #31 / PR #33」（本会话定稿收尾）+ R1/CPL/W1-Y1 先例"
+  # amendment 2 (2026-09-07): master 并行合并（W1 批次）后 base 需再重锚；
+  # 44bcea9 为 merge origin/master 后的验证终态 HEAD（322 OK + gate pass），照 CPL rebaseline 先例。
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "大统领 2026-09-06 指令「进军 Issue #31 / PR #33」延续（PR #33 冲突解决收尾）+ AEDL-CPL rebaseline 先例"
 
 escalation:
   owner: Percy

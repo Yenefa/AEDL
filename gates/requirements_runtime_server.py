@@ -110,8 +110,17 @@ def _heuristic_proposal(request: str) -> Dict[str, Any]:
 class RequirementsRuntime:
     """In-memory runtime state. One contract + one proposal per server process."""
 
-    def __init__(self, propose: Optional[Callable[[str], Dict[str, Any]]] = None) -> None:
+    def __init__(
+        self,
+        propose: Optional[Callable[[str], Dict[str, Any]]] = None,
+        clock: Optional[Callable[[], datetime]] = None,
+    ) -> None:
         self._propose = propose
+        # Injectable clock: production leaves it None (real wall time); tests
+        # pass a fixed callable so the 7-day freshness gate (C5 in
+        # requirements_contract) does not rot with the calendar. See Issue #31's
+        # follow-up / the "contract is stale" CI baseline failure (2026-09-07).
+        self._clock = clock
         self.proposal: Optional[Dict[str, Any]] = None
         self.answers: Dict[str, str] = {}
         self.contract: Optional[Dict[str, Any]] = None
@@ -180,7 +189,8 @@ class RequirementsRuntime:
         # not write the intent reference itself).
         contract_path = Path(path) if path else (root / "gates" / "requirements" / "requirements_contract_v1.json")
         intent_path = root / "src" / "hardware" / "m2-board" / "intent_v1.json"
-        errors = validate_requirements_contract(contract_path, intent_path)
+        now = self._clock() if self._clock is not None else None
+        errors = validate_requirements_contract(contract_path, intent_path, now=now)
         return {"status": "pass" if not errors else "fail", "errors": errors}
 
 

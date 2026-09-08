@@ -3232,6 +3232,24 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
   Percy 会话（Claude）已确认的 W1 任务卡与既档研究材料，不新增技术主张。
 - 人工审核：`PENDING_HUMAN_REVIEW`
 
+## AI-20260906-003
+
+- 日期：2026-09-06
+- 任务名称：Issue #31 — test_requirements_runtime_server 非 3.9 解释器下间歇失败：修复审核、验收复跑与定稿（PR #33）
+- 会话：ZCode 主会话（大统领指令「进军」）；修复本体由 `la4876949-bot` 会话完成（PR #33 既有 commit）
+- 参与：DEBUG / DOCUMENT
+- 模块/路径：
+  - `tests/test_requirements_runtime_server.py`（`_post()` 连接级失败 3 次有界重试 + 线性退避；HTTP 错误响应不重试——修复本体，本会话未改一字节）
+  - `tasks/GH-31.yaml`（amendment：base 重锚 d2a2ced → 46d6242（master 合并后 HEAD），allowed_paths 补台账与 envelope 本体，照 AEDL-CPL amendment 先例）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 审核结论：修复方向正确——只重试连接级失败（ConnectionError/HTTPException/URLError），HTTPError 照常返回（不掩盖真实断言信号）；有界 3 次。已知理论边界：POST 非幂等场景下重试可能二次执行，但这些用例的语义（finalize/404）二次执行会得到不同响应并使断言显式失败，不会静默假通过。
+- 验收复跑（真实运行，本机，对照 envelope 验收标准）：
+  - `py -3.13 -m unittest tests.test_requirements_runtime_server` × 10 → **10/10 OK**（修复前基线 ~2/6 失败率；满足"10 次零失败"验收）
+  - `py -3.9 -m unittest tests.test_requirements_runtime_server` → OK（3.9 基线不受影响）
+  - `python -m tools.dev_gate --envelope tasks/GH-31.yaml` → 结果随回执归档（run 结果见 bundle）
+- 已知限制：竞态根因未完全定位（envelope 如实记载"HTTPServer 同步 bind，非明显 listen-before-serve race"），本修复属鲁棒性兜底而非根因修复；3.13-32bit/其他平台组合未测。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
 ## AI-20260906-004
 
 - 日期：2026-09-06
@@ -3273,6 +3291,36 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - AI 参与：DOCUMENT —— 入库执行与引用挂接；方案及核查内容为 Codex 会话产出，本会话未改其实质。
 - 人工审核：`PENDING_HUMAN_REVIEW`
 
+## AI-20260906-006
+
+- 日期：2026-09-06
+- 任务名称：W1/P5 —— build_board.py 的 U3 封装映射修复 + 类级回归
+- 模块/路径：
+  - `tools/build_board.py`（FP_MAP 中 U3 封装修正）
+  - `tests/test_build_board_footprints.py`（新增，3 例）
+  - `tasks/GH-P5.yaml`（envelope）
+  - 本条台账
+- AI 工具/平台：Claude Code
+- 模型：`claude-opus-5`
+- AI 参与类型：DEBUG、GENERATE_CODE、GENERATE_TEST
+- 缺陷：`tools/build_board.py` 的 `FP_MAP` 把 U3 映射为 `Package_TO_SOT_SMD:SOT-23-5`，而 C82942 → C235316（ME6211C33R5G）换料后全链权威源（`intent_v1.json` / `ops_gen.json` / BOM / `m2_component_contracts.json` / `board_review_v1.json`）均为 **SOT-353**。任何人跑 builder 重建都会把换料前的旧封装静默带回 PCB。
+- 开工前实测确认范围：对 intent 中 **16 件已声明 footprint** 的器件逐一比对，**仅 U3 一处不一致**，其余 15 件一致；另 7 件（U1/U2/J1/SW1/SW2 + 两个电源标记）intent 未声明 footprint，补声明属设计意图变更，不在本次范围。
+- AECP 流程（本任务按任务卡要求走完整 Envelope + Admission）：
+  - 首轮 admit **BLOCKED**：`--allow-dirty` 与 `--allow-drift` 均被拒，工具明确提示「agent cannot self-authorize」。
+  - 根因是结构性死结：信封不提交则树脏、提交则 HEAD 移动导致基线漂移——**文件无法包含自身提交的 sha**。仓库惯例（信封先落 master）需要直推共享分支，Agent 不得擅自执行。
+  - 由信封中具名的 escalation owner **Percy 人工授权** `exceptions.allow_drift`（`decision_ref: W1/P5 session 2026-09-06`），先例见 AI-20260903-001（allow_dirty，granted_by=Yenefa）。
+  - 授权后 admit → **ADMIT，exit 0**，`envelope_sha256 2fbdc043357f…`；回执经 `--admit-receipt` 传入 dev_gate，`binding_check` 由 fail 转 pass。
+- 回归测试设计（钉的是**缺陷类别**而非单点）：对 intent 中全部已声明 footprint 与 `FP_MAP` 逐项比对，任一漂移即失败；另钉 U3 具体值，并含一例自检（受控扰动副本必须报出不一致，证明检查非空转）。
+- 验证（真实运行，先红后绿）：
+  - **RED**：临时把 U3 退回 `SOT-23-5` → 3 例中 **2 例失败**（通用断言 + U3 钉值）。
+  - **GREEN**：恢复修复 → **3/3 OK**。
+  - 全量 `unittest discover -s tests` → **325 例**（原 322 + 新增 3）。
+  - `dev_gate --envelope --admit-receipt` → syntax/sandbox_tests/secret_scan/**scope_check**/**binding_check**/bundle_check 全 pass。
+- **已知既有缺陷（非本次引入）**：全量套件与 dev_gate 的 `main_tests` **间歇性失败**——本轮实测 `unittest` 3 次中 1 次失败、`dev_gate` 2 次中 1 次失败，traceback 指向 `urllib/request.py` 且解释器为 Python 3.13，正是 **Issue #31** 的签名（台账记录约 2/6 失败率），修复在**尚未合并的 PR #33**。本次新增的 3 例为纯确定性、不涉网络。此为 Issue #31 在另一日期的一次独立复现。
+- 团队自主部分：`allow_drift` 例外由 Percy 人工授权；Agent 未自授权任何标志。
+- 已知限制：未重建 PCB（builder 未实际执行，本机无 pcbnew）；未触碰原理图/PCB/BOM/任何证据文件；SOT-353 不在 KiCad 标准 `Package_TO_SOT_SMD` 库内属既有状态（见冻结 ERC 证据的同名 warning），不由本次修复引入、亦不由本次解决。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
 ## AI-20260906-011
 
 - **台账 ID 改号说明（2026-09-07，PR #38 解决 master 合并冲突时补记）**：本条目原领用
@@ -3303,4 +3351,171 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - 团队自主部分：无。本目录只陈述手册事实，不做设计判断与修复建议；强制/建议两级区分为按手册措辞（must vs advised/recommended）如实标注。
 - 验证（真实运行）：`py -3.9 -m tools.dev_gate` → 见本 PR。事实条目均可按所记页码在仓库内原件复核。
 - 已知限制：U1 datasheet 无 `/Title` 元数据，**版本号 `TO_VERIFY`**（仅有 CreationDate）；未覆盖 D1/SW1/SW2/无源件；未从来源 C（J1 镜像）提取任何事实。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260907-001
+
+- 日期：2026-09-07
+- 任务名称：W1 工程执行计划入库（Y2/Y3/Y4 前置的文件级拆分，Codex 2026-09-07 产出；人类指令入库）
+- 模块/路径：
+  - `docs/competition/internal/AEDL_W1_工程执行计划.md`（新增，INTERNAL banner；核心结论：当前
+    不能有效运行 Y4，缺口在执行通道与实验组件而非架构——PR-1 akcli 受约束补丁/PR-2 独立重验/
+    PR-3 六例物化+强 D+C 接口 三段拆分；strict-nets 与合法拓扑修复冲突的 0.21.0 源码级分析
+    （B01 最高优先级 blocker）；patch schema envelope 设计；Y3 四个连接点；12 项 blocker 清单；
+    PR-3 文件组与验收命令）
+  - `docs/competition/internal/W1_TASKS_20260907.md`（Y4 段挂执行计划引用）
+  - `docs/competition/internal/W1_CARD_Yenefa_20260907.md`（Y2/Y3 卡挂 PR-1/PR-2 拆分要点）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 说明：计划编制者本轮只做审查与拆分（51 项现有测试通过为验证记录），未新增生产代码、未运行 Y4。
+  本会话入库执行与引用挂接，未改其实质。P3/P4/Y4 v1.1 已合入（#43），计划对此已校准，
+  未列为待编写。B09（P3 三条待核验）与 Y1 范围 DRAFT 为并行推进项，不阻塞 PR-1 开工。
+- AI 参与：DOCUMENT —— 入库执行与挂接。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260907-002
+
+- 日期：2026-09-07
+- 任务名称：PR-1 akcli 裁决三件套 + 大统领战略裁决入库（Y2 开工依据冻结）
+- 模块/路径：
+  - `docs/competition/internal/AEDL_PR1_技术裁决_20260907.md`（新增，INTERNAL banner；Codex
+    2026-09-07 原生资格实测报告：三层拒绝机制源码定位、E1/E2/E3/DC-04/05 精确拓扑差分与
+    protected-diff 定义、最小例外架构（AEDL adapter 包原生 writer）、patch envelope 契约、
+    快照/字节级回滚事务设计、PR-1 文件级任务与测试集、Go/No-Go 判据、降级条款）
+  - `docs/competition/internal/AEDL_PR1_原生资格记录_20260907.json`（实测原始记录：5 案例注入/
+    strict dry-run/apply 退出码、DC-03 旁路负例、序列与重放、上游 netdiff 23 测试、probe 文件哈希）
+  - `docs/competition/internal/AEDL_PR1_裁决矩阵_20260907.csv`（READY / READY_WITH_CONSTRAINED_EXCEPTION）
+  - `docs/competition/internal/AEDL_PR1_大统领裁决_20260907.md`（新增：大统领会话裁决记录——akcli
+    身份重定义为受控 writer、Repair Executor 冻结定义、"执行成功≠工程正确性证据"升格为核心
+    设计原则、Y4 答案泄漏防线（proposal-visible vs host-only policy 分离）、PR-1/PR-2 边界修订、
+    能力表、下一步顺序冻结、降级条款；ZCode 代笔入库）
+  - `docs/competition/internal/W1_TASKS_20260907.md`（TASK-Y2 挂裁决引用）
+  - `docs/competition/internal/W1_CARD_Yenefa_20260907.md`（开工前必读段）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 关键结论（实测支撑）：strict-nets 只是 named-net split/merge 检测器而非修复策略；DC-03 旁路
+  负例（exit 0 + applied=true 但电阻两端短接）为"工具执行成功≠拓扑修复正确"提供真实实验证据；
+  DC-04/05 须 place+connect 同一 op-list 单批提交（事务原子性）。
+- AI 参与：DOCUMENT —— 大统领裁决代笔结构与三件套入库执行；实测与源码审查为 Codex 会话产出。
+- 已知限制：独立 KiCad 验证 NOT_RUN（该环境无 kicad-cli）；资格样本非封存 Y4 计分输入；
+  生产启用 NO-GO。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260907-003
+
+- 日期：2026-09-07
+- 任务名称：PR-1 Implementation Contract 三件套入库 + 五查审查（Yenefa 指令：审查并冻结 PR-1 contract）
+- 会话：ZCode 主会话（审查与入库）；合同编制为 Codex 会话（2026-09-07，基线 master@01e30d6 + PR #44 head 5ce1203）
+- 模块/路径：
+  - `docs/competition/internal/AEDL_PR1_实现合同_20260907.md`（Implementation Contract v1，52KB/12 节：
+    五生产文件冻结范围/所有权与依赖方向/Proposal-HostPatch 数据接口（三原语 op 子集）/
+    canonical JSON 与 TopologyObservation/hash 体系/三层可见性/五规则执行语义（含 E3 四分区与
+    坐标冻结）/模块 API 与 StageApplyResult/thin verifier 与 commit 谓词（合取无例外）/单轮状态机
+    与 fail-closed 恢复规则/C1–C6 commit 顺序与验收命令/完成边界 READY_TO_IMPLEMENT）
+  - `docs/competition/internal/AEDL_PR1_开发任务卡_20260907.md`（Ready-to-Code Task Card：可写范围、
+    接口职责表、规则-事务表、编码验收顺序、交接完成标准）
+  - `docs/competition/internal/AEDL_PR1_topology_policy_v1_draft.json`（五规则精确数据 UNBOUND 草案，
+    enabled_by_default=false；JSON 本体零改动入库——unknown_field=REJECT 纪律，banner 由伴生 .md 承载）
+  - `docs/competition/internal/W1_TASKS_20260907.md`（Y2 段挂实现合同冻结引用）
+  - `docs/competition/internal/W1_CARD_Yenefa_20260907.md`（PR-1 开写入口段）
+- 五查审查结论（ZCode，2026-09-07，全部通过）：
+  1. **Y4 ground truth 泄漏**：三层可见性（public/host-only/acceptance-private）+ public_projection
+     deny 列表（rules/after/expected_delta/golden/standard_patch 等）+ acceptance_private
+     forbidden_consumers 含 C/D——防线闭合。
+  2. **绕过 Sandbox**：bind_policy 强制消费既有 PolicyPort 授权（TOOL_EXECUTE/FILE_WRITE 非 ALLOW
+     即 BLOCKED）；不新建 grant/签名类型。
+  3. **policy 自授权**：approved_rule_ids 只从宿主解析的真实批准记录派生；enabled_by_default=false；
+     草案 required_runtime_values 无默认值路径；伪造 policy_ref/hash 一律拒绝。
+  4. **过宽拓扑例外**：机器核验——E1 after/E3 四分区/E2/DC-04/DC-05 成员与 P4 期望（PR #39）逐项
+     相等（13/13 PASS）；E3 旁路 wire 坐标 nm 级与资格实测 fault.kicad_sch 一致；members_exact
+     集合相等语义 + derived_risk counts_alone_authorize=false。
+  5. **rollback/hash 漏洞**：恢复规则 1–5 覆盖未发布 stage/部分提交/无权限文件变化/崩溃重启
+     （无 terminal record 即恢复不猜成功）/恢复失败 TOOL_ERROR；design 恢复与 candidate_hash 分开
+     声明；幂等键 (run,candidate,patch) 漂移即 BLOCKED。
+- fixture 来源核实：`Documents/Codex/2026-09-07/aedl-pr-1-akcli-0-21/work/native-probes/DC-01..05`
+  存在（fault.kicad_sch/repair_ops.json 等）；E2 固件断言路径 `src/firmware/include/sht30.h`
+  DEFAULT_ADDR=0x44 实核一致（=68 十进制）。
+- 已知限制：本审查为 AI candidate judgment；合同是编码合同不是已实现系统；原生资格测试
+  （C6 opt-in）与 KiCad 独立验证依赖 Yenefa 环境闭合；三份文件不得喂给 C/D 计分会话（曝光纪律）。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260907-004
+
+- 日期：2026-09-07
+- 任务名称：CI 时间炸弹修复——requirements runtime validate 注入时钟（大统领拍板方案 B）
+- 会话：ZCode 主会话（独立 CI/test-infra 修复，不属 #46）
+- 参与：DEBUG
+- 模块/路径：
+  - `gates/requirements_runtime_server.py`（RequirementsRuntime.__init__ 增 clock 可注入参数，
+    默认 None=真实墙钟，生产行为不变；validate() 把 now 透传给 validate_requirements_contract——
+    该函数本就支持 now= 参数，属接线而非新语义）
+  - `tests/test_requirements_runtime_server.py`（ValidateEndpointRealContractTests 注入固定时钟
+    2026-09-01（合同 8/30 签发的 7 天窗口内）；新增反向用例
+    test_validate_endpoint_reports_stale_contract_when_clock_is_past_window——固定 2026-10-01 时钟
+    必须如实报 stale fail，证明注入没有绕过 C5 新鲜度门禁）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 背景：合同 8/30 签发、7 天设计过期，2026-09-07 起该测试随日历确定性变红（master 与全部
+  PR 的 CI 同红，job 101521379908/101777728708 均确认此唯一根因）。方案 A（重签合同）7 天后再炸；
+  方案 B（注入固定时钟）一次根治，反向用例保证门禁语义不被测试架空。
+- 验证（真实运行）：模块 13/13 OK（含新增反向用例）；全量 `unittest discover -s tests`
+  → **323/323 OK**（322 + 新增 1，时间炸弹拆除）；`py -3.9` 与 `py -3.13` 双解释器 OK。
+- 已知限制：合同过期本身的治理语义（7 天后需要人工 re-confirm）不变——生产环境仍会在
+  真实时间过期时报 fail，这是设计行为；本修复只让回归测试不再随日历腐烂。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260907-005
+
+- 日期：2026-09-07
+- 任务名称：PR-1 C1 —— proposal/topology 合同冻结 + pipeline 解析/政策结构校验/public 投影纯函数
+- 会话：WorkBuddy 主会话（实现侧执行 Agent）；编码依据为 PR #46 的《AEDL_PR1_实现合同_20260907.md》v1（已冻结，本次未改动任何合同文档）
+- 模块/路径：
+  - `src/repair/patch_schema_v1.json`（新增：PATCH/REFUSE 互斥、三原语 op 子集、闭合字段与 limits、
+    禁用自证字段清单（applied/verdict/expected_delta 等 10 项）、canonical JSON 与 digest 约定、
+    `$defs` 声明 HostPatch 与回执形状、`public_op_schema` 不含任何逐例答案）
+  - `src/repair/topology_policy_v1.json`（新增：五规则数据的逐字节落地，来源
+    `docs/competition/internal/AEDL_PR1_topology_policy_v1_draft.json`，11846 字节、
+    sha256 `999d28f8cc2690f3a0362d7865293b84551ef05fafe32e1c765fb1b8f7d1e36b`，JSON 本体零改动）
+  - `tools/repair_pipeline.py`（新增，仅 C1 子集：`parse_proposal`、`validate_topology_policy`、
+    `make_public_context`、`public_feedback`、canonical hash helpers；**不含** run_round /
+    bind_policy / snapshot / stage / commit / rollback，不导入 adapter 或 verifier）
+  - `tests/test_repair_contract.py`（新增，87 用例）
+  - `tasks/PR1-C1.yaml`（新增 task envelope）+ `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 实测结果：
+  - `python -X utf8 -m unittest tests.test_repair_contract` → 87 passed（py 3.9.13 与 3.13.1 双绿）
+  - 既有回归 `tests.test_generate_m2_ops tests.test_schematic_semantics tests.test_gate_core tests.test_run_gates` → 51 passed
+  - `python -X utf8 -m tools.admit --envelope tasks/PR1-C1.yaml --allow-dirty` → ADMIT（allow_dirty 由 envelope 预授权 + CLI 旗标双写）
+  - policy 结构校验对仓库 policy 零 finding：E1/E2/E3 → CONSTRAINED_EXCEPTION、DC-04/05 → STRICT 唯一；
+    每条规则的分区替换均可回溯到 before slot、新组件 pin 完整（R7/R8/R9/C5 均为 {1,2}）、
+    operation_counts 与声明的 object_delta 逐项相等、enabled_by_default 保持 false
+  - public 投影为白名单构造：`make_public_context` 仅 8 个字段、拒绝 denied key/token；
+    `public_feedback` 仅 4 个字段，observed_issue_ids 与 host allowlist 求交
+- AI 参与：GENERATE_CODE + GENERATE_TEST —— 按冻结合同编码与测试；未重新裁决架构、未重研 akcli 能力、未产出合同 v1.1
+- ID 说明：master 最新占用为 AI-20260907-002；003（PR #46 合同三件套）与 004（PR #47 固定时钟）已在开放 PR 分支占用，
+  为避免撞号本条取 005（改号说明见此）
+- 已知限制：C2–C6 未实现（verifier 纯函数/fresh KiCad 绑定/adapter/单轮事务/原生资格均 NOT_RUN）；
+  本次不生成正式 Evidence、不触发 promotion；本会话已读 host-only policy，
+  按合同 §6 不得冒充未曝光的 C/D 计分会话
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260908-001
+
+- 日期：2026-09-08
+- 任务名称：PR-1/C1 rebase 到 b369f17 后基线 + 修复 C1 review 两处小坑（大统领指令）
+- 会话：ZCode 主会话
+- 参与：REFACTOR / DEBUG
+- 模块/路径：
+  - rebase：`feat-pr1-c1-repair-contracts` 5ae2e7c → 388f054（基于 c34cd0d，含 #41/#46/#47；
+    台账冲突按"双方保留、005 排 004 后"解决）
+  - `tools/repair_pipeline.py`（坑①）：`load_topology_policy` 的解析/读文件错误收敛——原先
+    strict-JSON 失败经 `load_json_strict` 包装成 `ProposalInvalidError`（错误归类：policy 文件的
+    错误不该算 proposal 错）、路径缺失抛裸 `OSError`；现统一转 `PolicyInvalidError`，
+    调用方/测试只有一个错误路径可捕获
+  - `tools/repair_pipeline.py`（坑②）：`make_public_context` 对 `current_observation`/`public_facts`
+    /`limits` 做 JSON 深快照（原先直接放引用——宿主侧后续变更会穿透到已发出的 PublicContext，
+    aliasing/TOCTOU；不可序列化输入显式 ProposalInvalidError，不静默共享引用）
+  - `tests/test_repair_contract.py`（+5 防回归用例：observation/facts/limits 三向 no-aliasing、
+    不可序列化拒绝、policy 加载双错误路径收敛）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 验证（真实运行）：`tests.test_repair_contract` → **92/92 OK**（87+5）；`py -3.9` 同模块 OK；
+  全量 `unittest discover -s tests` → **418/418 OK**。
+- 说明：两个坑均为大统领 2026-09-08 review 指出；合同接口/数据形状零变化（§12 允许的内部实现
+  选择），不出 v1.1 合同。
 - 人工审核：`PENDING_HUMAN_REVIEW`
