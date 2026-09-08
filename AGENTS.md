@@ -323,11 +323,22 @@ Agent 可以起草 PR、分析 PR、提出 Review 建议，但不得冒充人工
 
 # 4. AI 使用留痕
 
-当 AI 对以下内容产生**实质贡献**时，更新：
+当 AI 对以下内容产生**实质贡献**时，新增一条条目文件：
 
 ```text
-docs/compliance/AI_USAGE_LOG.md
+docs/compliance/ai-usage/<ID>.md
 ```
+
+`docs/compliance/AI_USAGE_LOG.md` 是脚本自动生成的索引，**禁止手工编辑**
+（GH-49 / ADR-012：单文件 append-only 台账在多分支并行下系统性产生 Git 冲突与撞号，
+已改为每条一个文件 + 生成索引）。新增条目后运行：
+
+```text
+python -m tools.build_ai_usage_index build
+```
+
+`python -m tools.dev_gate` 的 `ai_usage_ledger` 检查会 fail-closed 校验：
+ID 格式、重复 ID、日期一致性、审核状态行、索引同步。
 
 触发项：
 
@@ -347,11 +358,17 @@ docs/compliance/AI_USAGE_LOG.md
 
 同一 Issue / PR、同一目标的多轮 Agent 交互可合并为一条记录。
 
-ID：
+ID（两种格式并存，存量不追溯改号）：
 
 ```text
-AI-YYYYMMDD-NNN
+AI-YYYYMMDD-NNN              # 旧格式（GH-49 前存量，只读）
+AI-YYYYMMDD-<ACTOR>-<NN>     # 当前格式：例 AI-20260908-YEN-001
 ```
+
+`ACTOR` 是登记过的 actor 代号（真人 YEN=Yenefa / PER=Percy / LIO=Lior，
+Agent ZCODE / CODEX / CLAUDE / OPENCODE / BOT；新增代号须先登记 `docs/ID_MAP.md`
+再启用）。**各 actor 只在自己名下递增 `<NN>`，不同 actor 的号码互不冲突——
+并行分支领号不再需要读全库比大小。**
 
 参与标签：
 

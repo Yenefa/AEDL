@@ -14,11 +14,15 @@ README、HANDOFF 与本文件只负责导航和项目状态说明，不复制维
 
 | 发生的事实 | 必须更新 |
 | --- | --- |
-| AI 对代码、测试、文档、设计、调试、研究、Benchmark 或媒体有实质贡献 | `AI_USAGE_LOG.md` |
+| AI 对代码、测试、文档、设计、调试、研究、Benchmark 或媒体有实质贡献 | `ai-usage/<ID>.md` 新建条目（GH-49）；`AI_USAGE_LOG.md` 为生成索引，禁手改 |
 | 新增外部工具、库、模型、服务、数据、素材、示例、Prompt 或 Skill | `THIRD_PARTY_RESOURCES.md` |
 | 形成架构、接口、验证、Benchmark、范围、安全或开源边界决策 | `DECISIONS.md` |
 | 形成测试、Benchmark、故障注入或效果主张 | `../evidence/EVIDENCE_INDEX.md` |
 | 需要记录团队实际贡献 | `TEAM_CONTRIBUTIONS.md`，不得由 AI 猜测人员或贡献 |
+
+## 台账存储（GH-49 / ADR-012）
+
+`AI_USAGE_LOG.md` 由 `python -m tools.build_ai_usage_index build` 自动生成（文件头有 GENERATED 标记），真源是 `ai-usage/` 下的逐条文件。dev_gate 的 `ai_usage_ledger` 检查校验 ID 格式、重复 ID、日期一致性、审核状态行与索引同步，fail-closed。
 
 ## 审核状态
 

@@ -33,13 +33,14 @@
 
 **共享只读区**（谁都不许写，除非大统领指令）：`src/`、`delivery/`、`docs/compliance/` 台账（追加自己那条除外）、既有 9 门禁代码、`notes/m2-*`。
 
-**追加型文件**（只许 append 自己的条目，不许改别人的）：`docs/compliance/AI_USAGE_LOG.md`、`docs/HANDOFF.md`（各改各的章节）。
+**追加型文件**（只许 append 自己的条目，不许改别人的）：`docs/compliance/ai-usage/<自己的新条目>.md`（GH-49 后每条一个文件）、`docs/HANDOFF.md`（各改各的章节）。`docs/compliance/AI_USAGE_LOG.md` 是生成索引，**任何人不许手工编辑**。
 
-## 0.1 台账领号（防撞号，2026-08-31 两次实战撞号后固化）
+## 0.1 台账领号（GH-49 / ADR-012 起不再有全局撞号）
 
-1. 领号 = `grep -o "AI-2026[0-9-]*" docs/compliance/AI_USAGE_LOG.md | sort -u | tail -1` 取最大号 +1。
-2. **领号后第一步立即追加占位条目**（标题 + 一行"claimed by <会话名>，内容完工后补"）再开始干活——占位即锁号。
-3. 提交信息里的 `[AI-...]` 标签以台账条目**内容**为准，撞号时按条目甄别，不改写已提交历史。
+1. ID 用 actor 格式：`AI-YYYYMMDD-<ACTOR>-<NN>`（例 `AI-20260908-YEN-001`）。`<NN>` 只在自己的 actor 名下递增——先 `ls docs/compliance/ai-usage/ | grep "<ACTOR>"` 看自己最大号 +1，与他人无关。
+2. **领号后第一步立即新建自己的 `<ID>.md` 占位条目**（标题 + 一行"claimed by <会话名>，内容完工后补" + 状态行 `PENDING_HUMAN_REVIEW`）再开始干活——文件即锁号，不同分支新建不同文件，Git 不可能冲突。
+3. 存量旧格式 `AI-YYYYMMDD-NNN` 只读不新发；收尾运行 `python -m tools.build_ai_usage_index build` 重建索引，dev_gate `ai_usage_ledger` 检查会 fail-closed 拦截格式错误与撞号。
+4. actor 代号新增须先登记 `docs/ID_MAP.md`（真人）或 `tools/build_ai_usage_index.py` REGISTERED_ACTORS（Agent），未登记代号会被门禁拒绝。
 
 ## 0.2 pre-commit 钩子（prettier）处置规则
 

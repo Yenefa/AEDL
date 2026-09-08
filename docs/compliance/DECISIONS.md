@@ -400,3 +400,35 @@
 
 - 后续复查条件：
   - 首个真实 Issue 以 envelope + admission 走完 ADMIT → EXECUTE → GATE → PENDING_HUMAN_REVIEW → MERGE 全链路；CRLF 哈希缺口得到双人裁决；或 CI/本地验证语义再次分叉时复查。
+
+## ADR-012 — AI Usage 台账拆分：per-entry 文件 + actor 前缀 ID + 生成索引
+
+- 日期：2026-09-08
+- 状态：**Proposed**（GH-49 PR 待人工审核合并后转 Accepted）
+
+- 问题：
+  - 单文件 append-only 台账（`AI_USAGE_LOG.md`）+ 每日全局递增 ID（`AI-YYYYMMDD-NNN`）在多 Agent / 多分支并行下系统性失效：所有分支在同一文件末尾同一位置 append → Git 文本冲突；各分支各自"取最大号 +1" → 语义撞号。2026-09-06 一日累计四次并行撞号（002→007→010 连锁改号，台账自记"顺序编号在多分支并行下系统性失效"）；PR #36 rebase 冲突再次复现。
+  - 撞号后的改号无法修改已共享提交的 commit message（AGENTS §3.7 禁改写历史），只能在新条目里写改号说明，台账出现"ID 名不副实"的历史包袱。
+
+- 候选方案：
+  1. 维持现状，冲突靠手工 rebase 解决——继续制造冲突与撞号。
+  2. 只改 ID 格式加 actor 前缀——语义撞号消除，但单文件 append 的 Git 冲突仍在。
+  3. 拆分存储 + actor 前缀 ID + 生成索引——每分支新建自己的文件，Git 无共享行；索引由脚本生成并校验。
+
+- 决策：
+  - 采用方案 3（GH-49）。
+  - 存储：条目真源 `docs/compliance/ai-usage/<ID>.md`（一文件一可审计工作单元）；`AI_USAGE_LOG.md` 降级为**自动生成索引**，文件头带 GENERATED 标记，禁止手工编辑。
+  - 工具：`tools/build_ai_usage_index.py`（migrate 幂等拆分 / build 重建索引 / check fail-closed 校验：ID 格式、重复 ID、日期一致性、审核状态行、索引同步、未登记 actor）。
+  - ID 双格式并存：存量 `AI-YYYYMMDD-NNN` 只读不追溯改号（含 AI-20260906-007 改号史原样保留）；新条目用 `AI-YYYYMMDD-<ACTOR>-<NN>`，`<NN>` 在各 actor 名下独立递增，并行领号无需读全库。
+  - 门禁：`dev_gate` 新增 `ai_usage_ledger` 检查调用 check 子命令，索引失同步/格式错误/撞号 = FAIL。
+  - 领号协议相应改写（`docs/COLLABORATION.md` §0.1）：领号 = 新建自己的占位文件，不同分支永远不同文件，Git 不可能冲突。
+
+- Evidence / Reference：
+  - `tools/build_ai_usage_index.py`、`tests/test_build_ai_usage_index.py`（18 例）、`docs/compliance/ai-usage/`（75 条迁移，逐字节核验）、`docs/COLLABORATION.md` §0.1、`docs/ID_MAP.md`、`AGENTS.md` §4。
+  - AI-20260908-YEN-001（台账）。
+
+- 影响：
+  - 迁移为逐字节搬运（75/75 byte-faithful；条目间分隔空行不保留，属结构不属于条目内容）；仅 2 条存量 stub（AI-20260901-007/-008）原文缺审核状态行，按 AGENTS §4 默认状态补 `PENDING_HUMAN_REVIEW` 并在此披露。
+  - 未合并分支若触碰台账（如 `docs/role-discipline-v2` 追加 23 行）合并时需迁移到 per-entry 文件再 `build`；`check` 会拦截遗漏。
+  - 开放 PR（#36–#40）中的台账追加在合并后由各自分支或本 PR 后续 commit 执行 `migrate` 收编。
+  - 后续复查条件：若 per-entry 文件数量增长到使目录枚举显著变慢（>500 条），再评估按月分目录；当前规模不做。

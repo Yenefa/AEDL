@@ -96,6 +96,8 @@ main_tests     主仓库单测（3.9 解释器，与 CI 一致）
 sandbox_tests  sandbox_runtime 单测（uv；uv 缺失时显式 excluded）
 secret_scan    高置信 secret 模式（原 CI job 同款）
 scope_check    工作区 diff vs envelope 的 allowed/forbidden（有 envelope 时）
+ai_usage_ledger  AI 台账完整性（GH-49）：ID 格式/重复/日期/状态行 + 索引同步，
+               fail-closed（ADR-012）
 ```
 
 GH-20 后无平台排除：同一命令，一种 PASS 语义，排除项可见（`excluded_checks`）。
