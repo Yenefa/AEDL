@@ -3428,3 +3428,62 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - 已知限制：合同过期本身的治理语义（7 天后需要人工 re-confirm）不变——生产环境仍会在
   真实时间过期时报 fail，这是设计行为；本修复只让回归测试不再随日历腐烂。
 - 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260907-005
+
+- 日期：2026-09-07
+- 任务名称：PR-1 C1 —— proposal/topology 合同冻结 + pipeline 解析/政策结构校验/public 投影纯函数
+- 会话：WorkBuddy 主会话（实现侧执行 Agent）；编码依据为 PR #46 的《AEDL_PR1_实现合同_20260907.md》v1（已冻结，本次未改动任何合同文档）
+- 模块/路径：
+  - `src/repair/patch_schema_v1.json`（新增：PATCH/REFUSE 互斥、三原语 op 子集、闭合字段与 limits、
+    禁用自证字段清单（applied/verdict/expected_delta 等 10 项）、canonical JSON 与 digest 约定、
+    `$defs` 声明 HostPatch 与回执形状、`public_op_schema` 不含任何逐例答案）
+  - `src/repair/topology_policy_v1.json`（新增：五规则数据的逐字节落地，来源
+    `docs/competition/internal/AEDL_PR1_topology_policy_v1_draft.json`，11846 字节、
+    sha256 `999d28f8cc2690f3a0362d7865293b84551ef05fafe32e1c765fb1b8f7d1e36b`，JSON 本体零改动）
+  - `tools/repair_pipeline.py`（新增，仅 C1 子集：`parse_proposal`、`validate_topology_policy`、
+    `make_public_context`、`public_feedback`、canonical hash helpers；**不含** run_round /
+    bind_policy / snapshot / stage / commit / rollback，不导入 adapter 或 verifier）
+  - `tests/test_repair_contract.py`（新增，87 用例）
+  - `tasks/PR1-C1.yaml`（新增 task envelope）+ `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 实测结果：
+  - `python -X utf8 -m unittest tests.test_repair_contract` → 87 passed（py 3.9.13 与 3.13.1 双绿）
+  - 既有回归 `tests.test_generate_m2_ops tests.test_schematic_semantics tests.test_gate_core tests.test_run_gates` → 51 passed
+  - `python -X utf8 -m tools.admit --envelope tasks/PR1-C1.yaml --allow-dirty` → ADMIT（allow_dirty 由 envelope 预授权 + CLI 旗标双写）
+  - policy 结构校验对仓库 policy 零 finding：E1/E2/E3 → CONSTRAINED_EXCEPTION、DC-04/05 → STRICT 唯一；
+    每条规则的分区替换均可回溯到 before slot、新组件 pin 完整（R7/R8/R9/C5 均为 {1,2}）、
+    operation_counts 与声明的 object_delta 逐项相等、enabled_by_default 保持 false
+  - public 投影为白名单构造：`make_public_context` 仅 8 个字段、拒绝 denied key/token；
+    `public_feedback` 仅 4 个字段，observed_issue_ids 与 host allowlist 求交
+- AI 参与：GENERATE_CODE + GENERATE_TEST —— 按冻结合同编码与测试；未重新裁决架构、未重研 akcli 能力、未产出合同 v1.1
+- ID 说明：master 最新占用为 AI-20260907-002；003（PR #46 合同三件套）与 004（PR #47 固定时钟）已在开放 PR 分支占用，
+  为避免撞号本条取 005（改号说明见此）
+- 已知限制：C2–C6 未实现（verifier 纯函数/fresh KiCad 绑定/adapter/单轮事务/原生资格均 NOT_RUN）；
+  本次不生成正式 Evidence、不触发 promotion；本会话已读 host-only policy，
+  按合同 §6 不得冒充未曝光的 C/D 计分会话
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260908-001
+
+- 日期：2026-09-08
+- 任务名称：PR-1/C1 rebase 到 b369f17 后基线 + 修复 C1 review 两处小坑（大统领指令）
+- 会话：ZCode 主会话
+- 参与：REFACTOR / DEBUG
+- 模块/路径：
+  - rebase：`feat-pr1-c1-repair-contracts` 5ae2e7c → 388f054（基于 c34cd0d，含 #41/#46/#47；
+    台账冲突按"双方保留、005 排 004 后"解决）
+  - `tools/repair_pipeline.py`（坑①）：`load_topology_policy` 的解析/读文件错误收敛——原先
+    strict-JSON 失败经 `load_json_strict` 包装成 `ProposalInvalidError`（错误归类：policy 文件的
+    错误不该算 proposal 错）、路径缺失抛裸 `OSError`；现统一转 `PolicyInvalidError`，
+    调用方/测试只有一个错误路径可捕获
+  - `tools/repair_pipeline.py`（坑②）：`make_public_context` 对 `current_observation`/`public_facts`
+    /`limits` 做 JSON 深快照（原先直接放引用——宿主侧后续变更会穿透到已发出的 PublicContext，
+    aliasing/TOCTOU；不可序列化输入显式 ProposalInvalidError，不静默共享引用）
+  - `tests/test_repair_contract.py`（+5 防回归用例：observation/facts/limits 三向 no-aliasing、
+    不可序列化拒绝、policy 加载双错误路径收敛）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 验证（真实运行）：`tests.test_repair_contract` → **92/92 OK**（87+5）；`py -3.9` 同模块 OK；
+  全量 `unittest discover -s tests` → **418/418 OK**。
+- 说明：两个坑均为大统领 2026-09-08 review 指出；合同接口/数据形状零变化（§12 允许的内部实现
+  选择），不出 v1.1 合同。
+- 人工审核：`PENDING_HUMAN_REVIEW`
