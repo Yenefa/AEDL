@@ -1,0 +1,238 @@
+{
+  "policy_version": 1,
+  "policy_id": "AEDL_PR1_TOPOLOGY_V1",
+  "classification": "HOST_ONLY",
+  "artifact_kind": "UNBOUND_IMPLEMENTATION_DRAFT",
+  "enabled_by_default": false,
+  "base_commit": "01e30d6a33ca959d2197736242ee49de5a11f476",
+  "target": "design/src/hardware/m2-board/m2_board.kicad_sch",
+  "scope": "ONE_FLAT_M2_SCHEMATIC_ONE_ROUND",
+  "defaults": {
+    "unknown_field": "REJECT",
+    "unmatched_rule": "BLOCKED",
+    "multiple_matching_rules": "BLOCKED",
+    "unresolved_binding": "UNKNOWN",
+    "unapproved_policy": "BLOCKED",
+    "operation_limit": 8,
+    "native_write_calls": 1,
+    "protect": "ALL_UNDECLARED_SOURCE_OBJECTS_AND_TOPOLOGY_AND_DEPENDENCY_BYTES",
+    "component_removal": "FORBIDDEN",
+    "existing_component_attribute_change": "FORBIDDEN",
+    "library_definition_change": "FORBIDDEN",
+    "no_connect_change": "FORBIDDEN",
+    "automatic_exception_fallback": false,
+    "required_checks": ["fresh_export", "source_hash_binding", "exact_topology_delta", "protected_diff"],
+    "deferred_checks": {"erc": "NOT_RUN", "semantic_runner": "NOT_RUN", "formal_evidence": "NOT_RUN"}
+  },
+  "binding_contract": {
+    "owner": "tools.repair_pipeline",
+    "input_source": "HOST_APPROVED_CURRENT_FAULT_BYTES",
+    "never_bind_from": ["proposal_expected_topology", "golden_design", "case_id_lookup_in_proposer"],
+    "required_runtime_values": [
+      "run_id", "candidate_id", "round_id", "patch_id", "proposal_sha256",
+      "base_file_manifest", "base_topology_sha256", "toolchain_manifest",
+      "policy_document_sha256", "authority_context", "approved_rule_ids",
+      "pin_identity_map", "object_identity_map", "embedded_symbol_hashes"
+    ],
+    "existing_pin_identity": ["sheet_instance_uuid_path", "component_uuid", "reference", "unit", "pin_number", "pin_uuid"],
+    "new_pin_identity": "UNIQUE_NEW_COMPONENT_ROLE_PLUS_PIN_NUMBER_UNTIL_STAGE_UUIDS_ARE_CHECKED",
+    "selectors": ["exact_pin", "unique_local_label_at_pin", "unique_wire_with_exact_endpoints", "unique_named_partition"],
+    "membership_expressions": ["literal_exact_set", "captured_before_partition_plus_exact_additions"],
+    "name_rule": "ROOT_LOCAL_LABEL_NAMES_ARE_SLASH_PREFIXED; SYNTHETIC_UNCONNECTED_NAMES_ARE_NOT_ALIASES",
+    "capture_rule": "CAPTURE_ENTIRE_BEFORE_PARTITION_ONCE; NO_REBIND_AFTER_APPLY",
+    "uuid_rule": "EXISTING_UUIDS_EXACT; NEW_UUIDS_FRESH_UNIQUE_AND_CONSISTENT_WITH_NATIVE_RESULTS",
+    "approval_rule": "EXISTING_HOST_AUTHORITY_MUST_RESOLVE_AND_ALLOW_THIS_POLICY_DIGEST_RULE_AND_ACTIONS"
+  },
+  "public_projection": {
+    "allow": ["schema_version", "context_id", "target", "base_source_sha256", "current_observation", "public_facts", "generic_op_schema", "limits"],
+    "deny": ["rules", "rule_id", "route", "object_delta", "after", "expected_delta", "approved_rule_ids", "authority_context", "acceptance", "golden", "standard_patch", "private_report"]
+  },
+  "rules": [
+    {
+      "id": "E1",
+      "trace_case": "DC-01",
+      "route": "CONSTRAINED_EXCEPTION",
+      "before": {
+        "partitions": [
+          {"slot": "dm", "names_exact": ["/USB_DM"], "members_exact": ["R8.2", "U1.14"]},
+          {"slot": "dp", "names_exact": ["/USB_DP"], "members_exact": ["R7.2", "U1.13"]},
+          {"slot": "dm_conn", "names_exact": ["/USB_DM_CONN"], "members_exact": ["J1.A7", "J1.B7", "R8.1"]},
+          {"slot": "dp_conn", "names_exact": ["/USB_DP_CONN"], "members_exact": ["J1.A6", "J1.B6", "R7.1"]}
+        ],
+        "component_assertions": [
+          {"reference": "R7", "lib_id": "Device:R", "value": "22R", "footprint": "Resistor_SMD:R_0603_1608Metric", "dnp": false, "in_bom": true, "on_board": true},
+          {"reference": "R8", "lib_id": "Device:R", "value": "22R", "footprint": "Resistor_SMD:R_0603_1608Metric", "dnp": false, "in_bom": true, "on_board": true}
+        ]
+      },
+      "after": {
+        "replace_partitions": ["dm", "dp"],
+        "partitions": [
+          {"names_exact": ["/USB_DM"], "members_exact": ["R8.2", "U1.13"]},
+          {"names_exact": ["/USB_DP"], "members_exact": ["R7.2", "U1.14"]}
+        ],
+        "add_components": [],
+        "all_other_partitions": "UNCHANGED"
+      },
+      "object_delta": {
+        "remove": [
+          {"slot": "wrong_dm", "kind": "label", "name": "USB_DM", "at_pin": "U1.14", "scope": "local"},
+          {"slot": "wrong_dp", "kind": "label", "name": "USB_DP", "at_pin": "U1.13", "scope": "local"}
+        ],
+        "add_labels": [
+          {"name": "USB_DM", "at_pin": "U1.13", "scope": "local", "rotation": 0},
+          {"name": "USB_DP", "at_pin": "U1.14", "scope": "local", "rotation": 0}
+        ]
+      },
+      "operation_counts": {"delete_object": 2, "add_net_label": 2, "place_component": 0},
+      "derived_risk": {"named_split": 2, "named_merge": 2, "counts_alone_authorize": false}
+    },
+    {
+      "id": "E2",
+      "trace_case": "DC-02",
+      "route": "CONSTRAINED_EXCEPTION",
+      "before": {
+        "partitions": [
+          {"slot": "addr", "names_exact": [], "members_exact": ["U2.2"], "no_connect": false},
+          {"slot": "gnd", "names_exact": ["/GND"], "capture_all_members": true, "contains": ["U2.7", "U2.8", "U2.9"], "excludes": ["U2.2"]}
+        ],
+        "readonly_fact_assertions": [
+          {"path": "design/src/firmware/include/sht30.h", "constant": "DEFAULT_ADDR", "integer_equals": 68}
+        ]
+      },
+      "after": {
+        "replace_partitions": ["addr", "gnd"],
+        "partitions": [
+          {"names_exact": ["/GND"], "members_from": "gnd", "add_exact": ["U2.2"]}
+        ],
+        "add_components": [],
+        "all_other_partitions": "UNCHANGED"
+      },
+      "object_delta": {
+        "remove": [],
+        "add_labels": [{"name": "GND", "at_pin": "U2.2", "scope": "local", "rotation": 0}]
+      },
+      "operation_counts": {"delete_object": 0, "add_net_label": 1, "place_component": 0},
+      "derived_risk": {"named_split": 0, "named_merge": 1, "counts_alone_authorize": false}
+    },
+    {
+      "id": "E3",
+      "trace_case": "DC-03",
+      "route": "CONSTRAINED_EXCEPTION",
+      "before": {
+        "absent_components": ["R7", "R8"],
+        "partitions": [
+          {"slot": "dp_joined", "names_exact": ["/USB_DP", "/USB_DP_CONN"], "members_exact": ["J1.A6", "J1.B6", "U1.14"]},
+          {"slot": "dm_joined", "names_exact": ["/USB_DM", "/USB_DM_CONN"], "members_exact": ["J1.A7", "J1.B7", "U1.13"]}
+        ]
+      },
+      "after": {
+        "replace_partitions": ["dp_joined", "dm_joined"],
+        "partitions": [
+          {"names_exact": ["/USB_DP_CONN"], "members_exact": ["J1.A6", "J1.B6", "R7.1"]},
+          {"names_exact": ["/USB_DP"], "members_exact": ["R7.2", "U1.14"]},
+          {"names_exact": ["/USB_DM_CONN"], "members_exact": ["J1.A7", "J1.B7", "R8.1"]},
+          {"names_exact": ["/USB_DM"], "members_exact": ["R8.2", "U1.13"]}
+        ],
+        "add_components": [
+          {"reference": "R7", "lib_id": "Device:R", "value": "22R", "footprint": "Resistor_SMD:R_0603_1608Metric", "position_mil": [8600, 7600], "rotation": 0, "mirror": "none", "unit": 1, "dnp": false, "in_bom": true, "on_board": true},
+          {"reference": "R8", "lib_id": "Device:R", "value": "22R", "footprint": "Resistor_SMD:R_0603_1608Metric", "position_mil": [10900, 7600], "rotation": 0, "mirror": "none", "unit": 1, "dnp": false, "in_bom": true, "on_board": true}
+        ],
+        "all_other_partitions": "UNCHANGED",
+        "distinct_partition_pins": [["R7.1", "R7.2"], ["R8.1", "R8.2"]]
+      },
+      "object_delta": {
+        "remove": [
+          {"slot": "dp_bypass", "kind": "wire", "endpoints_nm": [[218440000, 189230000], [218440000, 196850000]]},
+          {"slot": "dm_bypass", "kind": "wire", "endpoints_nm": [[276860000, 189230000], [276860000, 196850000]]}
+        ],
+        "add_labels": []
+      },
+      "operation_counts": {"delete_object": 2, "add_net_label": 0, "place_component": 2},
+      "derived_risk": {"named_split": 2, "named_merge": 0, "counts_alone_authorize": false}
+    },
+    {
+      "id": "DC-04",
+      "trace_case": "DC-04",
+      "route": "STRICT",
+      "before": {
+        "absent_components": ["R9"],
+        "partitions": [
+          {"slot": "boot", "names_exact": ["/BOOT"], "members_exact": ["SW2.1", "U1.8"]},
+          {"slot": "vdd", "names_exact": ["/+3V3"], "capture_all_members": true, "contains": ["R3.1"]},
+          {"slot": "gnd", "names_exact": ["/GND"], "capture_all_members": true, "contains": ["SW2.2"]}
+        ]
+      },
+      "after": {
+        "replace_partitions": ["boot", "vdd"],
+        "partitions": [
+          {"names_exact": ["/BOOT"], "members_from": "boot", "add_exact": ["R9.2"]},
+          {"names_exact": ["/+3V3"], "members_from": "vdd", "add_exact": ["R9.1"]}
+        ],
+        "add_components": [
+          {"reference": "R9", "lib_id": "Device:R", "value": "10k", "footprint": "Resistor_SMD:R_0603_1608Metric", "position_mil": [1350, 10150], "rotation": 0, "mirror": "none", "unit": 1, "dnp": false, "in_bom": true, "on_board": true}
+        ],
+        "all_other_partitions": "UNCHANGED",
+        "distinct_partition_pins": [["R9.1", "R9.2"]]
+      },
+      "object_delta": {
+        "remove": [],
+        "add_labels": [
+          {"name": "+3V3", "at_pin": "R9.1", "scope": "local", "rotation": 0},
+          {"name": "BOOT", "at_pin": "R9.2", "scope": "local", "rotation": 0}
+        ]
+      },
+      "operation_counts": {"delete_object": 0, "add_net_label": 2, "place_component": 1},
+      "derived_risk": {"named_split": 0, "named_merge": 0, "counts_alone_authorize": false}
+    },
+    {
+      "id": "DC-05",
+      "trace_case": "DC-05",
+      "route": "STRICT",
+      "before": {
+        "absent_components": ["C5"],
+        "partitions": [
+          {"slot": "en", "names_exact": ["/EN"], "members_exact": ["R3.2", "SW1.1", "U1.2"]},
+          {"slot": "gnd", "names_exact": ["/GND"], "capture_all_members": true, "contains": ["SW1.2"]},
+          {"slot": "vdd", "names_exact": ["/+3V3"], "capture_all_members": true, "contains": ["R3.1"]}
+        ],
+        "component_assertions": [{"reference": "R3", "value": "10k"}]
+      },
+      "after": {
+        "replace_partitions": ["en", "gnd"],
+        "partitions": [
+          {"names_exact": ["/EN"], "members_from": "en", "add_exact": ["C5.1"]},
+          {"names_exact": ["/GND"], "members_from": "gnd", "add_exact": ["C5.2"]}
+        ],
+        "add_components": [
+          {"reference": "C5", "lib_id": "Device:C", "value": "1uF", "footprint": "Capacitor_SMD:C_0603_1608Metric", "position_mil": [10550, 1450], "rotation": 0, "mirror": "none", "unit": 1, "dnp": false, "in_bom": true, "on_board": true}
+        ],
+        "all_other_partitions": "UNCHANGED",
+        "distinct_partition_pins": [["C5.1", "C5.2"]]
+      },
+      "object_delta": {
+        "remove": [],
+        "add_labels": [
+          {"name": "EN", "at_pin": "C5.1", "scope": "local", "rotation": 0},
+          {"name": "GND", "at_pin": "C5.2", "scope": "local", "rotation": 0}
+        ]
+      },
+      "operation_counts": {"delete_object": 0, "add_net_label": 2, "place_component": 1},
+      "derived_risk": {"named_split": 0, "named_merge": 0, "counts_alone_authorize": false}
+    }
+  ],
+  "refusal_boundary": {
+    "trace_case": "DC-06",
+    "component": "U3",
+    "background_status": "BLOCKED_POWER_THERMAL",
+    "patch_authorized": false,
+    "valid_proposal_decision": "REFUSE",
+    "design_bytes_must_remain_unchanged": true
+  },
+  "acceptance_private_contract": {
+    "runtime_dependency": false,
+    "owner": "INDEPENDENT_ACCEPTANCE_OWNER",
+    "contents": ["independent_expected_topology", "standard_patch_if_retained", "negative_fixture_expectations", "diagnosis_rubric", "scoring"],
+    "visible_to": ["acceptance_process"],
+    "forbidden_consumers": ["C", "D", "repair_proposal_prompt", "public_feedback", "runtime_policy_binder"]
+  }
+}
