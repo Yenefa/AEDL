@@ -3035,6 +3035,88 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
   committed-delta scope（envelope base df138d9..HEAD）复核结果见 PR #27 描述。
 - 人工审核：`PENDING_HUMAN_REVIEW`
 
+
+## AI-20260902-006
+
+- **台账 ID 改号说明（2026-09-06，PR #14 解决 master 合并冲突时补记）**：本条目原领用
+  `AI-20260902-005`。合并时发现 master 已有并行会话的 `AI-20260902-005`（W4A Collision 1，
+  PR #27），台账 ID 撞号。裁定：master 先占 005，本 W4B 工作单元改号 **006**
+  （先合先占，沿用 W4A 004→005 先例；开放 PR #30 所领 006 号在其合并时另改 007，
+  由大统领裁定）。`notes/open_source_intake/kicad-happy.md` 尾注同步改指 006。
+- 日期：2026-09-02
+- 任务名称：kicad-happy 六步 intake（Issue #3 / W4B）
+- 关联工作项：`Yenefa/AEDL#3`
+- 参与标签：`ADVISE`、`DOCUMENT`、`GENERATE_TEST`（对 kicad-happy 分析器本身执行，非新增 AEDL 测试）
+- AI 系统：Claude Code (Anthropic)；模型 `claude-sonnet-5`
+- 人类授权：项目负责人（经 Percy 代为确认）指派 Issue #3 给 `la4876949-bot`；本轮为该任务的实际交付，并按 Yenefa 对首版 PR #14 的审查意见（6 blockers + 2 必修）返工。
+- 模块/路径：
+  - `notes/open_source_intake/kicad-happy.md`（新）
+  - `notes/open_source_intake/README.md`（目录表新增一行、已完成清单更新、附属说明新增一条）
+  - `docs/COLLABORATION.md`（TASK-W4B 状态行更新为完成）
+  - `docs/WAVE4_TASKS_20260901.md`（W4B 跟踪表状态行更新为完成）
+  - 本台账本条目
+- 做了什么：
+  - 六步 intake 内容见 `kicad-happy.md`：`aklofas/kicad-happy`（MIT，`d5fd7da`），`sexp_parser.py`/`finding_schema.py` 全文核实，`analyze_schematic.py`/`analyze_pcb.py` 结构核实，两个核心分析器均对 AEDL 真实 `src/hardware/m2-board/` 文件实际运行（21+13 findings），逐条与 `tools/board_review.py`（全文，624 行）/`gates/schematic_semantics.py`（全文，518 行）做碰撞分析。
+  - 返工修正首版 PR #14 的审查发现：
+    - CRLF 字节契约违规（B1）：定位根因为本机 clone 未设 `core.autocrlf false`（`docs/CONTROL_PLANE.md` 明确要求的环境前提），本轮已修正 `git config` 并对三个受影响文件做 CRLF→LF 显式转换核实（`\r` 计数=0）。
+    - base 分支过期（B2）：`fix/m2-schematic-semantic-release` 相对 master 已无独有 commit（Issue #8 稳定化已合并），本轮从 `origin/master` 重建分支。
+    - AI 编号与实际不符（B3）：master 当前最新为 `AI-20260902-004`，本条目改用 `-005`；此前草稿中关于 `a130d7e`/`-007` 归属的断言已确认不准确（`-007` 实际属身份映射 commit `4142059`），一并撤回该断言。
+    - 遗漏 Issue #3 原始 scope 两个状态行文件（R1）：本轮补齐 `docs/COLLABORATION.md`、`docs/WAVE4_TASKS_20260901.md`。
+    - Review gate 复选框（B6）：首版提交时该框为未勾选（`- [ ]`），提交后被外部操作勾选为 `[x]`，与 `reviews=[]` 的实际状态不符；本轮已取消勾选，并在 PR 回复中说明非本方所为。
+- 技术实现改动：`NO`——本任务仅产出研究文档与状态行更新，未修改 AEDL 任何代码、门禁、硬件文件。
+- 现有 Evidence 字节改动：`NO`。
+- 新技术 Evidence 生成：`NO`（`notes/open_source_intake/` 下的报告本身不构成比赛 Evidence，见文件内声明）。
+- 第三方选型或许可证变化：`NO`（kicad-happy 未被代码级复用进 AEDL；如未来 Adapt `sexp_parser.py`，需另行登记 `THIRD_PARTY.md`）。
+- 验证：
+  - `analyze_schematic.py`、`analyze_pcb.py` 对 AEDL 真实硬件文件运行，均 exit 0。
+  - 三个受影响文件 CRLF 显式核实为 0（`\r` byte count）。
+  - `git diff --diff-filter=M` 核对 `notes/open_source_intake/kicad-happy.md`、`README.md`、本台账为新增/追加，无对既有条目的修改。
+- 已知限制：
+  - `analyze_schematic.py`（10271 行）、`analyze_pcb.py`（7145 行）未逐行审计，仅结构层 + 实际运行验证；`skills/emc/`、`skills/spice/`、供应商集成 skills（digikey/element14/jlcpcb/lcsc/mouser/pcbway）本轮未核实源码，标注 `未核实`。
+  - 嘉立创实际工艺能力表（环宽 DFM-001/002 finding 的严重程度判定）因浏览器工具渲染问题未能核实到具体数值，如实标注未核实。
+  - kicad-happy 本地克隆未纳入本仓库工作树（`.gitignore` 尚无排除规则，与 `_neuroboard_repo/` 已知问题相同），放在仓库外临时路径。
+  - Review Bundle 生成方式（post-commit 钩子 vs 手动 `tools.make_review_bundle`）本轮首次接触，如生成路径与既有惯例不符，以 Yenefa 复核意见为准调整。
+  - 本任务未实装任何吸收建议，按 Issue #3 要求"不实装"。
+- Commit / PR：分支 `docs/3-kicad-happy-intake`（从 `origin/master` 重建），PR #14 已存在，本轮更新其内容与 base；已请求 `Yenefa` Review；AI 不 Approve、不 merge。
+- AIC Score Target：`AI 与开源融合`（对应 `docs/competition/FUSION_MAP.md` "AI+开源"评分项的证据资产之一）
+- 最终状态：`PENDING_HUMAN_REVIEW`
+
+## AI-20260902-007
+
+- **台账 ID 改号说明（2026-09-06，PR #30 合并冲突解决时执行）**：本条目原领用
+  `AI-20260902-006`。PR #14 于 2026-09-06 先行合入 master 时，其条目已由 Yenefa 改号占用
+  `-006`，并在该条目的改号说明中明确裁定「开放 PR #30 所领 006 号在其合并时另改 **007**」。
+  本次按该裁定执行，改号为 **`AI-20260902-007`**；先合先占，与 W4A 004→005、W4B 005→006
+  同一先例。历史 commit message 中的 `[AI-20260902-006]` 不改写（改号事实以本说明为准）。
+  注：本条为 `20260902` 日序，与同日另行改号的 `AI-20260906-007`（PR #36）分属不同日期，不冲突。
+- 日期：2026-09-02
+- 任务名称：AGENT_ONBOARDING 引导文档（to AI coding agents）+ README 链接（重建版）
+- 模块/路径：
+  - `AGENT_ONBOARDING.md`（新增，仓库根）
+  - `README.md`（AI Agent 节加引导入口）
+  - 本台账本条目
+- AI 工具/平台：DeepSeek Harness（DSH Web）
+- 模型：`deepseek-v4-flash`
+- 参与标签：DOCUMENT
+- 任务目标：让任何 AI coding agent（Claude Code / Codex / zcode / DSH / opencode / Hermes /
+  Trae / Work Buddy / Qoder / OpenClaw 等）clone 后按引导完成环境自检（autocrlf / Python 3.9 /
+  uv / gh）、必读顺序、AECP 生命周期速查与红线。
+- AI 实际产出：
+  - AGENT_ONBOARDING.md：0 身份与定位 / 1 环境自检 4 项命令 + dev_gate 基线 / 2 必读顺序 /
+    3 AECP 速查（含 `python -m tools.make_review_bundle`，引用 #24 工具）/ 4 红线 / 5 台账指针。
+- 版本沿革：首版曾标 AI-20260902-003（PR #28），与并行推进的 #25（Tasks 6-7 实现）撞号；
+  关闭重建于 master f53f2a8（#24/#25/#26 之后）；重建版初标 005 又与 #27（W4A Collision 1）
+  撞号，最终定号 006。内容取材自仓库既有规范（AGENTS.md / CONTROL_PLANE.md / README），
+  未发明新规则。
+- 团队自主部分：Yenefa 在席特殊授权（一路推进）下重建；撞号与并行撞车已如实记录。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 验证：`py -3 -m tools.dev_gate` exit 0（syntax / main 312 / sandbox 274 / secret_scan 307）；
+  `git diff --check` RC 0。
+- Compliance：Third-party none；ADR none。
+- AIC Score Target：`NONE`（内部协作引导，不包装成比赛创新）
+- 最终状态：
+  - `PENDING_HUMAN_REVIEW`（PR 待人工 review）
+
 ## AI-20260903-001
 - 日期：2026-09-03
 - 任务：AEDL-R1（渲染图新鲜度门禁，AECP 流程交付）
@@ -3150,6 +3232,95 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
   Percy 会话（Claude）已确认的 W1 任务卡与既档研究材料，不新增技术主张。
 - 人工审核：`PENDING_HUMAN_REVIEW`
 
+## AI-20260906-003
+
+- 日期：2026-09-06
+- 任务名称：Issue #31 — test_requirements_runtime_server 非 3.9 解释器下间歇失败：修复审核、验收复跑与定稿（PR #33）
+- 会话：ZCode 主会话（大统领指令「进军」）；修复本体由 `la4876949-bot` 会话完成（PR #33 既有 commit）
+- 参与：DEBUG / DOCUMENT
+- 模块/路径：
+  - `tests/test_requirements_runtime_server.py`（`_post()` 连接级失败 3 次有界重试 + 线性退避；HTTP 错误响应不重试——修复本体，本会话未改一字节）
+  - `tasks/GH-31.yaml`（amendment：base 重锚 d2a2ced → 46d6242（master 合并后 HEAD），allowed_paths 补台账与 envelope 本体，照 AEDL-CPL amendment 先例）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 审核结论：修复方向正确——只重试连接级失败（ConnectionError/HTTPException/URLError），HTTPError 照常返回（不掩盖真实断言信号）；有界 3 次。已知理论边界：POST 非幂等场景下重试可能二次执行，但这些用例的语义（finalize/404）二次执行会得到不同响应并使断言显式失败，不会静默假通过。
+- 验收复跑（真实运行，本机，对照 envelope 验收标准）：
+  - `py -3.13 -m unittest tests.test_requirements_runtime_server` × 10 → **10/10 OK**（修复前基线 ~2/6 失败率；满足"10 次零失败"验收）
+  - `py -3.9 -m unittest tests.test_requirements_runtime_server` → OK（3.9 基线不受影响）
+  - `python -m tools.dev_gate --envelope tasks/GH-31.yaml` → 结果随回执归档（run 结果见 bundle）
+- 已知限制：竞态根因未完全定位（envelope 如实记载"HTTPServer 同步 bind，非明显 listen-before-serve race"），本修复属鲁棒性兜底而非根因修复；3.13-32bit/其他平台组合未测。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260906-004
+
+- 日期：2026-09-06
+- 任务名称：Y4 预注册实验方案入库（AI vs Script 实验设计，人类指令「上传上去免得以后没方案」）
+- 模块/路径：
+  - `docs/competition/internal/AEDL_W1_Y4_AI_vs_Script_实验方案.md`（新增，Codex 会话 2026-09-06
+    产出；加 INTERNAL banner；37 条轨迹设计/预算/指标/失败归因表/W3 投入判据/结果模板，
+    实验结果 NOT_RUN）
+  - `docs/competition/internal/W1_TASKS_20260907.md`（TASK-Y4 增预注册方案引用行）
+  - `docs/competition/internal/W1_CARD_Yenefa_20260907.md`（Y4 同步引用）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 说明：随附摘要文件 `Y4.md` 为同一方案的对话摘要，无独有信息，未入库。方案的独立验收细则
+  以 Percy P3/P4 交付为准；方案自身声明「依据 master@ed6dc61，P3/P4 目录尚未见，运行前须冻结」。
+- AI 参与：DOCUMENT —— 入库执行与领地表挂接；方案内容为 Codex 会话产出，本会话未改其实质。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260906-010
+
+- **台账 ID 改号说明（2026-09-06，Percy 侧接管合并时执行）**：本条目原领用 `AI-20260906-005`，
+  与并行推进的 PR #40（P2 用户试用协议）撞号——该号在本条推送前已被占用。裁定：**本条改号为 `-010`**
+  （`-002`~`-009` 当日已占满），PR #40 保留 `-005` 不动。历史 commit message 中的
+  `[AI-20260906-005]` 不改写（改号事实以本说明为准，沿用 AI-20260902-005 先例）。
+  本日累计第四次并行撞号；顺序编号在多分支并行下系统性失效，建议改按作者编号，另议。
+
+- 日期：2026-09-06
+- 任务名称：Y4 实验方案 v1.0 → v1.1 修订入库 + 复核说明（人类指令「最新修订版重新提交」，在 PR #42 分支上更新）
+- 模块/路径：
+  - `docs/competition/internal/AEDL_W1_Y4_AI_vs_Script_实验方案.md`（v1.1 替换 v1.0：新增 B 定性正确
+    独立记分 n/6 与 A n/5 不互偿；事实/案例定义直引 P3 PR #38@3d4268a、P4 PR #39@ad907ae 精确提交；
+    D 作者/C 开发的知题曝光如实记录、信息不对称主张条件化；失败归因表增 B 行；结果模板增 B 列。
+    A 修复分母、轮数、投入阈值不变）
+  - `docs/competition/internal/AEDL_Y4_复核与修订说明.md`（新增：三项用户反馈的裁定与原件核查记录；
+    查出 P3 F-U1-04 勘误——datasheet p34 Figure 9-1 实有 R4/R6 0Ω，"未画串阻"旁证不采用；
+    P3 核验表实为 10 项/7 人工核验，摘要 6/9 过期；P4 §0 开发曝光口径与旧 W1 卡不一致，本批计分协议内显式择定）
+  - `docs/competition/internal/W1_TASKS_20260907.md` / `W1_CARD_Yenefa_20260907.md`（Y4 引用行升 v1.1）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 说明：随附摘要 `Y4-V1.1.md` 为对话摘要无独有信息，未入库。复核说明对 P3/P4 的勘误**不回写上游 PR**
+  （Percy 领地保持原样，人工核验状态不被 AI 改写），差异以本文件为准。实验仍 NOT_RUN。
+- AI 参与：DOCUMENT —— 入库执行与引用挂接；方案及核查内容为 Codex 会话产出，本会话未改其实质。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260906-006
+
+- 日期：2026-09-06
+- 任务名称：W1/P5 —— build_board.py 的 U3 封装映射修复 + 类级回归
+- 模块/路径：
+  - `tools/build_board.py`（FP_MAP 中 U3 封装修正）
+  - `tests/test_build_board_footprints.py`（新增，3 例）
+  - `tasks/GH-P5.yaml`（envelope）
+  - 本条台账
+- AI 工具/平台：Claude Code
+- 模型：`claude-opus-5`
+- AI 参与类型：DEBUG、GENERATE_CODE、GENERATE_TEST
+- 缺陷：`tools/build_board.py` 的 `FP_MAP` 把 U3 映射为 `Package_TO_SOT_SMD:SOT-23-5`，而 C82942 → C235316（ME6211C33R5G）换料后全链权威源（`intent_v1.json` / `ops_gen.json` / BOM / `m2_component_contracts.json` / `board_review_v1.json`）均为 **SOT-353**。任何人跑 builder 重建都会把换料前的旧封装静默带回 PCB。
+- 开工前实测确认范围：对 intent 中 **16 件已声明 footprint** 的器件逐一比对，**仅 U3 一处不一致**，其余 15 件一致；另 7 件（U1/U2/J1/SW1/SW2 + 两个电源标记）intent 未声明 footprint，补声明属设计意图变更，不在本次范围。
+- AECP 流程（本任务按任务卡要求走完整 Envelope + Admission）：
+  - 首轮 admit **BLOCKED**：`--allow-dirty` 与 `--allow-drift` 均被拒，工具明确提示「agent cannot self-authorize」。
+  - 根因是结构性死结：信封不提交则树脏、提交则 HEAD 移动导致基线漂移——**文件无法包含自身提交的 sha**。仓库惯例（信封先落 master）需要直推共享分支，Agent 不得擅自执行。
+  - 由信封中具名的 escalation owner **Percy 人工授权** `exceptions.allow_drift`（`decision_ref: W1/P5 session 2026-09-06`），先例见 AI-20260903-001（allow_dirty，granted_by=Yenefa）。
+  - 授权后 admit → **ADMIT，exit 0**，`envelope_sha256 2fbdc043357f…`；回执经 `--admit-receipt` 传入 dev_gate，`binding_check` 由 fail 转 pass。
+- 回归测试设计（钉的是**缺陷类别**而非单点）：对 intent 中全部已声明 footprint 与 `FP_MAP` 逐项比对，任一漂移即失败；另钉 U3 具体值，并含一例自检（受控扰动副本必须报出不一致，证明检查非空转）。
+- 验证（真实运行，先红后绿）：
+  - **RED**：临时把 U3 退回 `SOT-23-5` → 3 例中 **2 例失败**（通用断言 + U3 钉值）。
+  - **GREEN**：恢复修复 → **3/3 OK**。
+  - 全量 `unittest discover -s tests` → **325 例**（原 322 + 新增 3）。
+  - `dev_gate --envelope --admit-receipt` → syntax/sandbox_tests/secret_scan/**scope_check**/**binding_check**/bundle_check 全 pass。
+- **已知既有缺陷（非本次引入）**：全量套件与 dev_gate 的 `main_tests` **间歇性失败**——本轮实测 `unittest` 3 次中 1 次失败、`dev_gate` 2 次中 1 次失败，traceback 指向 `urllib/request.py` 且解释器为 Python 3.13，正是 **Issue #31** 的签名（台账记录约 2/6 失败率），修复在**尚未合并的 PR #33**。本次新增的 3 例为纯确定性、不涉网络。此为 Issue #31 在另一日期的一次独立复现。
+- 团队自主部分：`allow_drift` 例外由 Percy 人工授权；Agent 未自授权任何标志。
+- 已知限制：未重建 PCB（builder 未实际执行，本机无 pcbnew）；未触碰原理图/PCB/BOM/任何证据文件；SOT-353 不在 KiCad 标准 `Package_TO_SOT_SMD` 库内属既有状态（见冻结 ERC 证据的同名 warning），不由本次修复引入、亦不由本次解决。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
 ## AI-20260906-005
 
 - 日期：2026-09-06
@@ -3177,4 +3348,171 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - 团队自主部分：招募对象由 Percy 自行联系；本文件不代为接触任何人。
 - 验证（真实运行）：`py -3.9 -m tools.dev_gate` 见本 PR。
 - 已知限制：**尚未联系任何用户，无任何用户数据**；第二段能否执行取决于 Y2/Y3，未达成则如实标未完成；3–5 人只支持初步可用性判断，不能推断广泛市场效果。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260907-001
+
+- 日期：2026-09-07
+- 任务名称：W1 工程执行计划入库（Y2/Y3/Y4 前置的文件级拆分，Codex 2026-09-07 产出；人类指令入库）
+- 模块/路径：
+  - `docs/competition/internal/AEDL_W1_工程执行计划.md`（新增，INTERNAL banner；核心结论：当前
+    不能有效运行 Y4，缺口在执行通道与实验组件而非架构——PR-1 akcli 受约束补丁/PR-2 独立重验/
+    PR-3 六例物化+强 D+C 接口 三段拆分；strict-nets 与合法拓扑修复冲突的 0.21.0 源码级分析
+    （B01 最高优先级 blocker）；patch schema envelope 设计；Y3 四个连接点；12 项 blocker 清单；
+    PR-3 文件组与验收命令）
+  - `docs/competition/internal/W1_TASKS_20260907.md`（Y4 段挂执行计划引用）
+  - `docs/competition/internal/W1_CARD_Yenefa_20260907.md`（Y2/Y3 卡挂 PR-1/PR-2 拆分要点）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 说明：计划编制者本轮只做审查与拆分（51 项现有测试通过为验证记录），未新增生产代码、未运行 Y4。
+  本会话入库执行与引用挂接，未改其实质。P3/P4/Y4 v1.1 已合入（#43），计划对此已校准，
+  未列为待编写。B09（P3 三条待核验）与 Y1 范围 DRAFT 为并行推进项，不阻塞 PR-1 开工。
+- AI 参与：DOCUMENT —— 入库执行与挂接。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260907-002
+
+- 日期：2026-09-07
+- 任务名称：PR-1 akcli 裁决三件套 + 大统领战略裁决入库（Y2 开工依据冻结）
+- 模块/路径：
+  - `docs/competition/internal/AEDL_PR1_技术裁决_20260907.md`（新增，INTERNAL banner；Codex
+    2026-09-07 原生资格实测报告：三层拒绝机制源码定位、E1/E2/E3/DC-04/05 精确拓扑差分与
+    protected-diff 定义、最小例外架构（AEDL adapter 包原生 writer）、patch envelope 契约、
+    快照/字节级回滚事务设计、PR-1 文件级任务与测试集、Go/No-Go 判据、降级条款）
+  - `docs/competition/internal/AEDL_PR1_原生资格记录_20260907.json`（实测原始记录：5 案例注入/
+    strict dry-run/apply 退出码、DC-03 旁路负例、序列与重放、上游 netdiff 23 测试、probe 文件哈希）
+  - `docs/competition/internal/AEDL_PR1_裁决矩阵_20260907.csv`（READY / READY_WITH_CONSTRAINED_EXCEPTION）
+  - `docs/competition/internal/AEDL_PR1_大统领裁决_20260907.md`（新增：大统领会话裁决记录——akcli
+    身份重定义为受控 writer、Repair Executor 冻结定义、"执行成功≠工程正确性证据"升格为核心
+    设计原则、Y4 答案泄漏防线（proposal-visible vs host-only policy 分离）、PR-1/PR-2 边界修订、
+    能力表、下一步顺序冻结、降级条款；ZCode 代笔入库）
+  - `docs/competition/internal/W1_TASKS_20260907.md`（TASK-Y2 挂裁决引用）
+  - `docs/competition/internal/W1_CARD_Yenefa_20260907.md`（开工前必读段）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 关键结论（实测支撑）：strict-nets 只是 named-net split/merge 检测器而非修复策略；DC-03 旁路
+  负例（exit 0 + applied=true 但电阻两端短接）为"工具执行成功≠拓扑修复正确"提供真实实验证据；
+  DC-04/05 须 place+connect 同一 op-list 单批提交（事务原子性）。
+- AI 参与：DOCUMENT —— 大统领裁决代笔结构与三件套入库执行；实测与源码审查为 Codex 会话产出。
+- 已知限制：独立 KiCad 验证 NOT_RUN（该环境无 kicad-cli）；资格样本非封存 Y4 计分输入；
+  生产启用 NO-GO。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260907-003
+
+- 日期：2026-09-07
+- 任务名称：PR-1 Implementation Contract 三件套入库 + 五查审查（Yenefa 指令：审查并冻结 PR-1 contract）
+- 会话：ZCode 主会话（审查与入库）；合同编制为 Codex 会话（2026-09-07，基线 master@01e30d6 + PR #44 head 5ce1203）
+- 模块/路径：
+  - `docs/competition/internal/AEDL_PR1_实现合同_20260907.md`（Implementation Contract v1，52KB/12 节：
+    五生产文件冻结范围/所有权与依赖方向/Proposal-HostPatch 数据接口（三原语 op 子集）/
+    canonical JSON 与 TopologyObservation/hash 体系/三层可见性/五规则执行语义（含 E3 四分区与
+    坐标冻结）/模块 API 与 StageApplyResult/thin verifier 与 commit 谓词（合取无例外）/单轮状态机
+    与 fail-closed 恢复规则/C1–C6 commit 顺序与验收命令/完成边界 READY_TO_IMPLEMENT）
+  - `docs/competition/internal/AEDL_PR1_开发任务卡_20260907.md`（Ready-to-Code Task Card：可写范围、
+    接口职责表、规则-事务表、编码验收顺序、交接完成标准）
+  - `docs/competition/internal/AEDL_PR1_topology_policy_v1_draft.json`（五规则精确数据 UNBOUND 草案，
+    enabled_by_default=false；JSON 本体零改动入库——unknown_field=REJECT 纪律，banner 由伴生 .md 承载）
+  - `docs/competition/internal/W1_TASKS_20260907.md`（Y2 段挂实现合同冻结引用）
+  - `docs/competition/internal/W1_CARD_Yenefa_20260907.md`（PR-1 开写入口段）
+- 五查审查结论（ZCode，2026-09-07，全部通过）：
+  1. **Y4 ground truth 泄漏**：三层可见性（public/host-only/acceptance-private）+ public_projection
+     deny 列表（rules/after/expected_delta/golden/standard_patch 等）+ acceptance_private
+     forbidden_consumers 含 C/D——防线闭合。
+  2. **绕过 Sandbox**：bind_policy 强制消费既有 PolicyPort 授权（TOOL_EXECUTE/FILE_WRITE 非 ALLOW
+     即 BLOCKED）；不新建 grant/签名类型。
+  3. **policy 自授权**：approved_rule_ids 只从宿主解析的真实批准记录派生；enabled_by_default=false；
+     草案 required_runtime_values 无默认值路径；伪造 policy_ref/hash 一律拒绝。
+  4. **过宽拓扑例外**：机器核验——E1 after/E3 四分区/E2/DC-04/DC-05 成员与 P4 期望（PR #39）逐项
+     相等（13/13 PASS）；E3 旁路 wire 坐标 nm 级与资格实测 fault.kicad_sch 一致；members_exact
+     集合相等语义 + derived_risk counts_alone_authorize=false。
+  5. **rollback/hash 漏洞**：恢复规则 1–5 覆盖未发布 stage/部分提交/无权限文件变化/崩溃重启
+     （无 terminal record 即恢复不猜成功）/恢复失败 TOOL_ERROR；design 恢复与 candidate_hash 分开
+     声明；幂等键 (run,candidate,patch) 漂移即 BLOCKED。
+- fixture 来源核实：`Documents/Codex/2026-09-07/aedl-pr-1-akcli-0-21/work/native-probes/DC-01..05`
+  存在（fault.kicad_sch/repair_ops.json 等）；E2 固件断言路径 `src/firmware/include/sht30.h`
+  DEFAULT_ADDR=0x44 实核一致（=68 十进制）。
+- 已知限制：本审查为 AI candidate judgment；合同是编码合同不是已实现系统；原生资格测试
+  （C6 opt-in）与 KiCad 独立验证依赖 Yenefa 环境闭合；三份文件不得喂给 C/D 计分会话（曝光纪律）。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260907-004
+
+- 日期：2026-09-07
+- 任务名称：CI 时间炸弹修复——requirements runtime validate 注入时钟（大统领拍板方案 B）
+- 会话：ZCode 主会话（独立 CI/test-infra 修复，不属 #46）
+- 参与：DEBUG
+- 模块/路径：
+  - `gates/requirements_runtime_server.py`（RequirementsRuntime.__init__ 增 clock 可注入参数，
+    默认 None=真实墙钟，生产行为不变；validate() 把 now 透传给 validate_requirements_contract——
+    该函数本就支持 now= 参数，属接线而非新语义）
+  - `tests/test_requirements_runtime_server.py`（ValidateEndpointRealContractTests 注入固定时钟
+    2026-09-01（合同 8/30 签发的 7 天窗口内）；新增反向用例
+    test_validate_endpoint_reports_stale_contract_when_clock_is_past_window——固定 2026-10-01 时钟
+    必须如实报 stale fail，证明注入没有绕过 C5 新鲜度门禁）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 背景：合同 8/30 签发、7 天设计过期，2026-09-07 起该测试随日历确定性变红（master 与全部
+  PR 的 CI 同红，job 101521379908/101777728708 均确认此唯一根因）。方案 A（重签合同）7 天后再炸；
+  方案 B（注入固定时钟）一次根治，反向用例保证门禁语义不被测试架空。
+- 验证（真实运行）：模块 13/13 OK（含新增反向用例）；全量 `unittest discover -s tests`
+  → **323/323 OK**（322 + 新增 1，时间炸弹拆除）；`py -3.9` 与 `py -3.13` 双解释器 OK。
+- 已知限制：合同过期本身的治理语义（7 天后需要人工 re-confirm）不变——生产环境仍会在
+  真实时间过期时报 fail，这是设计行为；本修复只让回归测试不再随日历腐烂。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260907-005
+
+- 日期：2026-09-07
+- 任务名称：PR-1 C1 —— proposal/topology 合同冻结 + pipeline 解析/政策结构校验/public 投影纯函数
+- 会话：WorkBuddy 主会话（实现侧执行 Agent）；编码依据为 PR #46 的《AEDL_PR1_实现合同_20260907.md》v1（已冻结，本次未改动任何合同文档）
+- 模块/路径：
+  - `src/repair/patch_schema_v1.json`（新增：PATCH/REFUSE 互斥、三原语 op 子集、闭合字段与 limits、
+    禁用自证字段清单（applied/verdict/expected_delta 等 10 项）、canonical JSON 与 digest 约定、
+    `$defs` 声明 HostPatch 与回执形状、`public_op_schema` 不含任何逐例答案）
+  - `src/repair/topology_policy_v1.json`（新增：五规则数据的逐字节落地，来源
+    `docs/competition/internal/AEDL_PR1_topology_policy_v1_draft.json`，11846 字节、
+    sha256 `999d28f8cc2690f3a0362d7865293b84551ef05fafe32e1c765fb1b8f7d1e36b`，JSON 本体零改动）
+  - `tools/repair_pipeline.py`（新增，仅 C1 子集：`parse_proposal`、`validate_topology_policy`、
+    `make_public_context`、`public_feedback`、canonical hash helpers；**不含** run_round /
+    bind_policy / snapshot / stage / commit / rollback，不导入 adapter 或 verifier）
+  - `tests/test_repair_contract.py`（新增，87 用例）
+  - `tasks/PR1-C1.yaml`（新增 task envelope）+ `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 实测结果：
+  - `python -X utf8 -m unittest tests.test_repair_contract` → 87 passed（py 3.9.13 与 3.13.1 双绿）
+  - 既有回归 `tests.test_generate_m2_ops tests.test_schematic_semantics tests.test_gate_core tests.test_run_gates` → 51 passed
+  - `python -X utf8 -m tools.admit --envelope tasks/PR1-C1.yaml --allow-dirty` → ADMIT（allow_dirty 由 envelope 预授权 + CLI 旗标双写）
+  - policy 结构校验对仓库 policy 零 finding：E1/E2/E3 → CONSTRAINED_EXCEPTION、DC-04/05 → STRICT 唯一；
+    每条规则的分区替换均可回溯到 before slot、新组件 pin 完整（R7/R8/R9/C5 均为 {1,2}）、
+    operation_counts 与声明的 object_delta 逐项相等、enabled_by_default 保持 false
+  - public 投影为白名单构造：`make_public_context` 仅 8 个字段、拒绝 denied key/token；
+    `public_feedback` 仅 4 个字段，observed_issue_ids 与 host allowlist 求交
+- AI 参与：GENERATE_CODE + GENERATE_TEST —— 按冻结合同编码与测试；未重新裁决架构、未重研 akcli 能力、未产出合同 v1.1
+- ID 说明：master 最新占用为 AI-20260907-002；003（PR #46 合同三件套）与 004（PR #47 固定时钟）已在开放 PR 分支占用，
+  为避免撞号本条取 005（改号说明见此）
+- 已知限制：C2–C6 未实现（verifier 纯函数/fresh KiCad 绑定/adapter/单轮事务/原生资格均 NOT_RUN）；
+  本次不生成正式 Evidence、不触发 promotion；本会话已读 host-only policy，
+  按合同 §6 不得冒充未曝光的 C/D 计分会话
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260908-001
+
+- 日期：2026-09-08
+- 任务名称：PR-1/C1 rebase 到 b369f17 后基线 + 修复 C1 review 两处小坑（大统领指令）
+- 会话：ZCode 主会话
+- 参与：REFACTOR / DEBUG
+- 模块/路径：
+  - rebase：`feat-pr1-c1-repair-contracts` 5ae2e7c → 388f054（基于 c34cd0d，含 #41/#46/#47；
+    台账冲突按"双方保留、005 排 004 后"解决）
+  - `tools/repair_pipeline.py`（坑①）：`load_topology_policy` 的解析/读文件错误收敛——原先
+    strict-JSON 失败经 `load_json_strict` 包装成 `ProposalInvalidError`（错误归类：policy 文件的
+    错误不该算 proposal 错）、路径缺失抛裸 `OSError`；现统一转 `PolicyInvalidError`，
+    调用方/测试只有一个错误路径可捕获
+  - `tools/repair_pipeline.py`（坑②）：`make_public_context` 对 `current_observation`/`public_facts`
+    /`limits` 做 JSON 深快照（原先直接放引用——宿主侧后续变更会穿透到已发出的 PublicContext，
+    aliasing/TOCTOU；不可序列化输入显式 ProposalInvalidError，不静默共享引用）
+  - `tests/test_repair_contract.py`（+5 防回归用例：observation/facts/limits 三向 no-aliasing、
+    不可序列化拒绝、policy 加载双错误路径收敛）
+  - `docs/compliance/AI_USAGE_LOG.md`（本条）
+- 验证（真实运行）：`tests.test_repair_contract` → **92/92 OK**（87+5）；`py -3.9` 同模块 OK；
+  全量 `unittest discover -s tests` → **418/418 OK**。
+- 说明：两个坑均为大统领 2026-09-08 review 指出；合同接口/数据形状零变化（§12 允许的内部实现
+  选择），不出 v1.1 合同。
 - 人工审核：`PENDING_HUMAN_REVIEW`

@@ -16,10 +16,13 @@ on the M2 board files.
 
 from __future__ import annotations
 
+import http.client
 import json
 import sys
 import tempfile
 import threading
+from datetime import datetime, timezone
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -185,20 +188,33 @@ class _HttpServerCase(_TempRepoCase):
         self.thread.join(timeout=5)
 
     def _post(self, path: str, payload=None, raw: bytes | None = None):
+        # GH-31: transient connection failures (reset/aborted) have been observed
+        # against this test-local HTTPServer on some interpreter/thread-timing
+        # combinations, unrelated to the assertions under test - each test method
+        # spins up and tears down its own real server+thread. Retry only on
+        # connection-level failures, never on a real HTTP error response (that is
+        # a valid, meaningful test outcome and must not be retried away).
         data = raw if raw is not None else json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(
             self.url + path, data=data, method="POST",
             headers={"Content-Type": "application/json"},
         )
-        try:
-            with urllib.request.urlopen(request, timeout=10) as response:
-                return response.status, json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as error:
-            body = error.read().decode("utf-8")
+        attempts = 3
+        for attempt in range(attempts):
             try:
-                return error.code, json.loads(body)
-            except json.JSONDecodeError:
-                return error.code, {"_raw": body}
+                with urllib.request.urlopen(request, timeout=10) as response:
+                    return response.status, json.loads(response.read().decode("utf-8"))
+            except urllib.error.HTTPError as error:
+                body = error.read().decode("utf-8")
+                try:
+                    return error.code, json.loads(body)
+                except json.JSONDecodeError:
+                    return error.code, {"_raw": body}
+            except (ConnectionError, http.client.HTTPException, urllib.error.URLError):
+                if attempt == attempts - 1:
+                    raise
+                time.sleep(0.05 * (attempt + 1))
+        raise AssertionError("unreachable")  # pragma: no cover
 
 
 class FinalizeEndpointTests(_HttpServerCase):
@@ -235,7 +251,14 @@ class ValidateEndpointRealContractTests(_HttpServerCase):
         _TempRepoCase.setUp(self)  # skip _HttpServerCase's temp intent setup
         repo_root = Path(__file__).resolve().parents[1]
         self.server = HTTPServer(("127.0.0.1", 0), _Handler)
-        _Handler.runtime = RequirementsRuntime()
+        # Fixed clock pinned INSIDE the contract's 7-day freshness window (signed
+        # 2026-08-30T16:37:37Z). The test asserts the production validate path,
+        # not the calendar: without this injection the test rots on 2026-09-07+
+        # and turns CI deterministically red (contract is stale by design, C5).
+        # The stale behavior itself is still covered below by the fixed-future
+        # clock counterpart.
+        fresh_clock = lambda: datetime(2026, 9, 1, tzinfo=timezone.utc)  # noqa: E731
+        _Handler.runtime = RequirementsRuntime(clock=fresh_clock)
         _Handler.root = repo_root
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -246,6 +269,19 @@ class ValidateEndpointRealContractTests(_HttpServerCase):
         status, body = self._post("/api/validate", {})
         self.assertEqual(status, 200)
         self.assertEqual(body["status"], "pass", body["errors"])
+
+    def test_validate_endpoint_reports_stale_contract_when_clock_is_past_window(self):
+        # Proves the injected clock is not bypassing the freshness gate: a date
+        # past the 7-day window must still produce the designed stale failure.
+        stale_clock = lambda: datetime(2026, 10, 1, tzinfo=timezone.utc)  # noqa: E731
+        _Handler.runtime = RequirementsRuntime(clock=stale_clock)
+        status, body = self._post("/api/validate", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(body["status"], "fail")
+        self.assertTrue(any("stale" in e for e in body["errors"]), body["errors"])
+        # restore the fresh-clock runtime for any test ordering
+        fresh_clock = lambda: datetime(2026, 9, 1, tzinfo=timezone.utc)  # noqa: E731
+        _Handler.runtime = RequirementsRuntime(clock=fresh_clock)
 
     def test_validate_endpoint_reports_missing_contract_file_as_fail(self):
         status, body = self._post("/api/validate", {"path": "gates/requirements/nope.json"})

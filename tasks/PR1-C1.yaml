@@ -1,0 +1,81 @@
+task: PR1-C1
+
+base:
+  branch: feat-pr1-c1-repair-contracts
+  sha: 1d945955d3593cd21165c8a561a656c004bdfa34  # master @ PR #45 merged (PR #46/#47 still open)
+
+goal: |
+  Implement the C1 slice of the frozen PR-1 Implementation Contract v1:
+  freeze the proposal/topology-policy contracts and the host-side pure
+  functions that parse, validate and publicly project them.
+  C1 delivers schemas + policy data + parse/validate/public-projection only.
+  No run_round, no adapter, no verifier, no git-level repair transaction.
+
+scope: |
+  In scope (contract section 2 / 11, commit C1):
+    - src/repair/patch_schema_v1.json (new)
+    - src/repair/topology_policy_v1.json (new, verbatim landing of
+      docs/competition/internal/AEDL_PR1_topology_policy_v1_draft.json)
+    - tools/repair_pipeline.py (new; C1 subset only: parse_proposal,
+      validate_topology_policy, make_public_context, public_feedback)
+    - tests/test_repair_contract.py (new)
+  Out of scope: tools/akcli_adapter.py, gates/repair_verification.py,
+  run_round/bind_policy/snapshot/stage/commit/rollback, fixtures, any
+  change to gates/**, sandbox_runtime/**, existing M2 contracts, or the
+  frozen contract documents themselves.
+
+dependencies: []
+# PR #46 (contract triad) and PR #47 (stale-contract clock) are open but not
+# merged; C1 branches from master and does not require either to land.
+
+allowed_paths:
+  - src/repair/**
+  - src/repair/patch_schema_v1.json
+  - src/repair/topology_policy_v1.json
+  - tools/repair_pipeline.py
+  - tests/test_repair_contract.py
+  - tasks/PR1-C1.yaml
+  - docs/compliance/AI_USAGE_LOG.md
+
+forbidden_paths:
+  - gates/**
+  - sandbox_runtime/**
+  - docs/evidence/**
+  # docs/compliance/** is forbidden as a whole except AI_USAGE_LOG.md, which
+  # AGENTS.md section 4 requires whenever AI makes a substantive contribution.
+  - src/firmware/**
+  - src/hardware/**
+  - src/m1/**
+  - notes/**
+  - web/**
+
+acceptance: |
+  - python -X utf8 -m unittest tests.test_repair_contract passes under
+    Python 3.9 and 3.13 (contract section 11, C1 command).
+  - PATCH/REFUSE mutually exclusive; unknown fields, duplicate keys, NaN/
+    Infinity/floats and bool-as-integer all rejected.
+  - Five policy rules closed: partition replacement resolves to before slots,
+    every new component pin covered, operation counts equal the declared
+    object delta, E1/E2/E3 -> CONSTRAINED_EXCEPTION and DC-04/05 -> STRICT,
+    policy remains disabled by default.
+  - Public context and public feedback built by whitelist only; no per-case
+    after/expected delta/route/internal path reaches the proposer projection.
+  - Existing regression suite unchanged (tests.test_generate_m2_ops,
+    tests.test_schematic_semantics, tests.test_gate_core, tests.test_run_gates).
+
+change_budget:
+  expected_files: 6
+  expected_modules: [src/repair, tools, tests, docs/compliance, tasks]
+  cross_module: false
+  contract_change: false
+  evidence_semantics_change: false
+
+exceptions:
+  # Agent cannot self-authorize. Dirty tree source: envelope + AI log entry
+  # authored during the finalisation run, per AEDL-CPL / GH-31 precedent.
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "Yenefa 2026-09-07 PR-1 C1 开工指令（交接提示词：PR-1 实现正式开工，从 C1 开始）"
+
+escalation:
+  owner: Yenefa
