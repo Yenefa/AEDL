@@ -3543,3 +3543,6 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - 已知限制：Sandbox junction WinError 183 与 review-bundle generator 两个基线问题独立修复（大统领
   指令不入 C2 scope）；fresh KiCad export（C3）、native adapter（C4）、事务（C5）、原生资格（C6）未实现。
 - 人工审核：`PENDING_HUMAN_REVIEW`
+
+- 终态补记（同日）：commit 5d1fd5a 后干净树 re-admit（ADMIT，无 allow_dirty；HEAD 绑定 5d1fd5a3）
+  + bound dev_gate **7/7 pass**（junction 项本机本次通过）。回执已归档 review-bundles/ 并拷 Bundle-Lap。
