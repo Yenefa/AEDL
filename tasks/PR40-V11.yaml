@@ -1,0 +1,67 @@
+task: PR40-V11
+
+base:
+  branch: docs/p2-user-trial
+  sha: c7ab3f0798eeae7f9255a81f60ecc477cd90711c  # PR #40 当前 head（merge master 后）；合并窗口漂移照 GH-31/GH-49 先例走 allow_drift
+
+goal: |
+  按 Yenefa 2026-09-08 裁定把 PR #40 的 E5 协议修成 v1.1 后再合：
+  修复 v1 的设计 blocker（§0 两段式 = 全体第一段 baseline、全体第二段 AEDL，
+  与 §5 声称的 U-02 先 AEDL 顺序交替自相矛盾，arm↔顺序完全混淆），并落实
+  四项核心改动（baseline 降 exploratory / W5 paired-counterbalanced 两 arm /
+  统一 outcome-timer-hint schema / anonymous→repository-pseudonymized +
+  consent + human-review provenance）。
+
+scope: |
+  In scope:
+  - notes/e5-user-trial/e5-protocol-v1.md：v1 → v1.1（保留 Percy 的访谈提纲、
+    招募话术、前提检验条款等 v1 核心内容，只做结构更正与新增）
+  - notes/e5-user-trial/sessions/_TEMPLATE.md：v1.1 模板（consent 块、provenance
+    头、两 arm 同表 schema、exploratory 与对照分离）
+  - docs/compliance/ai-usage/AI-20260908-YEN-002.md：新格式台账条目（ADR-012
+    per-entry 先行采用；本分支无 #49 的拆分工具，AI_USAGE_LOG.md 旧索引不动，
+    待 #49 合并后 migrate+build 收编——在 PR 描述中披露）
+  Out of scope:
+  - 不改 docs/compliance/AI_USAGE_LOG.md（避免与 PR #49 生成索引冲突）
+  - 不动 W1 任务卡 / 领地表 / 其他 E 系列文档
+  - E5 执行（招募/访谈/编码/场次）不变，仍归 Percy
+
+dependencies: []
+
+allowed_paths:
+  - notes/e5-user-trial/**
+  - docs/compliance/ai-usage/**
+  - docs/compliance/ai-usage/AI-20260908-YEN-002.md
+  - tasks/PR40-V11.yaml
+
+forbidden_paths:
+  - docs/compliance/AI_USAGE_LOG.md
+  - gates/**
+  - docs/evidence/**
+  - src/**
+  - sandbox_runtime/**
+
+acceptance: |
+  - v1 的四项核心矛盾全部消除：§0/§5 不再同时声称"第一段全体 baseline"与
+    "U-02 先 AEDL"；第一段 baseline 明确降级 exploratory 不进对照。
+  - 两 arm 的 outcome/timer/hint schema 在协议 §5.3 与模板中逐字段一致。
+  - 匿名表述统一为 repository-pseudonymized，consent 要点与 provenance 可执行。
+  - dev_gate PASS（syntax/main_tests/sandbox_tests/secret_scan/scope/binding/bundle）。
+
+change_budget:
+  expected_files: 4
+  expected_modules: [notes, docs, tasks]
+  cross_module: false
+  contract_change: false
+  evidence_semantics_change: false
+
+exceptions:
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "大统领 2026-09-08 指令「PR #40 修成 v1.1 后再合」（本会话定稿收尾）+ R1/CPL/GH-31/GH-49 先例"
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "大统领 2026-09-08 指令延续：PR #49/#40 并行合并窗口内收尾，照 GH-31 rebaseline 先例"
+
+escalation:
+  owner: Yenefa

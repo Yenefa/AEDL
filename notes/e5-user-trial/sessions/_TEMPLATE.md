@@ -1,7 +1,17 @@
-# U-XX 会话记录
+# U-XX 会话记录（v1.1 模板）
 
-> 匿名记录。**不得填写姓名、联系方式、学校/单位、可识别的项目名。**
-> 日期：____　场次：第一段（访谈+基线）/ 第二段（AEDL 对照）
+> repository-pseudonymized 记录（协议 §8.2）。**不得填写姓名、联系方式、学校/单位、可识别的项目名**；只用编号。
+> 日期：____　场次：☐ 第一段（访谈 + 可选 exploratory）　☐ 第二段（两 arm 对照，可跨两场次）
+> 人审核 provenance（48h 内填，协议 §8.3）：reviewed_by: ____ / reviewed_at: ____ / 与笔记一致性: ☐确认 ☐有更正（：____）
+
+## 知情同意（协议 §8.1，勾选 + 日期）
+
+- [ ] 两段内容已说明（访谈 + 两 arm 任务对照）
+- [ ] 用途：仅用于学生竞赛 AEDL 评测报告与答辩
+- [ ] 记录范围：逐字笔记（不录音/录像）
+- [ ] 数据形态与去向：repository-pseudonymized（编号制），存个人电脑 + 私有仓库，材料只出现汇总
+- [ ] 随时退出权利已说明；退出时已收集记录的处置：☐保留 ☐删除
+- 口头同意日期：____
 
 ## 背景
 
@@ -30,7 +40,7 @@
 **Q6 你信不信 AI 帮你查电路？什么情况下信/不信？**
 > 不信任理由要记完整。
 
-## 编码（访谈后填，不当场做）
+## 编码（访谈后填，不当场做；初编=人工 Percy，协议 §8.3）
 
 - [ ] 自发提到跨视图问题（硬件↔固件 / 引脚身份 / 手册没看清）
 - [ ] 自发提到"检查全过但板子错"
@@ -38,28 +48,36 @@
 - [ ] 与 P4 现有 6 个案例的重合项：
 - [ ] **新的错误类型（E1 候选）**：
 
-## 基线任务（可选）
+## 第一段 · exploratory 任务（可选；**不进入 E5 对照**，协议 §4）
 
 | 项 | 记录 |
 |---|---|
 | 任务编号 | |
-| 是否找到缺陷 | 是 / 否 / 部分 |
-| 用时 | |
+| 是否找到缺陷 | found_exact / found_partial / not_found / abandoned |
+| 净用时（含 pause 单列） | |
 | 用了什么工具 | |
-| 中途提问 | |
+| hint_events（who/what/at） | |
 | 卡在哪 | |
 
-## 第二段 · AEDL arm（W5 填）
+## 第二段 · 对照任务记录（W5 填；**两 arm 用同一套字段**，协议 §5.3）
 
-| 项 | 记录 |
-|---|---|
-| 任务编号 | |
-| 本人顺序 | 先基线 / 先 AEDL |
-| 是否完成 | |
-| 用时 | |
-| 人工介入次数 | |
-| 卡住的地方 | |
-| 口头吐槽原文 | |
+> 每个 participant 两个 arm 各填一张本节。arm 顺序由 `assignments.md` 固定（偶数=先 baseline 后 AEDL；奇数=先 AEDL 后 baseline）。
+
+| 项 | **baseline arm** | **AEDL arm** |
+|---|---|---|
+| 本场顺序（先做/后做） | | |
+| 任务编号（两 arm 不同题） | | |
+| outcome | found_exact / found_partial / not_found / abandoned | found_exact / found_partial / not_found / abandoned |
+| timer_start / timer_end | | |
+| pause 事件（原因/时长） | | |
+| **净用时**（end − start − Σpause） | | |
+| hint_events（who/what/at/phase） | | |
+| facilitator 干预次数 `interventions` | | |
+| 操作性问题次数 `ops_questions` | | |
+| 卡在哪 `stuck_points` | | |
+| 口头吐槽原文 `verbatim` | | |
+
+> 提醒：baseline 的"上网查手册"计 hint_events（who=participant）；AEDL 的工具报告**不算** hint，工具外人工协助才算。两 arm 的 interventions / ops_questions 必须并排报告（对称性检查）。
 
 ## 备注
 
