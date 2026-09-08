@@ -3321,6 +3321,7 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - 团队自主部分：无。本目录只陈述手册事实，不做设计判断与修复建议；强制/建议两级区分为按手册措辞（must vs advised/recommended）如实标注。
 - 验证（真实运行）：`py -3.9 -m tools.dev_gate` → 见本 PR。事实条目均可按所记页码在仓库内原件复核。
 - 已知限制：U1 datasheet 无 `/Title` 元数据，**版本号 `TO_VERIFY`**（仅有 CreationDate）；未覆盖 D1/SW1/SW2/无源件；未从来源 C（J1 镜像）提取任何事实。
+- **2026-09-08 增补（回应 PR #38 审计的 M1/M2 必修）**：按审计要求补核 F-U1-03（p34 EN 的 RC）与 F-U1-05b（p22 内部上下拉 45 kΩ）。Agent 从冻结原件（`sha256 2375b1be75eb…`，v1.7，47 页）提取该两页原文并列出待确认要点，**由 Percy 目视对照原件确认无误**，随后将 §7.1 两行状态改为 `HUMAN_VERIFIED`、§1.1 计数由 7/10 更正为 **9/10**。核验中新增一项口径限制并写入 F-U1-05b 正文：Table 6-3 的 R_PU/R_PD **Min 与 Max 两列均为「—」，厂家只给 Typ**（条件 3.3 V、25 °C），故下游（含 P4 的 DC-04 B 维）不得表述为内部上拉「就是」45 kΩ。余下 1 条 F-U1-04 属 Figure 9-1 图形内容，需目视读图，文本提取无法替代，保持 `AI_EXTRACTED_UNVERIFIED`。状态变更由人工判定，Agent 未自行升级任何核验状态。
 - 人工审核：`PENDING_HUMAN_REVIEW`
 
 ## AI-20260906-006
