@@ -15,7 +15,10 @@ import sys
 FP_MAP = {
     "U1": ("RF_Module", "ESP32-C3-WROOM-02"),
     "U2": ("Sensor_Humidity", "Sensirion_DFN-8-1EP_2.5x2.5mm_P0.5mm_EP1.1x1.7mm"),
-    "U3": ("Package_TO_SOT_SMD", "SOT-23-5"),
+    # U3 换料 C82942 -> C235316（ME6211C33R5G）后封装为 SOT-353，不是换料前的
+    # SOT-23-5。此表若与 intent_v1.json 不一致，重建会把旧封装带回来——
+    # tests/test_build_board_footprints.py 对全部 intent 已声明封装做回归。
+    "U3": ("Package_TO_SOT_SMD", "SOT-353"),
     "J1": ("Connector_USB", "USB_C_Receptacle_HRO_TYPE-C-31-M-12"),
     "SW1": ("Button_Switch_SMD", "SW_SPST_TS-1088-xR020"),
     "SW2": ("Button_Switch_SMD", "SW_SPST_TS-1088-xR020"),

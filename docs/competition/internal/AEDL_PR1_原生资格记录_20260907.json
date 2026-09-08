@@ -1,0 +1,1272 @@
+{
+  "audit_kind": "native operation qualification, not production executor acceptance",
+  "aedl_master": "01e30d6a33ca959d2197736242ee49de5a11f476",
+  "w1_plan_pr44": "5ce1203e85198bef2d87d33c72ca565ffc905075",
+  "p4_pr39": "0e84912dd3cd56f1364c7ffc69fd7a9a68ca9ba0",
+  "p3_pr38": "8f4d904f2e023c232461aaf65f21e5df9dc7063b",
+  "akcli_tag": "68c2df5e43db2f822ab8dbfea36f777396897d8d",
+  "akcli_sdist_sha256": "949ea4d51497ec5413ec19ad15454972d2c30b58f1447493b7b5d99031330df6",
+  "python": "3.11.15",
+  "kicad_independent_validation": "NOT_RUN: akcli doctor reports kicad-cli not found",
+  "exception_adapter_implementation": "NOT_IMPLEMENTED",
+  "rollback_implementation_test": "NOT_RUN",
+  "probes": [
+    {
+      "case": 1,
+      "fault_sha256": "c37fdcb5ff9fbc46d4b53fdf119c920dc368774ad0f4026037e5661a41084f5c",
+      "injection": {
+        "exit": 0,
+        "ops": [
+          {
+            "op_index": 0,
+            "op": "delete_object",
+            "status": "ok",
+            "created_uuids": [],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          },
+          {
+            "op_index": 1,
+            "op": "delete_object",
+            "status": "ok",
+            "created_uuids": [],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          },
+          {
+            "op_index": 2,
+            "op": "add_net_label",
+            "status": "ok",
+            "created_uuids": [
+              "94bd1446-14e3-5f50-a4c8-362ec112453e"
+            ],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          },
+          {
+            "op_index": 3,
+            "op": "add_net_label",
+            "status": "ok",
+            "created_uuids": [
+              "496b7d20-44af-512f-b961-ba51ecb4a041"
+            ],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          }
+        ],
+        "findings": []
+      },
+      "strict": {
+        "dry_run": {
+          "exit": 0,
+          "response": {
+            "schema_version": "1.0",
+            "applied": false,
+            "status": "dry-run",
+            "ops": [
+              {
+                "op_index": 0,
+                "op": "delete_object",
+                "status": "ok",
+                "created_uuids": [],
+                "error_code": null,
+                "message": "",
+                "remediation": null
+              },
+              {
+                "op_index": 1,
+                "op": "delete_object",
+                "status": "ok",
+                "created_uuids": [],
+                "error_code": null,
+                "message": "",
+                "remediation": null
+              },
+              {
+                "op_index": 2,
+                "op": "add_net_label",
+                "status": "ok",
+                "created_uuids": [
+                  "71c7cc18-59b2-5441-b12b-fec1d5b8b7ed"
+                ],
+                "error_code": null,
+                "message": "",
+                "remediation": null
+              },
+              {
+                "op_index": 3,
+                "op": "add_net_label",
+                "status": "ok",
+                "created_uuids": [
+                  "a57005a6-6dcd-5b05-8d5d-612a3a0aa1f8"
+                ],
+                "error_code": null,
+                "message": "",
+                "remediation": null
+              }
+            ],
+            "connectivity": [],
+            "net_diff": {
+              "equivalent": false,
+              "risk": true,
+              "lines": [
+                "! SPLIT USB_DM (2 pins) -> USB_DM(1) + USB_DP(1)",
+                "! SPLIT USB_DP (2 pins) -> USB_DM(1) + USB_DP(1)",
+                "! MERGE USB_DM + USB_DP -> USB_DM",
+                "! MERGE USB_DP + USB_DM -> USB_DP"
+              ]
+            },
+            "preview": null
+          },
+          "stderr": "",
+          "changed": false
+        },
+        "apply": {
+          "exit": 6,
+          "response": {
+            "schema_version": "1",
+            "akcli_version": "0.21.0",
+            "error": {
+              "code": "OPLIST",
+              "message": "REFUSED: --strict-nets: net split/merge touches a named net; nothing written",
+              "exit": 6,
+              "remediation": "nothing was written; `akcli ops validate <file>` explains the op-list, and the per-op errors above say what to fix"
+            }
+          },
+          "stderr": "  ! SPLIT USB_DM (2 pins) -> USB_DM(1) + USB_DP(1)\n  ! SPLIT USB_DP (2 pins) -> USB_DM(1) + USB_DP(1)\n  ! MERGE USB_DM + USB_DP -> USB_DM\n  ! MERGE USB_DP + USB_DM -> USB_DP\nREFUSED: --strict-nets: net split/merge touches a named net; nothing written\n",
+          "changed": false
+        }
+      },
+      "writer": {
+        "exit": 0,
+        "ops": [
+          {
+            "op_index": 0,
+            "op": "delete_object",
+            "status": "ok",
+            "created_uuids": [],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          },
+          {
+            "op_index": 1,
+            "op": "delete_object",
+            "status": "ok",
+            "created_uuids": [],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          },
+          {
+            "op_index": 2,
+            "op": "add_net_label",
+            "status": "ok",
+            "created_uuids": [
+              "71c7cc18-59b2-5441-b12b-fec1d5b8b7ed"
+            ],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          },
+          {
+            "op_index": 3,
+            "op": "add_net_label",
+            "status": "ok",
+            "created_uuids": [
+              "a57005a6-6dcd-5b05-8d5d-612a3a0aa1f8"
+            ],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          }
+        ],
+        "findings": []
+      },
+      "delta": [
+        "! SPLIT USB_DM (2 pins) -> USB_DM(1) + USB_DP(1)",
+        "! SPLIT USB_DP (2 pins) -> USB_DM(1) + USB_DP(1)",
+        "! MERGE USB_DM + USB_DP -> USB_DM",
+        "! MERGE USB_DP + USB_DM -> USB_DP"
+      ],
+      "risk": true,
+      "net_restored_by_akcli_reader": true,
+      "component_attributes_restored": true,
+      "repair_ops": {
+        "protocol_version": 2,
+        "target_format": "kicad",
+        "ops": [
+          {
+            "op": "delete_object",
+            "uuid": "94bd1446-14e3-5f50-a4c8-362ec112453e"
+          },
+          {
+            "op": "delete_object",
+            "uuid": "496b7d20-44af-512f-b961-ba51ecb4a041"
+          },
+          {
+            "op": "add_net_label",
+            "name": "USB_DM",
+            "at": "U1.13"
+          },
+          {
+            "op": "add_net_label",
+            "name": "USB_DP",
+            "at": "U1.14"
+          }
+        ]
+      }
+    },
+    {
+      "case": 2,
+      "fault_sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0",
+      "injection": {
+        "exit": 0,
+        "ops": [
+          {
+            "op_index": 0,
+            "op": "delete_object",
+            "status": "ok",
+            "created_uuids": [],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          }
+        ],
+        "findings": []
+      },
+      "strict": {
+        "dry_run": {
+          "exit": 0,
+          "response": {
+            "schema_version": "1.0",
+            "applied": false,
+            "status": "dry-run",
+            "ops": [
+              {
+                "op_index": 0,
+                "op": "add_net_label",
+                "status": "ok",
+                "created_uuids": [
+                  "068977a9-f29f-5bc4-8672-7783902d73b2"
+                ],
+                "error_code": null,
+                "message": "",
+                "remediation": null
+              }
+            ],
+            "connectivity": [],
+            "net_diff": {
+              "equivalent": false,
+              "risk": true,
+              "lines": [
+                "! MERGE GND + <unnamed@U2.2> -> GND"
+              ]
+            },
+            "preview": null
+          },
+          "stderr": "",
+          "changed": false
+        },
+        "apply": {
+          "exit": 6,
+          "response": {
+            "schema_version": "1",
+            "akcli_version": "0.21.0",
+            "error": {
+              "code": "OPLIST",
+              "message": "REFUSED: --strict-nets: net split/merge touches a named net; nothing written",
+              "exit": 6,
+              "remediation": "nothing was written; `akcli ops validate <file>` explains the op-list, and the per-op errors above say what to fix"
+            }
+          },
+          "stderr": "  ! MERGE GND + <unnamed@U2.2> -> GND\nREFUSED: --strict-nets: net split/merge touches a named net; nothing written\n",
+          "changed": false
+        }
+      },
+      "writer": {
+        "exit": 0,
+        "ops": [
+          {
+            "op_index": 0,
+            "op": "add_net_label",
+            "status": "ok",
+            "created_uuids": [
+              "068977a9-f29f-5bc4-8672-7783902d73b2"
+            ],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          }
+        ],
+        "findings": []
+      },
+      "delta": [
+        "! MERGE GND + <unnamed@U2.2> -> GND"
+      ],
+      "risk": true,
+      "net_restored_by_akcli_reader": true,
+      "component_attributes_restored": true,
+      "repair_ops": {
+        "protocol_version": 2,
+        "target_format": "kicad",
+        "ops": [
+          {
+            "op": "add_net_label",
+            "name": "GND",
+            "at": "U2.2"
+          }
+        ]
+      }
+    },
+    {
+      "case": 3,
+      "fault_sha256": "110c7cb61758c6a06ec6b49e43d30508931e67582cb7721b957033287eb11da9",
+      "injection": {
+        "exit": 0,
+        "ops": [
+          {
+            "op_index": 0,
+            "op": "delete_component",
+            "status": "ok",
+            "created_uuids": [],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          },
+          {
+            "op_index": 1,
+            "op": "delete_component",
+            "status": "ok",
+            "created_uuids": [],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          },
+          {
+            "op_index": 2,
+            "op": "add_wire",
+            "status": "ok",
+            "created_uuids": [
+              "f7bdb3a0-0bf7-585b-a8ff-2c4ce0812420"
+            ],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          },
+          {
+            "op_index": 3,
+            "op": "add_wire",
+            "status": "ok",
+            "created_uuids": [
+              "1354b01f-c0b1-5c3c-9c87-fd3fe80c4c33"
+            ],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          }
+        ],
+        "findings": []
+      },
+      "strict": {
+        "dry_run": {
+          "exit": 0,
+          "response": {
+            "schema_version": "1.0",
+            "applied": false,
+            "status": "dry-run",
+            "ops": [
+              {
+                "op_index": 0,
+                "op": "delete_object",
+                "status": "ok",
+                "created_uuids": [],
+                "error_code": null,
+                "message": "",
+                "remediation": null
+              },
+              {
+                "op_index": 1,
+                "op": "delete_object",
+                "status": "ok",
+                "created_uuids": [],
+                "error_code": null,
+                "message": "",
+                "remediation": null
+              },
+              {
+                "op_index": 2,
+                "op": "place_component",
+                "status": "ok",
+                "created_uuids": [
+                  "92070112-a0e3-567b-b511-bd74013bc2d4"
+                ],
+                "error_code": null,
+                "message": "",
+                "remediation": null
+              },
+              {
+                "op_index": 3,
+                "op": "place_component",
+                "status": "ok",
+                "created_uuids": [
+                  "62899c32-34ac-57b0-a393-75644a63cec7"
+                ],
+                "error_code": null,
+                "message": "",
+                "remediation": null
+              }
+            ],
+            "connectivity": [],
+            "net_diff": {
+              "equivalent": false,
+              "risk": true,
+              "lines": [
+                "! SPLIT USB_DM (3 pins) -> USB_DM_CONN(2) + USB_DM(1)",
+                "! SPLIT USB_DP (3 pins) -> USB_DP_CONN(2) + USB_DP(1)"
+              ]
+            },
+            "preview": null
+          },
+          "stderr": "",
+          "changed": false
+        },
+        "apply": {
+          "exit": 6,
+          "response": {
+            "schema_version": "1",
+            "akcli_version": "0.21.0",
+            "error": {
+              "code": "OPLIST",
+              "message": "REFUSED: --strict-nets: net split/merge touches a named net; nothing written",
+              "exit": 6,
+              "remediation": "nothing was written; `akcli ops validate <file>` explains the op-list, and the per-op errors above say what to fix"
+            }
+          },
+          "stderr": "  ! SPLIT USB_DM (3 pins) -> USB_DM_CONN(2) + USB_DM(1)\n  ! SPLIT USB_DP (3 pins) -> USB_DP_CONN(2) + USB_DP(1)\nREFUSED: --strict-nets: net split/merge touches a named net; nothing written\n",
+          "changed": false
+        }
+      },
+      "writer": {
+        "exit": 0,
+        "ops": [
+          {
+            "op_index": 0,
+            "op": "delete_object",
+            "status": "ok",
+            "created_uuids": [],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          },
+          {
+            "op_index": 1,
+            "op": "delete_object",
+            "status": "ok",
+            "created_uuids": [],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          },
+          {
+            "op_index": 2,
+            "op": "place_component",
+            "status": "ok",
+            "created_uuids": [
+              "92070112-a0e3-567b-b511-bd74013bc2d4"
+            ],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          },
+          {
+            "op_index": 3,
+            "op": "place_component",
+            "status": "ok",
+            "created_uuids": [
+              "62899c32-34ac-57b0-a393-75644a63cec7"
+            ],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          }
+        ],
+        "findings": []
+      },
+      "delta": [
+        "! SPLIT USB_DM (3 pins) -> USB_DM_CONN(2) + USB_DM(1)",
+        "! SPLIT USB_DP (3 pins) -> USB_DP_CONN(2) + USB_DP(1)"
+      ],
+      "risk": true,
+      "net_restored_by_akcli_reader": true,
+      "component_attributes_restored": true,
+      "repair_ops": {
+        "protocol_version": 2,
+        "target_format": "kicad",
+        "ops": [
+          {
+            "op": "delete_object",
+            "uuid": "f7bdb3a0-0bf7-585b-a8ff-2c4ce0812420"
+          },
+          {
+            "op": "delete_object",
+            "uuid": "1354b01f-c0b1-5c3c-9c87-fd3fe80c4c33"
+          },
+          {
+            "op": "place_component",
+            "lib_id": "Device:R",
+            "designator": "R7",
+            "x_mil": 8600,
+            "y_mil": 7600,
+            "value": "22R",
+            "footprint": "Resistor_SMD:R_0603_1608Metric"
+          },
+          {
+            "op": "place_component",
+            "lib_id": "Device:R",
+            "designator": "R8",
+            "x_mil": 10900,
+            "y_mil": 7600,
+            "value": "22R",
+            "footprint": "Resistor_SMD:R_0603_1608Metric"
+          }
+        ]
+      }
+    },
+    {
+      "case": 4,
+      "fault_sha256": "655f585df2e913a8aaade3d8a0a291591ec1e7e275920006a54aec8f75dde7a0",
+      "injection": {
+        "exit": 0,
+        "ops": [
+          {
+            "op_index": 0,
+            "op": "delete_object",
+            "status": "ok",
+            "created_uuids": [],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          },
+          {
+            "op_index": 1,
+            "op": "delete_object",
+            "status": "ok",
+            "created_uuids": [],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          },
+          {
+            "op_index": 2,
+            "op": "delete_component",
+            "status": "ok",
+            "created_uuids": [],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          }
+        ],
+        "findings": []
+      },
+      "strict": {
+        "dry_run": {
+          "exit": 0,
+          "response": {
+            "schema_version": "1.0",
+            "applied": false,
+            "status": "dry-run",
+            "ops": [
+              {
+                "op_index": 0,
+                "op": "place_component",
+                "status": "ok",
+                "created_uuids": [
+                  "e51b8115-84f9-5f14-a897-a0902a20c188"
+                ],
+                "error_code": null,
+                "message": "",
+                "remediation": null
+              },
+              {
+                "op_index": 1,
+                "op": "add_net_label",
+                "status": "ok",
+                "created_uuids": [
+                  "155cc533-d7ae-57fb-a42e-00f5671f5985"
+                ],
+                "error_code": null,
+                "message": "",
+                "remediation": null
+              },
+              {
+                "op_index": 2,
+                "op": "add_net_label",
+                "status": "ok",
+                "created_uuids": [
+                  "1eea0d78-e965-5e40-9ce8-e380a8fed01f"
+                ],
+                "error_code": null,
+                "message": "",
+                "remediation": null
+              }
+            ],
+            "connectivity": [],
+            "net_diff": {
+              "equivalent": false,
+              "risk": false,
+              "lines": [
+                "~ +3V3: +R9.1 (9->10 pins)",
+                "~ BOOT: +R9.2 (2->3 pins)"
+              ]
+            },
+            "preview": null
+          },
+          "stderr": "",
+          "changed": false
+        },
+        "apply": {
+          "exit": 0,
+          "response": {
+            "schema_version": "1.0",
+            "applied": true,
+            "status": "applied",
+            "ops": [
+              {
+                "op_index": 0,
+                "op": "place_component",
+                "status": "ok",
+                "created_uuids": [
+                  "e51b8115-84f9-5f14-a897-a0902a20c188"
+                ],
+                "error_code": null,
+                "message": "",
+                "remediation": null
+              },
+              {
+                "op_index": 1,
+                "op": "add_net_label",
+                "status": "ok",
+                "created_uuids": [
+                  "155cc533-d7ae-57fb-a42e-00f5671f5985"
+                ],
+                "error_code": null,
+                "message": "",
+                "remediation": null
+              },
+              {
+                "op_index": 2,
+                "op": "add_net_label",
+                "status": "ok",
+                "created_uuids": [
+                  "1eea0d78-e965-5e40-9ce8-e380a8fed01f"
+                ],
+                "error_code": null,
+                "message": "",
+                "remediation": null
+              }
+            ],
+            "connectivity": [],
+            "net_diff": {
+              "equivalent": false,
+              "risk": false,
+              "lines": [
+                "~ +3V3: +R9.1 (9->10 pins)",
+                "~ BOOT: +R9.2 (2->3 pins)"
+              ]
+            },
+            "preview": null
+          },
+          "stderr": "",
+          "changed": true
+        }
+      },
+      "writer": {
+        "exit": 0,
+        "ops": [
+          {
+            "op_index": 0,
+            "op": "place_component",
+            "status": "ok",
+            "created_uuids": [
+              "e51b8115-84f9-5f14-a897-a0902a20c188"
+            ],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          },
+          {
+            "op_index": 1,
+            "op": "add_net_label",
+            "status": "ok",
+            "created_uuids": [
+              "155cc533-d7ae-57fb-a42e-00f5671f5985"
+            ],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          },
+          {
+            "op_index": 2,
+            "op": "add_net_label",
+            "status": "ok",
+            "created_uuids": [
+              "1eea0d78-e965-5e40-9ce8-e380a8fed01f"
+            ],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          }
+        ],
+        "findings": []
+      },
+      "delta": [
+        "~ +3V3: +R9.1 (9->10 pins)",
+        "~ BOOT: +R9.2 (2->3 pins)"
+      ],
+      "risk": false,
+      "net_restored_by_akcli_reader": true,
+      "component_attributes_restored": true,
+      "repair_ops": {
+        "protocol_version": 2,
+        "target_format": "kicad",
+        "ops": [
+          {
+            "op": "place_component",
+            "lib_id": "Device:R",
+            "designator": "R9",
+            "x_mil": 1350,
+            "y_mil": 10150,
+            "value": "10k",
+            "footprint": "Resistor_SMD:R_0603_1608Metric"
+          },
+          {
+            "op": "add_net_label",
+            "name": "+3V3",
+            "at": "R9.1"
+          },
+          {
+            "op": "add_net_label",
+            "name": "BOOT",
+            "at": "R9.2"
+          }
+        ]
+      }
+    },
+    {
+      "case": 5,
+      "fault_sha256": "08393ee96d2d5f2ab15b721fc962a2c6e731330b855a26845d6f530dba4ebf16",
+      "injection": {
+        "exit": 0,
+        "ops": [
+          {
+            "op_index": 0,
+            "op": "delete_object",
+            "status": "ok",
+            "created_uuids": [],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          },
+          {
+            "op_index": 1,
+            "op": "delete_object",
+            "status": "ok",
+            "created_uuids": [],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          },
+          {
+            "op_index": 2,
+            "op": "delete_component",
+            "status": "ok",
+            "created_uuids": [],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          }
+        ],
+        "findings": []
+      },
+      "strict": {
+        "dry_run": {
+          "exit": 0,
+          "response": {
+            "schema_version": "1.0",
+            "applied": false,
+            "status": "dry-run",
+            "ops": [
+              {
+                "op_index": 0,
+                "op": "place_component",
+                "status": "ok",
+                "created_uuids": [
+                  "7c082663-be2c-558b-a992-d595ebfa9b0d"
+                ],
+                "error_code": null,
+                "message": "",
+                "remediation": null
+              },
+              {
+                "op_index": 1,
+                "op": "add_net_label",
+                "status": "ok",
+                "created_uuids": [
+                  "e57bb499-a975-57f7-a0d0-691650ae47a5"
+                ],
+                "error_code": null,
+                "message": "",
+                "remediation": null
+              },
+              {
+                "op_index": 2,
+                "op": "add_net_label",
+                "status": "ok",
+                "created_uuids": [
+                  "6fe7578b-aa59-5f66-b52a-dd35d71b5997"
+                ],
+                "error_code": null,
+                "message": "",
+                "remediation": null
+              }
+            ],
+            "connectivity": [],
+            "net_diff": {
+              "equivalent": false,
+              "risk": false,
+              "lines": [
+                "~ EN: +C5.1 (3->4 pins)",
+                "~ GND: +C5.2 (22->23 pins)"
+              ]
+            },
+            "preview": null
+          },
+          "stderr": "",
+          "changed": false
+        },
+        "apply": {
+          "exit": 0,
+          "response": {
+            "schema_version": "1.0",
+            "applied": true,
+            "status": "applied",
+            "ops": [
+              {
+                "op_index": 0,
+                "op": "place_component",
+                "status": "ok",
+                "created_uuids": [
+                  "7c082663-be2c-558b-a992-d595ebfa9b0d"
+                ],
+                "error_code": null,
+                "message": "",
+                "remediation": null
+              },
+              {
+                "op_index": 1,
+                "op": "add_net_label",
+                "status": "ok",
+                "created_uuids": [
+                  "e57bb499-a975-57f7-a0d0-691650ae47a5"
+                ],
+                "error_code": null,
+                "message": "",
+                "remediation": null
+              },
+              {
+                "op_index": 2,
+                "op": "add_net_label",
+                "status": "ok",
+                "created_uuids": [
+                  "6fe7578b-aa59-5f66-b52a-dd35d71b5997"
+                ],
+                "error_code": null,
+                "message": "",
+                "remediation": null
+              }
+            ],
+            "connectivity": [],
+            "net_diff": {
+              "equivalent": false,
+              "risk": false,
+              "lines": [
+                "~ EN: +C5.1 (3->4 pins)",
+                "~ GND: +C5.2 (22->23 pins)"
+              ]
+            },
+            "preview": null
+          },
+          "stderr": "",
+          "changed": true
+        }
+      },
+      "writer": {
+        "exit": 0,
+        "ops": [
+          {
+            "op_index": 0,
+            "op": "place_component",
+            "status": "ok",
+            "created_uuids": [
+              "7c082663-be2c-558b-a992-d595ebfa9b0d"
+            ],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          },
+          {
+            "op_index": 1,
+            "op": "add_net_label",
+            "status": "ok",
+            "created_uuids": [
+              "e57bb499-a975-57f7-a0d0-691650ae47a5"
+            ],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          },
+          {
+            "op_index": 2,
+            "op": "add_net_label",
+            "status": "ok",
+            "created_uuids": [
+              "6fe7578b-aa59-5f66-b52a-dd35d71b5997"
+            ],
+            "error_code": null,
+            "message": "",
+            "remediation": null
+          }
+        ],
+        "findings": []
+      },
+      "delta": [
+        "~ EN: +C5.1 (3->4 pins)",
+        "~ GND: +C5.2 (22->23 pins)"
+      ],
+      "risk": false,
+      "net_restored_by_akcli_reader": true,
+      "component_attributes_restored": true,
+      "repair_ops": {
+        "protocol_version": 2,
+        "target_format": "kicad",
+        "ops": [
+          {
+            "op": "place_component",
+            "lib_id": "Device:C",
+            "designator": "C5",
+            "x_mil": 10550,
+            "y_mil": 1450,
+            "value": "1uF",
+            "footprint": "Capacitor_SMD:C_0603_1608Metric"
+          },
+          {
+            "op": "add_net_label",
+            "name": "EN",
+            "at": "C5.1"
+          },
+          {
+            "op": "add_net_label",
+            "name": "GND",
+            "at": "C5.2"
+          }
+        ]
+      }
+    }
+  ],
+  "sequence_and_replay": [
+    {
+      "case": "DC-04",
+      "reports": [
+        {
+          "step": "place_only",
+          "exit": 0,
+          "response": {
+            "schema_version": "1.0",
+            "applied": true,
+            "status": "applied",
+            "ops": [
+              {
+                "op_index": 0,
+                "op": "place_component",
+                "status": "ok",
+                "created_uuids": [
+                  "e51b8115-84f9-5f14-a897-a0902a20c188"
+                ],
+                "error_code": null,
+                "message": "",
+                "remediation": null
+              }
+            ],
+            "connectivity": [],
+            "net_diff": {
+              "equivalent": false,
+              "risk": false,
+              "lines": [
+                "+ NEW <unnamed@R9.1> (1)",
+                "+ NEW <unnamed@R9.2> (1)"
+              ]
+            },
+            "preview": null
+          }
+        },
+        {
+          "step": "connect_later",
+          "exit": 6,
+          "response": {
+            "schema_version": "1",
+            "akcli_version": "0.21.0",
+            "error": {
+              "code": "OPLIST",
+              "message": "REFUSED: --strict-nets: net split/merge touches a named net; nothing written",
+              "exit": 6,
+              "remediation": "nothing was written; `akcli ops validate <file>` explains the op-list, and the per-op errors above say what to fix"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case": "DC-05",
+      "reports": [
+        {
+          "step": "place_only",
+          "exit": 0,
+          "response": {
+            "schema_version": "1.0",
+            "applied": true,
+            "status": "applied",
+            "ops": [
+              {
+                "op_index": 0,
+                "op": "place_component",
+                "status": "ok",
+                "created_uuids": [
+                  "7c082663-be2c-558b-a992-d595ebfa9b0d"
+                ],
+                "error_code": null,
+                "message": "",
+                "remediation": null
+              }
+            ],
+            "connectivity": [],
+            "net_diff": {
+              "equivalent": false,
+              "risk": false,
+              "lines": [
+                "+ NEW <unnamed@C5.1> (1)",
+                "+ NEW <unnamed@C5.2> (1)"
+              ]
+            },
+            "preview": null
+          }
+        },
+        {
+          "step": "connect_later",
+          "exit": 6,
+          "response": {
+            "schema_version": "1",
+            "akcli_version": "0.21.0",
+            "error": {
+              "code": "OPLIST",
+              "message": "REFUSED: --strict-nets: net split/merge touches a named net; nothing written",
+              "exit": 6,
+              "remediation": "nothing was written; `akcli ops validate <file>` explains the op-list, and the per-op errors above say what to fix"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case": "DC-01",
+      "native_reapply_exit": 0,
+      "byte_identical": true
+    },
+    {
+      "case": "DC-02",
+      "native_reapply_exit": 0,
+      "byte_identical": true
+    },
+    {
+      "case": "DC-03",
+      "native_reapply_exit": 0,
+      "byte_identical": true
+    },
+    {
+      "case": "DC-04",
+      "native_reapply_exit": 0,
+      "byte_identical": true
+    },
+    {
+      "case": "DC-05",
+      "native_reapply_exit": 0,
+      "byte_identical": true
+    }
+  ],
+  "negative_bypass": {
+    "exit": 0,
+    "response": {
+      "schema_version": "1.0",
+      "applied": true,
+      "status": "applied",
+      "ops": [
+        {
+          "op_index": 0,
+          "op": "place_component",
+          "status": "ok",
+          "created_uuids": [
+            "92070112-a0e3-567b-b511-bd74013bc2d4"
+          ],
+          "error_code": null,
+          "message": "",
+          "remediation": null
+        },
+        {
+          "op_index": 1,
+          "op": "place_component",
+          "status": "ok",
+          "created_uuids": [
+            "62899c32-34ac-57b0-a393-75644a63cec7"
+          ],
+          "error_code": null,
+          "message": "",
+          "remediation": null
+        }
+      ],
+      "connectivity": [],
+      "net_diff": {
+        "equivalent": false,
+        "risk": false,
+        "lines": [
+          "~ USB_DM: +R8.1 +R8.2 (3->5 pins)",
+          "~ USB_DP: +R7.1 +R7.2 (3->5 pins)"
+        ]
+      },
+      "preview": null
+    },
+    "usb_nets": [
+      {
+        "name": "USB_DP",
+        "aliases": [
+          "USB_DP_CONN"
+        ],
+        "members": [
+          [
+            "J1",
+            "A6"
+          ],
+          [
+            "J1",
+            "B6"
+          ],
+          [
+            "R7",
+            "1"
+          ],
+          [
+            "R7",
+            "2"
+          ],
+          [
+            "U1",
+            "14"
+          ]
+        ]
+      },
+      {
+        "name": "USB_DM",
+        "aliases": [
+          "USB_DM_CONN"
+        ],
+        "members": [
+          [
+            "J1",
+            "A7"
+          ],
+          [
+            "J1",
+            "B7"
+          ],
+          [
+            "R8",
+            "1"
+          ],
+          [
+            "R8",
+            "2"
+          ],
+          [
+            "U1",
+            "13"
+          ]
+        ]
+      }
+    ]
+  },
+  "upstream_netdiff": {
+    "method": "Direct invocation of upstream fixture-free test functions; pytest runner not installed",
+    "file": "tests/test_netdiff.py",
+    "tests": [
+      "test_self_diff_is_equivalent",
+      "test_empty_inputs_are_equivalent",
+      "test_member_order_and_container_type_do_not_matter",
+      "test_rename_same_members_different_name",
+      "test_named_to_unnamed_is_a_rename_not_remove",
+      "test_modified_pin_added",
+      "test_modified_pin_removed",
+      "test_rename_and_modify_combined_is_one_modified_entry",
+      "test_modified_long_pin_delta_is_truncated",
+      "test_split_named_net_into_named_plus_unnamed",
+      "test_split_fragments_ordered_by_overlap_desc",
+      "test_split_of_purely_unnamed_nets_carries_no_risk",
+      "test_merge_two_named_rails",
+      "test_merge_surviving_name_listed_first_even_when_smaller",
+      "test_merge_of_purely_unnamed_nets_carries_no_risk",
+      "test_merge_unnamed_into_named_rail_is_risky",
+      "test_created_and_removed",
+      "test_reshuffle_reports_both_split_and_merge",
+      "test_accepts_model_net_objects",
+      "test_model_net_rename_detected_by_membership",
+      "test_format_summary_limit_truncates_with_marker",
+      "test_output_lists_are_deterministically_sorted",
+      "test_netview_display_named_and_unnamed"
+    ],
+    "passed": 23
+  },
+  "probe_files": {
+    "DC-01": {
+      "fault.kicad_sch": "c37fdcb5ff9fbc46d4b53fdf119c920dc368774ad0f4026037e5661a41084f5c",
+      "strict.kicad_sch": "c37fdcb5ff9fbc46d4b53fdf119c920dc368774ad0f4026037e5661a41084f5c",
+      "native_writer.kicad_sch": "7c65a283d757eb1ee47fa73f0c4eb657d2bd9ca77aa487078c7705c9a8bd330b",
+      "repair_ops.json": "1d3c699552e6088182b8fff17812e2bbb45295670bf70876a7bba12934d470d9"
+    },
+    "DC-02": {
+      "fault.kicad_sch": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0",
+      "strict.kicad_sch": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0",
+      "native_writer.kicad_sch": "65ac445c70f3d79d01e485038745b308875a92f4142e22d98714b19a78a05c1a",
+      "repair_ops.json": "918fac4ca6757c664681c8bc9aa3fbd0cc06066030a046eb8c8bff930c59bfdb"
+    },
+    "DC-03": {
+      "fault.kicad_sch": "110c7cb61758c6a06ec6b49e43d30508931e67582cb7721b957033287eb11da9",
+      "strict.kicad_sch": "110c7cb61758c6a06ec6b49e43d30508931e67582cb7721b957033287eb11da9",
+      "native_writer.kicad_sch": "c1086a312408cb4e70c454349fd3db470f77fee73563877d8eccc4226250e252",
+      "repair_ops.json": "9bb7a936b3852fcd4176b42e2387202ba78a4395eea64ad50928bfa30d9bc1da"
+    },
+    "DC-04": {
+      "fault.kicad_sch": "655f585df2e913a8aaade3d8a0a291591ec1e7e275920006a54aec8f75dde7a0",
+      "strict.kicad_sch": "2f660180ab180009656da7d47e7b686a75ce42ce9084b610904e2b6d28db99c6",
+      "native_writer.kicad_sch": "2f660180ab180009656da7d47e7b686a75ce42ce9084b610904e2b6d28db99c6",
+      "repair_ops.json": "9d848bf6576642801cbfbc7ce5db6378c15b059a37be398800d0c6ef45922f86"
+    },
+    "DC-05": {
+      "fault.kicad_sch": "08393ee96d2d5f2ab15b721fc962a2c6e731330b855a26845d6f530dba4ebf16",
+      "strict.kicad_sch": "033e4efa94bc800fa60d8cb66182ba35478c6efbd85213db0a6c87a3c828f83b",
+      "native_writer.kicad_sch": "033e4efa94bc800fa60d8cb66182ba35478c6efbd85213db0a6c87a3c828f83b",
+      "repair_ops.json": "9db7d918f71367de24a50f3c84df430602aceffb6d4126da921cc30fcaf12a32"
+    }
+  }
+}
