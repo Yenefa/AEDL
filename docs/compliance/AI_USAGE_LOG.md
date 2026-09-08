@@ -3291,36 +3291,6 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - AI 参与：DOCUMENT —— 入库执行与引用挂接；方案及核查内容为 Codex 会话产出，本会话未改其实质。
 - 人工审核：`PENDING_HUMAN_REVIEW`
 
-## AI-20260906-006
-
-- 日期：2026-09-06
-- 任务名称：W1/P5 —— build_board.py 的 U3 封装映射修复 + 类级回归
-- 模块/路径：
-  - `tools/build_board.py`（FP_MAP 中 U3 封装修正）
-  - `tests/test_build_board_footprints.py`（新增，3 例）
-  - `tasks/GH-P5.yaml`（envelope）
-  - 本条台账
-- AI 工具/平台：Claude Code
-- 模型：`claude-opus-5`
-- AI 参与类型：DEBUG、GENERATE_CODE、GENERATE_TEST
-- 缺陷：`tools/build_board.py` 的 `FP_MAP` 把 U3 映射为 `Package_TO_SOT_SMD:SOT-23-5`，而 C82942 → C235316（ME6211C33R5G）换料后全链权威源（`intent_v1.json` / `ops_gen.json` / BOM / `m2_component_contracts.json` / `board_review_v1.json`）均为 **SOT-353**。任何人跑 builder 重建都会把换料前的旧封装静默带回 PCB。
-- 开工前实测确认范围：对 intent 中 **16 件已声明 footprint** 的器件逐一比对，**仅 U3 一处不一致**，其余 15 件一致；另 7 件（U1/U2/J1/SW1/SW2 + 两个电源标记）intent 未声明 footprint，补声明属设计意图变更，不在本次范围。
-- AECP 流程（本任务按任务卡要求走完整 Envelope + Admission）：
-  - 首轮 admit **BLOCKED**：`--allow-dirty` 与 `--allow-drift` 均被拒，工具明确提示「agent cannot self-authorize」。
-  - 根因是结构性死结：信封不提交则树脏、提交则 HEAD 移动导致基线漂移——**文件无法包含自身提交的 sha**。仓库惯例（信封先落 master）需要直推共享分支，Agent 不得擅自执行。
-  - 由信封中具名的 escalation owner **Percy 人工授权** `exceptions.allow_drift`（`decision_ref: W1/P5 session 2026-09-06`），先例见 AI-20260903-001（allow_dirty，granted_by=Yenefa）。
-  - 授权后 admit → **ADMIT，exit 0**，`envelope_sha256 2fbdc043357f…`；回执经 `--admit-receipt` 传入 dev_gate，`binding_check` 由 fail 转 pass。
-- 回归测试设计（钉的是**缺陷类别**而非单点）：对 intent 中全部已声明 footprint 与 `FP_MAP` 逐项比对，任一漂移即失败；另钉 U3 具体值，并含一例自检（受控扰动副本必须报出不一致，证明检查非空转）。
-- 验证（真实运行，先红后绿）：
-  - **RED**：临时把 U3 退回 `SOT-23-5` → 3 例中 **2 例失败**（通用断言 + U3 钉值）。
-  - **GREEN**：恢复修复 → **3/3 OK**。
-  - 全量 `unittest discover -s tests` → **325 例**（原 322 + 新增 3）。
-  - `dev_gate --envelope --admit-receipt` → syntax/sandbox_tests/secret_scan/**scope_check**/**binding_check**/bundle_check 全 pass。
-- **已知既有缺陷（非本次引入）**：全量套件与 dev_gate 的 `main_tests` **间歇性失败**——本轮实测 `unittest` 3 次中 1 次失败、`dev_gate` 2 次中 1 次失败，traceback 指向 `urllib/request.py` 且解释器为 Python 3.13，正是 **Issue #31** 的签名（台账记录约 2/6 失败率），修复在**尚未合并的 PR #33**。本次新增的 3 例为纯确定性、不涉网络。此为 Issue #31 在另一日期的一次独立复现。
-- 团队自主部分：`allow_drift` 例外由 Percy 人工授权；Agent 未自授权任何标志。
-- 已知限制：未重建 PCB（builder 未实际执行，本机无 pcbnew）；未触碰原理图/PCB/BOM/任何证据文件；SOT-353 不在 KiCad 标准 `Package_TO_SOT_SMD` 库内属既有状态（见冻结 ERC 证据的同名 warning），不由本次修复引入、亦不由本次解决。
-- 人工审核：`PENDING_HUMAN_REVIEW`
-
 ## AI-20260906-011
 
 - **台账 ID 改号说明（2026-09-07，PR #38 解决 master 合并冲突时补记）**：本条目原领用
@@ -3351,6 +3321,65 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - 团队自主部分：无。本目录只陈述手册事实，不做设计判断与修复建议；强制/建议两级区分为按手册措辞（must vs advised/recommended）如实标注。
 - 验证（真实运行）：`py -3.9 -m tools.dev_gate` → 见本 PR。事实条目均可按所记页码在仓库内原件复核。
 - 已知限制：U1 datasheet 无 `/Title` 元数据，**版本号 `TO_VERIFY`**（仅有 CreationDate）；未覆盖 D1/SW1/SW2/无源件；未从来源 C（J1 镜像）提取任何事实。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260906-006
+
+- 日期：2026-09-06
+- 任务名称：W1/P5 —— build_board.py 的 U3 封装映射修复 + 类级回归
+- 模块/路径：
+  - `tools/build_board.py`（FP_MAP 中 U3 封装修正）
+  - `tests/test_build_board_footprints.py`（新增，3 例）
+  - `tasks/GH-P5.yaml`（envelope）
+  - 本条台账
+- AI 工具/平台：Claude Code
+- 模型：`claude-opus-5`
+- AI 参与类型：DEBUG、GENERATE_CODE、GENERATE_TEST
+- 缺陷：`tools/build_board.py` 的 `FP_MAP` 把 U3 映射为 `Package_TO_SOT_SMD:SOT-23-5`，而 C82942 → C235316（ME6211C33R5G）换料后全链权威源（`intent_v1.json` / `ops_gen.json` / BOM / `m2_component_contracts.json` / `board_review_v1.json`）均为 **SOT-353**。任何人跑 builder 重建都会把换料前的旧封装静默带回 PCB。
+- 开工前实测确认范围：对 intent 中 **16 件已声明 footprint** 的器件逐一比对，**仅 U3 一处不一致**，其余 15 件一致；另 7 件（U1/U2/J1/SW1/SW2 + 两个电源标记）intent 未声明 footprint，补声明属设计意图变更，不在本次范围。
+- AECP 流程（本任务按任务卡要求走完整 Envelope + Admission）：
+  - 首轮 admit **BLOCKED**：`--allow-dirty` 与 `--allow-drift` 均被拒，工具明确提示「agent cannot self-authorize」。
+  - 根因是结构性死结：信封不提交则树脏、提交则 HEAD 移动导致基线漂移——**文件无法包含自身提交的 sha**。仓库惯例（信封先落 master）需要直推共享分支，Agent 不得擅自执行。
+  - 由信封中具名的 escalation owner **Percy 人工授权** `exceptions.allow_drift`（`decision_ref: W1/P5 session 2026-09-06`），先例见 AI-20260903-001（allow_dirty，granted_by=Yenefa）。
+  - 授权后 admit → **ADMIT，exit 0**，`envelope_sha256 2fbdc043357f…`；回执经 `--admit-receipt` 传入 dev_gate，`binding_check` 由 fail 转 pass。
+- 回归测试设计（钉的是**缺陷类别**而非单点）：对 intent 中全部已声明 footprint 与 `FP_MAP` 逐项比对，任一漂移即失败；另钉 U3 具体值，并含一例自检（受控扰动副本必须报出不一致，证明检查非空转）。
+- 验证（真实运行，先红后绿）：
+  - **RED**：临时把 U3 退回 `SOT-23-5` → 3 例中 **2 例失败**（通用断言 + U3 钉值）。
+  - **GREEN**：恢复修复 → **3/3 OK**。
+  - 全量 `unittest discover -s tests` → **325 例**（原 322 + 新增 3）。
+  - `dev_gate --envelope --admit-receipt` → syntax/sandbox_tests/secret_scan/**scope_check**/**binding_check**/bundle_check 全 pass。
+- **已知既有缺陷（非本次引入）**：全量套件与 dev_gate 的 `main_tests` **间歇性失败**——本轮实测 `unittest` 3 次中 1 次失败、`dev_gate` 2 次中 1 次失败，traceback 指向 `urllib/request.py` 且解释器为 Python 3.13，正是 **Issue #31** 的签名（台账记录约 2/6 失败率），修复在**尚未合并的 PR #33**。本次新增的 3 例为纯确定性、不涉网络。此为 Issue #31 在另一日期的一次独立复现。
+- 团队自主部分：`allow_drift` 例外由 Percy 人工授权；Agent 未自授权任何标志。
+- 已知限制：未重建 PCB（builder 未实际执行，本机无 pcbnew）；未触碰原理图/PCB/BOM/任何证据文件；SOT-353 不在 KiCad 标准 `Package_TO_SOT_SMD` 库内属既有状态（见冻结 ERC 证据的同名 warning），不由本次修复引入、亦不由本次解决。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260906-005
+
+- 日期：2026-09-06
+- 任务名称：W1/P2 —— E5 用户试用协议 v1 + 会话记录模板
+- 模块/路径：
+  - `notes/e5-user-trial/e5-protocol-v1.md`（新增）
+  - `notes/e5-user-trial/sessions/_TEMPLATE.md`（新增）
+  - 本条台账
+- AI 工具/平台：Claude Code
+- 模型：`claude-opus-5`
+- AI 参与类型：DOCUMENT
+- 任务目标：W1 任务卡 P2。Percy 现场已有可招募对象，需要立即可用的招募话术、访谈提纲与记录模板。
+- 关键设计决定（**把 E5 拆成两段**）：
+  - AEDL 修复闭环当前不可用（Y2 akcli 适配、Y3 独立重验链路未完成），"用 AEDL 做任务"这一半现在做不了；
+  - 但矩阵 E5 方法的第一句就是"**先了解近期设计错误**"——该段今天即可执行，不做会浪费已到位的人；
+  - 故拆为：第一段（背景登记 + 错误经历访谈 + 可选基线计时，现在做）／第二段（AEDL 对照，W5，前置 Y2+Y3）。
+  - **两段之间存在时间间隔，属方法学让步，已写明必须在报告中如实披露**，不伪装为同场次交错对照。
+- AI 实际产出：
+  - 招募话术，并列出**不得说的话**（"帮我验证工具好不好用"属诱导；预先解释可查错误类型会让受访者照着答；不得主动提 M2 的 USB/SHT30 事故——**要看他们是否自发提到**）
+  - 6 题访谈提纲，其中 **Q5「有没有 ERC 全绿但板子还是错的情况」为关键题**，直接检验 AEDL 的核心主张（多份文件自洽 ≠ 正确）
+  - 背景登记表、第二段任务设计草案（同人不同题、顺序在人之间交替）
+  - 匿名与数据纪律：仅用 `U-01…U-05` 编号，姓名/联系方式/单位一律不入仓库；失败与中途放弃必须保留
+  - 会话记录模板（现场直接填）
+- **前提检验条款（本轮主动加入）**：若多数受访者反馈"未遇到过跨视图这类错误"，即构成对产品前提的**反证**，应如实记录并触发范围重估。W1 是止损闸门，在此处发现前提不成立优于十月发现。
+- 团队自主部分：招募对象由 Percy 自行联系；本文件不代为接触任何人。
+- 验证（真实运行）：`py -3.9 -m tools.dev_gate` 见本 PR。
+- 已知限制：**尚未联系任何用户，无任何用户数据**；第二段能否执行取决于 Y2/Y3，未达成则如实标未完成；3–5 人只支持初步可用性判断，不能推断广泛市场效果。
 - 人工审核：`PENDING_HUMAN_REVIEW`
 
 ## AI-20260907-001
