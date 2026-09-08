@@ -31,3 +31,10 @@ delivery/gerbers/* text eol=crlf
 # Preserve the exact imported AEDL governance sources, including Markdown hard-break spaces.
 AGENTS.md whitespace=-blank-at-eol
 docs/compliance/AEDL_开发记录与AI使用规范_v1.0.md whitespace=-blank-at-eol
+
+# PR-1 fixtures are byte-frozen evidence inputs (contract section 11): the
+# manifest binds their sha256/size_bytes, so Git must never convert line
+# endings for them on any platform (autocrlf=true worktrees otherwise
+# silently rewrite LF -> CRLF at checkout).
+tests/fixtures/repair_pr1/** -text
+tests/fixtures/repair_pr1/**/* -text
