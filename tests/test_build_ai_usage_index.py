@@ -47,10 +47,10 @@ class LedgerToolTestBase(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def write_entry(self, name, text):
-        (self.entries / name).write_text(text, encoding="utf-8", newline="\n")
+        (self.entries / name).write_bytes(text.encode("utf-8"))
 
     def write_ledger(self, text):
-        self.ledger.write_text(text, encoding="utf-8", newline="\n")
+        self.ledger.write_bytes(text.encode("utf-8"))
 
 
 class MigrateTests(LedgerToolTestBase):

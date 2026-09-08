@@ -134,7 +134,9 @@ def cmd_migrate(root: Path) -> dict:
         if target.is_file():
             skipped += 1
             continue
-        target.write_text(body, encoding="utf-8", newline="\n")
+        # Path.write_text(newline=...) is 3.10+; encode + write_bytes keeps the
+        # LF byte baseline deterministic on every supported interpreter (3.9).
+        target.write_bytes(body.encode("utf-8"))
         migrated.append(entry_id)
     return {
         "migrated": migrated,
@@ -194,7 +196,7 @@ def cmd_build(root: Path) -> dict:
     entries = read_entries(root)
     if not entries:
         raise LedgerError("no per-entry files under docs/compliance/ai-usage/ — refuse to blank the index")
-    (root / LEDGER_PATH).write_text(build_index_text(entries), encoding="utf-8", newline="\n")
+    (root / LEDGER_PATH).write_bytes(build_index_text(entries).encode("utf-8"))
     return {"index_entries": len(entries)}
 
 
