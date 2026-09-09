@@ -123,7 +123,7 @@ Issue → task branch → exact-path staging → tests → Draft PR
 ```
 
 - 正式团队成员、AI 贡献和第三方资源分别登记，不能混写成“全部团队自研”。
-- AI 的实质贡献记录在 [AI Usage Log](docs/compliance/AI_USAGE_LOG.md)，审核状态保持 `PENDING_HUMAN_REVIEW`。
+- AI 的实质贡献逐条记录在 [docs/compliance/ai-usage/](docs/compliance/ai-usage/)（[AI_USAGE_LOG.md](docs/compliance/AI_USAGE_LOG.md) 为自动生成索引），审核状态保持 `PENDING_HUMAN_REVIEW`。
 - 关键决策见 [DECISIONS](docs/compliance/DECISIONS.md)，第三方与许可证边界见 [THIRD_PARTY_RESOURCES](docs/compliance/THIRD_PARTY_RESOURCES.md)。
 - 仓库当前的具体分支策略与 GitHub 强制能力边界见 [协作协议](docs/COLLABORATION.md)。
 

@@ -400,3 +400,37 @@
 
 - 后续复查条件：
   - 首个真实 Issue 以 envelope + admission 走完 ADMIT → EXECUTE → GATE → PENDING_HUMAN_REVIEW → MERGE 全链路；CRLF 哈希缺口得到双人裁决；或 CI/本地验证语义再次分叉时复查。
+
+## ADR-012 — AI Usage 台账拆分：per-entry 文件 + actor 随机 ID + 生成索引
+
+- 日期：2026-09-08
+- 状态：**Proposed**（GH-49 PR 待人工审核合并后转 Accepted）
+
+- 问题：
+  - 单文件 append-only 台账（`AI_USAGE_LOG.md`）+ 每日全局递增 ID（`AI-YYYYMMDD-NNN`）在多 Agent / 多分支并行下系统性失效：所有分支在同一文件末尾同一位置 append → Git 文本冲突；各分支各自"取最大号 +1" → 语义撞号。2026-09-06 一日累计四次并行撞号（002→007→010 连锁改号，台账自记"顺序编号在多分支并行下系统性失效"）；PR #36 rebase 冲突再次复现。
+  - 撞号后的改号无法修改已共享提交的 commit message（AGENTS §3.7 禁改写历史），只能在新条目里写改号说明，台账出现"ID 名不副实"的历史包袱。
+
+- 候选方案：
+  1. 维持现状，冲突靠手工 rebase 解决——继续制造冲突与撞号。
+  2. actor 前缀 + 局部递增——不同 actor 被隔开，同 actor 的不同分支仍会同时取到相同最大号 +1；文件不是跨分支锁。
+  3. 拆分存储 + actor 前缀 + 随机后缀 + 生成索引——记录独立分配，索引由脚本重建并校验。
+
+- 决策：
+  - 采用方案 3（GH-49）。
+  - 存储：条目真源 `docs/compliance/ai-usage/<ID>.md`（一文件一可审计工作单元）；`AI_USAGE_LOG.md` 降级为**自动生成索引**，文件头带 GENERATED 标记，禁止手工编辑。
+  - 工具：`tools/build_ai_usage_index.py` 的 new / migrate / build / check。new 用标准库 `secrets.token_hex(16).upper()`，生成 128 bit、32 位大写 hex 后缀，并排他创建新文件；同目录碰撞重试且不覆盖。无需中央序号或扫描最大值。
+  - 新格式 `AI-YYYYMMDD-<ACTOR>-<RANDOM>`；存量 `AI-YYYYMMDD-NNN`、早期 `<ACTOR>-<NN>` 继续只读兼容、不追溯改号。actor 是审计分类标签，不是身份认证。
+  - migrate：同 ID 同字节正文才 skip；不同正文 HARD FAIL，先预检整个批次再写新文件。`--source` 支持外部旧台账快照；任何已知历史补记也必须显式调和，不能自动豁免。
+  - check：校验 ID、日期、审核状态、目录杂项，且与 `build_index_text(entries)` 全文比对，涵盖数量/摘要/顺序/链接；索引漂移由 dev_gate fail-closed。
+  - 随机 ID 是概率保证，不承诺数学上的零碰撞。共享生成索引仍可能冲突；保留双方记录后重新 build/check。相同 ID 不同正文不得静默吞掉一方。
+
+- Evidence / Reference：
+  - `tools/build_ai_usage_index.py`、`tests/test_build_ai_usage_index.py`、`docs/COLLABORATION.md` §0.1、`docs/ID_MAP.md`、`AGENTS.md` §4；实际数量与测试结果以对应 head 的 Review Bundle 为准。
+  - AI-20260908-YEN-001（台账）。
+  - 2026-09-09 复审修订：AI-20260909-CODEX-D685F9E9FAC5AF8DCA0869791DE02AE4；[Python secrets 官方文档](https://docs.python.org/3/library/secrets.html#secrets.token_hex)。
+
+- 影响：
+  - 迁移保留条目内部字节；条目间空行属结构，可移除至一个终止换行。原迁移另对 2 条 stub（AI-20260901-007/-008）追加默认 `PENDING_HUMAN_REVIEW`；这是已披露的正文修订，不能称为全部正文零差异。
+  - 必须先处理仍追加旧式台账的开放 PR（含 #34），再对最终 master 迁移、build、check，并重跑全部测试与门禁。#50 已合入 master `4d5a8f4`，本轮已收编其两条旧记录；过程与当前计数见 `ai-usage/README.md`。旧提交计数不能用作后续 head 的证据。
+  - 新增记录后忘记 build 会被 check 拦下，但 check 无法凭空发现没有导入的外部旧台账；最终迁移必须独立核对源条目集合。
+  - 后续复查条件：若 per-entry 文件数量增长到使目录枚举显著变慢（>500 条），再评估按月分目录；当前规模不做。

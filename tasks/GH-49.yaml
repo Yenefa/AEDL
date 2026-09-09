@@ -1,0 +1,97 @@
+task: GH-49
+
+base:
+  branch: chore/ai-ledger-split
+  sha: 03a0a3403367945af480fa10f06c15f9bde2bb95  # 2026-09-09 用户明确授权的最终同步基线（GH-34 合并后的 master）
+    # 基线沿革：8457b6d（原批准）→ 4d5a8f45（GH-50 合并后）→ 03a0a340（GH-34 合并后，本值）。
+    # GitHub PR #49 base = 本值；本次 fetch/merge、migrate、复验与 commit/push
+    # 均由 2026-09-09 用户指令授权。HEAD 位于本基线之上是任务实现提交的正常状态。
+    # 本轮为治理收尾：仅更新本 envelope 的基线/预算/provenance 与 PR 描述，不改工具、测试、
+    # 迁移或 ID 语义（用户 2026-09-09 指令）。
+
+goal: |
+  终结 AI Usage 台账的并行撞号与 Git append 冲突：把单文件 append-only 台账
+  （docs/compliance/AI_USAGE_LOG.md）拆分为每条记录一个独立文件
+  （docs/compliance/ai-usage/<ID>.md），AI_USAGE_LOG.md 改为由脚本自动生成的
+  纯索引；当前修订使用 AI-YYYYMMDD-<ACTOR>-<RANDOM>（128 bit 随机后缀），
+  支持同 actor 多 Agent/多分支独立领号，并关闭索引正文漂移与迁移分歧遗漏。
+
+scope: |
+  In scope:
+  - tools/build_ai_usage_index.py：四个子命令
+    (1) migrate —— 把 AI_USAGE_LOG.md 按 `## AI-...` 标题拆分为
+        docs/compliance/ai-usage/<ID>.md（仅同 ID 同字节正文 skip；差异 HARD FAIL，
+        写入前预检整个批次；可用 --source 导入外部旧台账原始 blob）；
+    (2) build —— 从 per-entry 文件重生成 AI_USAGE_LOG.md 索引（按 ID 排序，
+        与手工顺序无关）；AI_USAGE_LOG.md 顶部声明为生成文件，禁止手工编辑；
+    (3) check —— fail-closed 校验：ID 格式合法（旧 NNN 与新 ACTOR 两种格式均
+        接受，存量不追溯）、日期一致、无越界文件、索引全文与生成值一致；
+    (4) new —— actor + 128 bit 随机 ID，排他创建，碰撞重试不覆盖。
+  - ID 格式：当前为 AI-YYYYMMDD-<ACTOR>-<RANDOM>，RANDOM 为 32 位大写 hex；
+    旧 NNN 和早期 ACTOR-NN 只读兼容，不追溯改号。
+  - docs/compliance/ai-usage/ 目录；最终迁移数量取自同步后的 master 原始台账。
+  - dev_gate 接入 ai_usage_ledger 检查（check 子命令，fail-closed）。
+  - 配套文档更新：AGENTS.md §4、docs/COLLABORATION.md §0.1、docs/ID_MAP.md、
+    docs/compliance/README.md、docs/CONTROL_PLANE.md、README.md、ADR-012。
+  Out of scope:
+  - 不改写任何存量条目正文（拆分是逐字节搬运，标题分隔线之外的正文零改动）。
+  - 不改编号规则的历史语义：AI-20260906-007 的改号历史保留原样。
+  - 不动 gates/run_gates.py 正式 Evidence 链路。
+
+dependencies: []
+
+allowed_paths:
+  - tools/build_ai_usage_index.py
+  - tools/dev_gate.py
+  - tests/test_build_ai_usage_index.py
+  - tests/test_dev_gate.py
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/compliance/ai-usage/**
+  - AGENTS.md
+  - docs/COLLABORATION.md
+  - docs/ID_MAP.md
+  - docs/compliance/README.md
+  - docs/CONTROL_PLANE.md
+  - README.md
+  - docs/compliance/DECISIONS.md
+  - tasks/GH-49.yaml
+  - docs/compliance/ai-usage/README.md
+
+forbidden_paths:
+  - gates/**
+  - docs/evidence/**
+  - src/**
+  - sandbox_runtime/**
+
+acceptance: |
+  - migrate 幂等：同一 AI_USAGE_LOG.md 跑两次结果一致（第二次 0 条新迁移）。
+  - 最终源台账条目无遗漏；内部字节保留；已披露 stub 补记必须单独调和并保留 diff。
+    索引恰好引用完整旧条目与新 actor 条目集合，无重复，不使用旧 head 固定计数。
+  - 同 ID 同正文 skip；不同正文 HARD FAIL，且预检失败不留下新条目的部分批次。
+  - 同 actor 不同分支/并发创建，使用独立随机 ID；本地碰撞重试不覆盖。
+  - 索引 count/summary 手改、目录杂项必须 FAIL；缺 summary 的生成结果有可见 fallback。
+  - check 对迁移后的仓库 PASS；对注入的重复 ID / 非法格式 / 日期失配 fail-closed。
+  - dev_gate receipt 包含 ai_usage_ledger 检查且 PASS。
+  - 全量测试（主仓库 unittest discover）通过。
+
+change_budget:
+  expected_files: 100  # 提交前复核 GitHub PR #49 changed_files = 100（真实值，非估算）
+    # 沿革：90 → 96（GH-50 补迁 5 条 legacy + 1 条 CODEX 记录）→ 100（M1 严格字段解析、
+    # GH-34 迁移 2 条、本轮 2 条 CODEX 记录、master 同步带入的 spec 文件）。路径领地不变。
+  expected_modules: [tools, tests, docs, tasks]
+  cross_module: true
+  contract_change: false
+  evidence_semantics_change: false
+
+exceptions:
+  # Agent cannot self-authorize. 脏树来源 = envelope 本身与台账条目未提交
+  # （定稿 run 必然状态），照 AEDL-R1 / AEDL-CPL / GH-31 先例。
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "大统领 2026-09-08 指令「台账拆分治理，终结编号地狱」（本会话定稿收尾）+ R1/CPL/GH-31 先例"
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "大统领 2026-09-09 明确指令：先修 review-status 全值匹配，再同步 GH-34 合并后的 master 03a0a3403367945af480fa10f06c15f9bde2bb95，完成最终 migrate → build → check → full regression → admission/bound gate → push → 双平台 CI。本 envelope 的 base.sha 已随之更新为该最终基线，故 HEAD 与 base.sha 的差异仅来自本任务实现提交（工具/测试/台账/envelope），不是未授权的 base 漂移。历史授权：2026-09-08 合并窗口收尾；2026-09-09 同步 GH-50 合并后的 master 4d5a8f45。"
+
+escalation:
+  owner: Yenefa

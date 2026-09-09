@@ -323,11 +323,22 @@ Agent 可以起草 PR、分析 PR、提出 Review 建议，但不得冒充人工
 
 # 4. AI 使用留痕
 
-当 AI 对以下内容产生**实质贡献**时，更新：
+当 AI 对以下内容产生**实质贡献**时，新增一条条目文件：
 
 ```text
-docs/compliance/AI_USAGE_LOG.md
+docs/compliance/ai-usage/<ID>.md
 ```
+
+`docs/compliance/AI_USAGE_LOG.md` 是脚本自动生成的索引，**禁止手工编辑**
+（GH-49 / ADR-012：单文件 append-only 台账在多分支并行下系统性产生 Git 冲突与撞号，
+已改为每条一个文件 + 生成索引）。新增条目后运行：
+
+```text
+python -m tools.build_ai_usage_index build
+```
+
+`python -m tools.dev_gate` 的 `ai_usage_ledger` 检查会 fail-closed 校验：
+ID 格式、重复 ID、日期一致性、审核状态行、索引同步。
 
 触发项：
 
@@ -347,11 +358,26 @@ docs/compliance/AI_USAGE_LOG.md
 
 同一 Issue / PR、同一目标的多轮 Agent 交互可合并为一条记录。
 
-ID：
+ID（存量格式继续可读，不追溯改号）：
 
 ```text
-AI-YYYYMMDD-NNN
+AI-YYYYMMDD-NNN              # 旧格式（GH-49 前存量，只读）
+AI-YYYYMMDD-<ACTOR>-<NN>     # 早期 actor 序号格式，只读兼容
+AI-YYYYMMDD-<ACTOR>-<RANDOM> # 当前格式：32 位大写十六进制随机后缀
 ```
+
+`ACTOR` 是登记过的 actor 代号（真人 YEN=Yenefa / PER=Percy / LIO=Lior，
+Agent ZCODE / CODEX / CLAUDE / OPENCODE / BOT；新增代号须先登记 `docs/ID_MAP.md`
+再启用）。用下述命令建立条目，再补齐本次工具、标签、范围与实际验证结果：
+
+```text
+python -m tools.build_ai_usage_index new --actor CODEX --summary "本次任务名称"
+```
+
+`new` 使用 `secrets.token_hex(16).upper()`（128 bit 随机数），不查询最大序号，
+同 actor 的多分支/多机器也独立领号。以排他创建防止本地覆盖，碰撞时重试；
+跨分支唯一性是概率保证，不能宣称数学上的零碰撞，文件也不是跨分支锁。
+合并时保留双方条目，生成索引有冲突时重新 `build`，再 `check`。
 
 参与标签：
 

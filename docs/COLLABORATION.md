@@ -33,13 +33,14 @@
 
 **共享只读区**（谁都不许写，除非大统领指令）：`src/`、`delivery/`、`docs/compliance/` 台账（追加自己那条除外）、既有 9 门禁代码、`notes/m2-*`。
 
-**追加型文件**（只许 append 自己的条目，不许改别人的）：`docs/compliance/AI_USAGE_LOG.md`、`docs/HANDOFF.md`（各改各的章节）。
+**追加型文件**（只许 append 自己的条目，不许改别人的）：`docs/compliance/ai-usage/<自己的新条目>.md`（GH-49 后每条一个文件）、`docs/HANDOFF.md`（各改各的章节）。`docs/compliance/AI_USAGE_LOG.md` 是生成索引，**任何人不许手工编辑**。
 
-## 0.1 台账领号（防撞号，2026-08-31 两次实战撞号后固化）
+## 0.1 台账领号（GH-49 / ADR-012：无需中央分配的随机 ID）
 
-1. 领号 = `grep -o "AI-2026[0-9-]*" docs/compliance/AI_USAGE_LOG.md | sort -u | tail -1` 取最大号 +1。
-2. **领号后第一步立即追加占位条目**（标题 + 一行"claimed by <会话名>，内容完工后补"）再开始干活——占位即锁号。
-3. 提交信息里的 `[AI-...]` 标签以台账条目**内容**为准，撞号时按条目甄别，不改写已提交历史。
+1. 执行 `python -m tools.build_ai_usage_index new --actor CODEX --summary "任务名称"`。当前 ID 为 `AI-YYYYMMDD-<ACTOR>-<RANDOM>`，RANDOM = 32 位大写十六进制（128 bit）；禁止以 actor 最大序号 +1 分配新 ID。
+2. 工具排他创建 `<ID>.md`，含日期、任务名与 `PENDING_HUMAN_REVIEW`；补齐 claimed by、AI 工具、标签、范围和结果。排他创建只保护同一目录；随机性使同 actor 的不同分支/机器碰撞概率可忽略，但不能称为跨分支锁或绝无冲突。
+3. 存量 `AI-YYYYMMDD-NNN` 与早期 `AI-YYYYMMDD-<ACTOR>-<NN>` 只读兼容、不追溯改号。收尾 `build` 再 `check`；合并时保留双方条目，索引冲突重新生成。若发生同 ID 不同内容，明确核对两项工作后处理，禁止静默丢掉一方。
+4. 新 actor 代号须同时登记 `docs/ID_MAP.md` 与 `tools/build_ai_usage_index.py` 的 REGISTERED_ACTORS；未登记代号会被门禁拒绝。
 
 ## 0.2 pre-commit 钩子（prettier）处置规则
 

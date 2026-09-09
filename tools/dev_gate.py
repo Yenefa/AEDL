@@ -21,6 +21,8 @@ One entry, one PASS semantics on every platform (LF byte baseline via
     sandbox_tests  sandbox_runtime unit tests via uv (excluded if uv missing)
     secret_scan    high-confidence secret patterns (same set as the former CI job)
     scope_check    working diff vs envelope allowed/forbidden paths (only with --envelope)
+    ai_usage_ledger  AI usage ledger integrity: ID formats/duplicates/dates/status
+                   markers + generated index sync (GH-49, ADR-012)
 
 Checks that cannot run in this environment are reported in excluded_checks
 with an explicit reason — never silently skipped.
@@ -40,6 +42,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from tools.admit import SCHEMA_VERSION as ADMIT_SCHEMA_VERSION
+from tools.build_ai_usage_index import check_ledger, list_entry_files
 from tools.envelope import parse_envelope, scope_violations
 
 GATE_VERSION = "1"
@@ -397,6 +400,27 @@ def check_bundle(root) -> tuple:
             "duration_s": 0.0}, []
 
 
+def check_ai_usage_ledger(root) -> dict:
+    """Ledger integrity (GH-49, ADR-012): per-entry IDs unique/valid, date and
+    review-status fields present, generated index in sync. Fail-closed: any
+    finding is a FAIL, an infrastructure problem reading the ledger is ERROR."""
+    started = time.monotonic()
+    try:
+        findings = check_ledger(Path(root))
+    except Exception as exc:  # noqa: BLE001 - gate must classify, not crash
+        return {"status": "error", "exit_code": 2,
+                "detail": f"ai_usage_ledger check failed to run: {type(exc).__name__}: {exc}",
+                "duration_s": round(time.monotonic() - started, 1)}
+    if findings:
+        return {"status": "fail", "exit_code": 1,
+                "detail": f"{len(findings)} finding(s):\n" + "\n".join(f"- {f}" for f in findings),
+                "duration_s": round(time.monotonic() - started, 1)}
+    n = len(list_entry_files(Path(root)))
+    return {"status": "pass", "exit_code": 0,
+            "detail": f"{n} entry file(s), index in sync (marker present)",
+            "duration_s": round(time.monotonic() - started, 1)}
+
+
 def check_scope(root, envelope_path) -> tuple:
     if not envelope_path:
         return None, [{"id": "scope_check", "reason": "no --envelope provided"}]
@@ -434,6 +458,7 @@ def run_gate(root=None, envelope=None, dry_run=False, receipt_path=None, interpr
             "main_tests": {"status": "pending", "detail": "dry-run"},
             "sandbox_tests": {"status": "pending", "detail": "dry-run"},
             "secret_scan": {"status": "pending", "detail": "dry-run"},
+            "ai_usage_ledger": {"status": "pending", "detail": "dry-run"},
         }
         status = "pending"
         exit_code = 1
@@ -443,10 +468,12 @@ def run_gate(root=None, envelope=None, dry_run=False, receipt_path=None, interpr
         main, excl_main = check_main_tests(py, root)
         sandbox, excl_sand = check_sandbox_tests(root)
         secret = check_secret_scan(root)
+        ledger = check_ai_usage_ledger(root)
         scope, excl_scope = check_scope(root, envelope)
         binding, excl_binding = check_binding(root, envelope, admit_receipt)
         bundle, excl_bundle = check_bundle(root)
-        checks = {"syntax": syntax, "main_tests": main, "sandbox_tests": sandbox, "secret_scan": secret}
+        checks = {"syntax": syntax, "main_tests": main, "sandbox_tests": sandbox,
+                  "secret_scan": secret, "ai_usage_ledger": ledger}
         if scope is not None:
             checks["scope_check"] = scope
         if binding is not None:
