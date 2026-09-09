@@ -194,7 +194,11 @@ class CheckTests(LedgerToolTestBase):
         self.write_entry("AI-20260901-007.md", LEGACY_ENTRY)
         self.write_entry("AI-20260908-YEN-001.md", ACTOR_ENTRY)
         bi.cmd_build(self.tmp)
-        self.assertEqual(bi.check_ledger(self.tmp), [])
+        generated = self.ledger.read_bytes()
+        for ending in (b"\n", b"\r\n"):
+            with self.subTest(checkout_line_ending=ending):
+                self.ledger.write_bytes(generated.replace(b"\n", ending))
+                self.assertEqual(bi.check_ledger(self.tmp), [])
 
     def test_duplicate_filename_and_heading(self):
         self.write_entry("AI-20260901-007.md", LEGACY_ENTRY)

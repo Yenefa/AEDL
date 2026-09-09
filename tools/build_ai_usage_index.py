@@ -307,7 +307,10 @@ def check_ledger(root: Path) -> list:
     if not ledger.is_file():
         findings.append(f"{LEDGER_PATH}: missing (run: build)")
     else:
-        index_text = ledger.read_bytes().decode("utf-8")
+        # Git may check out this generated text file with CRLF on Windows.
+        # Normalize platform line endings while comparing the entire text;
+        # migration separately compares raw bytes and never normalizes bodies.
+        index_text = ledger.read_text(encoding="utf-8")
         if INDEX_MARKER not in index_text:
             findings.append(f"{LEDGER_PATH}: missing GENERATED marker (hand-edited? run: build)")
         linked = set(re.findall(r"\(ai-usage/(AI-\S+)\.md\)", index_text))
