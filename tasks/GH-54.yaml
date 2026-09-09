@@ -94,6 +94,12 @@ exceptions:
   allow_dirty:
     granted_by: Yenefa
     decision_ref: "项目负责人 2026-09-09 会话明确批准实施本方案（Issue #54 的 5 项裁决）"
+  # 提交后 HEAD 位于 base.sha 之上是任务实现的正常状态（GH-49 先例）。本条由项目负责人
+  # 2026-09-09 会话指令「commit → push → Draft PR → 生成/更新 Review Bundle」授权：
+  # 交付回执必须绑定**提交后的** HEAD，故需在提交后以 --allow-drift 重新 admit。
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "项目负责人 2026-09-09 会话指令：允许 commit + push + Draft PR + 更新 Review Bundle"
 
 escalation:
   owner: Yenefa
