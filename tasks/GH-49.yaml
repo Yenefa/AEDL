@@ -2,8 +2,12 @@ task: GH-49
 
 base:
   branch: chore/ai-ledger-split
-  sha: 4d5a8f45ff40e0b3d0a0a7562cd45c7691c253b5  # 2026-09-09 用户明确要求同步 #50 合并后的 master
-    # 原批准基线 8457b6d；本次 rebase、迁移、复验与 commit/push 均由同一指令授权
+  sha: 03a0a3403367945af480fa10f06c15f9bde2bb95  # 2026-09-09 用户明确授权的最终同步基线（GH-34 合并后的 master）
+    # 基线沿革：8457b6d（原批准）→ 4d5a8f45（GH-50 合并后）→ 03a0a340（GH-34 合并后，本值）。
+    # GitHub PR #49 base = 本值；本次 fetch/merge、migrate、复验与 commit/push
+    # 均由 2026-09-09 用户指令授权。HEAD 位于本基线之上是任务实现提交的正常状态。
+    # 本轮为治理收尾：仅更新本 envelope 的基线/预算/provenance 与 PR 描述，不改工具、测试、
+    # 迁移或 ID 语义（用户 2026-09-09 指令）。
 
 goal: |
   终结 AI Usage 台账的并行撞号与 Git append 冲突：把单文件 append-only 台账
@@ -71,7 +75,9 @@ acceptance: |
   - 全量测试（主仓库 unittest discover）通过。
 
 change_budget:
-  expected_files: 96  # 原 90 + 最新 master 补迁 5 条 legacy + 本轮 CODEX 记录；路径领地不变
+  expected_files: 100  # 提交前复核 GitHub PR #49 changed_files = 100（真实值，非估算）
+    # 沿革：90 → 96（GH-50 补迁 5 条 legacy + 1 条 CODEX 记录）→ 100（M1 严格字段解析、
+    # GH-34 迁移 2 条、本轮 2 条 CODEX 记录、master 同步带入的 spec 文件）。路径领地不变。
   expected_modules: [tools, tests, docs, tasks]
   cross_module: true
   contract_change: false
@@ -85,7 +91,7 @@ exceptions:
     decision_ref: "大统领 2026-09-08 指令「台账拆分治理，终结编号地狱」（本会话定稿收尾）+ R1/CPL/GH-31 先例"
   allow_drift:
     granted_by: Yenefa
-    decision_ref: "大统领 2026-09-08 合并窗口收尾授权；2026-09-09 明确指令：fetch/rebase 两工作树到 PR 50 合并后的最新 master，重新 migrate/build/check、测试、bound dev_gate 后 commit/push PR 34 与 PR 49"
+    decision_ref: "大统领 2026-09-09 明确指令：先修 review-status 全值匹配，再同步 GH-34 合并后的 master 03a0a3403367945af480fa10f06c15f9bde2bb95，完成最终 migrate → build → check → full regression → admission/bound gate → push → 双平台 CI。本 envelope 的 base.sha 已随之更新为该最终基线，故 HEAD 与 base.sha 的差异仅来自本任务实现提交（工具/测试/台账/envelope），不是未授权的 base 漂移。历史授权：2026-09-08 合并窗口收尾；2026-09-09 同步 GH-50 合并后的 master 4d5a8f45。"
 
 escalation:
   owner: Yenefa
