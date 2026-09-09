@@ -47,6 +47,20 @@ ACTOR_ID_RE = re.compile(r"^AI-(\d{8})-([A-Z]{2,10})-(\d{2,4}|[0-9A-F]{32})$")
 # Actor codes registered in docs/ID_MAP.md + docs/COLLABORATION.md (human or agent).
 REGISTERED_ACTORS = {"YEN", "PER", "LIO", "CODEX", "ZCODE", "CLAUDE", "OPENCODE", "BOT"}
 
+# Review status is parsed as a FIELD, never matched as a bare substring: a body
+# sentence mentioning HUMAN_REVIEWED must not satisfy the check, and an invalid
+# value in a review field must not be laundered by a valid token elsewhere.
+# 最终状态 is the legacy field name of the sanctioned record template
+# (docs/compliance/AEDL_开发记录与AI使用规范_v1.0.md) and of the pre-GH-49
+# entries, so it stays a recognized alias; existing records are not rewritten.
+REVIEW_STATUS_VALUES = ("PENDING_HUMAN_REVIEW", "HUMAN_REVIEWED", "ACCEPTED")
+REVIEW_FIELD_RE = re.compile(r"^([ \t]*)(?:[-*][ \t]+)?(人工审核|最终状态)[ \t]*[：:][ \t]*(.*)$")
+REVIEW_INLINE_VALUE_RE = re.compile(r"^`?[ \t]*([A-Za-z][A-Za-z0-9_]*)[ \t]*`?")
+REVIEW_NESTED_STATUS_RE = re.compile(
+    r"^[-*][ \t]+状态[ \t]*[：:][ \t]*`?[ \t]*([A-Za-z][A-Za-z0-9_]*)[ \t]*`?")
+REVIEW_NESTED_BARE_RE = re.compile(
+    r"^[-*][ \t]+`[ \t]*([A-Za-z][A-Za-z0-9_]*)[ \t]*`[ \t]*(?:（[^）]*）)?[ \t]*$")
+
 
 class LedgerError(Exception):
     """Validation failure — rendered as check findings, never a traceback."""
@@ -258,6 +272,38 @@ def build_index_text(entries: list) -> str:
     return "\n".join(lines)
 
 
+def review_status_fields(text: str) -> list:
+    """[(field_name, declared_status)] for every review-status field.
+
+    A status counts only when declared by a review field (人工审核, or the
+    legacy 最终状态) — inline (`- 人工审核：`PENDING_HUMAN_REVIEW``) or on the
+    field's first nested status line (`  - 状态：...` / `  - `...``). Bare
+    occurrences anywhere else in the body are never accepted. A field with no
+    parseable status declares nothing; the caller still fails such an entry
+    when no field declares an allowed status.
+    """
+    lines = text.splitlines()
+    fields = []
+    for idx, line in enumerate(lines):
+        m = REVIEW_FIELD_RE.match(line)
+        if not m:
+            continue
+        indent, name, inline = len(m.group(1)), m.group(2), m.group(3).strip()
+        if inline:
+            token = REVIEW_INLINE_VALUE_RE.match(inline)
+            fields.append((name, token.group(1) if token else inline))
+            continue
+        for nxt in lines[idx + 1:]:
+            if not nxt.strip() or len(nxt) - len(nxt.lstrip()) <= indent:
+                break
+            nested = (REVIEW_NESTED_STATUS_RE.match(nxt.strip())
+                      or REVIEW_NESTED_BARE_RE.match(nxt.strip()))
+            if nested:
+                fields.append((name, nested.group(1)))
+                break
+    return fields
+
+
 def cmd_build(root: Path) -> dict:
     entries = read_entries(root)
     if not entries:
@@ -300,8 +346,16 @@ def check_ledger(root: Path) -> list:
                 findings.append(f"{rel}: 日期字段 {date_field.group(1)}-... != ID 日期 {day}")
         else:
             findings.append(f"{rel}: missing 日期 field")
-        if "PENDING_HUMAN_REVIEW" not in text and "HUMAN_REVIEWED" not in text and "ACCEPTED" not in text:
-            findings.append(f"{rel}: no review-status marker")
+        declared = review_status_fields(text)
+        allowed = ", ".join(REVIEW_STATUS_VALUES)
+        if not declared:
+            findings.append(f"{rel}: no review-status field (need 人工审核/最终状态 declaring one of {allowed})")
+        else:
+            invalid = sorted({value for _, value in declared if value not in REVIEW_STATUS_VALUES})
+            if invalid:
+                findings.append(
+                    f"{rel}: invalid review-status value(s) {invalid} in a review field "
+                    f"(allowed: {allowed})")
     # index agreement: the generated index must reference exactly the entry set
     ledger = root / LEDGER_PATH
     if not ledger.is_file():

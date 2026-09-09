@@ -244,6 +244,76 @@ class CheckTests(LedgerToolTestBase):
         self.assertTrue(any("out of sync" in f for f in findings))
 
 
+class ReviewStatusFieldTests(LedgerToolTestBase):
+    """GH-49 review M1: the review status must come from a parsed field.
+
+    A bare occurrence of PENDING_HUMAN_REVIEW / HUMAN_REVIEWED / ACCEPTED in
+    the body must never satisfy the check, and an invalid value in a review
+    field must not be laundered by a valid token elsewhere in the body.
+    """
+
+    def test_body_mention_without_review_field_fails(self):
+        text = ACTOR_ENTRY.replace(
+            "- 人工审核：`PENDING_HUMAN_REVIEW`\n",
+            "- 备注：正文提到 HUMAN_REVIEWED，但没有人工审核字段。\n")
+        self.write_entry("AI-20260908-YEN-001.md", text)
+        findings = bi.check_ledger(self.tmp)
+        self.assertTrue(any("review-status" in f for f in findings), findings)
+
+    def test_invalid_status_value_is_not_laundered_by_body_text(self):
+        text = ACTOR_ENTRY.replace(
+            "- 人工审核：`PENDING_HUMAN_REVIEW`\n",
+            "- 人工审核：SOME_INVALID_STATUS\n"
+            "- 备注：正文同时出现 PENDING_HUMAN_REVIEW 与 HUMAN_REVIEWED。\n")
+        self.write_entry("AI-20260908-YEN-001.md", text)
+        findings = bi.check_ledger(self.tmp)
+        self.assertTrue(any("SOME_INVALID_STATUS" in f for f in findings), findings)
+
+    def test_each_allowed_status_value_passes(self):
+        for status in ("PENDING_HUMAN_REVIEW", "HUMAN_REVIEWED", "ACCEPTED"):
+            with self.subTest(status=status):
+                self.write_entry("AI-20260908-YEN-001.md",
+                                 ACTOR_ENTRY.replace("PENDING_HUMAN_REVIEW", status))
+                bi.cmd_build(self.tmp)
+                self.assertEqual(bi.check_ledger(self.tmp), [])
+
+    def test_review_field_forms_present_in_existing_stock_pass(self):
+        # Forms that actually occur under docs/compliance/ai-usage/.
+        forms = {
+            "inline_backtick": "- 人工审核：`PENDING_HUMAN_REVIEW`\n",
+            "inline_ascii_colon": "- 人工审核: PENDING_HUMAN_REVIEW\n",
+            "inline_with_note": "- 人工审核：`PENDING_HUMAN_REVIEW`（PR #21）\n",
+            "nested_status": "- 人工审核：\n  - 状态：`PENDING_HUMAN_REVIEW`\n  - 审核人：待定\n",
+            "legacy_final_status": "- 最终状态：\n  - `PENDING_HUMAN_REVIEW`\n",
+        }
+        for name, field in forms.items():
+            with self.subTest(form=name):
+                self.write_entry(
+                    "AI-20260908-YEN-001.md",
+                    "## AI-20260908-YEN-001\n\n- 日期：2026-09-08\n"
+                    "- 任务名称：actor 格式条目\n" + field)
+                bi.cmd_build(self.tmp)
+                self.assertEqual(bi.check_ledger(self.tmp), [])
+
+    def test_unrelated_field_name_does_not_satisfy_check(self):
+        text = ACTOR_ENTRY.replace("- 人工审核：`PENDING_HUMAN_REVIEW`\n",
+                                   "- 审核状态：`PENDING_HUMAN_REVIEW`\n")
+        self.write_entry("AI-20260908-YEN-001.md", text)
+        findings = bi.check_ledger(self.tmp)
+        self.assertTrue(any("review-status" in f for f in findings), findings)
+
+    def test_coexisting_review_fields_in_existing_stock_pass(self):
+        # AI-20260829-001..005 carry both 人工审核：HUMAN_REVIEWED and
+        # 最终状态：ACCEPTED; repeated fields are part of the existing stock,
+        # so the strict parser must not treat them as a conflict.
+        text = ACTOR_ENTRY.replace(
+            "- 人工审核：`PENDING_HUMAN_REVIEW`\n",
+            "- 人工审核：`HUMAN_REVIEWED`\n- 最终状态：\n  - `ACCEPTED`\n")
+        self.write_entry("AI-20260908-YEN-001.md", text)
+        bi.cmd_build(self.tmp)
+        self.assertEqual(bi.check_ledger(self.tmp), [])
+
+
 class DevGateWiringTests(LedgerToolTestBase):
     def test_index_body_tamper_fails_development_gate(self):
         self.write_entry("AI-20260908-YEN-001.md", ACTOR_ENTRY)
