@@ -2,28 +2,30 @@ task: GH-49
 
 base:
   branch: chore/ai-ledger-split
-  sha: 8457b6d26adcd69d786fb0c40d7af1054c308d37  # 任务批准时对应 master HEAD (8457b6d)；
-    # 照 GH-31 amendment 先例，合并窗口漂移由 allow_drift 预授权
+  sha: 4d5a8f45ff40e0b3d0a0a7562cd45c7691c253b5  # 2026-09-09 用户明确要求同步 #50 合并后的 master
+    # 原批准基线 8457b6d；本次 rebase、迁移、复验与 commit/push 均由同一指令授权
 
 goal: |
   终结 AI Usage 台账的并行撞号与 Git append 冲突：把单文件 append-only 台账
   （docs/compliance/AI_USAGE_LOG.md）拆分为每条记录一个独立文件
   （docs/compliance/ai-usage/<ID>.md），AI_USAGE_LOG.md 改为由脚本自动生成的
-  纯索引；同时把 ID 格式从每日全局递增 NNN 改为 actor 前缀格式
-  AI-YYYYMMDD-<ACTOR>-<NN>，使多 Agent/多分支并行领号不再互斥。
+  纯索引；当前修订使用 AI-YYYYMMDD-<ACTOR>-<RANDOM>（128 bit 随机后缀），
+  支持同 actor 多 Agent/多分支独立领号，并关闭索引正文漂移与迁移分歧遗漏。
 
 scope: |
   In scope:
-  - 新增 tools/build_ai_usage_index.py：三个子命令
+  - tools/build_ai_usage_index.py：四个子命令
     (1) migrate —— 把 AI_USAGE_LOG.md 按 `## AI-...` 标题拆分为
-        docs/compliance/ai-usage/<ID>.md（幂等：索引中已有的 ID 跳过）；
+        docs/compliance/ai-usage/<ID>.md（仅同 ID 同字节正文 skip；差异 HARD FAIL，
+        写入前预检整个批次；可用 --source 导入外部旧台账原始 blob）；
     (2) build —— 从 per-entry 文件重生成 AI_USAGE_LOG.md 索引（按 ID 排序，
         与手工顺序无关）；AI_USAGE_LOG.md 顶部声明为生成文件，禁止手工编辑；
     (3) check —— fail-closed 校验：ID 格式合法（旧 NNN 与新 ACTOR 两种格式均
-        接受，存量不追溯）、无重复 ID、日期字段与 ID 日期一致、无越界文件。
-  - ID 格式扩展：新增 AI-YYYYMMDD-<ACTOR>-<NN>（ACTOR ∈ 已登记 actor 列表），
-    存量 AI-YYYYMMDD-NNN 记录不迁移不改号。
-  - docs/compliance/ai-usage/ 目录 + 75 条存量记录迁移。
+        接受，存量不追溯）、日期一致、无越界文件、索引全文与生成值一致；
+    (4) new —— actor + 128 bit 随机 ID，排他创建，碰撞重试不覆盖。
+  - ID 格式：当前为 AI-YYYYMMDD-<ACTOR>-<RANDOM>，RANDOM 为 32 位大写 hex；
+    旧 NNN 和早期 ACTOR-NN 只读兼容，不追溯改号。
+  - docs/compliance/ai-usage/ 目录；最终迁移数量取自同步后的 master 原始台账。
   - dev_gate 接入 ai_usage_ledger 检查（check 子命令，fail-closed）。
   - 配套文档更新：AGENTS.md §4、docs/COLLABORATION.md §0.1、docs/ID_MAP.md、
     docs/compliance/README.md、docs/CONTROL_PLANE.md、README.md、ADR-012。
@@ -59,14 +61,17 @@ forbidden_paths:
 
 acceptance: |
   - migrate 幂等：同一 AI_USAGE_LOG.md 跑两次结果一致（第二次 0 条新迁移）。
-  - 75 条存量记录逐字节拆分：每条 per-entry 文件包含 `## <ID>` 标题 + 原正文，
-    索引重建后 AI_USAGE_LOG.md 恰好引用 75 个 ID，无重复。
+  - 最终源台账条目无遗漏；内部字节保留；已披露 stub 补记必须单独调和并保留 diff。
+    索引恰好引用完整旧条目与新 actor 条目集合，无重复，不使用旧 head 固定计数。
+  - 同 ID 同正文 skip；不同正文 HARD FAIL，且预检失败不留下新条目的部分批次。
+  - 同 actor 不同分支/并发创建，使用独立随机 ID；本地碰撞重试不覆盖。
+  - 索引 count/summary 手改、目录杂项必须 FAIL；缺 summary 的生成结果有可见 fallback。
   - check 对迁移后的仓库 PASS；对注入的重复 ID / 非法格式 / 日期失配 fail-closed。
   - dev_gate receipt 包含 ai_usage_ledger 检查且 PASS。
   - 全量测试（主仓库 unittest discover）通过。
 
 change_budget:
-  expected_files: 90
+  expected_files: 96  # 原 90 + 最新 master 补迁 5 条 legacy + 本轮 CODEX 记录；路径领地不变
   expected_modules: [tools, tests, docs, tasks]
   cross_module: true
   contract_change: false
@@ -80,7 +85,7 @@ exceptions:
     decision_ref: "大统领 2026-09-08 指令「台账拆分治理，终结编号地狱」（本会话定稿收尾）+ R1/CPL/GH-31 先例"
   allow_drift:
     granted_by: Yenefa
-    decision_ref: "大统领 2026-09-08 指令延续：master 并行合并窗口内收尾（PR #36/#37 批次），照 GH-31 rebaseline 先例"
+    decision_ref: "大统领 2026-09-08 合并窗口收尾授权；2026-09-09 明确指令：fetch/rebase 两工作树到 PR 50 合并后的最新 master，重新 migrate/build/check、测试、bound dev_gate 后 commit/push PR 34 与 PR 49"
 
 escalation:
   owner: Yenefa

@@ -8,7 +8,7 @@
 
 | ID 体系 | 格式 | 真源文件 | 典型用法 |
 |---|---|---|---|
-| AI 台账 ID | `AI-YYYYMMDD-NNN`（旧）/ `AI-YYYYMMDD-<ACTOR>-<NN>`（现，如 AI-20260908-YEN-001） | 条目：`docs/compliance/ai-usage/<ID>.md`；索引（生成物）：`docs/compliance/AI_USAGE_LOG.md` | 解码 git 提交信息里的 `[AI-...]` 标签，定位到具体会话的工作边界与文件清单 |
+| AI 台账 ID | 当前 `AI-YYYYMMDD-<ACTOR>-<RANDOM>`（32 位大写 hex，128 bit）；旧 `AI-YYYYMMDD-NNN` 与 `<ACTOR>-<NN>` 只读兼容 | 条目：`docs/compliance/ai-usage/<ID>.md`；索引（生成物）：`docs/compliance/AI_USAGE_LOG.md` | 用 `tools.build_ai_usage_index new` 领号；解码 git `[AI-...]` 标签，定位工作边界 |
 | 架构决策 ID | `ADR-NNN`（如 ADR-005） | `docs/compliance/DECISIONS.md` | 引用设计依据（换料方法论、单一真源等）；立项标准见 `AGENTS.md` §6 |
 | 证据 ID | `EVID-YYYYMMDD-NNN`（如 EVID-20260829-001） | `docs/evidence/EVIDENCE_INDEX.md` | 支撑技术主张（比赛材料、评审结论）；AI 不得手工改写原始 evidence |
 | 第三方资源 ID | `RES-NNN`（如 RES-001） | `docs/compliance/THIRD_PARTY_RESOURCES.md` | 查 license/授权边界/再分发义务；未知项标 `TO_VERIFY` |
@@ -24,7 +24,7 @@
 |---|---|---|
 | `Yenefa` | Yenefa | 项目负责人（大统领）；原 `sca331613-commits`，2026-09-01 改名 |
 | `la4876949-bot` | Percy | 正式团队成员（AEDL_TEAM）；第二名真人协作者，2026-09-01 确认 |
-| —（Agent 代号登记处） | YEN/PER/LIO=真人；ZCODE/CODEX/CLAUDE/OPENCODE/BOT=Agent | AI 台账 actor 前缀（GH-49）；新代号先登记本表或 `tools/build_ai_usage_index.py` REGISTERED_ACTORS 再启用 |
+| —（Agent 代号登记处） | YEN/PER/LIO=真人；ZCODE/CODEX/CLAUDE/OPENCODE/BOT=Agent | AI 台账 actor 前缀（GH-49）；新代号先同时登记本表与 `tools/build_ai_usage_index.py` REGISTERED_ACTORS 再启用 |
 
 ## 按需加载路由（任务类型 → 必读文件）
 

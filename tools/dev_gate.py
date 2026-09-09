@@ -42,7 +42,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from tools.admit import SCHEMA_VERSION as ADMIT_SCHEMA_VERSION
-from tools.build_ai_usage_index import check_ledger
+from tools.build_ai_usage_index import check_ledger, list_entry_files
 from tools.envelope import parse_envelope, scope_violations
 
 GATE_VERSION = "1"
@@ -415,8 +415,7 @@ def check_ai_usage_ledger(root) -> dict:
         return {"status": "fail", "exit_code": 1,
                 "detail": f"{len(findings)} finding(s):\n" + "\n".join(f"- {f}" for f in findings),
                 "duration_s": round(time.monotonic() - started, 1)}
-    n = len(list((Path(root) / "docs" / "compliance" / "ai-usage").glob("*.md"))) \
-        if (Path(root) / "docs" / "compliance" / "ai-usage").is_dir() else 0
+    n = len(list_entry_files(Path(root)))
     return {"status": "pass", "exit_code": 0,
             "detail": f"{n} entry file(s), index in sync (marker present)",
             "duration_s": round(time.monotonic() - started, 1)}

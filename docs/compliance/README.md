@@ -22,7 +22,7 @@ README、HANDOFF 与本文件只负责导航和项目状态说明，不复制维
 
 ## 台账存储（GH-49 / ADR-012）
 
-`AI_USAGE_LOG.md` 由 `python -m tools.build_ai_usage_index build` 自动生成（文件头有 GENERATED 标记），真源是 `ai-usage/` 下的逐条文件。dev_gate 的 `ai_usage_ledger` 检查校验 ID 格式、重复 ID、日期一致性、审核状态行与索引同步，fail-closed。
+`AI_USAGE_LOG.md` 由 `python -m tools.build_ai_usage_index build` 自动生成（文件头有 GENERATED 标记），真源是 `ai-usage/` 下的逐条文件。dev_gate 校验 ID、日期、审核状态、目录杂项与索引全文（含数量和摘要）。新条目由 `new --actor CODEX --summary "任务名"` 分配随机 ID；迁移仅跳过正文逐字节相同的 ID，出现差异必须人工核对，具体步骤见 `ai-usage/README.md`。
 
 ## 审核状态
 
