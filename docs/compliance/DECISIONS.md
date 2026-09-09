@@ -2,6 +2,31 @@
 
 > 关键工程与治理决策使用 `ADR-NNN`。状态只表示决策是否采用，不等于人工审核台账已经完成。
 
+## ADR 字段规范（2026-09-09 起适用于新 ADR）
+
+> 目的：把"谁提出、谁决定、谁实现、谁有权 review / merge"从正文散文提升为**显式字段**。
+> 适用范围：**本规范生效之后新写的 ADR**。生效之前的 ADR 保持原文，**不回填**这些字段——
+> 历史事实以各自正文的「AI 参与」「团队自主判断」为准，聚合总览见 [`docs/HUMAN_OWNERSHIP.md`](../HUMAN_OWNERSHIP.md)。
+
+新 ADR 除 `AGENTS.md` §6 既有内容外，必须声明：
+
+```text
+- Decision owner:              <人类 / 角色>
+- Proposal source:             Human / AI-assisted / Mixed
+- Final decision:              Human
+- Implementation:              Human / AI-assisted / Mixed
+- Review authority:            <人类 / 角色>
+- Promotion / merge authority: <人类 / 角色>
+```
+
+填写规则：
+
+- `Final decision` 恒为 `Human`：AI 可以提议、实现与验证，但不能晋升或批准（AGENTS.md §2.3、§3.7）。
+- `Proposal source` 与 `Implementation` 允许 `Mixed`：人类提出目标/约束、AI 收敛技术方案、
+  人类最终批准时按 `Mixed` 记录，不写成 `Human`（见 [`ATTRIBUTION_POLICY.md`](ATTRIBUTION_POLICY.md) §3）。
+- 无法核验时写 `TO_VERIFY`，不得猜测。
+- 本字段规范只约束新 ADR，不改写任何既有 ADR 正文。
+
 ## ADR-001 — 项目内单一规范真源与多入口发现
 
 - 日期：2026-08-29

@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 88 条。完整正文在各自条目文件中；本索引只做导航。
+共 89 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -118,6 +118,7 @@
 ## 2026-09-09
 
 - [`AI-20260909-001`](ai-usage/AI-20260909-001.md) — PR #34 复审整改——闭合 V3 信任模型与精确签名流程（设计提案）
+- [`AI-20260909-BOT-C250B615B40C709A46C59E31570F5E61`](ai-usage/AI-20260909-BOT-C250B615B40C709A46C59E31570F5E61.md) — 贡献归因信息架构重构——人类 ownership 前置 + AI usage work-unit 聚合层（Issue #54）
 - [`AI-20260909-CODEX-6E819BDC6421B00C5B728D09253CBECE`](ai-usage/AI-20260909-CODEX-6E819BDC6421B00C5B728D09253CBECE.md) — PR #49 M1 修复：review status 改为严格字段解析
 - [`AI-20260909-CODEX-752D7A7FCC04DFBF91D2912F3222B054`](ai-usage/AI-20260909-CODEX-752D7A7FCC04DFBF91D2912F3222B054.md) — PR #49 M1 补漏：review status 全值匹配 + 同步 master 03a0a34
 - [`AI-20260909-CODEX-D685F9E9FAC5AF8DCA0869791DE02AE4`](ai-usage/AI-20260909-CODEX-D685F9E9FAC5AF8DCA0869791DE02AE4.md) — PR #49 复审整改：随机 ID、索引全文校验与迁移分歧检测

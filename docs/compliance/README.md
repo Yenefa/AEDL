@@ -19,6 +19,26 @@ README、HANDOFF 与本文件只负责导航和项目状态说明，不复制维
 | 形成架构、接口、验证、Benchmark、范围、安全或开源边界决策 | `DECISIONS.md` |
 | 形成测试、Benchmark、故障注入或效果主张 | `../evidence/EVIDENCE_INDEX.md` |
 | 需要记录团队实际贡献 | `TEAM_CONTRIBUTIONS.md`，不得由 AI 猜测人员或贡献 |
+| 需要判断一项工作归谁（Human / AI-assisted / Mixed） | `ATTRIBUTION_POLICY.md`（规则）；人类职责总览见 [`../HUMAN_OWNERSHIP.md`](../HUMAN_OWNERSHIP.md) |
+| 想按**工作单元**看 AI 使用（默认浏览入口） | `AI_USAGE_SUMMARY.md`；逐条真源 `ai-usage/<ID>.md`，完整索引 `AI_USAGE_LOG.md` |
+
+## 贡献归因与 AI 展示分层（2026-09-09）
+
+```text
+docs/HUMAN_OWNERSHIP.md            人类职责、决策权、验收权（引用 ADR / PR / Issue 证据）
+  ↓
+docs/compliance/DECISIONS.md       架构与治理决策（新 ADR 起启用归因字段）
+  ↓
+docs/compliance/ATTRIBUTION_POLICY.md   Human / AI-assisted / Mixed / Forbidden 分类规则
+  ↓
+docs/compliance/AI_USAGE_SUMMARY.md     AI 使用 → 工作单元聚合视图（人工维护）
+  ↓
+docs/compliance/AI_USAGE_LOG.md         逐条索引（脚本生成，禁手改）
+  ↓
+docs/compliance/ai-usage/<ID>.md        逐条真源（可审计工作单元）
+```
+
+聚合层只做引用：不新增事实、不改写条目正文，`Human owner` 无证据时写 `TO_VERIFY`，不默认归属。
 
 ## 台账存储（GH-49 / ADR-012）
 
