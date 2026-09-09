@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 85 条。完整正文在各自条目文件中；本索引只做导航。
+共 87 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -87,6 +87,9 @@
 
 - [`AI-20260903-001`](ai-usage/AI-20260903-001.md) — 任务：AEDL-R1（渲染图新鲜度门禁，AECP 流程交付）
 - [`AI-20260903-002`](ai-usage/AI-20260903-002.md) — AEDL-CPL —— M2 板 6 方向敏感件 footprint 0° 朝向 / CPL Rotation / JLC 修正审计（只审计不改 delivery）
+## 2026-09-04
+
+- [`AI-20260904-001`](ai-usage/AI-20260904-001.md) — Sandbox V3（Issue #5）设计冻结阶段——外部信任锚 + 编排器灌注闭环
 ## 2026-09-06
 
 - [`AI-20260906-001`](ai-usage/AI-20260906-001.md) — W1 竞赛任务包入库 — AEW 领地表（W1_TASKS）+ 内部研究资料导入 + 双人任务卡分发
@@ -114,5 +117,6 @@
 - [`AI-20260908-YEN-002`](ai-usage/AI-20260908-YEN-002.md) — PR #40 E5 用户试用协议 v1 → v1.1 设计 blocker 更正（Yenefa 授权）
 ## 2026-09-09
 
+- [`AI-20260909-001`](ai-usage/AI-20260909-001.md) — PR #34 复审整改——闭合 V3 信任模型与精确签名流程（设计提案）
 - [`AI-20260909-CODEX-6E819BDC6421B00C5B728D09253CBECE`](ai-usage/AI-20260909-CODEX-6E819BDC6421B00C5B728D09253CBECE.md) — PR #49 M1 修复：review status 改为严格字段解析
 - [`AI-20260909-CODEX-D685F9E9FAC5AF8DCA0869791DE02AE4`](ai-usage/AI-20260909-CODEX-D685F9E9FAC5AF8DCA0869791DE02AE4.md) — PR #49 复审整改：随机 ID、索引全文校验与迁移分歧检测
