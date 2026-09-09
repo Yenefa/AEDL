@@ -3689,3 +3689,19 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - 验证（真实运行）：见上"现状核实"；未建 Task Envelope（沿用 GH-31/PR #33 先例：小范围、纯文档、零代码路径改动），直接 `py -3.9 -m tools.dev_gate`（结果见本 PR）。
 - 已知限制：签名方案未决，因此设计文档未给出可执行的 `cryptography`/`PyNaCl` 具体 API 调用；`trusted_approvers_v1.json` 的 schema 细节留待方案裁决后随实现一并定稿。
 - 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260909-001
+
+- 日期：2026-09-09
+- 任务名称：PR #34 复审整改——闭合 V3 信任模型与精确签名流程（设计提案）
+- AI 工具/模型：Codex / GPT-6
+- 参与标签：DEBUG / ADVISE / DOCUMENT
+- 依据：本次用户贴文的 #34 P1–P5；Issue #5；源码基线 9876e23d45cd7bf661bbd4047c6d8a1c9b912d99。
+- 同步：按用户 2026-09-09 明确指令 rebase 到 #50 合并后的 master `4d5a8f45ff40e0b3d0a0a7562cd45c7691c253b5`，复验后 commit/push。设计正文无冲突；仅调和旧台账追加，完整保留 master 的 81 条与本 PR 两条记录。
+- 产出：修订 docs/superpowers/specs/2026-09-04-edd001-sandbox-v3-trust-anchor-design.md，明确受保护 TCB/host trust root、Ed25519、身份/角色/撤销与轮换、CLI exact signed fields、受保护快照 fresh verification、能力台账来源、拒绝与 V1/V2 fail-closed 边界。
+- Impact Analysis：直接修改规格与本条记录（2 文件）；潜在影响未来 CLI/state/trust/policy 实现；不修改 runtime、测试、锁文件、硬件或原始 Evidence。设计风险 HIGH，运行时代码变更为零。
+- Change Budget：expected_files=2；expected_modules=[docs]；cross_module=false；contract_change=false（仅提案）；evidence_semantics_change=false。
+- 验证：同步 4d5a8f4 后 dev_gate 5/5 PASS（主仓 Python 3.9 全量 474/474、Sandbox 冻结依赖 283，保留 1 skip、1 expectedFailure）；使用仓库外任务专用 TEMP/TMP。提交后的回执与真实 diff 随 Review Bundle 交付；不得用现有回归通过声称新签名或 host 隔离已实现。
+- 未执行：新密码学机制、host ACL、密钥托管、真实 EDD-001 promotion；设计获审后另行实现。
+- 第三方：未引入运行依赖/复制第三方源码；算法接口核对参考 cryptography 官方 Ed25519 文档，拟定依赖在实现阶段登记并锁定。
+- 人工审核：`PENDING_HUMAN_REVIEW`
