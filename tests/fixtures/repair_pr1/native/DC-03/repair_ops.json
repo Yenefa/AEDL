@@ -1,0 +1,32 @@
+{
+  "protocol_version": 2,
+  "target_format": "kicad",
+  "ops": [
+    {
+      "op": "delete_object",
+      "uuid": "f7bdb3a0-0bf7-585b-a8ff-2c4ce0812420"
+    },
+    {
+      "op": "delete_object",
+      "uuid": "1354b01f-c0b1-5c3c-9c87-fd3fe80c4c33"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "Device:R",
+      "designator": "R7",
+      "x_mil": 8600,
+      "y_mil": 7600,
+      "value": "22R",
+      "footprint": "Resistor_SMD:R_0603_1608Metric"
+    },
+    {
+      "op": "place_component",
+      "lib_id": "Device:R",
+      "designator": "R8",
+      "x_mil": 10900,
+      "y_mil": 7600,
+      "value": "22R",
+      "footprint": "Resistor_SMD:R_0603_1608Metric"
+    }
+  ]
+}

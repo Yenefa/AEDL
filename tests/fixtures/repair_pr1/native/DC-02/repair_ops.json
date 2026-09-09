@@ -1,0 +1,11 @@
+{
+  "protocol_version": 2,
+  "target_format": "kicad",
+  "ops": [
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "U2.2"
+    }
+  ]
+}

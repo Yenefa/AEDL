@@ -1,0 +1,24 @@
+{
+  "protocol_version": 2,
+  "target_format": "kicad",
+  "ops": [
+    {
+      "op": "delete_object",
+      "uuid": "94bd1446-14e3-5f50-a4c8-362ec112453e"
+    },
+    {
+      "op": "delete_object",
+      "uuid": "496b7d20-44af-512f-b961-ba51ecb4a041"
+    },
+    {
+      "op": "add_net_label",
+      "name": "USB_DM",
+      "at": "U1.13"
+    },
+    {
+      "op": "add_net_label",
+      "name": "USB_DP",
+      "at": "U1.14"
+    }
+  ]
+}

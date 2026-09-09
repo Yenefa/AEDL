@@ -1,0 +1,25 @@
+{
+  "protocol_version": 2,
+  "target_format": "kicad",
+  "ops": [
+    {
+      "op": "place_component",
+      "lib_id": "Device:C",
+      "designator": "C5",
+      "x_mil": 10550,
+      "y_mil": 1450,
+      "value": "1uF",
+      "footprint": "Capacitor_SMD:C_0603_1608Metric"
+    },
+    {
+      "op": "add_net_label",
+      "name": "EN",
+      "at": "C5.1"
+    },
+    {
+      "op": "add_net_label",
+      "name": "GND",
+      "at": "C5.2"
+    }
+  ]
+}

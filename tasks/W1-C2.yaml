@@ -1,0 +1,89 @@
+# Task Envelope — W1-C2 修复验证器纯函数（gates/repair_verification）
+# 手写自 PR-1 Implementation Contract §8 + C1 先例（tasks/PR1-C1.yaml 等价物 PR1-C1.yaml
+# 由 Worker 会话产出未入库，本 envelope 照 AEDL-CPL/GH-P5 先例与合同 §2 文件范围冻结）。
+# Human review + admission required before execution.
+
+task: W1-C2
+
+base:
+  branch: feat-pr1-c2-repair-verification
+  sha: c34cd0dc06650ed2d28e4699a6f12564fc127621  # PR-1 开写时与实现合同（#46）共同基线；rebase 后含 #41/#46/#47/#48
+
+goal: |
+  PR-1 Commit 2（合同 §11 C2）：`gates/repair_verification.py` 的完整原理图观察、
+  exact/protected 纯函数、独立只读 S-expression 源观察、域分离 canonical hash
+  （hash_bytes/canonical_json_bytes/canonical_sha256 单一归属地），及
+  tests/test_repair_verification.py（合同 §9 thin verifier 的纯函数前置部分；
+  fresh KiCad export 的 verify_stage 属 C3，不在本卡）。
+
+scope: |
+  Writable paths are whitelisted in allowed_paths; everything else is FOREIGN (read-only).
+  实现合同 §2 冻结：不修改 run_gates.py / schematic_semantics.py / 既有 M2 合同 /
+  Sandbox protocol / akcli 源码；不做 ERC/semantic runner 集成（C3）；无原生工具调用、
+  文件写入、授权或 candidate 提交功能。private acceptance 夹具仅为测试辅助，
+  生产模块不得读取。
+
+dependencies: []
+
+allowed_paths:
+  - gates/repair_verification.py
+  - tests/test_repair_verification.py
+  - tests/fixtures/repair_pr1/**
+  - tests/fixtures/repair_pr1/
+  - tests/fixtures/repair_pr1/manifest_v1.json
+  - tests/fixtures/repair_pr1/native/DC-01/fault.kicad_sch
+  - tests/fixtures/repair_pr1/native/DC-01/repair_ops.json
+  - tests/fixtures/repair_pr1/native/DC-02/fault.kicad_sch
+  - tests/fixtures/repair_pr1/native/DC-02/repair_ops.json
+  - tests/fixtures/repair_pr1/native/DC-03/fault.kicad_sch
+  - tests/fixtures/repair_pr1/native/DC-03/repair_ops.json
+  - tests/fixtures/repair_pr1/native/DC-04/fault.kicad_sch
+  - tests/fixtures/repair_pr1/native/DC-04/repair_ops.json
+  - tests/fixtures/repair_pr1/native/DC-05/fault.kicad_sch
+  - tests/fixtures/repair_pr1/native/DC-05/repair_ops.json
+  - tests/fixtures/repair_pr1/private/acceptance_v1.json
+  - tools/repair_pipeline.py          # C1 集成：hash helper 收口为 import（大统领裁定）
+  - .gitattributes                    # fixtures -text 字节冻结（合同 §11）
+  - docs/HANDOFF.md                   # 追加型
+  - docs/compliance/AI_USAGE_LOG.md   # 台账
+  - tasks/W1-C2.yaml
+
+forbidden_paths:
+  - src/**
+  - gates/run_gates.py
+  - gates/schematic_semantics.py
+  - gates/contracts/**
+  - sandbox_runtime/**
+  - delivery/**
+  - notes/**
+  - docs/evidence/**
+
+acceptance: |
+  - tests.test_repair_verification 全绿（56 用例：49 合同规定 + 7 review 增补——
+    3 个 new-UUID 角色契约 rejection、1 个 parsed-new-label 真实 parser 对齐、
+    3 个 E2-NC/DC04-BOOT/DC05-EN 定点负例）
+  - tests.test_repair_contract 保持绿（92 用例，hash helper 收口后 C1/C2 域兼容）
+  - 全量 unittest discover 零新增失败
+  - fixture 字节保真：DC-01..05 fault/ops 与原生资格记录逐字节一致（.gitattributes -text）
+  - private acceptance 不被生产代码读取（oracle isolation）
+  - 台账 + HANDOFF 如实追加
+
+change_budget:
+  expected_files: 19
+  expected_modules: [gates, tests, tools, tasks, docs]
+  cross_module: true
+  contract_change: false
+  evidence_semantics_change: false
+
+exceptions:
+  # Agent cannot self-authorize. 脏树来源 = envelope 本体 + 改动同时在工作树（C1 先例：
+  # 文件无法包含自身提交 sha）；rebase 后 baseline 相对原 envelope 漂移已由 base.sha 重锚吸收。
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "大统领 2026-09-07 冻结 PR-1 contract 后指令开写 C1-C6；C2 落地按同授权链（R1/CPL/W1-Y1/GH-P5 先例）"
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "同上；base 重锚至 c34cd0d 系 master 合并 #41/#46/#47/#48 后的既定演进，照 AEDL-CPL rebaseline 先例"
+
+escalation:
+  owner: Yenefa

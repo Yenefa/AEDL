@@ -3610,3 +3610,62 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - 说明：两个坑均为大统领 2026-09-08 review 指出；合同接口/数据形状零变化（§12 允许的内部实现
   选择），不出 v1.1 合同。
 - 人工审核：`PENDING_HUMAN_REVIEW`
+
+
+## AI-20260908-002
+
+- 日期：2026-09-08
+- 任务：PR-1 C2 完整观察、精确拓扑差分与受保护对象/文件比较。
+- 会话：Codex；依据本次人类指令审查项目并直接推进下一步，以及已冻结 PR-1 实现合同 C2。
+- 领号调整：执行中发现 PR #48 更新为 `6cd76c1`，已使用 `AI-20260908-001`；本工作单元改领 002，未改动他人记录。
+- 参与：DESIGN / CODE / TEST / DEBUG / REVIEW / DOCUMENT；本地工作流技能只用于开发指导，未复制技能源码、增加运行时依赖或对外再分发第三方资源。
+- 基线与分支：`master@c34cd0dc06650ed2d28e4699a6f12564fc127621` → `feat/pr1-c2-repair-verification`；C1 的 PR #48 仍 OPEN，未复制或修改该分支的生产代码。
+- Impact Analysis / Change Budget：16 文件，模块 `repair_verification / repair_tests / task_records`；cross_module=true，contract_change=false，evidence_semantics_change=false，风险 MEDIUM。仅新增验证模块、单测、规定的 12 个夹具文件，并追加本条和 HANDOFF；潜在影响是后续 C3/C4/C5 接口使用，不改变现有执行权限、硬件/固件或证据。
+- 实现：`gates/repair_verification.py` 提供域分离 hash、完整身份/coverage 校验、独立只读 S-expression 源观察、精确 delta 和独立 protected 比较。原始字节 hash 与电气语义分离；匿名单点、NC、标签别名、完整 source AST、文件集合/只读内容均保留。新增角色仅对齐显式 UUID；自审反例复现了删除对象内部 UUID 被新 pin 复用时误 PASS，补齐整棵 AST 的历史 UUID 冲突检查后转为 FAIL。
+- 测试与夹具：`tests/test_repair_verification.py` 的五例预期来自隔离的 P4 acceptance 数据；12 个规定夹具仅含五份原始 fault/ops、private acceptance 和 manifest。原始 native 输入逐字节复制并校验 SHA256/size；生产模块不读取 acceptance。源解析覆盖真实 M2（23 组件、86 pin、14 NC）与五份故障输入；额外只读解析历史 native_writer 五份产物全部得到 23/86 的完整观察，未重新执行原生工具，不能作为 C6/Y4 证据。
+- 验证（实际运行）：
+  - C2：`py -3.9 -X utf8 -m unittest tests.test_repair_verification` 与 `py -3.13 -X utf8 -m unittest tests.test_repair_verification` → 各 **49/49 OK**。
+  - 原有生成器/语义/核心门禁/runner 回归 → **51/51 OK**；learning_gate → PASS。
+  - C1 独立 worktree `6cd76c1`：合同测试 **92/92 OK**；C1/C2 的 10 域 × 7 值及 4 组原始 bytes 摘要兼容性 **74/74 PASS**。C1 pipeline 的 hash import 迁移留待 C1 合入后的集成，不覆盖其并行工作。
+  - 完整 `tools.dev_gate`（Python 3.9 主项目 / uv Python 3.11 Sandbox）→ **FAIL，exit 1**：syntax PASS，主项目 **375/375 OK**，secret_scan PASS（349 文件），bundle_check PASS；Sandbox 283 tests 中 1 ERROR、1 skip、1 expected failure。唯一 ERROR 是 `sandbox_runtime/tests/policy/test_paths.py:41` 的 Windows junction `FileExistsError [WinError 183]`；修改前 baseline（主项目 326 OK）及隔离复跑已复现同一错误，未跳过或越界修复。
+  - 无 C2 task envelope；dev_gate 明确排除 scope_check / binding_check，未声称已通过 admission。交付前人工可复核的实际文件清单与 16 文件预算一致。
+- 项目审查：EDD-001 preflight 实跑 BLOCKED（5 份 datasheet 缺失、POWER required contract 缺失、compiler 未注册、verifier coverage 未闭合）；未伪造、重签或放宽任何真实证据。
+- 限制：当前源观察仅支持已核验的 KiCad 20231120 flat M2、无旋转/镜像的单 unit 实例、根局部标签及正交直线旁路；其他结构 UNKNOWN。C3 fresh KiCad export、C4 native adapter、C5 授权/事务/rollback、C6 全链原生资格、实体硬件均 **NOT_RUN / 未实现于本切片**；纯比较 PASS 不能作为 candidate 提交或制造放行。并行独立复审未返回可用结果，本轮完成的是执行者自审和实测，外部 Review 仍待完成。
+- 合规触发：沿用 Codex 工具记录 RES-002；无新增第三方依赖、ADR、Evidence、Fusion Map、Open Outputs 或正式提交触发；AIC score target=NONE。保持未 commit、未 push、未创建新 PR。
+- 交付：仓库外 Review Bundle 随附基线/最终门禁 receipt、真实完整 diff、新文件全内容、可应用补丁及中文审查报告；状态只代表软件候选实现。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260908-003
+
+- 日期：2026-09-08
+- 任务名称：PR-1 C2 落地收口——C2 review 的 role 契约修复 + 增补测试 + C1 hash 收口 + envelope/admission（大统领源码级审查 REQUEST_CHANGES 后修态）
+- 会话：ZCode 主会话（C2 候选本体为 Codex 会话 AI-20260908-002 的 patch）
+- 参与：REFACTOR / DEBUG / GENERATE_TEST / REVIEW / DOCUMENT
+- 模块/路径：
+  - `gates/repair_verification.py`（P1 role 契约收死：HostExpectedAfter 的 new pin identity 必须
+    精确等于 `new:<reference>.<pin_number>`；新 label identity 必须匹配 `new:label:<十进制 slot>`
+    且 slot 从 0 密集——role 篡改在 binding 层即拒，fresh-UUID 对齐链无漂移空间）
+  - `tools/repair_pipeline.py`（C1 集成收口：删本地 hash_bytes/canonical_json_bytes/canonical_sha256/
+    DIGEST_KINDS 四套定义，改 `from gates.repair_verification import`——单一归属；digest 语义
+    兼容性实测 10 域全等）
+  - `tests/test_repair_verification.py`（+7：3 个 role 契约 rejection（pin/label/slot-dense）、
+    1 个 parsed-new-label 真实 S-expression parser 对齐（含 swapped-label 负例）、
+    3 个 E2-NC/DC04-BOOT/DC05-EN 定点负例；resync_bookkeeping 测试辅助保证突变样本账目一致、
+    拒绝可归因于冻结期望本身）
+  - `.gitattributes`（`tests/fixtures/repair_pr1/** -text`——fixture 字节冻结；本仓 autocrlf=true
+    曾把 git apply 的 LF fixture 转成 CRLF 致 49 用例 11 失败，.gitattributes 为合同 §11 的正式修法）
+  - `tasks/W1-C2.yaml`（envelope，补齐 admission 链）
+  - `docs/HANDOFF.md`、`docs/compliance/AI_USAGE_LOG.md`（本条）
+- 审查响应（大统领 2026-09-08 源码级审查，REQUEST_CHANGES 三项全落地）：
+  1. role 语义（P1 真实合同漏洞）→ _prepare 强制精确角色 + rejection tests，篡改样本从 PASS 变 FAIL
+  2. C1 集成 → hash 单一归属 + import，C1 92 + C2 56 合跑绿
+  3. tasks/PR1-C2.yaml 缺失 → 本 envelope，scope_check/binding_check 纳入 dev_gate
+- 验证（真实运行）：tests.test_repair_verification → **56/56 OK**（49+7）；tests.test_repair_contract
+  → 92/92 OK；全量 `unittest discover -s tests` → **474/474 OK**；py -3.9 两模块 OK；
+  fixture DC-01..05 与原生资格记录逐字节一致（LF，CRLF=0）。
+- 已知限制：Sandbox junction WinError 183 与 review-bundle generator 两个基线问题独立修复（大统领
+  指令不入 C2 scope）；fresh KiCad export（C3）、native adapter（C4）、事务（C5）、原生资格（C6）未实现。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
+- 终态补记（同日）：commit 5d1fd5a 后干净树 re-admit（ADMIT，无 allow_dirty；HEAD 绑定 5d1fd5a3）
+  + bound dev_gate **7/7 pass**（junction 项本机本次通过）。回执已归档 review-bundles/ 并拷 Bundle-Lap。

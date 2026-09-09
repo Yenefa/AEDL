@@ -221,3 +221,20 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
   不便人工查阅。**权威生成位不变**（仍是 CONTROL_PLANE §8 的仓库外 `review-bundles/`，
   不进 git，.patch 基线可回溯）；收藏位收审查用副本。会话收尾惯例：生成 → 拷一份到
   Bundle-Lap → INDEX.md 加一行。
+
+## 2026-09-08 PR-1 C2 候选交接（AI-20260908-002）
+
+- 当前：`feat/pr1-c2-repair-verification` 基于 `master@c34cd0d`，完成 C2 的完整源观察、精确拓扑差分和保护比较；16 文件预算内，无硬件/固件修改，未 commit/push，新 PR 未创建，`PENDING_HUMAN_REVIEW`。
+- 验证：C2 在 Python 3.9/3.13 各 49 OK；主项目 375 OK；learning PASS；C1 `6cd76c1` 合同 92 OK、摘要兼容 74 PASS。完整 dev_gate 仍 FAIL：原有 Windows junction 测试在 `test_paths.py:41` 报 WinError 183，修改前基线和独立复跑均一致。无 task envelope，scope/binding 门禁未运行；不能写成全绿。
+- 下一步：先复审本候选，并与仍 OPEN 的 C1 PR #48 集成 hash 单一来源；按冻结合同进入 C3，两次 fresh KiCad export 绑定源字节、完整 XML/source/native coverage 与依赖清单。C4/C5/C6 继续按依赖顺序实现，纯比较 PASS 不授予执行/提交/promotion 权限。当前 KiCad 20231120 flat M2 以外的几何/层级返回 UNKNOWN；未执行新的 native/KiCad 全链或实体测试。另，EDD-001 preflight 仍有 8 项前置缺口，详见本次 AI log 和仓库外审查报告。
+
+## 2026-09-08 PR-1 C2 候选交接（AI-20260908-002/003）
+
+- **C2 已落地**：`gates/repair_verification.py`（完整观察/exact delta/protected 投影/域分离 hash
+  单一归属地）+ `tests/test_repair_verification.py`（56 用例）+ 12 个规定夹具（fixture 字节经
+  `.gitattributes -text` 冻结）+ `tools/repair_pipeline.py` 的 hash import 收口（C1 集成完成）。
+- **大统领源码级审查（REQUEST_CHANGES）三项全部落地**：new-UUID 角色契约在 `_prepare` 强制
+  （new:<ref>.<pin> / new:label:<slot> 密集 slot，篡改样本 PASS→FAIL）；C1 hash 收口；
+  envelope `tasks/W1-C2.yaml` + admission 链补齐。
+- 验证：repair_verification 56/56（3.9/3.13）、repair_contract 92/92、全量 474/474 OK。
+- 状态：`PENDING_HUMAN_REVIEW`（PR 送审中）。C3（fresh KiCad export）待 C2 合并后另卡。
