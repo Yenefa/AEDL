@@ -54,12 +54,15 @@ REGISTERED_ACTORS = {"YEN", "PER", "LIO", "CODEX", "ZCODE", "CLAUDE", "OPENCODE"
 # (docs/compliance/AEDL_开发记录与AI使用规范_v1.0.md) and of the pre-GH-49
 # entries, so it stays a recognized alias; existing records are not rewritten.
 REVIEW_STATUS_VALUES = ("PENDING_HUMAN_REVIEW", "HUMAN_REVIEWED", "ACCEPTED")
+# A declared value is matched in full, never as a prefix: optional backticks,
+# one token, and at most one trailing full-width annotation. The annotation may
+# be unclosed in existing records (AI-20260902-001 ends with
+# `（Yenefa，…，口径同`), and that parenthesised form is the only suffix observed
+# in the stock — so `HUMAN_REVIEWED garbage` can never pass as a status.
+REVIEW_VALUE_RE = re.compile(r"`?[ \t]*([A-Za-z][A-Za-z0-9_]*)[ \t]*`?[ \t]*(?:（[^）]*）?)?")
 REVIEW_FIELD_RE = re.compile(r"^([ \t]*)(?:[-*][ \t]+)?(人工审核|最终状态)[ \t]*[：:][ \t]*(.*)$")
-REVIEW_INLINE_VALUE_RE = re.compile(r"^`?[ \t]*([A-Za-z][A-Za-z0-9_]*)[ \t]*`?")
-REVIEW_NESTED_STATUS_RE = re.compile(
-    r"^[-*][ \t]+状态[ \t]*[：:][ \t]*`?[ \t]*([A-Za-z][A-Za-z0-9_]*)[ \t]*`?")
-REVIEW_NESTED_BARE_RE = re.compile(
-    r"^[-*][ \t]+`[ \t]*([A-Za-z][A-Za-z0-9_]*)[ \t]*`[ \t]*(?:（[^）]*）)?[ \t]*$")
+REVIEW_NESTED_STATUS_RE = re.compile(r"^[-*][ \t]+状态[ \t]*[：:][ \t]*(.*)$")
+REVIEW_NESTED_BARE_RE = re.compile(r"^[-*][ \t]+(`.*)$")
 
 
 class LedgerError(Exception):
@@ -272,15 +275,28 @@ def build_index_text(entries: list) -> str:
     return "\n".join(lines)
 
 
+def declared_review_status(raw: str) -> str:
+    """Status declared by one field value.
+
+    The token is returned only when the complete value matches; otherwise the
+    raw text is returned so the caller reports it as an invalid status.
+    """
+    value = raw.strip()
+    m = REVIEW_VALUE_RE.fullmatch(value)
+    return m.group(1) if m else value
+
+
 def review_status_fields(text: str) -> list:
     """[(field_name, declared_status)] for every review-status field.
 
     A status counts only when declared by a review field (人工审核, or the
     legacy 最终状态) — inline (`- 人工审核：`PENDING_HUMAN_REVIEW``) or on the
-    field's first nested status line (`  - 状态：...` / `  - `...``). Bare
+    field's first nested status line (`  - 状态：...` / `  - `...``). The value
+    must match the whole field value: trailing text is reported as an invalid
+    status, never silently accepted as the token it starts with. Bare
     occurrences anywhere else in the body are never accepted. A field with no
-    parseable status declares nothing; the caller still fails such an entry
-    when no field declares an allowed status.
+    status line declares nothing; the caller still fails such an entry when no
+    field declares an allowed status.
     """
     lines = text.splitlines()
     fields = []
@@ -290,8 +306,7 @@ def review_status_fields(text: str) -> list:
             continue
         indent, name, inline = len(m.group(1)), m.group(2), m.group(3).strip()
         if inline:
-            token = REVIEW_INLINE_VALUE_RE.match(inline)
-            fields.append((name, token.group(1) if token else inline))
+            fields.append((name, declared_review_status(inline)))
             continue
         for nxt in lines[idx + 1:]:
             if not nxt.strip() or len(nxt) - len(nxt.lstrip()) <= indent:
@@ -299,7 +314,7 @@ def review_status_fields(text: str) -> list:
             nested = (REVIEW_NESTED_STATUS_RE.match(nxt.strip())
                       or REVIEW_NESTED_BARE_RE.match(nxt.strip()))
             if nested:
-                fields.append((name, nested.group(1)))
+                fields.append((name, declared_review_status(nested.group(1))))
                 break
     return fields
 

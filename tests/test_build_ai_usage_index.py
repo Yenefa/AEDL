@@ -269,6 +269,25 @@ class ReviewStatusFieldTests(LedgerToolTestBase):
         findings = bi.check_ledger(self.tmp)
         self.assertTrue(any("SOME_INVALID_STATUS" in f for f in findings), findings)
 
+    def test_inline_trailing_garbage_is_not_a_valid_status(self):
+        # prefix matching would launder "HUMAN_REVIEWED garbage" into a status
+        text = ACTOR_ENTRY.replace("- 人工审核：`PENDING_HUMAN_REVIEW`\n",
+                                   "- 人工审核：HUMAN_REVIEWED garbage\n")
+        self.write_entry("AI-20260908-YEN-001.md", text)
+        findings = bi.check_ledger(self.tmp)
+        self.assertTrue(
+            any("review-status" in f and "HUMAN_REVIEWED garbage" in f for f in findings),
+            findings)
+
+    def test_nested_trailing_garbage_is_not_a_valid_status(self):
+        text = ACTOR_ENTRY.replace("- 人工审核：`PENDING_HUMAN_REVIEW`\n",
+                                   "- 人工审核：\n  - 状态：ACCEPTED garbage\n")
+        self.write_entry("AI-20260908-YEN-001.md", text)
+        findings = bi.check_ledger(self.tmp)
+        self.assertTrue(
+            any("review-status" in f and "ACCEPTED garbage" in f for f in findings),
+            findings)
+
     def test_each_allowed_status_value_passes(self):
         for status in ("PENDING_HUMAN_REVIEW", "HUMAN_REVIEWED", "ACCEPTED"):
             with self.subTest(status=status):
