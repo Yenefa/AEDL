@@ -14,6 +14,7 @@
 | 第三方资源 ID | `RES-NNN`（如 RES-001） | `docs/compliance/THIRD_PARTY_RESOURCES.md` | 查 license/授权边界/再分发义务；未知项标 `TO_VERIFY` |
 | 事故教训 ID | `PIT-YYYYMMDD-NNN`（如 PIT-20260830-001） | `gates/lessons_registry_v1.json`（机器可执行）+ `docs/knowledge/PROJECT_PITFALLS.md`（叙述版） | 已防错误清单；排查"为什么门禁这样设计"时先查 |
 | 协作任务卡 | `TASK-PN`（如 TASK-P5） | `docs/COLLABORATION.md` | 多 AI 领地划分与任务领取状态 |
+| 贡献归因 | Human / AI-assisted / Mixed | `docs/compliance/ATTRIBUTION_POLICY.md`（规则）+ `docs/HUMAN_OWNERSHIP.md`（人类职责） | 判断一项工作归谁；聚合视图 `docs/compliance/AI_USAGE_SUMMARY.md` |
 
 ## 真人身份与代称
 
@@ -32,5 +33,5 @@
 - **门禁 / 合同 / intent 改动** → 先跑 `run_gates.py` 确认基线 → `docs/HANDOFF.md` 状态卡 → 相关 ADR → 改后必须全量测试（当前 127 例）。
 - **比赛材料 / 对外主张** → `docs/competition/` 五件套 + `SUBMISSION_CHECKLIST.md` §3 FAIRNESS_CHECK → 主张逐条对 EVID/ADR 台账核验（`AGENTS.md` §8.8）。
 - **开源吸收 / 第三方引入** → `notes/open_source_intake/README.md` → 对应 intake 报告（circuitbot.md、kicadai.md、kicad-mcp.md）→ `THIRD_PARTY.md`（Konnect AGPL 红线）→ 登记 RES-NNN。
-- **新会话接手** → `AGENTS.md` → 本表 → `docs/HANDOFF.md` 状态卡（1 分钟）→ 台账最近 2–3 条（AI ID 解码 git log）→ 按任务类型走上述路由。
+- **新会话接手** → `AGENTS.md` → 本表 → `docs/HANDOFF.md` 状态卡（1 分钟）→ `docs/HUMAN_OWNERSHIP.md`（谁做决策）→ `AI_USAGE_SUMMARY.md` 最近工作单元（需精确 ID 时再查台账条目）→ 按任务类型走上述路由。
 - **多 AI 并行开工** → `docs/COLLABORATION.md` 领地规则 → `git status` 确认他人未提交改动 → 领卡开工。

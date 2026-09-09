@@ -7,7 +7,7 @@
 
 > 目的：两名真人开发者通过各自独立 clone 协作，同时允许多个 AI 会话在受控领地内辅助；所有成果经 Issue、任务分支、PR 和另一名真人 Review 交接，避免覆盖、混提和身份误记。
 > 本协议是 AGENTS.md 的并行扩展，冲突时以 AGENTS.md 为准。
-> **每个会话开工时（按序，缺一不可）**：读 `AGENTS.md` → 读 `docs/HANDOFF.md` 状态卡 → **读本文件** → `git status` 看现场 → 在 `docs/compliance/AI_USAGE_LOG.md` 领号（见 §0.1）。
+> **每个会话开工时（按序，缺一不可）**：读 `AGENTS.md` → 读 `docs/HANDOFF.md` 状态卡 → 读 `docs/HUMAN_OWNERSHIP.md`（人类职责与决策边界）→ **读本文件** → `git status` 看现场 → 在 `docs/compliance/ai-usage/` 领号（见 §0.1；AI 使用聚合视图见 `docs/compliance/AI_USAGE_SUMMARY.md`）。
 > v4 变更：新增主仓与实验/Evidence 卫星仓的唯一职责和回流协议（§0.7）；v3 的真人协作者身份、独立 clone、Issue-first 分支/PR 和 GitHub 强制能力边界继续生效。治理实施由 GitHub Issue #1 跟踪。
 
 ## 0. 比赛时钟（2026-08-31 大统领确认）
@@ -234,6 +234,8 @@ GitHub 模板：`.github/ISSUE_TEMPLATE/task.md`、`.github/PULL_REQUEST_TEMPLAT
 - 领号说明：开工领 012，后发现并行会话撞号（013/014/015 亦被占），按任务书「撞号再 +1」改用 **016**，映射已记入任务书 P9 进度日志。
 
 ## 4. 大统领的职责（只有你能做的）
+
+> 完整的人类职责、决策权与逐条证据见 [`docs/HUMAN_OWNERSHIP.md`](HUMAN_OWNERSHIP.md)；本节只保留当前在办事项。
 
 - 审 M2 的 89 文件 + 重签 board_review + commit/push 授权（不变，仍是第一优先）
 - 审 P1 产物（合同 + 测试）后批准 P4 挂载

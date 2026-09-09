@@ -1,0 +1,105 @@
+task: GH-54
+
+base:
+  branch: docs/attribution-ia   # 任务分支（admission 校验的是当前工作分支，沿 GH-49 先例）
+  sha: 8826fa6cc8b1f8c306e27d316297b96f8f745177  # origin/master（PR #49 合并后）＝ 本任务分支起点
+    # PR base = master；本 envelope 的 base.branch 是任务分支名，因为 admit 校验
+    # "envelope base.branch == 当前分支"。项目负责人 2026-09-09 会话批准从
+    # origin/master 8826fa6 开分支实施（见 Issue #54 的 Scope 与 5 项裁决）。
+
+goal: |
+  在不伪造、不改写历史事实、不弱化真实 AI 参与的前提下，重构仓库的贡献归因信息架构：
+  让人类项目负责人（Yenefa）的决策权、验收权、产品与架构 ownership 更靠前、更系统化；
+  AI 活动从"逐条流水"降级为"聚合 work unit + 可追溯原始记录"。
+
+scope: |
+  In scope:
+  - README.md：靠前新增 "Human-directed, AI-assisted"（中英双语）+ ownership 表 + 阅读顺序；
+    AI 披露段落保留（仅移后）。
+  - 新增 docs/HUMAN_OWNERSHIP.md、docs/compliance/ATTRIBUTION_POLICY.md、
+    docs/compliance/AI_USAGE_SUMMARY.md。
+  - docs/compliance/DECISIONS.md：仅对未来 ADR 启用新字段规范（不回填历史 ADR）。
+  - .github/PULL_REQUEST_TEMPLATE.md：章节顺序调整为 Human decision → Engineering rationale
+    → Implementation → AI assistance → Verification（字段不删）。
+  - docs/compliance/ai-usage/README.md：显式化"一个可审计 work unit，不是一个 prompt"。
+  - 阅读顺序指针：docs/COLLABORATION.md、docs/HANDOFF.md、AGENT_ONBOARDING.md、
+    docs/compliance/README.md、docs/ID_MAP.md。
+  - 本任务自身的 AI 使用台账条目（AI-20260909-BOT-...）。
+  Out of scope:
+  - 不改写任何历史 ADR 正文；不回填历史 ADR 的 Decision owner。
+  - 不新增/删除/改写任何既有 AI Usage 条目正文。
+  - 不改 commit author、不改写 Git history、不 force push。
+  - 不改 Evidence 字节、正式验证结果、PR review 历史、HUMAN_REVIEWED / ACCEPTED。
+  - 不动 AGENTS.md、gates/、src/、sandbox_runtime/、.gitattributes、delivery/。
+  - 不回填 TEAM_CONTRIBUTIONS.md 中的历史 UNKNOWN 负责人。
+
+dependencies:
+  - ref: GH-49
+    required_state: merged   # PR #49（AI Usage 台账拆分）已合并至 master 8826fa6
+
+allowed_paths:
+  - README.md
+  - AGENT_ONBOARDING.md
+  - .github/PULL_REQUEST_TEMPLATE.md
+  - docs/HUMAN_OWNERSHIP.md
+  - docs/ID_MAP.md
+  - docs/HANDOFF.md
+  - docs/COLLABORATION.md
+  - docs/compliance/README.md
+  - docs/compliance/DECISIONS.md
+  - docs/compliance/AI_USAGE_LOG.md   # 生成索引：新增条目后 build 必然更新（GH-49 先例）
+  - docs/compliance/ATTRIBUTION_POLICY.md
+  - docs/compliance/AI_USAGE_SUMMARY.md
+  - docs/compliance/ai-usage/README.md
+  - docs/compliance/ai-usage/AI-20260909-BOT-C250B615B40C709A46C59E31570F5E61.md
+  - tasks/GH-54.yaml
+
+forbidden_paths:
+  - AGENTS.md
+  - gates/**
+  - src/**
+  - sandbox_runtime/**
+  - delivery/**
+  - docs/evidence/**
+  - docs/competition/**
+  - docs/superpowers/**
+  - notes/**
+  - tests/**
+  - tools/**
+  - .gitattributes
+
+acceptance: |
+  - README 靠前出现 Human-directed, AI-assisted 章节与 ownership 表；AI 披露未删除。
+  - docs/HUMAN_OWNERSHIP.md 每条 human ownership 主张可追到 ADR / PR / Issue 证据；
+    无"Yenefa 独立设计 / 手写代码"类无证据主张。
+  - AI_USAGE_SUMMARY.md 的引用集合与 AI_USAGE_LOG.md 的 88 条双向一致
+    （无遗漏、无重复、无虚构 ID）；未把全部 work unit 默认标为 Yenefa owner。
+  - 历史 ADR 未被回填 Decision owner；新字段规范只对未来 ADR 生效。
+  - 既有 88 个 ai-usage/AI-*.md 条目文件字节零改动。
+  - python -m tools.build_ai_usage_index check PASS。
+  - py -3.9 -m tools.dev_gate exit 0（syntax / main_tests / sandbox_tests /
+    secret_scan / ai_usage_ledger / scope_check / binding_check / bundle_check）。
+  - 未 approve / 未 merge；状态保持 PENDING_HUMAN_REVIEW。
+
+change_budget:
+  expected_files: 15   # 实施后 git status 实测 changed_files=15，与预算一致（含生成索引 AI_USAGE_LOG.md）
+  expected_modules: [docs, .github, tasks]
+  cross_module: false
+  contract_change: false
+  evidence_semantics_change: false
+
+exceptions:
+  # Agent cannot self-authorize. 脏树来源 = 本任务新增/修改的文档与台账条目未提交
+  # （admit → 编辑 → gate → commit 的定稿顺序，必然状态），沿 GH-49 / AEDL-R1 先例。
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "项目负责人 2026-09-09 会话明确批准实施本方案（Issue #54 的 5 项裁决）"
+  # 提交后 HEAD 位于 base.sha 之上是任务实现的正常状态（GH-49 先例）。本条由项目负责人
+  # 2026-09-09 会话指令「commit → push → Draft PR → 生成/更新 Review Bundle」授权：
+  # 交付回执必须绑定**提交后的** HEAD，故需在提交后以 --allow-drift 重新 admit。
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "项目负责人 2026-09-09 会话指令：允许 commit + push + Draft PR + 更新 Review Bundle"
+
+escalation:
+  owner: Yenefa

@@ -67,7 +67,7 @@ py -3 -m tools.dev_gate
 收尾  python -m tools.dev_gate [--envelope ...]  → exit 0 全绿才算完
 交付  需人工 review 的交付必须附 Review Bundle（仓库外 review-bundles/；生成：
       python -m tools.make_review_bundle，post-commit 钩子亦自动生成）——无 bundle 不进人工 review
-留痕  AI 实质参与 → docs/compliance/AI_USAGE_LOG.md（AI-YYYYMMDD-NNN；默认 PENDING_HUMAN_REVIEW）
+留痕  AI 实质参与 → docs/compliance/ai-usage/<ID>.md（聚合视图 AI_USAGE_SUMMARY.md；默认 PENDING_HUMAN_REVIEW）
 晋升  永远人类。你能起草 PR、分析 PR、贴 review 建议，不能 merge / approve
 ```
 
@@ -88,6 +88,7 @@ py -3 -m tools.dev_gate
 ## 5. 台账与状态指针（真源以 HANDOFF / GitHub 为准）
 
 - 主线状态：`docs/HANDOFF.md` + 最新 Issue / PR
-- 合规台账：`docs/compliance/`（AI_USAGE_LOG / THIRD_PARTY_RESOURCES / DECISIONS）
+- 合规台账：`docs/compliance/`（AI_USAGE_SUMMARY → AI_USAGE_LOG / THIRD_PARTY_RESOURCES / DECISIONS / ATTRIBUTION_POLICY）
+- 人类职责与决策边界：`docs/HUMAN_OWNERSHIP.md`（谁做决策 / 谁验收 / AI 不能做什么）
 - Evidence：`docs/evidence/EVIDENCE_INDEX.md`
 - 赛事材料（评分 / 融合 / 开放成果）：触发时读 `docs/competition/`，平时不要塞进上下文

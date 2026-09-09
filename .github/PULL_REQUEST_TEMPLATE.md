@@ -1,19 +1,46 @@
-## What
+## Human decision / acceptance
 
-Describe the delivered change.
+- Goal owner: `TO_VERIFY`
+- Scope owner: `TO_VERIFY`
+- Acceptance decision: `PENDING / APPROVED / REJECTED`
+- Human review: `PENDING_HUMAN_REVIEW`
 
-## Why
+## Engineering rationale
+
+### What problem
 
 Explain the problem or task this PR addresses.
+
+### Why this approach
+
+### Alternatives rejected
+
+## What changed
+
+Describe the delivered change.
 
 ## Scope
 
 - Issue / Task: `#...`
-- Owner: `TO_VERIFY`
 - Owned paths changed:
 - Out-of-scope work intentionally not done:
 
-## Tests actually run
+## Implementation
+
+- Human / AI-assisted / Mixed: `TO_VERIFY`
+- Key implementation notes:
+
+## AI assistance
+
+- Research:
+- Code generation:
+- Test generation:
+- Review:
+- Documentation:
+
+## Verification
+
+### Tests actually run
 
 List exact commands and real results. Use `NOT_RUN` when applicable.
 
@@ -21,9 +48,13 @@ List exact commands and real results. Use `NOT_RUN` when applicable.
 <command> -> <result>
 ```
 
-## Not run / limitations
+### Not run / limitations
 
 - `NONE / NOT_RUN / UNKNOWN / BLOCKED`
+
+### Evidence
+
+- Evidence: `EVID-... / none`
 
 ## Compliance records
 
@@ -51,5 +82,3 @@ List exact commands and real results. Use `NOT_RUN` when applicable.
 
 - [ ] Another human has reviewed the diff and actual test evidence.
 - [ ] Merge target and branch ownership are correct.
-
-Human review: `PENDING_HUMAN_REVIEW`

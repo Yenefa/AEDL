@@ -8,6 +8,31 @@ AEDL 探索如何在明确的人类审批边界内，把自然语言需求转化
 
 本仓库是 AEDL 的**集成与技术主张真源**。当前已经具备确定性合同、失败关闭门禁、候选/证据隔离、M2 硬件载体和软件验证基线；它仍不是一个已经完成、可以无人监督下单的通用硬件 Agent。
 
+## Human-directed, AI-assisted · 人类主导，AI 辅助
+
+AEDL is human-directed and AI-assisted.
+The project owner defines product scope, acceptance criteria, architecture boundaries, verification policy, engineering claims, and release decisions.
+AI agents are used for research, implementation, testing, documentation, and adversarial review.
+
+AEDL 由人类主导、AI 辅助：项目负责人定义产品范围、验收标准、架构边界、验证政策、工程主张与发布决策；AI Agent 承担研究、实现、测试、文档与对抗性审查。
+
+| Area | Owner |
+| --- | --- |
+| Product direction | Yenefa |
+| Scope / acceptance criteria | Yenefa |
+| Architecture approval | Yenefa |
+| Verification policy | Yenefa + Percy (SHARED) |
+| Engineering claims | Yenefa |
+| Final merge / release | Human review + human merge; release sign-off: Yenefa |
+| Implementation assistance | AI-assisted |
+| Testing / adversarial review | AI-assisted |
+| Documentation assistance | AI-assisted |
+
+> Ownership here means **decision and approval authority, not sole authorship**. Implementation, research, tests and documentation in this repository are routinely AI-assisted, and every AI contribution stays on the record.
+> 这里的 Owner 指**决策与批准权，不是"唯一作者"**；仓库的实现、研究、测试与文档普遍由 AI 协助完成，全部记录保留可追溯。
+>
+> 逐条职责与证据：[Human Ownership](docs/HUMAN_OWNERSHIP.md) · 归因分类与红线：[Attribution Policy](docs/compliance/ATTRIBUTION_POLICY.md) · AI 使用聚合视图：[AI Usage Summary](docs/compliance/AI_USAGE_SUMMARY.md)。
+
 ## 当前真实状态
 
 > README 只描述稳定边界，不复制会过期的门禁计数。每次接手请以 [HANDOFF](docs/HANDOFF.md)、[Evidence Index](docs/evidence/EVIDENCE_INDEX.md) 和当前结构化门禁结果为准。
@@ -43,6 +68,19 @@ AEDL 探索如何在明确的人类审批边界内，把自然语言需求转化
 - **证据分级**：静态检查、仿真、软件 loopback 与实体硬件结果分别记录，不能互相冒充。
 
 ## 从这里开始
+
+### 推荐阅读顺序
+
+```text
+README.md
+  ↓  docs/HUMAN_OWNERSHIP.md                    人类职责、决策权与验收权
+  ↓  docs/compliance/DECISIONS.md               架构与治理决策（ADR）
+  ↓  技术文档（HANDOFF / COLLABORATION / CONTROL_PLANE / Evidence）
+  ↓  docs/compliance/AI_USAGE_SUMMARY.md        AI 使用的工作单元聚合视图
+  ↓  docs/compliance/AI_USAGE_LOG.md            完整可审计索引（逐条真源在 ai-usage/）
+```
+
+AI 台账是**审计层**，不是入门读物：先看清"谁做决策、谁验收"，再看 AI 如何协助。
 
 ### 人类开发者
 
@@ -123,7 +161,7 @@ Issue → task branch → exact-path staging → tests → Draft PR
 ```
 
 - 正式团队成员、AI 贡献和第三方资源分别登记，不能混写成“全部团队自研”。
-- AI 的实质贡献逐条记录在 [docs/compliance/ai-usage/](docs/compliance/ai-usage/)（[AI_USAGE_LOG.md](docs/compliance/AI_USAGE_LOG.md) 为自动生成索引），审核状态保持 `PENDING_HUMAN_REVIEW`。
+- AI 的实质贡献按**可审计工作单元**逐条记录在 [docs/compliance/ai-usage/](docs/compliance/ai-usage/)；默认浏览入口是 [AI_USAGE_SUMMARY.md](docs/compliance/AI_USAGE_SUMMARY.md)（工作单元聚合），完整索引为 [AI_USAGE_LOG.md](docs/compliance/AI_USAGE_LOG.md)（脚本生成，禁手改）。审核状态保持 `PENDING_HUMAN_REVIEW`。
 - 关键决策见 [DECISIONS](docs/compliance/DECISIONS.md)，第三方与许可证边界见 [THIRD_PARTY_RESOURCES](docs/compliance/THIRD_PARTY_RESOURCES.md)。
 - 仓库当前的具体分支策略与 GitHub 强制能力边界见 [协作协议](docs/COLLABORATION.md)。
 
