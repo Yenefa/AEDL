@@ -3321,6 +3321,36 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 - 已知限制：未重建 PCB（builder 未实际执行，本机无 pcbnew）；未触碰原理图/PCB/BOM/任何证据文件；SOT-353 不在 KiCad 标准 `Package_TO_SOT_SMD` 库内属既有状态（见冻结 ERC 证据的同名 warning），不由本次修复引入、亦不由本次解决。
 - 人工审核：`PENDING_HUMAN_REVIEW`
 
+## AI-20260906-007
+
+- **台账 ID 改号说明（2026-09-06）**：本条目原领用 `AI-20260906-002`。同日并行会话
+  （PR #37，Yenefa 的 W1-Y1 范围冻结）亦领用 `-002`，两侧分支相隔约 11 分钟先后推送，
+  互不可见，属并发撞号。裁定：**本条目改号为 `-007`**，PR #37 保留 `-002` 不动——
+  让号方选择依据是「减少对方上下文切换成本」，非先后顺序。改号后全日编号唯一：
+  `-001` / `-002`(#37) / `-003`(#38) / `-004`(#39) / `-005`(#40) / `-006`(#41) / `-007`(本条)。
+  历史 commit message 中的 `[AI-20260906-002]` 不改写（沿用 AI-20260902-005 的改号先例，
+  改号事实以本说明为准）。
+- 日期：2026-09-06
+- 任务名称：W1/P1+P6 —— KiCad 独立复现环境固化 + 安装说明缺口补齐
+- 模块/路径：
+  - `notes/m2-evidence-reset/independent-reproduction-20260906.md`（新增，E4 第一组复现数据）
+  - `docs/competition/OPEN_OUTPUTS.md`（安装章节增补 + 两条过期表述更正）
+  - 本条台账
+- AI 工具/平台：Claude Code
+- 模型：`claude-opus-5`
+- AI 参与类型：DEBUG（库表缺口定位）、DOCUMENT
+- 任务目标：W1 任务卡 P1/P6。在一台从未装过 KiCad 的机器上独立复现 M2 冻结的 ERC/DRC 证据，并把过程固化为外部用户可照做的安装说明。
+- AI 实际产出（全部本轮真实运行）：
+  - 安装 KiCad **10.0.5**（`winget --version 10.0.5 --exact`；刻意不用默认的 10.0.6，与 `delivery/manifest_v1.json` 的 `kicad_version` 对齐）
+  - **发现真实安装缺口**：headless `kicad-cli` 不触发 GUI 首次启动的全局库表生成，缺这一步 ERC 报 **39 条** `lib_symbol_issues`/`footprint_link_issues`（全为 warning、0 error）。补 `sym-lib-table`/`fp-lib-table` 后降至 **2 条**
+  - **ERC 独立复现一致**：2 条 warning 与 `generated/g2_erc_current.json` 逐条相同（SOT-353 封装缺失、ME6211 符号差异，均指向 U3）
+  - **DRC 独立复现一致**：violations=0、unconnected=0、schema 与 kicad_version 均与 `generated/g4_drc_current.json` 相同
+  - `OPEN_OUTPUTS.md` 更正两条过期表述：① 原写"项目当前无 LICENSE"，实际根目录已有 Apache-2.0（各成果许可证栏仍保持 `TO_VERIFY` 未动，仓库级 LICENSE 不自动等于逐项再分发权）；② 仓库仍为 private，本轮以未认证请求实测确认（匿名访问 404）
+- 团队自主部分：操作者为 Percy（`la4876949-bot`），非核心实现者——满足 E4「至少 1 次由非核心实现者操作」的要求。
+- 验证（真实运行）：`py -3.9 -m tools.dev_gate` → status pass、exit 0（syntax/main_tests/sandbox_tests/secret_scan/bundle_check 全 pass）。
+- 已知限制（明确不声称）：**ERC 0 error 不等于设计正确**——PIT-20260830-001 事故当时同样是 ERC 0/DRC 0/8 项评审 PASS 而缺陷并存；本次只证明两台机器跑出同样结果。未运行 `run_gates.py` 全套（渲染证据需重渲）；未做实体验证；未复现 akcli/jlcpcb/freerouting 工具链。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
 ## AI-20260906-005
 
 - 日期：2026-09-06
