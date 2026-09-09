@@ -3669,3 +3669,39 @@ SS34 note 措辞同步从 "schematic level" 精化为 "reference-design level"�
 
 - 终态补记（同日）：commit 5d1fd5a 后干净树 re-admit（ADMIT，无 allow_dirty；HEAD 绑定 5d1fd5a3）
   + bound dev_gate **7/7 pass**（junction 项本机本次通过）。回执已归档 review-bundles/ 并拷 Bundle-Lap。
+
+## AI-20260904-001
+
+- 日期：2026-09-04
+- 任务名称：Sandbox V3（Issue #5）设计冻结阶段——外部信任锚 + 编排器灌注闭环
+- 模块/路径：
+  - `docs/superpowers/specs/2026-09-04-edd001-sandbox-v3-trust-anchor-design.md`（新增，设计草案）
+  - 本条台账
+- AI 工具/平台：Claude Code
+- 模型：`claude-opus-5`
+- AI 参与类型：RESEARCH（核实 H/L/M 三份交接文档、ADR-008、当前 protocol.py 实际哈希与全量测试实况）、DOCUMENT（设计草案）
+- 任务目标：Issue #5 验收标准要求"先冻结攻击模型...仅在设计获审后进入实现"；本会话只交付这一阶段，不触碰任何 `sandbox_runtime/**` 实现文件。
+- AI 实际产出：
+  - 现状核实（本轮实测，非转述历史交接文档）：`protocol.py` SHA-256 `f7d447...3cad` 与 H 记录的 V2 冻结值相等；`uv run --frozen --project sandbox_runtime python -m unittest discover -s sandbox_runtime/tests` → **283 tests, OK (skipped=1, expected failures=1)**，唯一 xfail 即 L 标记的"自洽伪造需 V3"用例；`grep verified_bundle_sha256|capability_grants sandbox_runtime/src/aedl_sandbox/orchestrator.py` → 零匹配，确认 H 交接记录的"V2 bundle/capability 灌注待适配"缺口在当前 HEAD 依然成立；`agent-m-handoff.md` 确认 M 钉值已重钉为 V2 值（该项治理问题已自然解决）。
+  - 设计草案：威胁模型冻结（攻击者=对工作树/candidate/receipt 目录有文件系统写权限，明确排除主机级密钥沦陷、撤销自动化、跨主机分布式信任）；关键判断——签名动作必须发生在 CLI `resume` 边界之外、编排器进程之外（复用现有 `--approved-by` 已经建立的"人工在终端敲入即信任锚点"边界，而非在 orchestrator 内部完成签名）；协议 V3 增量（`HumanApprovalReceipt` 加 `signature`/`signer_key_id`，纯增量、V2 中性默认值）；`assess_promotion` 新增三个 `APPROVAL_` 前缀 reason_code；编排器灌注闭环复用 H 已在 §-2.0 定义好的字段语义，仅需实现+对抗测试。
+  - 四项显式标注留待人工裁决、本文件不代为决定：签名方案（非对称 vs HMAC，及其新依赖）、REJECTED 是否经 assess（H 已交回未决）、两人团队密钥运维安排。
+- 团队自主部分：无——本会话未获得任何裁决授权，全部四项裁决点原样转交，未替团队做选择。
+- 验证（真实运行）：见上"现状核实"；未建 Task Envelope（沿用 GH-31/PR #33 先例：小范围、纯文档、零代码路径改动），直接 `py -3.9 -m tools.dev_gate`（结果见本 PR）。
+- 已知限制：签名方案未决，因此设计文档未给出可执行的 `cryptography`/`PyNaCl` 具体 API 调用；`trusted_approvers_v1.json` 的 schema 细节留待方案裁决后随实现一并定稿。
+- 人工审核：`PENDING_HUMAN_REVIEW`
+
+## AI-20260909-001
+
+- 日期：2026-09-09
+- 任务名称：PR #34 复审整改——闭合 V3 信任模型与精确签名流程（设计提案）
+- AI 工具/模型：Codex / GPT-6
+- 参与标签：DEBUG / ADVISE / DOCUMENT
+- 依据：本次用户贴文的 #34 P1–P5；Issue #5；源码基线 9876e23d45cd7bf661bbd4047c6d8a1c9b912d99。
+- 同步：按用户 2026-09-09 明确指令 rebase 到 #50 合并后的 master `4d5a8f45ff40e0b3d0a0a7562cd45c7691c253b5`，复验后 commit/push。设计正文无冲突；仅调和旧台账追加，完整保留 master 的 81 条与本 PR 两条记录。
+- 产出：修订 docs/superpowers/specs/2026-09-04-edd001-sandbox-v3-trust-anchor-design.md，明确受保护 TCB/host trust root、Ed25519、身份/角色/撤销与轮换、CLI exact signed fields、受保护快照 fresh verification、能力台账来源、拒绝与 V1/V2 fail-closed 边界。
+- Impact Analysis：直接修改规格与本条记录（2 文件）；潜在影响未来 CLI/state/trust/policy 实现；不修改 runtime、测试、锁文件、硬件或原始 Evidence。设计风险 HIGH，运行时代码变更为零。
+- Change Budget：expected_files=2；expected_modules=[docs]；cross_module=false；contract_change=false（仅提案）；evidence_semantics_change=false。
+- 验证：同步 4d5a8f4 后 dev_gate 5/5 PASS（主仓 Python 3.9 全量 474/474、Sandbox 冻结依赖 283，保留 1 skip、1 expectedFailure）；使用仓库外任务专用 TEMP/TMP。提交后的回执与真实 diff 随 Review Bundle 交付；不得用现有回归通过声称新签名或 host 隔离已实现。
+- 未执行：新密码学机制、host ACL、密钥托管、真实 EDD-001 promotion；设计获审后另行实现。
+- 第三方：未引入运行依赖/复制第三方源码；算法接口核对参考 cryptography 官方 Ed25519 文档，拟定依赖在实现阶段登记并锁定。
+- 人工审核：`PENDING_HUMAN_REVIEW`
