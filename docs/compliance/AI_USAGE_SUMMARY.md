@@ -51,7 +51,7 @@
 | WU-29 | 2026-09-08 / 09-09 | GH-49 AI Usage 台账拆分治理与复审整改 | REFACTOR / DOCUMENT / DEBUG / GENERATE_CODE / GENERATE_TEST | Yenefa（授权）；Percy（CHANGES_REQUESTED review） | yes — PR #49 由 Yenefa merge | 4 |
 | WU-30 | 2026-09-04 / 09-09 | Sandbox V3 设计冻结与复审整改 | DOCUMENT / ADVISE | TO_VERIFY（AI-20260904-001 明记「本会话未获得任何裁决授权，全部四项裁决点原样转交」） | yes — PR #34 由 Yenefa merge | 2 |
 | WU-31 | 2026-09-09 | 贡献归因信息架构重构（Issue #54） | DOCUMENT / ADVISE | Yenefa（2026-09-09 会话批准本方案并给出裁决） | pending — 条目 PENDING_HUMAN_REVIEW；PR 待人工审核 | 1 |
-| WU-32 | 2026-09-09 | E5 用户试用招募记录入库（W2 TASK-A1） | DOCUMENT | Percy（招募联系、对象筛选与三人确认均由其本人完成） | pending — 条目 PENDING_HUMAN_REVIEW；A1 第三项完成条件未达成 | 1 |
+| WU-34 | 2026-09-09 | E5 用户试用招募记录入库（W2 TASK-A1） | DOCUMENT | Percy（招募联系、对象筛选与三人确认均由其本人完成） | pending — 条目 PENDING_HUMAN_REVIEW；A1 第三项完成条件未达成 | 1 |
 
 ## 明细
 
@@ -303,7 +303,7 @@
 - **Human final decision**：pending — 条目 PENDING_HUMAN_REVIEW；PR 待人工审核
 - **证据**：该条目「团队自主部分」：项目负责人 2026-09-09 会话批准本方案并给出裁决（Issue #54）。
 
-### WU-32 · 2026-09-09 — E5 用户试用招募记录入库（W2 TASK-A1）
+### WU-34 · 2026-09-09 — E5 用户试用招募记录入库（W2 TASK-A1）
 
 - **Records (1)**：`AI-20260909-PER-E93BEF7F1FF78F5D64FC89E1657FFA20`
 - **AI role**：DOCUMENT
