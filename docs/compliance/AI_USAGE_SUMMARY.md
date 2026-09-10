@@ -9,7 +9,7 @@
 >
 > 三层结构：**本文件（work units，默认浏览入口）** → [`AI_USAGE_LOG.md`](AI_USAGE_LOG.md)（逐条索引，脚本生成，禁手改） → `docs/compliance/ai-usage/<ID>.md`（逐条真源）。
 >
-> - 覆盖核验：本文件引用 89 条记录（88 条历史 + 本批自身 1 条），与 `AI_USAGE_LOG.md` 当前 89 条**双向一致**（无遗漏、无重复、无虚构 ID）。
+> - 覆盖核验：本文件引用 90 条记录（89 条历史 + 本批自身 1 条），与 `AI_USAGE_LOG.md` 当前 90 条**双向一致**（无遗漏、无重复、无虚构 ID）。
 > - 本文件只做聚合与引用，**不改写任何条目正文**；条目正文的修订请直接改 `ai-usage/<ID>.md` 并重建索引。
 > - **`Human owner` 只在该工作单元的记录中明确出现时才具名**；未具名一律写 `TO_VERIFY`，不默认归属给任何人。
 > - `Human final decision`：`yes` = 有批准 / merge / 裁决记录；`pending` = 条目仍为 `PENDING_HUMAN_REVIEW` 且无 merge 记录；`TO_VERIFY` = 记录未具名。
@@ -51,6 +51,7 @@
 | WU-29 | 2026-09-08 / 09-09 | GH-49 AI Usage 台账拆分治理与复审整改 | REFACTOR / DOCUMENT / DEBUG / GENERATE_CODE / GENERATE_TEST | Yenefa（授权）；Percy（CHANGES_REQUESTED review） | yes — PR #49 由 Yenefa merge | 4 |
 | WU-30 | 2026-09-04 / 09-09 | Sandbox V3 设计冻结与复审整改 | DOCUMENT / ADVISE | TO_VERIFY（AI-20260904-001 明记「本会话未获得任何裁决授权，全部四项裁决点原样转交」） | yes — PR #34 由 Yenefa merge | 2 |
 | WU-31 | 2026-09-09 | 贡献归因信息架构重构（Issue #54） | DOCUMENT / ADVISE | Yenefa（2026-09-09 会话批准本方案并给出裁决） | pending — 条目 PENDING_HUMAN_REVIEW；PR 待人工审核 | 1 |
+| WU-32 | 2026-09-09 | W1 范围边界入库（#37 残值提取 + 角色纪律重写） | DOCUMENT / REFACTOR | Percy（提取范围与 #37 关闭裁定由其人工决定） | yes — PR #53 由 Yenefa merge（合并时 REQUEST_CHANGES 的整改项尚未落地，见明细） | 1 |
 
 ## 明细
 
@@ -301,6 +302,19 @@
 - **Human owner**：Yenefa（2026-09-09 会话批准本方案并给出裁决）
 - **Human final decision**：pending — 条目 PENDING_HUMAN_REVIEW；PR 待人工审核
 - **证据**：该条目「团队自主部分」：项目负责人 2026-09-09 会话批准本方案并给出裁决（Issue #54）。
+
+### WU-32 · 2026-09-09 — W1 范围边界入库（#37 残值提取 + 角色纪律重写）
+
+- **Records (1)**：`AI-20260909-PER-001`
+- **AI role**：DOCUMENT / REFACTOR
+- **Human owner**：Percy（该条目「团队自主部分」：提取范围与关闭裁定由 Percy 人工决定；Agent 未自行判断哪些内容该丢弃）
+- **Human final decision**：yes — PR #53 由 Yenefa merge
+- **证据**：`AI-20260909-PER-001`「团队自主部分」；PR #53 merge commit `63bc7e3`。
+- **待整改（合并时未落地）**：PR #53 的 REQUEST_CHANGES 提出五项，合并时均未整改，其中三项为内容问题——
+  M1-2（`SCOPE_BOUNDARY_W1.md` §0 把「六态判定语义」误记为被 A/B 两维记分取代）、
+  M1-3（本条 ID 为序号格式，不符 ADR-012 新发规则，按「只读兼容、不追溯改号」保留）、
+  M1-5（`W1_CARD_Percy_20260907.md:9` 与 `W1_TASKS_20260907.md:14` 两处旧角色规则未同步）。
+  M1-4（台账未闭环）致 master 的 `ai_usage_ledger` 检查失败、CI 于 2026-09-09T14:38Z 转红。
 
 ---
 
