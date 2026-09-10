@@ -9,7 +9,7 @@
 >
 > 三层结构：**本文件（work units，默认浏览入口）** → [`AI_USAGE_LOG.md`](AI_USAGE_LOG.md)（逐条索引，脚本生成，禁手改） → `docs/compliance/ai-usage/<ID>.md`（逐条真源）。
 >
-> - 覆盖核验：本文件引用 91 条记录（90 条历史 + 本批自身 1 条），与 `AI_USAGE_LOG.md` 当前 91 条**双向一致**（无遗漏、无重复、无虚构 ID）。
+> - 覆盖核验：本文件引用 92 条记录（91 条历史 + 本批自身 1 条），与 `AI_USAGE_LOG.md` 当前 92 条**双向一致**（无遗漏、无重复、无虚构 ID）。
 > - 本文件只做聚合与引用，**不改写任何条目正文**；条目正文的修订请直接改 `ai-usage/<ID>.md` 并重建索引。
 > - **`Human owner` 只在该工作单元的记录中明确出现时才具名**；未具名一律写 `TO_VERIFY`，不默认归属给任何人。
 > - `Human final decision`：`yes` = 有批准 / merge / 裁决记录；`pending` = 条目仍为 `PENDING_HUMAN_REVIEW` 且无 merge 记录；`TO_VERIFY` = 记录未具名。
@@ -53,6 +53,7 @@
 | WU-31 | 2026-09-09 | 贡献归因信息架构重构（Issue #54） | DOCUMENT / ADVISE | Yenefa（2026-09-09 会话批准本方案并给出裁决） | pending — 条目 PENDING_HUMAN_REVIEW；PR 待人工审核 | 1 |
 | WU-32 | 2026-09-09 | W1 范围边界入库（#37 残值提取 + 角色纪律重写） | DOCUMENT / REFACTOR | Percy（提取范围与 #37 关闭裁定由其人工决定） | yes — PR #53 由 Yenefa merge（合并时 REQUEST_CHANGES 的整改项尚未落地，见明细） | 1 |
 | WU-33 | 2026-09-10 | 修复 master 红灯 + #53 遗留整改（M1-2 / M1-5） | DEBUG / DOCUMENT | Percy（「先修 master」优先级由其决定） | pending — 条目 PENDING_HUMAN_REVIEW | 1 |
+| WU-35 | 2026-09-10 | W2 TASK-B6 —— 再分发 / 隐私 / 证据三条发布边界 | RESEARCH / DOCUMENT | Percy（按 r3 任务卡指派并执行） | pending — 条目 PENDING_HUMAN_REVIEW；B-1/B-2/B-3 待 owner 裁定 | 1 |
 
 ## 明细
 
@@ -324,6 +325,14 @@
 - **Human owner**：Percy（2026-09-10 指令「先修 master」）
 - **Human final decision**：pending — 条目 `PENDING_HUMAN_REVIEW`
 - **证据**：该条目「起因」节实测数据——`check` 报 index out of sync、`dev_gate` overall fail、master CI 于 2026-09-09T14:38:07Z 转红；「未处理项」节逐条声明 M1-3 按 ADR-012 保留、M2 留待人工裁决。
+
+### WU-35 · 2026-09-10 — W2 TASK-B6 发布边界（再分发 / 隐私 / 证据）
+
+- **Records (1)**：`AI-20260910-PER-AFCEDEBF75ADD3D18C37E52BCB552A37`
+- **AI role**：RESEARCH / DOCUMENT
+- **Human owner**：Percy（W2 r3 §B6 指派其负责 redistribution / privacy / evidence boundary）
+- **Human final decision**：pending — 条目 `PENDING_HUMAN_REVIEW`；B-1 / B-2 / B-3 三项阻断项待 owner 裁定
+- **证据**：该条目「主要发现」节——RES-007 登记 `是否随 AEDL 再分发：NO`，而 `git ls-files` 实测 8 份第三方原件 8/8 已跟踪、4628 KB；「边界纪律」节声明本文件不改写任何登记、不裁定 LICENSE / secrets / public timing（属 Yenefa）。
 
 ---
 
