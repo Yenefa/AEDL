@@ -9,7 +9,7 @@
 >
 > 三层结构：**本文件（work units，默认浏览入口）** → [`AI_USAGE_LOG.md`](AI_USAGE_LOG.md)（逐条索引，脚本生成，禁手改） → `docs/compliance/ai-usage/<ID>.md`（逐条真源）。
 >
-> - 覆盖核验：本文件引用 92 条记录（91 条历史 + 本批自身 1 条），与 `AI_USAGE_LOG.md` 当前 92 条**双向一致**（无遗漏、无重复、无虚构 ID）。
+> - 覆盖核验：本文件引用 93 条记录（92 条历史 + 本批自身 1 条），与 `AI_USAGE_LOG.md` 当前 93 条**双向一致**（无遗漏、无重复、无虚构 ID）。
 > - 本文件只做聚合与引用，**不改写任何条目正文**；条目正文的修订请直接改 `ai-usage/<ID>.md` 并重建索引。
 > - **`Human owner` 只在该工作单元的记录中明确出现时才具名**；未具名一律写 `TO_VERIFY`，不默认归属给任何人。
 > - `Human final decision`：`yes` = 有批准 / merge / 裁决记录；`pending` = 条目仍为 `PENDING_HUMAN_REVIEW` 且无 merge 记录；`TO_VERIFY` = 记录未具名。
@@ -54,6 +54,7 @@
 | WU-32 | 2026-09-09 | W1 范围边界入库（#37 残值提取 + 角色纪律重写） | DOCUMENT / REFACTOR | Percy（提取范围与 #37 关闭裁定由其人工决定） | yes — PR #53 由 Yenefa merge（合并时 REQUEST_CHANGES 的整改项尚未落地，见明细） | 1 |
 | WU-33 | 2026-09-10 | 修复 master 红灯 + #53 遗留整改（M1-2 / M1-5） | DEBUG / DOCUMENT | Percy（「先修 master」优先级由其决定） | pending — 条目 PENDING_HUMAN_REVIEW | 1 |
 | WU-36 | 2026-09-11 | GH-56 r19/r20 修正版审计与提交 + PR #60 复核取证 | RESEARCH / REVIEW / DOCUMENT | Yenefa（授权提交 GH-56 变更集；PR #60 复核结论由其判定） | pending — 条目 PENDING_HUMAN_REVIEW；PR #61 待人工评审 | 1 |
+| WU-39 | 2026-09-11 | E5 exploratory 缺陷板 01（CH340C，DC-01 类） | GENERATE_CODE / GENERATE_TEST / DOCUMENT | Percy（路线 B 与制作指令由其决定；缺陷类型由 Agent 选定、待其复核） | pending — 条目 PENDING_HUMAN_REVIEW；缺陷类型选定待 Percy 复核 | 1 |
 
 ## 明细
 
@@ -334,6 +335,14 @@
 - **Human final decision**：pending — AI 条目 `PENDING_HUMAN_REVIEW`；PR #61 待人工评审；PR #60 已由 Owner 判定 `CHANGES_REQUESTED`
 - **证据**：PR #61（commit `e641b5eb`，CI 双绿）；PR #60 review（`CHANGES_REQUESTED`）；r20 归档全链哈希独立复核；真实冻结包 CLI 实测 exit 2 ×2
 - **边界**：未接触 Percy private oracle；复核仅使用公开仓库内容与公开冻结包
+
+### WU-39 · 2026-09-11 — E5 exploratory 缺陷板 01（W2 TASK-C1 准备）
+
+- **Records (1)**：`AI-20260911-PER-0F456C924220F66B5F3B26E9755B18AB`
+- **AI role**：GENERATE_CODE / GENERATE_TEST / DOCUMENT
+- **Human owner**：Percy（2026-09-11 决定 E5 走路线 B，并指令「开始画 exploratory 的缺陷板」）
+- **Human final decision**：pending — 条目 `PENDING_HUMAN_REVIEW`；缺陷类型（DC-01）由 Agent 选定并陈述理由、Percy 未提异议，最终以其复核为准
+- **证据**：该条目「验证」节——源文件 diff 恰好 2 行、ERC 两版 0 违规 0 警告（KiCad 10.0.5）、网表 14/14 断言通过；「隔离与数据保护」节——participant / facilitator 物理分隔，不得用作 C2 板或 Y4 输入。
 
 ---
 

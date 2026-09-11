@@ -38,3 +38,6 @@ docs/compliance/AEDL_开发记录与AI使用规范_v1.0.md whitespace=-blank-at-
 # silently rewrite LF -> CRLF at checkout).
 tests/fixtures/repair_pr1/** -text
 tests/fixtures/repair_pr1/**/* -text
+
+# E5 试验用板：sha256 写入 ANSWER_KEY 作为溯源，禁止换行转换，否则 autocrlf=true 的检出会使哈希失配。
+notes/e5-user-trial/boards/** -text

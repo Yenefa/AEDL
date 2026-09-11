@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 92 条。完整正文在各自条目文件中；本索引只做导航。
+共 93 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -129,3 +129,4 @@
 ## 2026-09-11
 
 - [`AI-20260911-OPENCODE-E1C979A5B030BE12E7E3E174226C2BE7`](ai-usage/AI-20260911-OPENCODE-E1C979A5B030BE12E7E3E174226C2BE7.md) — GH-56 r19/r20 修正版审计与提交执行 + PR #60（A2-L）复核取证
+- [`AI-20260911-PER-0F456C924220F66B5F3B26E9755B18AB`](ai-usage/AI-20260911-PER-0F456C924220F66B5F3B26E9755B18AB.md) — E5 exploratory 缺陷板 01 入库（CH340C USB 转串口，DC-01 类缺陷）；三重独立验证通过
