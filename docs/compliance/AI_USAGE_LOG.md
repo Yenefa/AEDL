@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 91 条。完整正文在各自条目文件中；本索引只做导航。
+共 92 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -126,3 +126,4 @@
 ## 2026-09-10
 
 - [`AI-20260910-LIO-4CADC9CD6CC1E745477A23F629A1AAD5`](ai-usage/AI-20260910-LIO-4CADC9CD6CC1E745477A23F629A1AAD5.md) — A2-L Y4 实验 D 组固定规则基线 repair_baseline 及测试
+- [`AI-20260910-PER-3A3AA8B393308B4AA361B83FDA17CEBF`](ai-usage/AI-20260910-PER-3A3AA8B393308B4AA361B83FDA17CEBF.md) — 修复 master 红灯（台账索引未闭环）+ 落实 PR #53 REQUEST_CHANGES 的 M1-2 / M1-5 整改
