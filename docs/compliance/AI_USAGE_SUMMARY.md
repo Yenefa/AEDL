@@ -53,7 +53,7 @@
 | WU-31 | 2026-09-09 | 贡献归因信息架构重构（Issue #54） | DOCUMENT / ADVISE | Yenefa（2026-09-09 会话批准本方案并给出裁决） | pending — 条目 PENDING_HUMAN_REVIEW；PR 待人工审核 | 1 |
 | WU-32 | 2026-09-09 | W1 范围边界入库（#37 残值提取 + 角色纪律重写） | DOCUMENT / REFACTOR | Percy（提取范围与 #37 关闭裁定由其人工决定） | yes — PR #53 由 Yenefa merge（合并时 REQUEST_CHANGES 的整改项尚未落地，见明细） | 1 |
 | WU-33 | 2026-09-10 | 修复 master 红灯 + #53 遗留整改（M1-2 / M1-5） | DEBUG / DOCUMENT | Percy（「先修 master」优先级由其决定） | pending — 条目 PENDING_HUMAN_REVIEW | 1 |
-| WU-34 | 2026-09-09 | E5 用户试用招募记录入库（W2 TASK-A1） | DOCUMENT | Percy（招募联系、对象筛选与三人确认均由其本人完成） | pending — 条目 PENDING_HUMAN_REVIEW；A1 第三项完成条件未达成 | 1 |
+| WU-37 | 2026-09-09 | E5 用户试用招募记录入库（W2 TASK-A1） | DOCUMENT | Percy（招募联系、对象筛选与三人确认均由其本人完成） | pending — 条目 PENDING_HUMAN_REVIEW；A1 第三项完成条件未达成 | 1 |
 
 ## 明细
 
@@ -326,7 +326,7 @@
 - **Human final decision**：pending — 条目 `PENDING_HUMAN_REVIEW`
 - **证据**：该条目「起因」节实测数据——`check` 报 index out of sync、`dev_gate` overall fail、master CI 于 2026-09-09T14:38:07Z 转红；「未处理项」节逐条声明 M1-3 按 ADR-012 保留、M2 留待人工裁决。
 
-### WU-34 · 2026-09-09 — E5 用户试用招募记录入库（W2 TASK-A1）
+### WU-37 · 2026-09-09 — E5 用户试用招募记录入库（W2 TASK-A1）
 
 - **Records (1)**：`AI-20260909-PER-E93BEF7F1FF78F5D64FC89E1657FFA20`
 - **AI role**：DOCUMENT
