@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 91 条。完整正文在各自条目文件中；本索引只做导航。
+共 92 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -126,3 +126,6 @@
 ## 2026-09-10
 
 - [`AI-20260910-PER-3A3AA8B393308B4AA361B83FDA17CEBF`](ai-usage/AI-20260910-PER-3A3AA8B393308B4AA361B83FDA17CEBF.md) — 修复 master 红灯（台账索引未闭环）+ 落实 PR #53 REQUEST_CHANGES 的 M1-2 / M1-5 整改
+## 2026-09-11
+
+- [`AI-20260911-PER-BA94BF6FC9D43C7427A6BCDECC297648`](ai-usage/AI-20260911-PER-BA94BF6FC9D43C7427A6BCDECC297648.md) — W2 A4 / TASK-J1 —— Percy 侧交叉复核完成（八项冻结范围零越界）；止损决策因依据链未闭合未能作出
