@@ -325,6 +325,15 @@
 - **Human final decision**：pending — 条目 `PENDING_HUMAN_REVIEW`
 - **证据**：该条目「起因」节实测数据——`check` 报 index out of sync、`dev_gate` overall fail、master CI 于 2026-09-09T14:38:07Z 转红；「未处理项」节逐条声明 M1-3 按 ADR-012 保留、M2 留待人工裁决。
 
+### WU-36 · 2026-09-11 — GH-56 r19/r20 修正版审计与提交 + PR #60 复核取证
+
+- **Records (1)**：`AI-20260911-OPENCODE-E1C979A5B030BE12E7E3E174226C2BE7`
+- **AI role**：RESEARCH / REVIEW / DOCUMENT
+- **Human owner**：Yenefa（授权提交 GH-56 变更集；PR #60 复核分析结论归 Owner）
+- **Human final decision**：pending — AI 条目 `PENDING_HUMAN_REVIEW`；PR #61 待人工评审；PR #60 已由 Owner 判定 `CHANGES_REQUESTED`
+- **证据**：PR #61（commit `e641b5eb`，CI 双绿）；PR #60 review（`CHANGES_REQUESTED`）；r20 归档全链哈希独立复核；真实冻结包 CLI 实测 exit 2 ×2
+- **边界**：未接触 Percy private oracle；复核仅使用公开仓库内容与公开冻结包
+
 ---
 
 ## 维护规则
