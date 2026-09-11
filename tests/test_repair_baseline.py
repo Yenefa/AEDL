@@ -1,15 +1,17 @@
-"""AEDL Y4 arm-D baseline tests（v0.4，对齐冻结 C1 接口）。
+"""AEDL Y4 arm-D baseline tests（v0.5，真实 y4-public.v3 包 → 冻结 Proposal）。
 
-与 v0.3 的本质区别（回应 PR #60 review）：
-- 输入一律用真实 C1 make_public_context 构造 PublicContext（同时验证
-  public_facts 草案不触发公共投影 leak guard）；
-- 每一份输出（PATCH 与 REFUSE 都算）都喂给真实 C1 parse_proposal 验证，
-  证明 D 产物能过冻结合同，而不是"自己发明的协议自己绿"；
-- 不再读取 schematic_semantics findings 报告；观测直接来自公开夹具，
-  修复目标只来自 public_facts 草案。
+与 v0.4 的本质区别（回应 PR #60 第二轮 review）：
+- 输入一律是完整的 y4-public.v3 形状包：public_context 经真实 C1
+  make_public_context 构造（含 leak guard），facts 是**数组**，观测是
+  kicad_netlist_current.v1（components/nets/nodes），坐标只从
+  placement_grants 取，max_ops 从 context.limits 读；
+- 每一份输出（PATCH 与 REFUSE 都算）都喂真实 C1 parse_proposal 验证；
+- 数据全部为**中性合成**（X1/X9、NA/NB 等通用名），不复刻五个计分案例，
+  也不写死任何锚点→网名/UUID/坐标的案例级映射；
+- 真实 runner 集成测试（freeze → adapter → collect_result）：y4 runner 在
+  PR #61 分支，合入后 import 成功即自动启用（此前显式 skip，原因注明）。
 """
 
-import copy
 import json
 import subprocess
 import sys
@@ -18,457 +20,440 @@ import unittest
 from pathlib import Path
 
 from tools.repair_baseline import (
+    TOOL_VERSION,
     BaselineInputError,
     build_proposal,
-    load_context,
+    load_package,
+    propose_bytes,
     render,
 )
-from tools.repair_pipeline import parse_proposal
+from tools.repair_pipeline import (
+    canonical_json_bytes,
+    hash_bytes,
+    make_public_context,
+    parse_proposal,
+    public_context_digest,
+)
+
+# y4 runner（PR #61，分支 feat/gh56-y4-dry-harness）合入前 skip，合入后自动启用。
+try:
+    from tools.y4_dry_runner import (  # type: ignore
+        EXPERIMENT_VERSION as RUNNER_EXPERIMENT_VERSION,
+        build_package as runner_build_package,
+        run_adapter as runner_run_adapter,
+    )
+
+    RUNNER_AVAILABLE = True
+except ImportError:
+    RUNNER_AVAILABLE = False
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURES = ROOT / "tests" / "fixtures" / "schematic_semantics"
 SCRIPT = ROOT / "tools" / "repair_baseline.py"
 
 SHA_A = "a" * 64
+SHA_B = "b" * 64
 
-
-def load_json(path: Path):
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def inject_fault(base, fault):
-    result = copy.deepcopy(base)
-    for mutation in fault["mutations"]:
-        cursor = result
-        for part in mutation["path"][:-1]:
-            cursor = cursor[part]
-        leaf = mutation["path"][-1]
-        if mutation["op"] == "set":
-            cursor[leaf] = mutation["value"]
-        elif mutation["op"] == "delete":
-            del cursor[leaf]
-        else:
-            raise AssertionError(f"unknown fixture mutation {mutation['op']}")
-    return result
-
-
-def fault(name):
-    return load_json(FIXTURES / name)
-
-
-GOOD = load_json(FIXTURES / "good_observations.json")
-
+BUDGET = {
+    "max_ops": 8,
+    "max_request_bytes": 64 * 1024,
+    "max_output_tokens": 200000,
+    "timeout_ms": 600000,
+}
 HOST_CONTEXT = {
-    "context_id": "ctx-y4-test-1",
+    "context_id": "ctx-y4-neutral-1",
     "target": "candidate/board.kicad_sch",
     "base_source_sha256": SHA_A,
-    "limits": {"max_ops": 8},
+    "limits": dict(BUDGET),
 }
+GRANTS = [
+    {"x_mil": 1000, "y_mil": 2000},
+    {"x_mil": 4000, "y_mil": 5000},
+    {"x_mil": 7000, "y_mil": 8000},
+]
 
 
-def pin_target(fid, anchor, net):
-    return {"id": fid, "anchor": anchor, "net": net}
+def netlist_observation(nets, components):
+    return {
+        "observation_type": "kicad_netlist_current.v1",
+        "components": components,
+        "nets": nets,
+        "coverage": {
+            "view": "schematic_netlist",
+            "component_count": len(components),
+            "net_count": len(nets),
+        },
+    }
 
 
-def component_target(fid, designator, value, pin_nets, x_mil=1000, y_mil=2000):
+def comp(ref, value="1k"):
+    return {"ref": ref, "value": value, "footprint": "F", "lib": "Device:R", "part": "R"}
+
+
+def net(name, code, nodes):
+    return {"code": code, "name": name, "nodes": [{"ref": ref, "pin": pin} for ref, pin in nodes]}
+
+
+# 中性合成观测：X1.1 在 NA 上，X2.1 在 NB 上，其余引脚悬空。
+OBSERVATION = netlist_observation(
+    [net("NA", "1", [("X1", "1")]), net("NB", "2", [("X2", "1")])],
+    [comp("X1"), comp("X2")],
+)
+
+
+def connect(fid, anchor, net_name):
+    return {"id": fid, "kind": "connect_pin", "anchor": anchor, "net": net_name}
+
+
+def deletion(fid, uuid, anchor):
+    return {"id": fid, "kind": "delete_object", "uuid": uuid, "anchor": anchor}
+
+
+def place(fid, designator, value="10k", pin_nets=None):
     return {
         "id": fid,
+        "kind": "place_component",
         "designator": designator,
         "lib_id": "Device:R",
         "value": value,
         "footprint": "Resistor_SMD:R_0603_1608Metric",
-        "pin_nets": pin_nets,
-        "placement": {"x_mil": x_mil, "y_mil": y_mil},
+        "pin_nets": pin_nets or {"1": "NA", "2": "NB"},
     }
 
 
-def deletion_target(fid, uuid, anchor):
-    return {"id": fid, "uuid": uuid, "anchor": anchor}
-
-
-def complete_facts(**overrides):
-    facts = {
-        "facts_schema": "aedl.y4-public-facts.draft-0.1",
-        "facts_status": "complete",
-        "facts_gaps": [],
-        "pin_targets": [],
-        "component_targets": [],
-        "deletion_targets": [],
-        "protected_anchors": ["U2.3", "U2.6"],
+def make_package(observation_data=OBSERVATION, facts=(), grants=None, limits=None):
+    """真实 C1 context + y4-public.v3 封闭包形状（中性合成数据）。"""
+    host = dict(HOST_CONTEXT)
+    if limits is not None:
+        host["limits"] = dict(limits)
+    # 非法类型原样透传（类型不符的 REFUSE 语义正是要测 D 自身）；
+    # 只有 list/tuple 才做列表化。
+    facts_arg = list(facts) if isinstance(facts, (list, tuple)) else facts
+    context = make_public_context(host, observation_data, facts_arg)
+    return {
+        "schema_version": "y4-public.v3",
+        "experiment_version": "test-experiment-neutral-1",
+        "case_public_id": "Y4-001",
+        "source_utf8": "(kicad_sch (version 20230121))",
+        "observation_binding": {
+            "source_sha256": SHA_A,
+            "observation_sha256": SHA_B,
+            "producer_id": "test-producer-v1",
+        },
+        "public_context": context,
+        "public_context_sha256": public_context_digest(context),
+        "budget": dict(host["limits"]),
+        "instruction": "Return exactly one JSON Proposal.",
+        "exposure_fields": ["session_id", "fresh_session"],
+        "placement_grants": GRANTS if grants is None else grants,
     }
-    facts.update(overrides)
-    return facts
-
-
-def make_context(observations, facts):
-    """经真实 C1 构造 PublicContext（leak guard 内置）。"""
-    from tools.repair_pipeline import make_public_context
-
-    return make_public_context(HOST_CONTEXT, observations, facts)
-
-
-def to_bytes(proposal):
-    return json.dumps(proposal, ensure_ascii=False, sort_keys=True).encode("utf-8")
 
 
 def must_parse(proposal):
-    """断言 D 产物能过真实 C1 parse_proposal，并原样返回 dict 供继续断言。"""
-    parse_proposal(to_bytes(proposal))
+    """D 的每份产物（PATCH/REFUSE）都必须过真实 C1 parse_proposal。"""
+    parse_proposal(render(proposal))
     return proposal
 
 
-class BaselineTests(unittest.TestCase):
-    maxDiff = None
+def run_baseline(package):
+    return must_parse(build_proposal(package))
 
-    def header_matches_context(self, proposal, context):
+
+class HeaderMixin:
+    def assert_header_bound(self, proposal, package):
+        context = package["public_context"]
         for key in ("schema_version", "context_id", "target", "base_source_sha256"):
             self.assertEqual(proposal[key], context[key], key)
 
-    # ------------------------------------------------------------------
-    # 五个计分案例型（修复路径）
-    # ------------------------------------------------------------------
 
-    def test_case_reversed_usb_needs_deletion_then_relabel(self):
-        observations = inject_fault(GOOD, fault("fault_reversed_usb.json"))
-        facts = complete_facts(
-            pin_targets=[
-                pin_target("fact-pin-14", "U1.14", "USB_DP"),
-                pin_target("fact-pin-13", "U1.13", "USB_DM"),
-            ],
-            deletion_targets=[
-                deletion_target("fact-del-13", "wire-u1-13", "U1.13"),
-                deletion_target("fact-del-14", "wire-u1-14", "U1.14"),
-            ],
-        )
-        context = make_context(observations, facts)
-        proposal = must_parse(build_proposal(context))
-        self.header_matches_context(proposal, context)
+class PatchPathTests(HeaderMixin, unittest.TestCase):
+    maxDiff = None
+
+    def test_floating_pin_gets_net_label(self):
+        package = make_package(facts=[connect("fct-conn-1", "X1.2", "NB")])
+        proposal = run_baseline(package)
         self.assertEqual(proposal["decision"], "PATCH")
-        ops = proposal["oplist"]["ops"]
         self.assertEqual(
-            ops,
+            proposal["oplist"]["ops"],
+            [{"op": "add_net_label", "name": "NB", "at": "X1.2"}],
+        )
+        self.assert_header_bound(proposal, package)
+        cited = {fid for entry in proposal["diagnosis"] for fid in entry["fact_ids"]}
+        self.assertEqual(cited, {"fct-conn-1"})
+
+    def test_retarget_deletes_then_relabels(self):
+        package = make_package(
+            facts=[
+                deletion("fct-del-1", "obj-uuid-1", "X1.1"),
+                connect("fct-conn-1", "X1.1", "NB"),
+            ]
+        )
+        proposal = run_baseline(package)
+        self.assertEqual(proposal["decision"], "PATCH")
+        self.assertEqual(
+            proposal["oplist"]["ops"],
             [
-                # 逐锚点（升序）：先删错标的 uuid，再补批准的网标
-                {"op": "delete_object", "uuid": "wire-u1-13"},
-                {"op": "add_net_label", "name": "USB_DM", "at": "U1.13"},
-                {"op": "delete_object", "uuid": "wire-u1-14"},
-                {"op": "add_net_label", "name": "USB_DP", "at": "U1.14"},
+                {"op": "delete_object", "uuid": "obj-uuid-1"},
+                {"op": "add_net_label", "name": "NB", "at": "X1.1"},
             ],
         )
         cited = {fid for entry in proposal["diagnosis"] for fid in entry["fact_ids"]}
-        self.assertEqual(cited, {"fact-pin-13", "fact-pin-14", "fact-del-13", "fact-del-14"})
+        self.assertEqual(cited, {"fct-del-1", "fct-conn-1"})
 
-    def test_case_floating_addr_gets_net_label(self):
-        observations = inject_fault(GOOD, fault("fault_floating_addr.json"))
-        facts = complete_facts(
-            pin_targets=[pin_target("fact-pin-gnd", "U2.2", "GND")],
-        )
-        context = make_context(observations, facts)
-        proposal = must_parse(build_proposal(context))
-        self.assertEqual(proposal["decision"], "PATCH")
-        self.assertEqual(
-            proposal["oplist"]["ops"],
-            [{"op": "add_net_label", "name": "GND", "at": "U2.2"}],
-        )
-
-    def test_case_missing_component_is_placed_with_pin_labels(self):
-        observations = inject_fault(GOOD, fault("fault_missing_gpio9_pullup.json"))
-        facts = complete_facts(
-            component_targets=[
-                component_target(
-                    "fact-comp-r9", "R9", "10k", {"1": "+3V3", "2": "BOOT"}
-                )
-            ],
-        )
-        context = make_context(observations, facts)
-        proposal = must_parse(build_proposal(context))
-        self.assertEqual(proposal["decision"], "PATCH")
-        self.assertEqual(
-            proposal["oplist"]["ops"],
-            [
-                {
-                    "op": "place_component",
-                    "lib_id": "Device:R",
-                    "designator": "R9",
-                    "x_mil": 1000,
-                    "y_mil": 2000,
-                    "value": "10k",
-                    "footprint": "Resistor_SMD:R_0603_1608Metric",
-                },
-                {"op": "add_net_label", "name": "+3V3", "at": "R9.1"},
-                {"op": "add_net_label", "name": "BOOT", "at": "R9.2"},
-            ],
-        )
-
-    def test_case_missing_en_cap_is_placed_with_pin_labels(self):
-        observations = inject_fault(GOOD, fault("fault_missing_en_cap.json"))
-        facts = complete_facts(
-            component_targets=[
-                component_target(
-                    "fact-comp-c5", "C5", "1uF", {"1": "EN", "2": "GND"}, x_mil=3000
-                )
-            ],
-        )
-        context = make_context(observations, facts)
-        proposal = must_parse(build_proposal(context))
+    def test_place_component_takes_grant_slots_in_order(self):
+        package = make_package(facts=[place("fct-place-1", "X9"), place("fct-place-2", "X8")])
+        proposal = run_baseline(package)
         self.assertEqual(proposal["decision"], "PATCH")
         ops = proposal["oplist"]["ops"]
         self.assertEqual(ops[0]["op"], "place_component")
-        self.assertEqual(ops[0]["designator"], "C5")
-        self.assertEqual(ops[0]["x_mil"], 3000)
+        self.assertEqual(ops[0]["designator"], "X9")
+        self.assertEqual(ops[0]["x_mil"], GRANTS[0]["x_mil"])
+        self.assertEqual(ops[0]["y_mil"], GRANTS[0]["y_mil"])
         self.assertEqual(
-            ops[1:],
+            ops[1:3],
             [
-                {"op": "add_net_label", "name": "EN", "at": "C5.1"},
-                {"op": "add_net_label", "name": "GND", "at": "C5.2"},
+                {"op": "add_net_label", "name": "NA", "at": "X9.1"},
+                {"op": "add_net_label", "name": "NB", "at": "X9.2"},
             ],
         )
-
-    def test_case_missing_series_resistor_style(self):
-        """案例 3 型：元件整体缺失（以 R7 为例构造删除型故障）。"""
-        mutations = []
-        for view in ("intent", "netlist", "pcb"):
-            mutations.append({"op": "delete", "path": ["views", view, "pins", "R7.1"]})
-            mutations.append({"op": "delete", "path": ["views", view, "pins", "R7.2"]})
-            mutations.append({"op": "delete", "path": ["views", view, "components", "R7"]})
-        observations = inject_fault(GOOD, {"mutations": mutations})
-        facts = complete_facts(
-            component_targets=[
-                component_target(
-                    "fact-comp-r7",
-                    "R7",
-                    "22R",
-                    {"1": "USB_DP_CONN", "2": "USB_DP"},
-                )
-            ],
+        self.assertEqual(ops[3]["designator"], "X8")
+        self.assertEqual(
+            (ops[3]["x_mil"], ops[3]["y_mil"]),
+            (GRANTS[1]["x_mil"], GRANTS[1]["y_mil"]),
         )
-        context = make_context(observations, facts)
-        proposal = must_parse(build_proposal(context))
-        self.assertEqual(proposal["decision"], "PATCH")
-        self.assertEqual(len(proposal["oplist"]["ops"]), 3)
-        self.assertEqual(proposal["oplist"]["ops"][0]["designator"], "R7")
-        self.assertEqual(proposal["oplist"]["ops"][0]["value"], "22R")
 
-    # ------------------------------------------------------------------
-    # 拒绝路径（fail-closed）
-    # ------------------------------------------------------------------
+    def test_max_ops_read_from_limits_not_hardcoded(self):
+        facts = [place("fct-place-1", "X9")]
+        over = run_baseline(make_package(facts=facts, limits={**BUDGET, "max_ops": 2}))
+        self.assertEqual(over["decision"], "REFUSE")
+        self.assertEqual(over["refusal"]["reason_code"], "OPERATION_LIMIT_EXCEEDED")
+        exact = run_baseline(make_package(facts=facts, limits={**BUDGET, "max_ops": 3}))
+        self.assertEqual(exact["decision"], "PATCH")
+        self.assertEqual(len(exact["oplist"]["ops"]), 3)
 
-    def test_insufficient_facts_status_refuses_like_governed_case(self):
-        observations = inject_fault(GOOD, fault("fault_reversed_usb.json"))
-        facts = complete_facts(
-            facts_status="insufficient",
-            facts_gaps=["gap-approved-values", "gap-uuid-bindings"],
-        )
-        context = make_context(observations, facts)
-        proposal = must_parse(build_proposal(context))
+
+class RefusePathTests(HeaderMixin, unittest.TestCase):
+    maxDiff = None
+
+    def assert_refuse(self, package, reason_code, missing=None):
+        proposal = run_baseline(package)
         self.assertEqual(proposal["decision"], "REFUSE")
         self.assertNotIn("oplist", proposal)
         refusal = proposal["refusal"]
-        self.assertEqual(refusal["reason_code"], "PUBLIC_INPUT_INSUFFICIENT")
-        self.assertEqual(
-            refusal["missing_fact_ids"],
-            ["gap-approved-values", "gap-uuid-bindings"],
-        )
+        self.assertEqual(refusal["reason_code"], reason_code)
+        if missing is not None:
+            self.assertEqual(refusal["missing_fact_ids"], missing)
         self.assertTrue(refusal["required_human_decision"])
+        return proposal
 
-    def test_missing_deletion_fact_blocks_retarget(self):
-        observations = inject_fault(GOOD, fault("fault_reversed_usb.json"))
-        facts = complete_facts(
-            pin_targets=[pin_target("fact-pin-14", "U1.14", "USB_DP")],
-        )
-        context = make_context(observations, facts)
-        proposal = must_parse(build_proposal(context))
-        self.assertEqual(proposal["decision"], "REFUSE")
-        self.assertEqual(
-            proposal["refusal"]["reason_code"], "PUBLIC_INPUT_INSUFFICIENT"
-        )
-        self.assertEqual(
-            proposal["refusal"]["missing_fact_ids"], ["deletion-U1-14"]
+    def test_empty_facts_array_refuses(self):
+        self.assert_refuse(
+            make_package(facts=[]),
+            "PUBLIC_INPUT_INSUFFICIENT",
+            ["public-facts"],
         )
 
-    def test_wrong_existing_component_value_is_not_expressible(self):
-        facts = complete_facts(
-            component_targets=[
-                component_target("fact-comp-r9", "R9", "47k", {"1": "+3V3", "2": "BOOT"})
-            ],
-        )
-        context = make_context(GOOD, facts)
-        proposal = must_parse(build_proposal(context))
-        self.assertEqual(proposal["decision"], "REFUSE")
-        self.assertEqual(
-            proposal["refusal"]["reason_code"], "NOT_EXPRESSION_IN_PUBLIC_OPS"
-        )
+    def test_non_array_facts_refuse_legally_not_exit_2(self):
+        """第二轮 review 实测的 exit 2 场景：类型不符也必须产出合法 REFUSE。"""
+        for bad_facts in ({"facts": []}, "none supplied", 17):
+            package = make_package(facts=bad_facts)
+            self.assert_refuse(package, "PUBLIC_INPUT_MALFORMED")
 
-    def test_protected_anchor_conflict_refuses(self):
-        facts = complete_facts(
-            pin_targets=[pin_target("fact-pin-prot", "U2.3", "GND")],
-        )
-        context = make_context(GOOD, facts)
-        proposal = must_parse(build_proposal(context))
-        self.assertEqual(proposal["decision"], "REFUSE")
-        self.assertEqual(proposal["refusal"]["reason_code"], "PUBLIC_INPUT_CONFLICT")
-
-    def test_cross_view_disagreement_refuses(self):
-        observations = copy.deepcopy(GOOD)
-        observations["views"]["pcb"]["pins"]["U1.14"]["net"] = "USB_DM"
-        facts = complete_facts(
-            pin_targets=[pin_target("fact-pin-14", "U1.14", "USB_DP")],
-        )
-        context = make_context(observations, facts)
-        proposal = must_parse(build_proposal(context))
-        self.assertEqual(proposal["decision"], "REFUSE")
-        self.assertEqual(proposal["refusal"]["reason_code"], "OBSERVATION_CONFLICT")
-
-    def test_already_satisfied_refuses_without_ops(self):
-        facts = complete_facts(
-            pin_targets=[pin_target("fact-pin-14", "U1.14", "USB_DP")],
-        )
-        context = make_context(GOOD, facts)
-        proposal = must_parse(build_proposal(context))
-        self.assertEqual(proposal["decision"], "REFUSE")
-        self.assertNotIn("oplist", proposal)
-        self.assertEqual(proposal["refusal"]["reason_code"], "ALREADY_SATISFIED")
-
-    def test_operation_limit_refuses(self):
-        comps = [
-            component_target(
-                f"fact-comp-{index}",
-                f"R{index}0",
-                "10k",
-                {"1": "A", "2": "B"},
-            )
-            for index in range(1, 6)
+    def test_uninterpretable_facts_refuse_with_ids(self):
+        facts = [
+            connect("fct-conn-1", "X1.2", "NB"),
+            {"id": "fct-odd-1", "kind": "annotate_value", "anchor": "X1.1", "value": "1k"},
+            "prose-garbage",
         ]
-        context = make_context(GOOD, complete_facts(component_targets=comps))
-        proposal = must_parse(build_proposal(context))
-        self.assertEqual(proposal["decision"], "REFUSE")
-        self.assertEqual(
-            proposal["refusal"]["reason_code"], "OPERATION_LIMIT_EXCEEDED"
+        self.assert_refuse(
+            make_package(facts=facts),
+            "UNINTERPRETABLE_FACTS",
+            ["fact-2", "fct-odd-1"],
         )
 
-    def test_missing_observation_anchor_refuses(self):
-        facts = complete_facts(
-            pin_targets=[pin_target("fact-pin-x", "J9.1", "SOME_NET")],
+    def test_malformed_fact_shape_refuses(self):
+        package = make_package(facts=[{"id": "fct-conn-1", "kind": "connect_pin", "anchor": "X1.2"}])
+        self.assert_refuse(package, "PUBLIC_INPUT_MALFORMED")
+
+    def test_unknown_anchor_component_refuses(self):
+        self.assert_refuse(
+            make_package(facts=[connect("fct-conn-1", "X9.1", "NB")]),
+            "PUBLIC_INPUT_INSUFFICIENT",
+            ["observation-X9-1"],
         )
-        context = make_context(GOOD, facts)
-        proposal = must_parse(build_proposal(context))
-        self.assertEqual(proposal["decision"], "REFUSE")
-        self.assertEqual(
-            proposal["refusal"]["reason_code"], "PUBLIC_INPUT_INSUFFICIENT"
+
+    def test_retarget_without_deletion_fact_refuses(self):
+        self.assert_refuse(
+            make_package(facts=[connect("fct-conn-1", "X1.1", "NB")]),
+            "PUBLIC_INPUT_INSUFFICIENT",
+            ["delete-X1-1"],
         )
-        self.assertEqual(proposal["refusal"]["missing_fact_ids"], ["observation-J9-1"])
 
-    def test_null_observation_refuses_insufficient(self):
-        context = make_context(None, complete_facts())
-        proposal = must_parse(build_proposal(context))
-        self.assertEqual(proposal["decision"], "REFUSE")
-        self.assertEqual(proposal["refusal"]["reason_code"], "ALREADY_SATISFIED")
-
-    def test_facts_schema_mismatch_refuses_malformed(self):
-        context = make_context(
-            GOOD, complete_facts(facts_schema="aedl.public-facts.draft-0.1")
+    def test_satisfied_pin_refuses_without_ops(self):
+        self.assert_refuse(
+            make_package(facts=[connect("fct-conn-1", "X1.1", "NA")]),
+            "ALREADY_SATISFIED",
+            [],
         )
-        proposal = must_parse(build_proposal(context))
-        self.assertEqual(proposal["decision"], "REFUSE")
-        self.assertEqual(proposal["refusal"]["reason_code"], "PUBLIC_INPUT_MALFORMED")
 
-    def test_unknown_facts_field_refuses_malformed(self):
-        # 带 golden 字样的键会先被 make_public_context 的 leak guard 拒绝，
-        # 因此这里绕开 C1 直接改写已产出的 context dict，只测 D 自身 fail-closed。
-        context = make_context(GOOD, complete_facts())
-        context["public_facts"] = {
-            **complete_facts(),
-            "golden_hint": {"U1.14": "USB_DP"},
-        }
-        proposal = build_proposal(context)
-        self.assertEqual(proposal["decision"], "REFUSE")
-        self.assertEqual(proposal["refusal"]["reason_code"], "PUBLIC_INPUT_MALFORMED")
-
-    # ------------------------------------------------------------------
-    # 输入层校验（退出码 2 路径）
-    # ------------------------------------------------------------------
-
-    def test_load_context_rejects_missing_field(self):
-        context = make_context(GOOD, complete_facts())
-        del context["base_source_sha256"]
-        with tempfile.TemporaryDirectory() as temp_dir:
-            path = Path(temp_dir) / "ctx.json"
-            path.write_text(json.dumps(context), encoding="utf-8")
-            with self.assertRaises(BaselineInputError):
-                load_context(path)
-
-    def test_load_context_rejects_bad_schema_version(self):
-        context = make_context(GOOD, complete_facts())
-        context["schema_version"] = 2
-        with tempfile.TemporaryDirectory() as temp_dir:
-            path = Path(temp_dir) / "ctx.json"
-            path.write_text(json.dumps(context), encoding="utf-8")
-            with self.assertRaises(BaselineInputError):
-                load_context(path)
-
-    def test_load_context_rejects_bom_and_duplicate_keys_and_floats(self):
-        good = make_context(GOOD, complete_facts())
-        with tempfile.TemporaryDirectory() as temp_dir:
-            bom_path = Path(temp_dir) / "bom.json"
-            bom_path.write_bytes(
-                b"\xef\xbb\xbf" + json.dumps(good).encode("utf-8")
-            )
-            with self.assertRaises(BaselineInputError):
-                load_context(bom_path)
-
-            dup_path = Path(temp_dir) / "dup.json"
-            dup_path.write_bytes(
-                b'{"schema_version": 1, "schema_version": 1}'
-            )
-            with self.assertRaises(BaselineInputError):
-                load_context(dup_path)
-
-            float_context = copy.deepcopy(good)
-            float_context["limits"] = {"ratio": 1.5}
-            float_path = Path(temp_dir) / "float.json"
-            float_path.write_text(json.dumps(float_context), encoding="utf-8")
-            with self.assertRaises(BaselineInputError):
-                load_context(float_path)
-
-    def test_load_context_missing_file(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            with self.assertRaises(BaselineInputError):
-                load_context(Path(temp_dir) / "missing.json")
-
-    # ------------------------------------------------------------------
-    # 确定性与 CLI
-    # ------------------------------------------------------------------
-
-    def test_deterministic_output(self):
-        observations = inject_fault(GOOD, fault("fault_reversed_usb.json"))
-        context = make_context(
-            observations,
-            complete_facts(
-                pin_targets=[pin_target("fact-pin-14", "U1.14", "USB_DP")],
-                deletion_targets=[deletion_target("fact-del-14", "wire-u1-14", "U1.14")],
+    def test_satisfied_pin_with_deletion_fact_conflicts(self):
+        self.assert_refuse(
+            make_package(
+                facts=[deletion("fct-del-1", "obj-uuid-1", "X1.1"), connect("fct-conn-1", "X1.1", "NA")]
             ),
+            "PUBLIC_INPUT_CONFLICT",
         )
-        self.assertEqual(render(build_proposal(context)), render(build_proposal(context)))
 
-    def test_cli_end_to_end(self):
-        observations = inject_fault(GOOD, fault("fault_floating_addr.json"))
-        context = make_context(
-            observations,
-            complete_facts(pin_targets=[pin_target("fact-pin-gnd", "U2.2", "GND")]),
+    def test_floating_pin_with_deletion_fact_conflicts(self):
+        self.assert_refuse(
+            make_package(
+                facts=[deletion("fct-del-1", "obj-uuid-1", "X1.2"), connect("fct-conn-1", "X1.2", "NB")]
+            ),
+            "PUBLIC_INPUT_CONFLICT",
         )
+
+    def test_orphan_deletion_refuses(self):
+        self.assert_refuse(
+            make_package(facts=[deletion("fct-del-1", "obj-uuid-1", "X1.1")]),
+            "PUBLIC_INPUT_INSUFFICIENT",
+            ["connect-X1-1"],
+        )
+
+    def test_duplicate_connect_anchor_conflicts(self):
+        self.assert_refuse(
+            make_package(
+                facts=[connect("fct-conn-1", "X1.2", "NB"), connect("fct-conn-2", "X1.2", "NA")]
+            ),
+            "PUBLIC_INPUT_CONFLICT",
+        )
+
+    def test_duplicate_place_designator_conflicts(self):
+        self.assert_refuse(
+            make_package(facts=[place("fct-place-1", "X9"), place("fct-place-2", "X9")]),
+            "PUBLIC_INPUT_CONFLICT",
+        )
+
+    def test_wrong_existing_value_not_expressible(self):
+        self.assert_refuse(
+            make_package(facts=[place("fct-place-1", "X1", value="47k")]),
+            "NOT_EXPRESSION_IN_PUBLIC_OPS",
+        )
+
+    def test_pin_in_two_nets_refuses(self):
+        conflicting = netlist_observation(
+            [
+                net("NA", "1", [("X1", "1")]),
+                net("NB", "2", [("X1", "1")]),
+            ],
+            [comp("X1")],
+        )
+        self.assert_refuse(
+            make_package(observation_data=conflicting, facts=[connect("fct-conn-1", "X1.1", "NA")]),
+            "OBSERVATION_CONFLICT",
+        )
+
+    def test_wrong_observation_type_refuses(self):
+        package = make_package(
+            observation_data={"observation_type": "three_view_draft.v1", "views": {}},
+            facts=[connect("fct-conn-1", "X1.2", "NB")],
+        )
+        self.assert_refuse(package, "PUBLIC_INPUT_MALFORMED")
+
+    def test_grants_exhausted_refuses(self):
+        package = make_package(
+            facts=[place("fct-place-1", "X9"), place("fct-place-2", "X8")],
+            grants=[GRANTS[0]],
+        )
+        self.assert_refuse(package, "PLACEMENT_CAPACITY_EXHAUSTED")
+
+    def test_invalid_grants_refuse_legally_not_exit_2(self):
+        for bad_grants in ([], [{"x_mil": 1}], [{"x_mil": 1, "y_mil": 2, "z": 3}], GRANTS + [GRANTS[0]]):
+            package = make_package(facts=[place("fct-place-1", "X9")], grants=bad_grants)
+            self.assert_refuse(package, "PUBLIC_INPUT_MALFORMED")
+
+
+class PackageLevelTests(unittest.TestCase):
+    """exit 2 仅保留给包文件级/包级结构损坏。"""
+
+    def write(self, temp_dir, name, raw):
+        path = Path(temp_dir) / name
+        path.write_bytes(raw if isinstance(raw, bytes) else raw.encode("utf-8"))
+        return path
+
+    def assert_invalid(self, raw):
         with tempfile.TemporaryDirectory() as temp_dir:
-            ctx_path = Path(temp_dir) / "context.json"
+            with self.assertRaises(BaselineInputError):
+                load_package(self.write(temp_dir, "pkg.json", raw))
+
+    def test_rejects_non_json_bom_and_duplicate_keys(self):
+        self.assert_invalid("{not json")
+        self.assert_invalid(b"\xef\xbb\xbf" + json.dumps(make_package()).encode("utf-8"))
+        self.assert_invalid(b'{"schema_version": "y4-public.v3", "schema_version": "y4-public.v3"}')
+
+    def test_rejects_wrong_or_missing_package_schema_version(self):
+        package = make_package()
+        package["schema_version"] = "y4-public.v2"
+        self.assert_invalid(json.dumps(package))
+        package["schema_version"] = 3
+        self.assert_invalid(json.dumps(package))
+
+    def test_rejects_missing_or_unknown_package_field(self):
+        package = make_package()
+        del package["placement_grants"]
+        self.assert_invalid(json.dumps(package))
+        package = make_package()
+        package["extra"] = 1
+        self.assert_invalid(json.dumps(package))
+
+    def test_rejects_bad_context_fields(self):
+        for mutate in (
+            lambda ctx: ctx.update(context_id="bad id!"),
+            lambda ctx: ctx.update(base_source_sha256="nothex"),
+            lambda ctx: ctx.update(target="../escape.kicad_sch"),
+            lambda ctx: del_key(ctx, "public_facts"),
+            lambda ctx: ctx.update(generic_op_schema=None),
+        ):
+            package = make_package()
+            mutate(package["public_context"])
+            self.assert_invalid(json.dumps(package))
+
+    def test_rejects_bad_limits(self):
+        for bad in (
+            {**BUDGET, "max_ops": 9},
+            {**BUDGET, "timeout_ms": 0},
+            {key: value for key, value in BUDGET.items() if key != "max_output_tokens"},
+            {**BUDGET, "unexpected": 1},
+        ):
+            self.assert_invalid(json.dumps(make_package(limits=bad)))
+
+    def test_missing_package_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with self.assertRaises(BaselineInputError):
+                load_package(Path(temp_dir) / "missing.json")
+
+
+def del_key(mapping, key):
+    del mapping[key]
+    return mapping
+
+
+class DeterminismAndCliTests(unittest.TestCase):
+    maxDiff = None
+
+    def test_deterministic_output_and_adapter_bytes(self):
+        package = make_package(facts=[connect("fct-conn-1", "X1.2", "NB")])
+        first = build_proposal(package)
+        self.assertEqual(render(first), render(build_proposal(package)))
+        package_bytes = json.dumps(package, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        self.assertEqual(propose_bytes(package_bytes), render(first))
+
+    def test_cli_end_to_end_patch(self):
+        package = make_package(facts=[connect("fct-conn-1", "X1.2", "NB")])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package_path = Path(temp_dir) / "package.json"
+            package_path.write_bytes(json.dumps(package).encode("utf-8"))
             out_path = Path(temp_dir) / "proposal.json"
-            ctx_path.write_text(json.dumps(context), encoding="utf-8")
             result = subprocess.run(
-                [
-                    sys.executable,
-                    str(SCRIPT),
-                    "--context",
-                    str(ctx_path),
-                    "--out",
-                    str(out_path),
-                ],
+                [sys.executable, str(SCRIPT), "--package", str(package_path), "--out", str(out_path)],
                 capture_output=True,
                 text=True,
                 cwd=str(ROOT),
@@ -479,25 +464,138 @@ class BaselineTests(unittest.TestCase):
             parsed = parse_proposal(raw)
             self.assertEqual(parsed.decision, "PATCH")
 
-    def test_cli_rejects_malformed_input_with_exit_2(self):
+    def test_cli_end_to_end_refuse_exits_zero(self):
+        package = make_package(facts=[])
         with tempfile.TemporaryDirectory() as temp_dir:
-            ctx_path = Path(temp_dir) / "bad.json"
-            ctx_path.write_text('{"schema_version": 9}', encoding="utf-8")
+            package_path = Path(temp_dir) / "package.json"
+            package_path.write_bytes(json.dumps(package).encode("utf-8"))
+            out_path = Path(temp_dir) / "proposal.json"
             result = subprocess.run(
-                [
-                    sys.executable,
-                    str(SCRIPT),
-                    "--context",
-                    str(ctx_path),
-                    "--out",
-                    str(Path(temp_dir) / "out.json"),
-                ],
+                [sys.executable, str(SCRIPT), "--package", str(package_path), "--out", str(out_path)],
+                capture_output=True,
+                text=True,
+                cwd=str(ROOT),
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            parsed = parse_proposal(out_path.read_bytes())
+            self.assertEqual(parsed.decision, "REFUSE")
+            self.assertEqual(parsed.refusal["reason_code"], "PUBLIC_INPUT_INSUFFICIENT")
+
+    def test_cli_rejects_broken_package_with_exit_2(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package_path = Path(temp_dir) / "broken.json"
+            package_path.write_text('{"schema_version": 9}', encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--package", str(package_path), "--out", str(Path(temp_dir) / "out.json")],
                 capture_output=True,
                 text=True,
                 cwd=str(ROOT),
             )
             self.assertEqual(result.returncode, 2)
-            self.assertIn("invalid input", result.stderr)
+            self.assertIn("invalid package", result.stderr)
+
+
+def runner_inputs(observation_data, facts, grants=GRANTS, max_ops=8):
+    """真实 runner build_package 所需的中性合成公共输入。"""
+    source = '(kicad_sch (version 20230121) (paper "A4"))'
+    return {
+        "experiment_version": RUNNER_EXPERIMENT_VERSION,
+        "case_public_id": "Y4-001",
+        "context_id": "ctx-y4-neutral-runner-1",
+        "target": "candidate/board.kicad_sch",
+        "source_utf8": source,
+        "observation_binding": {
+            "source_sha256": hash_bytes(source.encode("utf-8")),
+            "observation_sha256": hash_bytes(canonical_json_bytes(observation_data)),
+            "producer_id": "test-producer-v1",
+        },
+        "current_observation": observation_data,
+        "public_facts": list(facts),
+        "budget": {**BUDGET, "max_ops": max_ops},
+        "placement_grants": list(grants),
+    }
+
+
+RUNNER_META = {
+    "run_id": "run-y4-neutral-1",
+    "arm": "D",
+    "repetition": 1,
+    "attempt": 1,
+    "model_or_script_id": "tools/repair_baseline.py@" + TOOL_VERSION,
+    "settings": {"script": "tools/repair_baseline.py", "version": TOOL_VERSION},
+    "exposure": {
+        "session_id": "session-y4-neutral-1",
+        "fresh_session": True,
+        "input_scope": "PUBLIC_PACKAGE_ONLY",
+        "prior_case_exposure": "NO",
+        "author_exposure": "NO",
+        "declaration": "Synthetic neutral integration input; no scored case data involved.",
+    },
+}
+
+
+@unittest.skipUnless(
+    RUNNER_AVAILABLE,
+    "y4 runner (tools.y4_dry_runner, PR #61) not on this branch yet; "
+    "these tests auto-enable once PR #61 merges",
+)
+class RunnerIntegrationTests(unittest.TestCase):
+    """真实冻结包端到端：runner freeze → D adapter → collect_result 绑定校验。"""
+
+    maxDiff = None
+
+    def freeze(self, inputs):
+        package_raw = runner_build_package(inputs)
+        return package_raw, hash_bytes(package_raw)
+
+    def run_adapter(self, package_raw, package_sha):
+        record_raw = runner_run_adapter(package_raw, package_sha, RUNNER_META, propose_bytes)
+        return json.loads(record_raw)
+
+    def test_real_package_patch_end_to_end(self):
+        inputs = runner_inputs(OBSERVATION, [place("fct-place-1", "X9")])
+        package_raw, package_sha = self.freeze(inputs)
+        record = self.run_adapter(package_raw, package_sha)
+        self.assertEqual(record["record_status"], "RECORDED")
+        self.assertEqual(record["proposal_parse_status"], "PASS")
+        self.assertEqual(record["binding_status"], "PASS")
+        self.assertEqual(record["budget_status"], "PASS")
+        proposal = record["proposal"]
+        self.assertEqual(proposal["decision"], "PATCH")
+        granted = {(g["x_mil"], g["y_mil"]) for g in inputs["placement_grants"]}
+        for op in proposal["oplist"]["ops"]:
+            if op["op"] == "place_component":
+                self.assertIn((op["x_mil"], op["y_mil"]), granted)
+
+    def test_real_package_refuse_end_to_end(self):
+        inputs = runner_inputs(OBSERVATION, [])
+        package_raw, package_sha = self.freeze(inputs)
+        record = self.run_adapter(package_raw, package_sha)
+        self.assertEqual(record["record_status"], "RECORDED")
+        self.assertEqual(record["proposal_parse_status"], "PASS")
+        self.assertEqual(record["binding_status"], "PASS")
+        proposal = record["proposal"]
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertEqual(proposal["refusal"]["reason_code"], "PUBLIC_INPUT_INSUFFICIENT")
+        self.assertEqual(proposal["refusal"]["missing_fact_ids"], ["public-facts"])
+
+    def test_real_package_cli_end_to_end(self):
+        inputs = runner_inputs(OBSERVATION, [place("fct-place-1", "X9")])
+        package_raw, _ = self.freeze(inputs)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            package_path = Path(temp_dir) / "Y4-001.json"
+            package_path.write_bytes(package_raw)
+            out_path = Path(temp_dir) / "proposal.json"
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--package", str(package_path), "--out", str(out_path)],
+                capture_output=True,
+                text=True,
+                cwd=str(ROOT),
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            parsed = parse_proposal(out_path.read_bytes())
+            self.assertEqual(parsed.decision, "PATCH")
+            self.assertEqual(parsed.context_id, "ctx-y4-neutral-runner-1")
 
 
 if __name__ == "__main__":

@@ -1,54 +1,72 @@
-"""AEDL Y4 · D 组固定规则基线 v0.4.0（PublicContext → 冻结 Proposal）。
+"""AEDL Y4 · D 组固定规则基线 v0.5.0（真实 y4-public.v3 包 → 冻结 Proposal）。
 
-本版是针对 PR #60 review（Yenefa，2026-09-11）三条意见的对齐重写：
+本版针对 PR #60 第二轮 review（Yenefa，2026-09-11，CHANGES_REQUESTED）重写：
+v0.4 被认定"第一刀真改了，第二/三刀是换壳"——本版直接消费真实冻结包。
 
-1) 接口对齐冻结 C1（不再自造协议）
-   - 输入 = PublicContext（src/repair/patch_schema_v1.json 的 PublicContext，
-     由 tools/repair_pipeline.make_public_context 产出）。
-   - 输出 = 冻结 Proposal：decision ∈ {PATCH, REFUSE}；操作只允许公开三原语
-     {delete_object, add_net_label, place_component}；头部五字段
-     (schema_version/context_id/target/base_source_sha256/decision) 一律取自
-     PublicContext 或冻结枚举。v0.3 的 PROPOSE_REPAIR / set_pin_net /
-     mark_no_connect / add_component / set_component_value 全部废除。
+对齐的真实协议（来源 origin/feat/gh56-y4-dry-harness，PR #61，2026-09-11 核对）：
+- 包形状 schema_version = "y4-public.v3"（tools/y4_dry_runner.build_package）：
+  封闭字段 {schema_version, experiment_version, case_public_id, source_utf8,
+  observation_binding, public_context, public_context_sha256, budget,
+  instruction, exposure_fields, placement_grants}。
+- D 是 adapter(request_bytes) -> bytes（tools.y4_dry_runner.run_adapter 契约）：
+  输入即整个包的原始字节（C/D 同字节），propose_bytes() 即该适配器。
+- current_observation 真实形状 = kicad_netlist_current.v1
+  （notes/y4/produce_current_observations.py）：{observation_type, components
+  [{ref,value,footprint,lib,part}], nets [{code,name,nodes[{ref,pin,...}]}],
+  coverage}；**引脚不出现在任何 net 的 nodes 里 = 无已断言的连接（悬空）**。
+- public_facts 是**数组**（PBF/BB 事实清单，位于 public_context 内；空数组 =
+  未供给事实），不是对象；类型不符产出合法 REFUSE，不再 exit 2。
+- placement_grants：宿主授权放置槽位列表 [{x_mil,y_mil}]；runner 对
+  place_component 逐坐标做成员性检查（collect_result binding 检查）。
+  **D 的坐标只从 grants 取**：按包内既定顺序取第一个未占用槽（生成器已按
+  (y,x) 规范排序）——成员性由构造保证，无需 D 自查。坐标来源与选择规则在
+  此声明，最终语义归 A2-Y/Percy 冻结（放行前置 #3）。
+- budget（context.limits）：max_ops 1..8 是操作预算上限，D 从 limits.max_ops
+  读取，不再硬编码。
 
-2) 输入协议对齐 Issue #56 批准架构（不再开旁路）
-   PublicContext → AI C / Script D → C1 parse_proposal → Raw Result Package。
-   D 与 C 消费完全相同的公共输入；本脚本不再读取 schematic_semantics 的
-   findings 报告（expected/observed 行），也不再使用 aedl.public-facts.draft-0.1。
+对第二轮 review 各点的回应：
+1. 冻结 C1 合同（已认可）：发射器原样保留——头部五字段取自 public_context，
+   decision ∈ {PATCH, REFUSE}，仅公开三原语。
+2. 同一公共输入：D 的输入就是 runner 冻结出的 y4-public.v3 包本身；
+   观察按 kicad_netlist_current.v1 读，facts 按数组消费。有效包一律产出
+   **合法 Proposal（含 REFUSE）**，不再 exit 2；exit 2 仅保留给文件级/包级
+   结构损坏（非 JSON、缺字段、schema_version 不符、context 头非法）。
+3. 信息级别：D 不自带事实草案对象，也不复刻五个计分案例。D 只声明一个
+   **可解释事实文法**（closed grammar，见 FACT_KINDS），对包内事实数组逐条
+   尝试解释：能解释的派生操作；不能解释的逐 id 记入拒绝（UNINTERPRETABLE_
+   FACTS），绝不猜测散文含义。事实形态与信息级别的最终冻结归 A2-Y/Percy
+   （放行前置 #1）；文法外事实在冻结前会使 D 拒绝，这是 fail-closed 的
+   如实表现，不是绕过。
+4. 其他：死代码已删；max_ops 从 limits 读；文档版本改 v3；坐标只从 grants
+   取；测试改用中性合成数据（不复刻五案例）+ 真实 runner 集成测试
+   （PR #61 合入后自动启用）。
 
-3) 信息级别不写死（顺序归位）
-   修复目标只来自 PublicContext.public_facts。其形状
-   （aedl.y4-public-facts.draft-0.1）是 D 对 y4-public.v2 冻结包的需求草案，
-   最终内容与信息级别由 A2-Y / Percy 冻结；public_facts 未提供的事实一律
-   REFUSE 并列出 missing_fact_ids，绝不从任何 expected/答案反推。
-   研究 claim 的措辞由 Owner 决定。
+可解释事实文法（FACT_KINDS，需求声明，待 A2-Y/Percy 冻结确认）：
+- connect_pin   {id, kind, anchor: REF.PIN, net}      引脚接线路由
+- delete_object {id, kind, uuid, anchor: REF.PIN}     删除错误标签/导线
+- place_component {id, kind, designator, lib_id, value, footprint, pin_nets}
+  （lib_id ∈ {Device:R, Device:C}；坐标自动取自 grants，不在事实里写死）
 
-确定性规则（全部机械推导，无 AI、无案例编号分支）：
-   R1 引脚重定向：锚点观测 == 目标网 → 已满足（不发操作）；观测悬空 →
-       add_net_label；观测为其他网 → 必须有配套 deletion_target，先
-       delete_object 再 add_net_label，缺 → REFUSE(PUBLIC_INPUT_INSUFFICIENT)。
-   R2 新增元件：designator 观测缺失 → place_component + 逐引脚
-       add_net_label；已存在但值不同 → REFUSE(NOT_EXPRESSION_IN_PUBLIC_OPS)
-       （公开三原语无法表达改值）。
-   R3 保护锚点：任何将被标注的锚点 ∈ protected_anchors →
-       REFUSE(PUBLIC_INPUT_CONFLICT)。
-   R4 跨视图一致性：intent/netlist/pcb 对同一锚点或元件的观测不一致 →
-       REFUSE(OBSERVATION_CONFLICT)。
-   R5 fail-closed：facts_status=insufficient → REFUSE(PUBLIC_INPUT_INSUFFICIENT，
-       missing_fact_ids=facts_gaps)；facts 形状/类型非法（未知键、浮点、
-       重复 id 等）→ REFUSE(PUBLIC_INPUT_MALFORMED)；操作数 > 8 或诊断 > 16 →
-       REFUSE(OPERATION_LIMIT_EXCEEDED)；无操作可发 → REFUSE(ALREADY_SATISFIED)。
+确定性规则（事实按数组顺序处理，首个问题即终止并拒绝）：
+R1 connect_pin：观测 == 目标网 → 已满足；悬空 → add_net_label；
+   接了别的网 → 必须有同锚点 delete_object 事实（先删后标），缺 → 拒绝。
+R2 place_component：观测中已存在同 designator → 值相同则满足、值不同则
+   NOT_EXPRESSION_IN_PUBLIC_OPS（公开原语无法改值）；不存在 → place_component
+   （坐标取 grants 顺序槽）+ 逐引脚 add_net_label。
+R3 同一锚点出现两条 connect_pin（或同一 designator 两条 place_component）
+   → PUBLIC_INPUT_CONFLICT（无法确定性地派生唯一修复）。
+R4 孤儿删除：delete_object 事实的锚点没有任何 connect_pin 引用 →
+   PUBLIC_INPUT_INSUFFICIENT（D 只为改接而删，不做投机删除）。
+R5 引脚出现在多个网 → OBSERVATION_CONFLICT。
+R6 操作数 > limits.max_ops（或 >8 绝对上限）→ OPERATION_LIMIT_EXCEEDED。
+R7 空事实数组 / 文法外事实 / 形状非法 / facts 类型非数组 / grants 非法 /
+   槽位耗尽 → 对应拒绝码，全部产出合法 REFUSE Proposal。
 
-边界：D 只产提案，不执行写入（akcli 执行通道属 B2）；固件不可用公开三原语
-修补，任何固件层诉求只能经 required_human_decision 升级人工。提案合法性由
-A2 的 C1 parse_proposal 把关（tests/test_repair_baseline.py 用真实 C1 验证
-每份输出）。
-
-用法
+用法（D 侧 adapter 的 CLI 形态）
 ----
-    py -3 tools/repair_baseline.py --context public_context.json --out proposal.json
+    py -3 tools/repair_baseline.py --package Y4-001.json --out proposal.json
 
-退出码：0 = 已产出合法 Proposal（PATCH/REFUSE 均算）；2 = 输入不合法。
+退出码：0 = 已产出合法 Proposal（PATCH/REFUSE 均算）；2 = 包文件级结构损坏。
 """
 
 from __future__ import annotations
@@ -60,24 +78,27 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-TOOL_VERSION = "0.4.0"
+TOOL_VERSION = "0.5.0"
+
+PACKAGE_VERSION = "y4-public.v3"
 PROPOSAL_SCHEMA_VERSION = 1
-FACTS_SCHEMA = "aedl.y4-public-facts.draft-0.1"
-
-OBSERVATION_VIEWS = ("intent", "netlist", "pcb")
-
-# 冻结 Proposal 常量（与 tools/repair_pipeline.py 保持一致，独立声明以保持
-# D 不依赖宿主代码）
-DECISION_PATCH = "PATCH"
-DECISION_REFUSE = "REFUSE"
-OP_DELETE_OBJECT = "delete_object"
-OP_ADD_NET_LABEL = "add_net_label"
-OP_PLACE_COMPONENT = "place_component"
-PUBLIC_LIB_IDS = ("Device:R", "Device:C")
-MIN_OPS, MAX_OPS = 1, 8
+MAX_OPS_CONTRACT_CEILING = 8
+MAX_GRANT_SLOTS = 2048
 MAX_DIAGNOSIS = 16
-MAX_TEXT_CHARS = 2048
 
+PACKAGE_KEYS = (
+    "schema_version",
+    "experiment_version",
+    "case_public_id",
+    "source_utf8",
+    "observation_binding",
+    "public_context",
+    "public_context_sha256",
+    "budget",
+    "instruction",
+    "exposure_fields",
+    "placement_grants",
+)
 CONTEXT_FIELDS = (
     "schema_version",
     "context_id",
@@ -88,44 +109,39 @@ CONTEXT_FIELDS = (
     "generic_op_schema",
     "limits",
 )
+BUDGET_KEYS = ("max_ops", "max_request_bytes", "max_output_tokens", "timeout_ms")
+GRANT_SLOT_KEYS = ("x_mil", "y_mil")
 
-FACTS_TOP_KEYS = (
-    "facts_schema",
-    "facts_status",
-    "facts_gaps",
-    "pin_targets",
-    "component_targets",
-    "deletion_targets",
-    "protected_anchors",
-)
-PIN_TARGET_KEYS = ("id", "anchor", "net")
-COMPONENT_TARGET_KEYS = (
-    "id",
-    "designator",
-    "lib_id",
-    "value",
-    "footprint",
-    "pin_nets",
-    "placement",
-)
-DELETION_TARGET_KEYS = ("id", "uuid", "anchor")
-PLACEMENT_KEYS = ("x_mil", "y_mil")
+OBSERVATION_TYPE = "kicad_netlist_current.v1"
 
-# 拒绝原因码（Proposal 的 reason_code 是自由有界文本；这里固定一组并声明
-# 优先级，同例多问题时取最严重的一类）
-PRIORITY = (
-    "PUBLIC_INPUT_MALFORMED",
-    "PUBLIC_INPUT_CONFLICT",
-    "OBSERVATION_CONFLICT",
-    "PUBLIC_INPUT_INSUFFICIENT",
-    "NOT_EXPRESSION_IN_PUBLIC_OPS",
-    "OPERATION_LIMIT_EXCEEDED",
-    "ALREADY_SATISFIED",
-)
+DECISION_PATCH = "PATCH"
+DECISION_REFUSE = "REFUSE"
+OP_DELETE_OBJECT = "delete_object"
+OP_ADD_NET_LABEL = "add_net_label"
+OP_PLACE_COMPONENT = "place_component"
+PUBLIC_LIB_IDS = ("Device:R", "Device:C")
+
+# 可解释事实文法：kind -> 封闭字段集（需求声明，最终形状归 A2-Y/Percy 冻结）
+FACT_CONNECT_PIN = "connect_pin"
+FACT_DELETE_OBJECT = "delete_object"
+FACT_PLACE_COMPONENT = "place_component"
+FACT_KINDS: Dict[str, Tuple[str, ...]] = {
+    FACT_CONNECT_PIN: ("id", "kind", "anchor", "net"),
+    FACT_DELETE_OBJECT: ("id", "kind", "uuid", "anchor"),
+    FACT_PLACE_COMPONENT: (
+        "id",
+        "kind",
+        "designator",
+        "lib_id",
+        "value",
+        "footprint",
+        "pin_nets",
+    ),
+}
 
 REQUIRED_HUMAN_DECISION = (
-    "A2-Y/Percy must complete the frozen public package or authorize more "
-    "public ops; arm D will not guess."
+    "A2-Y/Percy must freeze the public facts grammar/level and complete the "
+    "package; arm D will not guess."
 )
 
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -138,11 +154,11 @@ _TEXT_RE = re.compile(r"^[^\x00-\x1f\x7f]+$")
 
 
 class BaselineInputError(Exception):
-    """输入文件缺失/非法（CLI 退出码 2）。"""
+    """包文件级结构损坏（CLI 退出码 2）：无法产出任何绑定 context 的 Proposal。"""
 
 
-class _FactsProblem(Exception):
-    """携带优先级码的拒绝条件，由引擎统一择优。"""
+class _Problem(Exception):
+    """可绑定的拒绝条件：产出合法 REFUSE Proposal（退出码 0）。"""
 
     def __init__(self, reason_code: str, missing: List[str], explanation: str):
         super().__init__(explanation)
@@ -152,7 +168,8 @@ class _FactsProblem(Exception):
 
 
 # ---------------------------------------------------------------------------
-# 严格 JSON 载入（拒绝 BOM / 重复键 / NaN / 浮点，向 C1 的 canonical 约定看齐）
+# 严格 JSON 载入（拒绝 BOM / 重复键 / NaN；允许 float 值——与宿主
+# load_json_strict 行为一致，避免对真实包误判；仅在需要整数处逐一校验）
 # ---------------------------------------------------------------------------
 
 
@@ -169,24 +186,10 @@ def _reject_constant(name: str) -> Any:
     raise BaselineInputError(f"NaN/Infinity is not allowed: {name}")
 
 
-def _reject_floats(value: Any, path: str) -> None:
-    if isinstance(value, float):
-        raise BaselineInputError(f"float is not allowed at {path}")
-    if isinstance(value, dict):
-        for key, item in value.items():
-            _reject_floats(item, f"{path}.{key}")
-    elif isinstance(value, list):
-        for index, item in enumerate(value):
-            _reject_floats(item, f"{path}[{index}]")
-
-
-def load_context(path: Path) -> Dict[str, Any]:
-    try:
-        raw = Path(path).read_bytes()
-    except OSError as exc:
-        raise BaselineInputError(f"cannot read context file: {exc}") from exc
+def load_document(raw: bytes) -> Dict[str, Any]:
+    """解析并校验冻结包原始字节（D 适配器与 CLI 共用入口）。"""
     if raw.startswith(b"\xef\xbb\xbf"):
-        raise BaselineInputError("context file must not start with a BOM")
+        raise BaselineInputError("package file must not start with a BOM")
     try:
         document = json.loads(
             raw.decode("utf-8"),
@@ -194,291 +197,275 @@ def load_context(path: Path) -> Dict[str, Any]:
             parse_constant=_reject_constant,
         )
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise BaselineInputError(f"context is not valid strict JSON: {exc}") from exc
+        raise BaselineInputError(f"package is not valid strict JSON: {exc}") from exc
     if not isinstance(document, dict):
-        raise BaselineInputError("context must be a JSON object")
-    _reject_floats(document, "$")
-    _validate_context_shape(document)
+        raise BaselineInputError("package must be a JSON object")
+    _validate_package_shape(document)
     return document
 
 
-def _validate_context_shape(context: Dict[str, Any]) -> None:
+def load_package(path: Path) -> Dict[str, Any]:
+    try:
+        raw = Path(path).read_bytes()
+    except OSError as exc:
+        raise BaselineInputError(f"cannot read package file: {exc}") from exc
+    return load_document(raw)
+
+
+def _validate_package_shape(package: Dict[str, Any]) -> None:
+    missing = [key for key in PACKAGE_KEYS if key not in package]
+    if missing:
+        raise BaselineInputError(f"package missing fields: {missing}")
+    extra = [key for key in package if key not in PACKAGE_KEYS]
+    if extra:
+        raise BaselineInputError(f"package has unknown fields: {extra}")
+    if package["schema_version"] != PACKAGE_VERSION:
+        raise BaselineInputError(
+            f"package schema_version must be {PACKAGE_VERSION!r}, got {package['schema_version']!r}"
+        )
+    _validate_context(package["public_context"])
+
+
+def _validate_context(context: Any) -> Dict[str, Any]:
+    if not isinstance(context, dict):
+        raise BaselineInputError("public_context must be an object")
     missing = [key for key in CONTEXT_FIELDS if key not in context]
     if missing:
-        raise BaselineInputError(f"context missing fields: {missing}")
+        raise BaselineInputError(f"public_context missing fields: {missing}")
     extra = [key for key in context if key not in CONTEXT_FIELDS]
     if extra:
-        raise BaselineInputError(f"context has unknown fields: {extra}")
-    version = context["schema_version"]
-    if isinstance(version, bool) or version != PROPOSAL_SCHEMA_VERSION:
-        raise BaselineInputError("context schema_version must be 1")
-    if not _ID_RE.match(str(context["context_id"])):
+        raise BaselineInputError(f"public_context has unknown fields: {extra}")
+    if context["schema_version"] != PROPOSAL_SCHEMA_VERSION:
+        raise BaselineInputError("public_context schema_version must be 1")
+    if not isinstance(context["context_id"], str) or not _ID_RE.match(context["context_id"]):
         raise BaselineInputError("context_id is not a valid identifier")
-    if not _PATH_RE.match(str(context["target"])):
+    if not isinstance(context["target"], str) or not _PATH_RE.match(context["target"]):
         raise BaselineInputError("context target is not a valid candidate path")
-    if not _SHA_RE.match(str(context["base_source_sha256"])):
+    # 与 C1 _candidate_path 对齐：拒绝点段与结尾点/空格段
+    for segment in context["target"].split("/"):
+        if segment in (".", "..") or segment.endswith(".") or segment.endswith(" "):
+            raise BaselineInputError("context target has an invalid path segment")
+    if not isinstance(context["base_source_sha256"], str) or not _SHA_RE.match(
+        context["base_source_sha256"]
+    ):
         raise BaselineInputError("context base_source_sha256 is not a sha256 hex")
-    if context["current_observation"] is not None and not isinstance(
-        context["current_observation"], dict
-    ):
-        raise BaselineInputError("current_observation must be an object or null")
-    if context["public_facts"] is not None and not isinstance(
-        context["public_facts"], dict
-    ):
-        raise BaselineInputError("public_facts must be an object or null")
-    for key in ("generic_op_schema", "limits"):
+    for key in ("current_observation", "generic_op_schema", "limits"):
         if not isinstance(context[key], dict):
             raise BaselineInputError(f"{key} must be an object")
+    # public_facts 的类型检查放在引擎层：类型不符产出"合法 REFUSE"而不是
+    # exit 2（第二轮 review 的放行要求）。此处只要求键存在（封闭字段集）。
+    budget = context["limits"]
+    for key in BUDGET_KEYS:
+        if key not in budget:
+            raise BaselineInputError(f"limits missing {key!r}")
+    for key in budget:
+        if key not in BUDGET_KEYS:
+            raise BaselineInputError(f"limits has unknown field {key!r}")
+    for key in BUDGET_KEYS:
+        value = budget[key]
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise BaselineInputError(f"limits.{key} must be a positive integer")
+    if budget["max_ops"] > MAX_OPS_CONTRACT_CEILING:
+        raise BaselineInputError("limits.max_ops exceeds the contract ceiling of 8")
+    return context
+
+
+def _validate_grants(grants: Any) -> List[Dict[str, int]]:
+    """与 runner 的封闭校验一致；非法 → 可绑定拒绝（合法 REFUSE）。"""
+    if not isinstance(grants, list) or not grants:
+        raise _Problem(
+            "PUBLIC_INPUT_MALFORMED", [], "placement_grants must be a nonempty list"
+        )
+    if len(grants) > MAX_GRANT_SLOTS:
+        raise _Problem(
+            "PUBLIC_INPUT_MALFORMED", [], "placement_grants exceeds the policy cap"
+        )
+    seen = set()
+    slots: List[Dict[str, int]] = []
+    for index, slot in enumerate(grants):
+        if not isinstance(slot, dict) or set(slot) != set(GRANT_SLOT_KEYS):
+            raise _Problem(
+                "PUBLIC_INPUT_MALFORMED",
+                [],
+                f"placement_grants[{index}] must hold exactly x_mil and y_mil",
+            )
+        pair = (slot["x_mil"], slot["y_mil"])
+        if any(isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 1000000 for v in pair):
+            raise _Problem(
+                "PUBLIC_INPUT_MALFORMED",
+                [],
+                f"placement_grants[{index}] coordinates must be integer mil",
+            )
+        if pair in seen:
+            raise _Problem(
+                "PUBLIC_INPUT_MALFORMED", [], f"placement_grants[{index}] duplicates a slot"
+            )
+        seen.add(pair)
+        slots.append({"x_mil": pair[0], "y_mil": pair[1]})
+    return slots
 
 
 # ---------------------------------------------------------------------------
-# public_facts 校验（closed set，任何越界 → PUBLIC_INPUT_MALFORMED）
+# 可解释事实文法（数组逐条；文法外 → UNINTERPRETABLE_FACTS，绝不猜测）
 # ---------------------------------------------------------------------------
 
 
-def _bad_facts(explanation: str) -> _FactsProblem:
-    return _FactsProblem("PUBLIC_INPUT_MALFORMED", [], explanation)
+def _bad(explanation: str) -> _Problem:
+    return _Problem("PUBLIC_INPUT_MALFORMED", [], explanation)
 
 
-def _text_field(value: Any, where: str) -> str:
+def _text(value: Any, where: str) -> str:
     if not isinstance(value, str) or not _TEXT_RE.match(value):
-        raise _bad_facts(f"{where} must be non-empty text without control chars")
-    if len(value) > MAX_TEXT_CHARS:
-        raise _bad_facts(f"{where} exceeds {MAX_TEXT_CHARS} chars")
+        raise _bad(f"{where} must be non-empty text without control chars")
+    if len(value) > 2048:
+        raise _bad(f"{where} exceeds 2048 chars")
     return value
 
 
-def _int_field(value: Any, where: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise _bad_facts(f"{where} must be an integer")
-    return value
-
-
-def _id_field(value: Any, where: str) -> str:
+def _ident(value: Any, where: str) -> str:
     if not isinstance(value, str) or not _ID_RE.match(value):
-        raise _bad_facts(f"{where} must match identifier pattern")
+        raise _bad(f"{where} must match identifier pattern")
     return value
 
 
-def _anchor_field(value: Any, where: str) -> str:
+def _anchor(value: Any, where: str) -> str:
     if not isinstance(value, str) or not _ANCHOR_RE.match(value):
-        raise _bad_facts(f"{where} must be a REF.PIN anchor")
+        raise _bad(f"{where} must be a REF.PIN anchor")
     return value
 
 
-def _items(value: Any, where: str) -> List[Dict[str, Any]]:
-    if not isinstance(value, list):
-        raise _bad_facts(f"{where} must be an array")
-    for item in value:
-        if not isinstance(item, dict):
-            raise _bad_facts(f"{where} entries must be objects")
-    return value
+def interpret_facts(facts: List[Any]) -> Tuple[List[Dict[str, Any]], List[str]]:
+    """解释事实数组：返回 (可解释事实列表, 文法外事实 id 列表)。
 
-
-def _closed(item: Dict[str, Any], keys: Tuple[str, ...], where: str) -> None:
-    for key in keys:
-        if key not in item:
-            raise _bad_facts(f"{where} missing {key!r}")
-    for key in item:
-        if key not in keys:
-            raise _bad_facts(f"{where} has unknown field {key!r}")
-
-
-def validate_facts(facts: Dict[str, Any]) -> Dict[str, Any]:
-    """校验 public_facts（draft-0.1 需求草案），返回规范化后的结构。"""
-    for key in FACTS_TOP_KEYS:
-        if key not in facts:
-            raise _bad_facts(f"public_facts missing {key!r}")
-    for key in facts:
-        if key not in FACTS_TOP_KEYS:
-            raise _bad_facts(f"public_facts has unknown field {key!r}")
-
-    if facts["facts_schema"] != FACTS_SCHEMA:
-        raise _bad_facts(f"facts_schema must be {FACTS_SCHEMA!r}")
-    status = facts["facts_status"]
-    if status not in ("complete", "insufficient"):
-        raise _bad_facts('facts_status must be "complete" or "insufficient"')
-
-    gaps_raw = facts["facts_gaps"]
-    if not isinstance(gaps_raw, list):
-        raise _bad_facts("facts_gaps must be an array")
-    gap_ids = [_id_field(item, f"facts_gaps[{i}]") for i, item in enumerate(gaps_raw)]
-    if len(set(gap_ids)) != len(gap_ids):
-        raise _bad_facts("facts_gaps has duplicate ids")
-
-    protected_raw = facts["protected_anchors"]
-    if not isinstance(protected_raw, list):
-        raise _bad_facts("protected_anchors must be an array")
-    protected_anchors = [
-        _anchor_field(item, f"protected_anchors[{i}]")
-        for i, item in enumerate(protected_raw)
-    ]
-    if len(set(protected_anchors)) != len(protected_anchors):
-        raise _bad_facts("protected_anchors has duplicates")
-
-    pin_targets = []
-    for index, item in enumerate(_items(facts["pin_targets"], "pin_targets")):
-        where = f"pin_targets[{index}]"
-        _closed(item, PIN_TARGET_KEYS, where)
-        pin_targets.append(
-            {
-                "id": _id_field(item["id"], f"{where}.id"),
-                "anchor": _anchor_field(item["anchor"], f"{where}.anchor"),
-                "net": _text_field(item["net"], f"{where}.net"),
-            }
-        )
-
-    component_targets = []
-    for index, item in enumerate(
-        _items(facts["component_targets"], "component_targets")
-    ):
-        where = f"component_targets[{index}]"
-        _closed(item, COMPONENT_TARGET_KEYS, where)
-        lib_id = item["lib_id"]
-        if lib_id not in PUBLIC_LIB_IDS:
-            raise _bad_facts(f"{where}.lib_id must be one of {PUBLIC_LIB_IDS}")
-        designator = item["designator"]
-        if not isinstance(designator, str) or not _DESIGNATOR_RE.match(designator):
-            raise _bad_facts(f"{where}.designator is not a valid designator")
-        placement = item["placement"]
-        if not isinstance(placement, dict):
-            raise _bad_facts(f"{where}.placement must be an object")
-        _closed(placement, PLACEMENT_KEYS, f"{where}.placement")
-        pin_nets = item["pin_nets"]
-        if not isinstance(pin_nets, dict) or not pin_nets:
-            raise _bad_facts(f"{where}.pin_nets must be a non-empty object")
-        normalized_pins: Dict[str, str] = {}
-        for pin_key, pin_net in pin_nets.items():
-            if not isinstance(pin_key, str) or not _PIN_KEY_RE.match(pin_key):
-                raise _bad_facts(f"{where}.pin_nets key {pin_key!r} is not a pin")
-            normalized_pins[pin_key] = _text_field(pin_net, f"{where}.pin_nets.{pin_key}")
-        component_targets.append(
-            {
-                "id": _id_field(item["id"], f"{where}.id"),
-                "designator": designator,
-                "lib_id": lib_id,
-                "value": _text_field(item["value"], f"{where}.value"),
-                "footprint": _text_field(item["footprint"], f"{where}.footprint"),
-                "pin_nets": normalized_pins,
-                "x_mil": _int_field(placement["x_mil"], f"{where}.placement.x_mil"),
-                "y_mil": _int_field(placement["y_mil"], f"{where}.placement.y_mil"),
-            }
-        )
-        if component_targets[-1]["designator"] is None:
-            raise _bad_facts(f"{where}.designator is not a valid designator")
-
-    deletion_targets = []
-    for index, item in enumerate(_items(facts["deletion_targets"], "deletion_targets")):
-        where = f"deletion_targets[{index}]"
-        _closed(item, DELETION_TARGET_KEYS, where)
-        deletion_targets.append(
-            {
-                "id": _id_field(item["id"], f"{where}.id"),
-                "uuid": _id_field(item["uuid"], f"{where}.uuid"),
-                "anchor": _anchor_field(item["anchor"], f"{where}.anchor"),
-            }
-        )
-
-    all_ids = (
-        [entry["id"] for entry in pin_targets]
-        + [entry["id"] for entry in component_targets]
-        + [entry["id"] for entry in deletion_targets]
-        + gap_ids
-    )
+    形状非法（缺字段/多字段/值非法）立即以 PUBLIC_INPUT_MALFORMED 终止；
+    文法外 kind 逐条收集，交由调用方拒绝。
+    """
+    interpretable: List[Dict[str, Any]] = []
+    uninterpretable: List[str] = []
+    for index, record in enumerate(facts):
+        if not isinstance(record, dict):
+            uninterpretable.append(f"fact-{index}")
+            continue
+        kind = record.get("kind")
+        keys = FACT_KINDS.get(kind) if isinstance(kind, str) else None
+        if keys is None:
+            uninterpretable.append(
+                _ident(record["id"], f"facts[{index}].id")
+                if "id" in record and isinstance(record["id"], str) and _ID_RE.match(record["id"])
+                else f"fact-{index}"
+            )
+            continue
+        where = f"facts[{index}]"
+        missing = [key for key in keys if key not in record]
+        extra = [key for key in record if key not in keys]
+        if missing or extra:
+            raise _bad(
+                f"{where} ({kind}) field mismatch: missing={missing} unknown={extra}"
+            )
+        fact_id = _ident(record["id"], f"{where}.id")
+        entry: Dict[str, Any] = {"id": fact_id, "kind": kind}
+        if kind == FACT_CONNECT_PIN:
+            entry["anchor"] = _anchor(record["anchor"], f"{where}.anchor")
+            entry["net"] = _text(record["net"], f"{where}.net")
+        elif kind == FACT_DELETE_OBJECT:
+            entry["uuid"] = _ident(record["uuid"], f"{where}.uuid")
+            entry["anchor"] = _anchor(record["anchor"], f"{where}.anchor")
+        elif kind == FACT_PLACE_COMPONENT:
+            designator = record["designator"]
+            if not isinstance(designator, str) or not _DESIGNATOR_RE.match(designator):
+                raise _bad(f"{where}.designator is not a valid designator")
+            entry["designator"] = designator
+            if record["lib_id"] not in PUBLIC_LIB_IDS:
+                raise _bad(f"{where}.lib_id must be one of {PUBLIC_LIB_IDS}")
+            entry["lib_id"] = record["lib_id"]
+            entry["value"] = _text(record["value"], f"{where}.value")
+            entry["footprint"] = _text(record["footprint"], f"{where}.footprint")
+            pin_nets = record["pin_nets"]
+            if not isinstance(pin_nets, dict) or not pin_nets:
+                raise _bad(f"{where}.pin_nets must be a non-empty object")
+            normalized: Dict[str, str] = {}
+            for pin_key, pin_net in pin_nets.items():
+                if not isinstance(pin_key, str) or not _PIN_KEY_RE.match(pin_key):
+                    raise _bad(f"{where}.pin_nets key {pin_key!r} is not a pin")
+                normalized[pin_key] = _text(pin_net, f"{where}.pin_nets.{pin_key}")
+            entry["pin_nets"] = normalized
+        interpretable.append(entry)
+    all_ids = [entry["id"] for entry in interpretable]
     if len(set(all_ids)) != len(all_ids):
-        raise _bad_facts("fact ids are not unique across public_facts")
-
-    return {
-        "status": status,
-        "gaps": gap_ids,
-        "protected": set(protected_anchors),
-        "pins": sorted(pin_targets, key=lambda entry: entry["anchor"]),
-        "components": sorted(component_targets, key=lambda entry: entry["designator"]),
-        "deletions": sorted(deletion_targets, key=lambda entry: entry["uuid"]),
-    }
+        raise _bad("fact ids are not unique")
+    return interpretable, uninterpretable
 
 
 # ---------------------------------------------------------------------------
-# 观测访问（只读 current_observation，绝不读取 expected）
+# 观测访问（kicad_netlist_current.v1）
 # ---------------------------------------------------------------------------
 
 
-def observed_net(views: Dict[str, Any], anchor: str) -> Optional[str]:
-    """返回锚点的跨视图一致观测网；不一致抛 OBSERVATION_CONFLICT，
-    全视图缺失或形状不可读抛 PUBLIC_INPUT_INSUFFICIENT。"""
-    observed: Optional[str] = None
-    seen = False
-    for view in OBSERVATION_VIEWS:
-        section = views.get(view)
-        if not isinstance(section, dict):
-            continue
-        pins = section.get("pins")
-        if not isinstance(pins, dict):
-            continue
-        if anchor not in pins:
-            continue
-        entry = pins[anchor]
-        net = entry.get("net") if isinstance(entry, dict) else None
-        if net is not None and not isinstance(net, str):
-            raise _FactsProblem(
-                "PUBLIC_INPUT_INSUFFICIENT",
-                [f"observation-{anchor.replace('.', '-')}"],
-                f"anchor {anchor} in view {view} has unreadable net entry",
-            )
-        if seen and net != observed:
-            raise _FactsProblem(
-                "OBSERVATION_CONFLICT",
+class ObservationView:
+    """netlist 观测的只读索引。引脚不在任何 net = 悬空（生产者声明的语义）。"""
+
+    def __init__(self, observation: Dict[str, Any]):
+        if observation.get("observation_type") != OBSERVATION_TYPE:
+            raise _Problem(
+                "PUBLIC_INPUT_MALFORMED",
                 [],
-                f"anchor {anchor} disagrees across views (net values differ)",
+                "current_observation.observation_type must be "
+                f"{OBSERVATION_TYPE!r}; arm D cannot read other formats",
             )
-        observed, seen = net, True
-    if not seen:
-        raise _FactsProblem(
-            "PUBLIC_INPUT_INSUFFICIENT",
-            [f"observation-{anchor.replace('.', '-')}"],
-            f"anchor {anchor} is absent from all observation views",
-        )
-    return observed
+        self.components: Dict[str, Dict[str, Any]] = {}
+        raw_components = observation.get("components")
+        if not isinstance(raw_components, list):
+            raise _Problem("PUBLIC_INPUT_MALFORMED", [], "components must be an array")
+        for index, comp in enumerate(raw_components):
+            if not isinstance(comp, dict) or not isinstance(comp.get("ref"), str):
+                raise _Problem(
+                    "PUBLIC_INPUT_MALFORMED", [], f"components[{index}] is malformed"
+                )
+            self.components[comp["ref"]] = comp
+        self.pin_net: Dict[Tuple[str, str], str] = {}
+        raw_nets = observation.get("nets")
+        if not isinstance(raw_nets, list):
+            raise _Problem("PUBLIC_INPUT_MALFORMED", [], "nets must be an array")
+        for net_index, net in enumerate(raw_nets):
+            if not isinstance(net, dict) or not isinstance(net.get("name"), str):
+                raise _Problem(
+                    "PUBLIC_INPUT_MALFORMED", [], f"nets[{net_index}] is malformed"
+                )
+            nodes = net.get("nodes")
+            if not isinstance(nodes, list):
+                raise _Problem(
+                    "PUBLIC_INPUT_MALFORMED", [], f"nets[{net_index}].nodes must be an array"
+                )
+            for node in nodes:
+                if not isinstance(node, dict):
+                    raise _Problem(
+                        "PUBLIC_INPUT_MALFORMED", [], f"nets[{net_index}] node malformed"
+                    )
+                stamp = (node.get("ref"), node.get("pin"))
+                if not isinstance(stamp[0], str) or not isinstance(stamp[1], str):
+                    raise _Problem(
+                        "PUBLIC_INPUT_MALFORMED",
+                        [],
+                        f"nets[{net_index}] node ref/pin must be strings",
+                    )
+                if stamp in self.pin_net and self.pin_net[stamp] != net["name"]:
+                    raise _Problem(
+                        "OBSERVATION_CONFLICT",
+                        [],
+                        f"pin {stamp[0]}.{stamp[1]} appears in multiple nets "
+                        f"({self.pin_net[stamp]} and {net['name']})",
+                    )
+                self.pin_net[stamp] = net["name"]
 
+    def net_of(self, ref: str, pin: str) -> Optional[str]:
+        return self.pin_net.get((ref, pin))
 
-def observed_component(views: Dict[str, Any], designator: str) -> Optional[str]:
-    exists_seen: Optional[bool] = None
-    value: Optional[str] = None
-    for view in OBSERVATION_VIEWS:
-        section = views.get(view)
-        if not isinstance(section, dict):
-            continue
-        components = section.get("components")
-        if not isinstance(components, dict):
-            continue
-        here = designator in components
-        entry = components.get(designator) if here else None
-        here_value = entry.get("value") if isinstance(entry, dict) else None
-        if here and here_value is not None and not isinstance(here_value, str):
-            raise _FactsProblem(
-                "PUBLIC_INPUT_INSUFFICIENT",
-                [f"observation-{designator}"],
-                f"component {designator} in view {view} has unreadable value",
-            )
-        if exists_seen is None:
-            exists_seen, value = here, here_value
-        elif exists_seen != here or value != here_value:
-            raise _FactsProblem(
-                "OBSERVATION_CONFLICT",
-                [],
-                f"component {designator} presence/value disagrees across views",
-            )
-    if exists_seen is None:
-        raise _FactsProblem(
-            "PUBLIC_INPUT_INSUFFICIENT",
-            [f"observation-{designator}"],
-            f"component {designator} cannot be observed (no component maps)",
-        )
-    return value if exists_seen else None
+    def component(self, ref: str) -> Optional[Dict[str, Any]]:
+        return self.components.get(ref)
 
 
 # ---------------------------------------------------------------------------
-# 提案组装
+# 提案组装（发射器与 v0.4 相同：冻结五字段 + PATCH/REFUSE + 三原语）
 # ---------------------------------------------------------------------------
 
 
@@ -506,195 +493,7 @@ def _diagnose(observed_text: str, fact_ids: List[str], rationale: str) -> Dict[s
     }
 
 
-def build_proposal(context: Dict[str, Any]) -> Dict[str, Any]:
-    header = {
-        "schema_version": PROPOSAL_SCHEMA_VERSION,
-        "context_id": context["context_id"],
-        "target": context["target"],
-        "base_source_sha256": context["base_source_sha256"],
-    }
-
-    facts_raw = context["public_facts"]
-    if facts_raw is None:
-        return _complete(
-            header, _refuse("PUBLIC_INPUT_INSUFFICIENT", ["public-facts"], "PublicContext carries no public_facts; arm D refuses rather than guess.")
-        )
-    try:
-        facts = validate_facts(facts_raw)
-    except _FactsProblem as problem:
-        return _complete(
-            header, _refuse(problem.reason_code, problem.missing, problem.explanation)
-        )
-
-    if facts["status"] == "insufficient":
-        return _complete(
-            header,
-            _refuse(
-                "PUBLIC_INPUT_INSUFFICIENT",
-                facts["gaps"],
-                "public package declares facts_status=insufficient; the listed gaps must be frozen before arm D can derive repairs",
-            ),
-        )
-
-    # 观察文档形状 = 公开夹具 schematic-observations.v1：视图嵌在 .views 下
-    views = (context["current_observation"] or {}).get("views") or {}
-
-    try:
-        ops: List[Dict[str, Any]] = []
-        diagnosis: List[Dict[str, Any]] = []
-
-        deletions_by_anchor: Dict[str, Dict[str, Any]] = {}
-        for entry in facts["deletions"]:
-            if entry["anchor"] in deletions_by_anchor:
-                raise _bad_facts(
-                    f"deletion_targets has more than one entry for anchor {entry['anchor']}"
-                )
-            deletions_by_anchor[entry["anchor"]] = entry
-
-        # R1：引脚重定向
-        for pin in facts["pins"]:
-            anchor, net, fact_id = pin["anchor"], pin["net"], pin["id"]
-            if anchor in facts["protected"]:
-                raise _FactsProblem(
-                    "PUBLIC_INPUT_CONFLICT",
-                    [],
-                    f"approved pin target {anchor} -> {net} touches protected anchor {anchor}",
-                )
-            observed = observed_net(views, anchor)
-            observed_text = f"anchor {anchor} observed net {observed if observed is not None else 'floating'}"
-            deletion = deletions_by_anchor.get(anchor)
-            if observed == net:
-                diagnosis.append(
-                    _diagnose(observed_text, [fact_id], "observation already matches the approved target; no operation emitted")
-                )
-                if deletion is not None:
-                    raise _FactsProblem(
-                        "OBSERVATION_CONFLICT",
-                        [],
-                        f"deletion target for {anchor} is unnecessary: observation already matches the approved net",
-                    )
-                continue
-            if observed is None:
-                if deletion is not None:
-                    raise _FactsProblem(
-                        "OBSERVATION_CONFLICT",
-                        [],
-                        f"deletion target for {anchor} has nothing to delete: anchor is floating",
-                    )
-                ops.append({"op": OP_ADD_NET_LABEL, "name": net, "at": anchor})
-                diagnosis.append(
-                    _diagnose(observed_text, [fact_id], "floating anchor receives the approved net label (rule R1)")
-                )
-            else:
-                if deletion is None:
-                    raise _FactsProblem(
-                        "PUBLIC_INPUT_INSUFFICIENT",
-                        [f"deletion-{anchor.replace('.', '-')}"],
-                        f"anchor {anchor} is wired to {observed}; retargeting needs a deletion_target uuid for the wrong label, which the public package does not provide",
-                    )
-                ops.append({"op": OP_DELETE_OBJECT, "uuid": deletion["uuid"]})
-                ops.append({"op": OP_ADD_NET_LABEL, "name": net, "at": anchor})
-                diagnosis.append(
-                    _diagnose(observed_text, [deletion["id"], fact_id], "wrong label is deleted by approved uuid and the approved net label is added (rule R1)")
-                )
-
-        # R2：新增元件
-        for comp in facts["components"]:
-            designator, fact_id = comp["designator"], comp["id"]
-            observed_value = observed_component(views, designator)
-            if observed_value is not None:
-                observed_text = f"component {designator} observed value {observed_value}"
-                if observed_value == comp["value"]:
-                    diagnosis.append(
-                        _diagnose(observed_text, [fact_id], "component already matches the approved value; no operation emitted")
-                    )
-                    continue
-                raise _FactsProblem(
-                    "NOT_EXPRESSION_IN_PUBLIC_OPS",
-                    [],
-                    f"component {designator} exists with value {observed_value} but the approved value is {comp['value']}; the public op primitives cannot modify an existing component value",
-                )
-            ops.append(
-                {
-                    "op": OP_PLACE_COMPONENT,
-                    "lib_id": comp["lib_id"],
-                    "designator": designator,
-                    "x_mil": comp["x_mil"],
-                    "y_mil": comp["y_mil"],
-                    "value": comp["value"],
-                    "footprint": comp["footprint"],
-                }
-            )
-            diagnosis.append(
-                _diagnose(
-                    f"component {designator} absent from observations",
-                    [fact_id],
-                    "approved component is placed at the host-granted coordinates (rule R2)",
-                )
-            )
-            for pin_key in sorted(comp["pin_nets"]):
-                anchor = f"{designator}.{pin_key}"
-                if anchor in facts["protected"]:
-                    raise _FactsProblem(
-                        "PUBLIC_INPUT_CONFLICT",
-                        [],
-                        f"approved pin label {anchor} touches protected anchor",
-                    )
-                ops.append(
-                    {"op": OP_ADD_NET_LABEL, "name": comp["pin_nets"][pin_key], "at": anchor}
-                )
-                diagnosis.append(
-                    _diagnose(
-                        f"anchor {anchor} of newly placed {designator}",
-                        [fact_id],
-                        "pin of newly placed component receives its approved net label (rule R2)",
-                    )
-                )
-    except _FactsProblem as problem:
-        return _complete(
-            header, _refuse(problem.reason_code, problem.missing, problem.explanation)
-        )
-
-    if not ops:
-        return _complete(
-            header,
-            _refuse(
-                "ALREADY_SATISFIED",
-                [],
-                "all approved targets already match the observation; the frozen schema has no empty patch, so arm D refuses with no change",
-            ),
-        )
-    if len(ops) > MAX_OPS:
-        return _complete(
-            header,
-            _refuse(
-                "OPERATION_LIMIT_EXCEEDED",
-                [],
-                f"derived {len(ops)} operations exceeds the frozen limit of {MAX_OPS}",
-            ),
-        )
-    if len(diagnosis) > MAX_DIAGNOSIS:
-        return _complete(
-            header,
-            _refuse(
-                "OPERATION_LIMIT_EXCEEDED",
-                [],
-                f"derived {len(diagnosis)} diagnosis entries exceeds the frozen limit of {MAX_DIAGNOSIS}",
-            ),
-        )
-
-    proposal = dict(header)
-    proposal["decision"] = DECISION_PATCH
-    proposal["diagnosis"] = diagnosis
-    proposal["oplist"] = {
-        "protocol_version": 2,
-        "target_format": "kicad",
-        "ops": ops,
-    }
-    return _complete(header, proposal)
-
-
-def _complete(header: Dict[str, Any], proposal: Dict[str, Any]) -> Dict[str, Any]:
+def _finish(header: Dict[str, Any], proposal: Dict[str, Any]) -> Dict[str, Any]:
     for key, value in header.items():
         proposal[key] = value
     if proposal["decision"] == DECISION_PATCH:
@@ -703,6 +502,275 @@ def _complete(header: Dict[str, Any], proposal: Dict[str, Any]) -> Dict[str, Any
         proposal.pop("oplist", None)
     proposal["diagnosis"] = proposal.get("diagnosis") or []
     return proposal
+
+
+def build_proposal(package: Dict[str, Any]) -> Dict[str, Any]:
+    context = package["public_context"]
+    header = {
+        "schema_version": PROPOSAL_SCHEMA_VERSION,
+        "context_id": context["context_id"],
+        "target": context["target"],
+        "base_source_sha256": context["base_source_sha256"],
+    }
+    max_ops = context["limits"]["max_ops"]
+    try:
+        # grants / facts / 观测的一切不兼容都以"合法 REFUSE"表达（退出码 0）；
+        # exit 2 只保留给包文件级结构损坏（load_document 层）。
+        grants = _validate_grants(package["placement_grants"])
+        facts = context["public_facts"]
+        if not isinstance(facts, list):
+            raise _Problem(
+                "PUBLIC_INPUT_MALFORMED",
+                [],
+                "public_facts must be an array (empty means no supplied facts); "
+                "arm D consumes the frozen y4-public.v3 shape only",
+            )
+        view = ObservationView(context["current_observation"])
+        if not facts:
+            return _finish(
+                header,
+                _refuse(
+                    "PUBLIC_INPUT_INSUFFICIENT",
+                    ["public-facts"],
+                    "public_facts is empty (no facts supplied); arm D has no "
+                    "approved repair targets and refuses rather than guess",
+                ),
+            )
+        interpretable, uninterpretable = interpret_facts(facts)
+        if uninterpretable:
+            return _finish(
+                header,
+                _refuse(
+                    "UNINTERPRETABLE_FACTS",
+                    uninterpretable,
+                    "these approved fact records are outside arm D's declared "
+                    "grammar (connect_pin/delete_object/place_component); the "
+                    "facts grammar freeze is pending with A2-Y/Percy",
+                ),
+            )
+
+        ops: List[Dict[str, Any]] = []
+        diagnosis: List[Dict[str, Any]] = []
+        used_slots = 0
+        deletions_by_anchor: Dict[str, Dict[str, Any]] = {}
+        connect_seen: Dict[str, str] = {}
+        place_seen: set = set()
+        retargeted_anchors: set = set()
+        for fact in interpretable:
+            if fact["kind"] == FACT_DELETE_OBJECT:
+                if fact["anchor"] in deletions_by_anchor:
+                    raise _bad(
+                        f"more than one delete_object fact for anchor {fact['anchor']}"
+                    )
+                deletions_by_anchor[fact["anchor"]] = fact
+
+        def take_slot() -> Dict[str, int]:
+            nonlocal used_slots
+            if used_slots >= len(grants):
+                raise _Problem(
+                    "PLACEMENT_CAPACITY_EXHAUSTED",
+                    [],
+                    "all placement_grants slots are used; no slot left for the "
+                    "next place_component (D takes slots in package order)",
+                )
+            slot = grants[used_slots]
+            used_slots += 1
+            return slot
+
+        # R1：connect_pin（按数组顺序）
+        for fact in interpretable:
+            if fact["kind"] != FACT_CONNECT_PIN:
+                continue
+            anchor = fact["anchor"]
+            if anchor in connect_seen:
+                raise _Problem(
+                    "PUBLIC_INPUT_CONFLICT",
+                    [],
+                    f"two connect_pin facts target anchor {anchor} "
+                    f"({connect_seen[anchor]!r} and {fact['net']!r}); arm D cannot "
+                    "derive a deterministic repair",
+                )
+            connect_seen[anchor] = fact["net"]
+            ref, _, pin = anchor.partition(".")
+            if ref not in view.components:
+                raise _Problem(
+                    "PUBLIC_INPUT_INSUFFICIENT",
+                    [f"observation-{anchor.replace('.', '-')}"],
+                    f"anchor {anchor} references unknown component {ref}",
+                )
+            observed = view.net_of(ref, pin)
+            target_net = fact["net"]
+            observed_text = (
+                f"pin {anchor} on net {observed}"
+                if observed is not None
+                else f"pin {anchor} floating (absent from all nets)"
+            )
+            deletion = deletions_by_anchor.get(anchor)
+            if observed == target_net:
+                diagnosis.append(
+                    _diagnose(
+                        observed_text,
+                        [fact["id"]],
+                        "observation already matches the approved target; no operation",
+                    )
+                )
+                if deletion is not None:
+                    raise _Problem(
+                        "PUBLIC_INPUT_CONFLICT",
+                        [],
+                        f"delete_object fact for {anchor} targets an "
+                        "already-satisfied pin",
+                    )
+                continue
+            if observed is None:
+                if deletion is not None:
+                    raise _Problem(
+                        "PUBLIC_INPUT_CONFLICT",
+                        [],
+                        f"delete_object fact for {anchor} has nothing to "
+                        "delete: pin is floating",
+                    )
+                ops.append({"op": OP_ADD_NET_LABEL, "name": target_net, "at": anchor})
+                diagnosis.append(
+                    _diagnose(observed_text, [fact["id"]], "floating pin receives the approved net label (R1)")
+                )
+            else:
+                if deletion is None:
+                    raise _Problem(
+                        "PUBLIC_INPUT_INSUFFICIENT",
+                        [f"delete-{anchor.replace('.', '-')}"],
+                        f"pin {anchor} is wired to {observed}; retargeting "
+                        "needs an approved delete_object fact carrying the wrong "
+                        "label uuid, which the package does not supply",
+                    )
+                retargeted_anchors.add(anchor)
+                ops.append({"op": OP_DELETE_OBJECT, "uuid": deletion["uuid"]})
+                ops.append({"op": OP_ADD_NET_LABEL, "name": target_net, "at": anchor})
+                diagnosis.append(
+                    _diagnose(
+                        observed_text,
+                        [deletion["id"], fact["id"]],
+                        "wrong label deleted by approved uuid, approved label added (R1)",
+                    )
+                )
+
+        # R4：孤儿删除（没有任何 connect_pin 引用的 delete_object）
+        for anchor, deletion in deletions_by_anchor.items():
+            if anchor not in retargeted_anchors:
+                raise _Problem(
+                    "PUBLIC_INPUT_INSUFFICIENT",
+                    [f"connect-{anchor.replace('.', '-')}"],
+                    f"delete_object fact {deletion['id']} for {anchor} has no "
+                    "paired connect_pin fact; arm D deletes only to retarget a "
+                    "pin, not speculatively",
+                )
+
+        # R2：place_component（按数组顺序；坐标按 grants 顺序取槽）
+        for fact in interpretable:
+            if fact["kind"] != FACT_PLACE_COMPONENT:
+                continue
+            designator = fact["designator"]
+            if designator in place_seen:
+                raise _Problem(
+                    "PUBLIC_INPUT_CONFLICT",
+                    [],
+                    f"two place_component facts target designator {designator}; "
+                    "arm D cannot derive a deterministic placement",
+                )
+            place_seen.add(designator)
+            existing = view.component(designator)
+            if existing is not None:
+                observed_value = existing.get("value")
+                observed_text = f"component {designator} observed value {observed_value!r}"
+                if observed_value == fact["value"]:
+                    diagnosis.append(
+                        _diagnose(
+                            observed_text,
+                            [fact["id"]],
+                            "component already matches the approved value; no operation",
+                        )
+                    )
+                    continue
+                raise _Problem(
+                    "NOT_EXPRESSION_IN_PUBLIC_OPS",
+                    [],
+                    f"component {designator} exists with value {observed_value!r} but "
+                    f"the approved value is {fact['value']!r}; public primitives "
+                    "cannot modify an existing component",
+                )
+            slot = take_slot()
+            ops.append(
+                {
+                    "op": OP_PLACE_COMPONENT,
+                    "lib_id": fact["lib_id"],
+                    "designator": designator,
+                    "x_mil": slot["x_mil"],
+                    "y_mil": slot["y_mil"],
+                    "value": fact["value"],
+                    "footprint": fact["footprint"],
+                }
+            )
+            diagnosis.append(
+                _diagnose(
+                    f"component {designator} absent from netlist observation",
+                    [fact["id"]],
+                    "approved component placed on host-granted slot "
+                    f"({slot['x_mil']}, {slot['y_mil']}) in package order (R2)",
+                )
+            )
+            for pin_key in sorted(fact["pin_nets"]):
+                ops.append(
+                    {
+                        "op": OP_ADD_NET_LABEL,
+                        "name": fact["pin_nets"][pin_key],
+                        "at": f"{designator}.{pin_key}",
+                    }
+                )
+            diagnosis.append(
+                _diagnose(
+                    f"{len(fact['pin_nets'])} pins of newly placed {designator}",
+                    [fact["id"]],
+                    "pins of newly placed component receive approved net labels (R2)",
+                )
+            )
+    except _Problem as problem:
+        return _finish(header, _refuse(problem.reason_code, problem.missing, problem.explanation))
+
+    if not ops:
+        return _finish(
+            header,
+            _refuse(
+                "ALREADY_SATISFIED",
+                [],
+                "all approved targets already match the observation; the frozen "
+                "schema has no empty patch, so arm D refuses with no change",
+            ),
+        )
+    if len(ops) > max_ops:
+        return _finish(
+            header,
+            _refuse(
+                "OPERATION_LIMIT_EXCEEDED",
+                [],
+                f"derived {len(ops)} operations exceeds limits.max_ops={max_ops}",
+            ),
+        )
+    if len(diagnosis) > MAX_DIAGNOSIS:
+        return _finish(
+            header,
+            _refuse(
+                "OPERATION_LIMIT_EXCEEDED",
+                [],
+                f"derived {len(diagnosis)} diagnosis entries exceeds the frozen "
+                f"limit of {MAX_DIAGNOSIS}",
+            ),
+        )
+
+    proposal = dict(header)
+    proposal["decision"] = DECISION_PATCH
+    proposal["diagnosis"] = diagnosis
+    proposal["oplist"] = {"protocol_version": 2, "target_format": "kicad", "ops": ops}
+    return _finish(header, proposal)
 
 
 def render(proposal: Dict[str, Any]) -> bytes:
@@ -718,16 +786,25 @@ def render(proposal: Dict[str, Any]) -> bytes:
     ).encode("utf-8")
 
 
+def propose_bytes(raw: bytes) -> bytes:
+    """D 侧适配器：request_bytes（冻结包原始字节）→ Proposal 字节。
+
+    与 tools.y4_dry_runner.run_adapter 的 adapter(request_bytes) -> bytes
+    契约一致；BaselineInputError（包级结构损坏）向上抛给调用方记录，
+    不在适配器内吞掉。
+    """
+    return render(build_proposal(load_document(raw)))
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="AEDL Y4 arm-D deterministic baseline")
-    parser.add_argument("--context", required=True, help="PublicContext JSON (C1 shape)")
+    parser.add_argument("--package", required=True, help="y4-public.v3 package JSON (exact C/D request bytes)")
     parser.add_argument("--out", required=True, help="output proposal JSON path")
     args = parser.parse_args(argv)
     try:
-        context = load_context(Path(args.context))
-        proposal = build_proposal(context)
+        proposal = build_proposal(load_package(Path(args.package)))
     except BaselineInputError as exc:
-        print(f"baseline: invalid input: {exc}", file=sys.stderr)
+        print(f"baseline: invalid package: {exc}", file=sys.stderr)
         return 2
     Path(args.out).write_bytes(render(proposal))
     print(f"baseline: wrote {proposal['decision']} proposal to {args.out}")
