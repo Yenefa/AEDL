@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 92 条。完整正文在各自条目文件中；本索引只做导航。
+共 93 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -127,3 +127,6 @@
 
 - [`AI-20260910-PER-3A3AA8B393308B4AA361B83FDA17CEBF`](ai-usage/AI-20260910-PER-3A3AA8B393308B4AA361B83FDA17CEBF.md) — 修复 master 红灯（台账索引未闭环）+ 落实 PR #53 REQUEST_CHANGES 的 M1-2 / M1-5 整改
 - [`AI-20260910-PER-AFCEDEBF75ADD3D18C37E52BCB552A37`](ai-usage/AI-20260910-PER-AFCEDEBF75ADD3D18C37E52BCB552A37.md) — W2 TASK-B6 —— 再分发 / 隐私 / 证据三条发布边界入库；发现 RES-007 登记与实际状态不符
+## 2026-09-11
+
+- [`AI-20260911-OPENCODE-E1C979A5B030BE12E7E3E174226C2BE7`](ai-usage/AI-20260911-OPENCODE-E1C979A5B030BE12E7E3E174226C2BE7.md) — GH-56 r19/r20 修正版审计与提交执行 + PR #60（A2-L）复核取证
