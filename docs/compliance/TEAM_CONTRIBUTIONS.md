@@ -54,3 +54,16 @@
 - 关联 Commit / PR：未提交；未创建 PR；未 push
 - 关联 Evidence：无（治理文档澄清，不形成硬件或比赛技术效果证据）
 - 备注：未根据客户端名称倒推历史精确模型版本。
+
+## 2026-09-11 — PR #60（A2-L D baseline）两轮人工对抗复核
+
+- 负责人：`Yenefa`（ID_MAP 记录的项目负责人）。
+- 协作者：OpenCode Desktop（AI 辅助复现取证与发布；`AI-20260911-OPENCODE-E1C979A5B030BE12E7E3E174226C2BE7`）。
+- 实际完成：
+  - v0.3.0（f190781）首轮 review（GitHub #60 评论）：判定 "green tests, wrong system"——自造 Proposal 协议未对齐冻结 C1 `parse_proposal`、公共输入旁路（checker findings + `aedl.public-facts.draft-0.1`）、expected 信息级别在公共输入冻结前写死。
+  - v0.4.0（3ce3a2e）rework 复核（GitHub review `CHANGES_REQUESTED`）：确认第一条已修复（23/23 输出经真实 C1 验证）；判定第二/三条未修复——真实 y4-public.v3 包（calibration + Y4-001）CLI 实测 exit 2（`public_facts` 形态不符）、观测视图不匹配（`kicad_netlist_current.v1` vs `views.*`）；给出三条放行前置。
+- 人工审核：本条记录人类审查动作本身；GitHub review 状态 `CHANGES_REQUESTED`（2026-09-11）。
+- 关联 AI Usage：`AI-20260911-OPENCODE-E1C979A5B030BE12E7E3E174226C2BE7`
+- 关联 Commit / PR：PR #60（评论 + review）；无仓库文件变更。
+- 关联 Evidence：无（评审结论，不构成硬件/技术效果证据）。
+- 备注：实测取证由 AI 辅助执行并已在 AI 条目登记；结论与责任归属 Yenefa。
