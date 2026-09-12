@@ -1,6 +1,6 @@
 # B5 前置：C3–C6 独立验收扰动判据（草案）
 
-> 状态：`DRAFT — NOT FROZEN`（draft-1）。起草：Claude Code（Percy 会话），2026-09-12。
+> 状态：`DRAFT — NOT FROZEN`（draft-2）。起草：Claude Code（Percy 会话），2026-09-12。
 > 任务：W2 r3 卡 **B5｜C3–C6 独立验收，Owner: Percy，6h**。
 > **纪律：判据必须先于实现冻结。** C3–C6 在 master 上一行未落地（§0.2 实测），所以此刻写判据天然没有实现曝光——这与 A3 rubric 是同一条纪律。
 > **红线：Percy 不实现 C3–C6**（W2 r3「永久隔离纪律」）。本文件只定义验收怎么判，不给实现方案。
