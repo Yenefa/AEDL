@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 92 条。完整正文在各自条目文件中；本索引只做导航。
+共 93 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -129,3 +129,6 @@
 ## 2026-09-11
 
 - [`AI-20260911-OPENCODE-E1C979A5B030BE12E7E3E174226C2BE7`](ai-usage/AI-20260911-OPENCODE-E1C979A5B030BE12E7E3E174226C2BE7.md) — GH-56 r19/r20 修正版审计与提交执行 + PR #60（A2-L）复核取证
+## 2026-09-12
+
+- [`AI-20260912-PER-8CDC04C60044592378A3C4FCCCB53E76`](ai-usage/AI-20260912-PER-8CDC04C60044592378A3C4FCCCB53E76.md) — P3 F-U1-04 措辞人工核验入库（A3 rubric 冻结前置）

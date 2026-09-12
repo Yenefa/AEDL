@@ -9,7 +9,7 @@
 >
 > 三层结构：**本文件（work units，默认浏览入口）** → [`AI_USAGE_LOG.md`](AI_USAGE_LOG.md)（逐条索引，脚本生成，禁手改） → `docs/compliance/ai-usage/<ID>.md`（逐条真源）。
 >
-> - 覆盖核验：本文件引用 92 条记录（91 条历史 + 本批自身 1 条），与 `AI_USAGE_LOG.md` 当前 92 条**双向一致**（无遗漏、无重复、无虚构 ID）。
+> - 覆盖核验：本文件引用 93 条记录（92 条历史 + 本批自身 1 条），与 `AI_USAGE_LOG.md` 当前 93 条**双向一致**（无遗漏、无重复、无虚构 ID）。
 > - 本文件只做聚合与引用，**不改写任何条目正文**；条目正文的修订请直接改 `ai-usage/<ID>.md` 并重建索引。
 > - **`Human owner` 只在该工作单元的记录中明确出现时才具名**；未具名一律写 `TO_VERIFY`，不默认归属给任何人。
 > - `Human final decision`：`yes` = 有批准 / merge / 裁决记录；`pending` = 条目仍为 `PENDING_HUMAN_REVIEW` 且无 merge 记录；`TO_VERIFY` = 记录未具名。
@@ -54,6 +54,7 @@
 | WU-32 | 2026-09-09 | W1 范围边界入库（#37 残值提取 + 角色纪律重写） | DOCUMENT / REFACTOR | Percy（提取范围与 #37 关闭裁定由其人工决定） | yes — PR #53 由 Yenefa merge（合并时 REQUEST_CHANGES 的整改项尚未落地，见明细） | 1 |
 | WU-33 | 2026-09-10 | 修复 master 红灯 + #53 遗留整改（M1-2 / M1-5） | DEBUG / DOCUMENT | Percy（「先修 master」优先级由其决定） | pending — 条目 PENDING_HUMAN_REVIEW | 1 |
 | WU-36 | 2026-09-11 | GH-56 r19/r20 修正版审计与提交 + PR #60 复核取证 | RESEARCH / REVIEW / DOCUMENT | Yenefa（授权提交 GH-56 变更集；PR #60 复核结论由其判定） | pending — 条目 PENDING_HUMAN_REVIEW；PR #61 待人工评审 | 1 |
+| WU-37 | 2026-09-12 | P3 F-U1-04 措辞人工核验入库（A3 rubric 冻结前置） | RESEARCH / DOCUMENT | Percy（打开冻结原件目视核对，裁定措辞为 `recommended`） | pending — 条目 PENDING_HUMAN_REVIEW；PR 待人工评审 | 1 |
 
 ## 明细
 
@@ -334,6 +335,15 @@
 - **Human final decision**：pending — AI 条目 `PENDING_HUMAN_REVIEW`；PR #61 待人工评审；PR #60 已由 Owner 判定 `CHANGES_REQUESTED`
 - **证据**：PR #61（commit `e641b5eb`，CI 双绿）；PR #60 review（`CHANGES_REQUESTED`）；r20 归档全链哈希独立复核；真实冻结包 CLI 实测 exit 2 ×2
 - **边界**：未接触 Percy private oracle；复核仅使用公开仓库内容与公开冻结包
+
+### WU-37 · 2026-09-12 — P3 F-U1-04 措辞人工核验入库（A3 rubric 冻结前置）
+
+- **Records (1)**：`AI-20260912-PER-8CDC04C60044592378A3C4FCCCB53E76`
+- **AI role**：RESEARCH / DOCUMENT
+- **Human owner**：Percy（打开冻结原件目视核对，裁定措辞为 `recommended`；核验本身未由 AI 代做）
+- **Human final decision**：pending — 条目 `PENDING_HUMAN_REVIEW`；PR 待人工评审
+- **证据**：核对对象为冻结原件 `src/hardware/m2-board/evidence/datasheets/U1_ESP32-C3-WROOM-02/esp32c3_schematic_checklist_power_supply_2026-08-31.html`；条目「本次改动」节列出 P3 的四处改动与摘录补全
+- **边界**：只覆盖 F-U1-04 的措辞；p34 Figure 9-1 图形附项仍为 `AI_EXTRACTED_UNVERIFIED`；A3 rubric 本体（`DRAFT — NOT FROZEN`）不在本单元范围内，其台账条目在字节冻结时另开
 
 ---
 
