@@ -24,16 +24,22 @@ from pathlib import Path
 from tools.repair_baseline import (
     CONTRACT_PATH,
     CONTRACT_SHA256,
+    MAX_C1_TEXT_CHARS,
+    MAX_DIAGNOSIS,
+    MAX_GRANT_SLOTS,
     TOOL_VERSION,
     BaselineInputError,
     build_proposal,
     choose_slot,
+    evaluate_netlist,
     load_package,
     propose_bytes,
     render,
 )
 import tools.repair_baseline as repair_baseline
 from tools.repair_pipeline import (
+    MAX_DIAGNOSIS as PIPELINE_MAX_DIAGNOSIS,
+    MAX_TEXT_CHARS as PIPELINE_MAX_TEXT_CHARS,
     canonical_json_bytes,
     hash_bytes,
     make_public_context,
@@ -124,6 +130,52 @@ SOURCE_TWO_WIRES = SOURCE_TEMPLATE.format(
     '  (wire (pts (xy 170 170) (xy 180 180)) (stroke (width 0) (type default))'
     ' (uuid "55555555-5555-5555-5555-555555555555"))'
 )
+
+# 去掉 (150,150)-(160,160) 的 NA/NB 导线：缺件修复只能走"标签中点"锚点分支
+# （两个标签的中点 (130, 131.905) 最近的是 grants[1]=(4000,5000)，不是 grants[0]）。
+SOURCE_LABELS_ONLY = SOURCE.replace(
+    '  (wire (pts (xy 150 150) (xy 160 160)) (stroke (width 0) (type default))'
+    ' (uuid "44444444-4444-4444-4444-444444444444"))\n',
+    "",
+)
+
+# B1 复现形状（review 的 BLOCKER 场景）：X1 = Device:R，其**真实**标签在旋转 90° 后
+# 的引脚位置 (103.81, 100)；一枚**无关**对象的标签 "NA" 恰好落在未旋转公式
+# `sym.y - dy` 算出的 X1.1 位置 (100, 96.19)。引擎读不到 rotation 时会把无关标签
+# 当成"X1.1 的错标签"删掉；读到 rotation 必须 fail-closed 拒绝。
+_DECOY_SOURCE_TEMPLATE = """(kicad_sch (version 20230121) (paper "A4")
+  (lib_symbols
+    (symbol "Device:R" (pin_numbers hide) (pin_names (offset 0))
+      (property "Reference" "R" (at 2.032 0 90))
+      (property "Value" "R" (at 0 0 90))
+      (symbol "R_0_1"
+        (rectangle (start -1.016 -2.54) (end 1.016 2.54))
+      )
+      (symbol "R_1_1"
+        (pin passive line (at 0 3.81 270) (length 1.27) (name "~" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
+        (pin passive line (at 0 -3.81 90) (length 1.27) (name "~" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
+      )
+    )
+  )
+  (symbol (lib_id "Device:R") (at 100 100 {rot}){mirror} (unit 1)
+    (uuid "66666666-6666-6666-6666-666666666666")
+    (property "Reference" "X1" (at 102 100 0))
+    (property "Value" "1k" (at 102 103 0))
+    (property "Footprint" "Test:R_neutral" (at 0 0 0))
+    (pin "1" (uuid "77777777-7777-7777-7777-777777777777"))
+    (pin "2" (uuid "88888888-8888-8888-8888-888888888888"))
+  )
+  (label "NA" (at 100 96.19 0) (uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa08"))
+  (label "NA" (at 103.81 100 0) (uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa09"))
+)
+"""
+
+# 无关对象的标签（未旋转公式下 X1.1 的位置）：它绝不能被删。
+DECOY_LABEL_UUID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa08"
+
+SOURCE_ROTATED_DECOY = _DECOY_SOURCE_TEMPLATE.format(rot=90, mirror="")
+SOURCE_MIRRORED_DECOY = _DECOY_SOURCE_TEMPLATE.format(rot=0, mirror=" (mirror y)")
+SOURCE_UNROTATED_DECOY = _DECOY_SOURCE_TEMPLATE.format(rot=0, mirror="")
 
 # 中性合成合同：只声明规则 id / severity / netlist 项，无任何案例级取值。
 CONTRACT_PIN = {
@@ -291,6 +343,22 @@ OBSERVATION_WITH_SIBLING = netlist_observation(
     [net("NA", "1", [("X1", "1")]), net("NB", "2", [("X2", "1")])],
     [comp("X1"), comp("X2"), comp("R5", footprint="Test:R_neutral")],
 )
+
+# B1：X1.1 在 NA 上，合同要求 NB → pin_net 错接，修复路径需要 X1 的引脚几何。
+OBSERVATION_X1_1_ON_NA = netlist_observation(
+    [net("NA", "1", [("X1", "1")])],
+    [comp("X1")],
+)
+CONTRACT_X1_1_NB = {
+    "schema_version": 1,
+    "rules": [
+        {
+            "id": "NEUTRAL_X1_1",
+            "severity": "major",
+            "checks": {"netlist": {"pins": {"X1.1": {"net": "NB"}}}},
+        }
+    ],
+}
 
 
 def make_package(observation_data=OBSERVATION, facts=(), grants=None, limits=None, source=SOURCE):
@@ -485,6 +553,74 @@ class DerivationTests(HeaderMixin, unittest.TestCase):
         self.assertIn("no C1 value-update operation for X1",
                       proposal["refusal"]["explanation"])
 
+    def test_missing_component_label_anchor_picks_nearest_slot(self):
+        """两个期望网标签的中点 (130, 131.905) 决定槽位：最近的 grants[1]。"""
+        proposal = run_baseline(
+            make_package(observation_data=OBSERVATION_WITH_SIBLING, source=SOURCE_LABELS_ONLY),
+            CONTRACT_MISSING,
+        )
+        self.assertEqual(proposal["decision"], "PATCH")
+        placement = [op for op in proposal["oplist"]["ops"] if op["op"] == "place_component"][0]
+        self.assertEqual((placement["x_mil"], placement["y_mil"]), (4000, 5000))
+
+    def test_sibling_footprint_uses_the_majority_family(self):
+        """兄弟封装取多数票：R5=0603 是少数，R1/R2=0402 胜出。"""
+        observation = netlist_observation(
+            [net("NA", "1", [("X1", "1")]), net("NB", "2", [("X2", "1")])],
+            [comp("X1"), comp("X2"), comp("R5", footprint="F:0603"),
+             comp("R1", footprint="F:0402"), comp("R2", footprint="F:0402")],
+        )
+        proposal = run_baseline(make_package(observation_data=observation), CONTRACT_MISSING)
+        self.assertEqual(proposal["decision"], "PATCH")
+        placement = [op for op in proposal["oplist"]["ops"] if op["op"] == "place_component"][0]
+        self.assertEqual(placement["footprint"], "F:0402")
+
+    def test_root_sheet_name_prefix_is_normalised(self):
+        """KiCad 根图纸网名 "/NB" 归一化为合同裸名 NB：不再是错接。"""
+        observation = netlist_observation([net("/NB", "1", [("X1", "2")])], [comp("X1")])
+        proposal = run_baseline(make_package(observation_data=observation), CONTRACT_PIN)
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertEqual(proposal["refusal"]["explanation"],
+                         "no public-derivable repair plan")
+
+    def test_unconnected_net_name_means_disconnected(self):
+        """`unconnected-*` 归一化为"未连接"：合同要求 X1.2 悬空，因此已满足。"""
+        observation = netlist_observation(
+            [net("unconnected-(X1-Pad2)", "1", [("X1", "2")])], [comp("X1")])
+        proposal = run_baseline(make_package(observation_data=observation), CONTRACT_DISCONNECT)
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertEqual(proposal["refusal"]["explanation"],
+                         "no public-derivable repair plan")
+
+    def test_duplicate_ops_are_deduplicated(self):
+        """两条规则推出同一个 op 时只发射一次（op 去重）。"""
+        contract = {
+            "schema_version": 1,
+            "rules": [
+                {"id": "NEUTRAL_DUP_A", "severity": "major",
+                 "checks": {"netlist": {"pins": {"X1.2": {"net": "NB"}}}}},
+                {"id": "NEUTRAL_DUP_B", "severity": "major",
+                 "checks": {"netlist": {"pins": {"X1.2": {"net": "NB"}}}}},
+            ],
+        }
+        proposal = run_baseline(make_package(), contract)
+        self.assertEqual(proposal["decision"], "PATCH")
+        self.assertEqual(proposal["oplist"]["ops"],
+                         [{"op": "add_net_label", "name": "NB", "at": "X1.2"}])
+        self.assertEqual(len(proposal["diagnosis"]), 2)
+
+    def test_labels_at_tolerance_is_pinned(self):
+        """引脚位置偏移 0.0005 的标签仍在 labels_at 的 0.001 容差内。"""
+        source = SOURCE.replace('(label "NA" (at 100 103.81 0)',
+                                '(label "NA" (at 100 103.8105 0)')
+        proposal = run_baseline(
+            make_package(observation_data=OBSERVATION_WRONG_LABEL, source=source), CONTRACT_PIN)
+        self.assertEqual(proposal["decision"], "PATCH")
+        self.assertEqual(proposal["oplist"]["ops"], [
+            {"op": "delete_object", "uuid": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01"},
+            {"op": "add_net_label", "name": "NB", "at": "X1.2"},
+        ])
+
     def test_no_mismatch_refuses_without_derivable_plan(self):
         proposal = run_baseline(make_package(), CONTRACT_SATISFIED)
         self.assertEqual(proposal["decision"], "REFUSE")
@@ -510,6 +646,129 @@ class DerivationTests(HeaderMixin, unittest.TestCase):
         self.assertNotIn(b'", "', raw)
 
 
+class FailClosedPreconditionTests(HeaderMixin, unittest.TestCase):
+    """review 整改的 fail-closed 前置条件（B1 旋转/镜像、W2 C1 文本、W3 同槽）。
+
+    三者都只在"引擎会算错几何或会发射非法产物"的输入上触发：五个冻结包 rotation
+    全为 0、无 mirror、文本合法、槽位互不相同，因此逐字节等价不受影响
+    （acceptance 脚本另行证明）。
+    """
+
+    maxDiff = None
+
+    # ---- B1：旋转/镜像符号的引脚几何不可信 ---------------------------------
+
+    def test_rotated_symbol_refuses_and_emits_no_delete_object(self):
+        proposal = run_baseline(
+            make_package(observation_data=OBSERVATION_X1_1_ON_NA, source=SOURCE_ROTATED_DECOY),
+            CONTRACT_X1_1_NB,
+        )
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertEqual(proposal["refusal"]["reason_code"], "SYMBOL_TRANSFORM_UNSUPPORTED")
+        self.assertIn("rotation/mirror", proposal["refusal"]["explanation"])
+        # 关键：无关对象的标签绝不出现在产物里（不发射 delete_object）。
+        self.assertNotIn("oplist", proposal)
+        self.assertNotIn(DECOY_LABEL_UUID, render(proposal).decode("utf-8"))
+
+    def test_mirrored_symbol_refuses_and_emits_no_delete_object(self):
+        proposal = run_baseline(
+            make_package(observation_data=OBSERVATION_X1_1_ON_NA, source=SOURCE_MIRRORED_DECOY),
+            CONTRACT_X1_1_NB,
+        )
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertEqual(proposal["refusal"]["reason_code"], "SYMBOL_TRANSFORM_UNSUPPORTED")
+        self.assertIn("mirror=y", proposal["refusal"]["explanation"])
+        self.assertNotIn(DECOY_LABEL_UUID, render(proposal).decode("utf-8"))
+
+    def test_untransformed_symbol_with_the_same_shape_deletes_the_decoy(self):
+        """对照：同一源码 rot=0 时未旋转公式确实指向那枚标签——说明拒绝来自
+        transform 前置条件，而不是几何路径本身（公式在 rot=0 下是对的）。"""
+        proposal = run_baseline(
+            make_package(observation_data=OBSERVATION_X1_1_ON_NA, source=SOURCE_UNROTATED_DECOY),
+            CONTRACT_X1_1_NB,
+        )
+        self.assertEqual(proposal["decision"], "PATCH")
+        self.assertEqual(proposal["oplist"]["ops"], [
+            {"op": "delete_object", "uuid": DECOY_LABEL_UUID},
+            {"op": "add_net_label", "name": "NB", "at": "X1.1"},
+        ])
+
+    # ---- W2：C1 文本前置校验（发射前） -------------------------------------
+
+    def test_over_long_footprint_refuses(self):
+        long_footprint = "F" * 3000
+        observation = netlist_observation(
+            [net("NA", "1", [("X1", "1")]), net("NB", "2", [("X2", "1")])],
+            [comp("X1"), comp("X2"), comp("R5", footprint=long_footprint)],
+        )
+        proposal = run_baseline(make_package(observation_data=observation), CONTRACT_MISSING)
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertEqual(proposal["refusal"]["reason_code"], "C1_TEXT_UNSUPPORTED")
+        self.assertIn("place_component footprint", proposal["refusal"]["explanation"])
+
+    def test_blank_expected_value_refuses(self):
+        """被发射的 value 为空/空白时同样是非法 C1 文本（allow_empty=False）。"""
+        contract = {
+            "schema_version": 1,
+            "rules": [
+                {"id": "NEUTRAL_BLANK_VALUE", "severity": "major",
+                 "checks": {"netlist": {
+                     "components": {"R21": {"value": "   "}},
+                     "pins": {"R21.1": {"net": "NA"}, "R21.2": {"net": "NB"}}}}},
+            ],
+        }
+        proposal = run_baseline(make_package(observation_data=OBSERVATION_WITH_SIBLING), contract)
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertEqual(proposal["refusal"]["reason_code"], "C1_TEXT_UNSUPPORTED")
+        self.assertIn("place_component value", proposal["refusal"]["explanation"])
+
+    def test_control_character_in_value_refuses(self):
+        """观测 value 里的控制字符会落进 diagnosis[].observed（PATCH 与 REFUSE
+        都带诊断），必须在发射前拒绝。"""
+        observation = netlist_observation(
+            [net("NA", "1", [("X1", "1")]), net("NB", "2", [("X2", "1")])],
+            [comp("X1", value="1k\x01"), comp("X2")],
+        )
+        proposal = run_baseline(make_package(observation_data=observation), CONTRACT_VALUE)
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertEqual(proposal["refusal"]["reason_code"], "C1_TEXT_UNSUPPORTED")
+        self.assertIn("diagnosis observed", proposal["refusal"]["explanation"])
+
+    # ---- W3：不同槽校验 ----------------------------------------------------
+
+    def test_two_placements_on_one_slot_refuse(self):
+        """两个缺件解析到同一个授予槽：摆放次数 (2) 未超授予槽数 (3)，
+        因此必须由"不同槽"校验拒绝（GRANTS_EXHAUSTED 抓不到）。"""
+        proposal = run_baseline(make_package(observation_data=OBSERVATION_WITH_SIBLING),
+                                CONTRACT_TWO_MISSING)
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertEqual(proposal["refusal"]["reason_code"], "SLOT_COLLISION")
+        self.assertIn("distinct granted slot", proposal["refusal"]["explanation"])
+
+    def test_two_missing_parts_on_distinct_slots_still_patch(self):
+        """反面对照：两个缺件落在**不同**槽时不得过度拒绝。"""
+        source = SOURCE_TEMPLATE.format(
+            extra='  (wire (pts (xy 20 20) (xy 24 24)) (stroke (width 0) (type default))'
+            ' (uuid "99999999-9999-9999-9999-999999999999"))'
+        )
+        contract = {
+            "schema_version": 1,
+            "rules": [
+                {"id": "NEUTRAL_TWO_SLOTS", "severity": "major",
+                 "checks": {"netlist": {
+                     "components": {"R21": {"value": "10k"}, "R22": {"value": "10k"}},
+                     "pins": {"R21.1": {"net": "NA"}, "R21.2": {"net": "NB"},
+                              "R22.1": {"net": "NC"}, "R22.2": {"net": "ND"}}}}},
+            ],
+        }
+        proposal = run_baseline(
+            make_package(observation_data=OBSERVATION_WITH_SIBLING, source=source), contract)
+        self.assertEqual(proposal["decision"], "PATCH")
+        slots = {(op["x_mil"], op["y_mil"]) for op in proposal["oplist"]["ops"]
+                 if op["op"] == "place_component"}
+        self.assertEqual(slots, {(1000, 2000), (7000, 8000)})
+
+
 class BudgetAndGuardTests(HeaderMixin, unittest.TestCase):
     maxDiff = None
 
@@ -529,17 +788,49 @@ class BudgetAndGuardTests(HeaderMixin, unittest.TestCase):
         self.assertEqual(proposal["decision"], "REFUSE")
         self.assertEqual(proposal["refusal"]["reason_code"], "GRANTS_EXHAUSTED")
 
-    def test_diagnosis_is_capped_to_frozen_limit(self):
-        """诊断条目封顶 16：即使注入合同触发更多规则，产物仍是合法 C1 Proposal。"""
+    def test_diagnosis_is_capped_and_still_c1_legal(self):
+        """诊断封顶 16（= C1 的封闭上限）：>16 条规则组时截断必须让产物保持合法。
+
+        旧版用例断言的提案是预算守卫的 REFUSE，其 `diagnosis` 恒为 `[]`，断言
+        恒真。这里刻意让 ops 与 blockers 同时存在 → 走"引擎无法表达修复"的
+        REFUSE，它**携带**诊断；去掉 `[:MAX_DIAGNOSIS]` 即 21 条 → parse_proposal
+        以 REPAIR_SCHEMA_INVALID 拒收。
+        """
         rules = [
-            {"id": "NEUTRAL_%02d" % index, "severity": "major",
+            {"id": "NEUTRAL_FLAT_%02d" % index, "severity": "major",
              "checks": {"netlist": {"pins": {"X1.%d" % index: {"net": "NB"}}}}}
             for index in range(2, 22)
         ]
-        proposal = run_baseline(make_package(), {"schema_version": 1, "rules": rules})
-        self.assertLessEqual(len(proposal["diagnosis"]), 16)
+        rules.append({"id": "NEUTRAL_WRONG_VALUE", "severity": "major",
+                      "checks": {"netlist": {"components": {"X1": {"value": "22k"}}}}})
+        contract = {"schema_version": 1, "rules": rules}
+        grouped = {m["rule_id"] for m in evaluate_netlist(contract, OBSERVATION)}
+        self.assertGreater(len(grouped), MAX_DIAGNOSIS)
+        proposal = run_baseline(make_package(), contract)  # run_baseline 过真实 C1
         self.assertEqual(proposal["decision"], "REFUSE")
-        self.assertEqual(proposal["refusal"]["reason_code"], "OPERATION_LIMIT_EXCEEDED")
+        self.assertEqual(proposal["refusal"]["reason_code"], "NO_DERIVABLE_PLAN")
+        self.assertEqual(len(proposal["diagnosis"]), MAX_DIAGNOSIS)
+
+    def test_c1_limits_match_the_pipeline(self):
+        """本地 C1 常量必须与 tools.repair_pipeline 一致，否则前置校验会与真实
+        拒收规则漂移（截断上限与文本上限都是 C1 的封闭约束）。"""
+        self.assertEqual(MAX_C1_TEXT_CHARS, PIPELINE_MAX_TEXT_CHARS)
+        self.assertEqual(MAX_DIAGNOSIS, PIPELINE_MAX_DIAGNOSIS)
+
+    def test_grants_cap_and_coordinate_range_refuse(self):
+        """grants 槽数上限与坐标范围（0..1000000 整数 mil）都是 fail-closed 拒绝。"""
+        over_cap = [{"x_mil": index, "y_mil": index} for index in range(MAX_GRANT_SLOTS + 1)]
+        proposal = run_baseline(make_package(grants=over_cap), CONTRACT_PIN)
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertEqual(proposal["refusal"]["reason_code"], "PUBLIC_INPUT_MALFORMED")
+        self.assertIn("exceeds the policy cap", proposal["refusal"]["explanation"])
+        for bad in ([{"x_mil": -1, "y_mil": 0}],
+                    [{"x_mil": 1000001, "y_mil": 0}],
+                    [{"x_mil": 0, "y_mil": True}]):
+            proposal = run_baseline(make_package(grants=bad), CONTRACT_PIN)
+            self.assertEqual(proposal["decision"], "REFUSE")
+            self.assertEqual(proposal["refusal"]["reason_code"], "PUBLIC_INPUT_MALFORMED")
+            self.assertIn("integer mil", proposal["refusal"]["explanation"])
 
     def test_pin_in_two_nets_conflicts(self):
         conflicting = netlist_observation(
@@ -634,6 +925,22 @@ class PackageLevelTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             with self.assertRaises(BaselineInputError):
                 load_package(Path(temp_dir) / "missing.json")
+
+    def load_raw(self, raw):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            return load_package(self.write(temp_dir, "pkg.json", raw))
+
+    def test_rejects_nan_and_infinity_constants(self):
+        """NaN/Infinity 常量必须在解析层被拒：json.loads 默认接受它们，只有
+        parse_constant 钩子会 fail-closed（否则它们会一路进入诊断文本）。"""
+        for token in ("NaN", "Infinity", "-Infinity"):
+            package = make_package()
+            package["public_context"]["current_observation"]["components"][0]["value"] = \
+                "__NONFINITE__"
+            raw = json.dumps(package)
+            self.load_raw(raw)  # 对照：占位符作为普通字符串是合法包
+            with self.assertRaises(BaselineInputError):
+                self.load_raw(raw.replace('"__NONFINITE__"', token))
 
 
 def del_key(mapping, key):

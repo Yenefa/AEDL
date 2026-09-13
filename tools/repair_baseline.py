@@ -34,6 +34,43 @@ Owner 决策 D1 = "C" 明确 L2 操作邻域事实不属于冻结合同。于是
 - 输出：json.dumps(ensure_ascii=False, sort_keys=True, separators=(",", ":"))，
   **无尾换行**（与实跑 D 的字节一致）。
 
+与 r16 的有意差异（deliberate differences，逐条披露）
+----------------------------------------------------
+内核与 r16 候选逐字相同的函数见上；下列是本模块**有意**偏离 r16 之处（机械 AST
+比对可复现）。有意偏离必须显式记录，而不是留给 reviewer 去发现：
+
+1. `parse_schematic`：删掉 r16 中本引擎用不到的 uuid/pins 辅助读取。
+2. `evaluate_netlist`：仅格式差异，语义相同。
+3. `_wire_endpoint_labels`：仅注解差异。
+4. `observed_state`：新增 `observation_type`/形状守卫与 `OBSERVATION_CONFLICT`
+   （r16 对"同一引脚出现在两个 net"是静默后者胜）。
+5. `build_plan`：仅 `choose_slot` 重构（语义相同）+ `OP_*` 常量。
+6. 诊断块抽成 `_diagnosis` 并加 `[:MAX_DIAGNOSIS]` 截断（C1 封闭上限 16）。
+7. 提案组装：v0.5 信封 + `GRANTS_EXHAUSTED` 守卫；`render()` 选项相同，仅加
+   `allow_nan=False`（无害）。
+8. **`max_ops` 上限（自 v0.6.0 起披露）**：r16 的 emitter **完全没有** ops 上限；
+   本模块在提案组装前新增 `if len(ops) > max_ops` → 合法
+   `REFUSE / OPERATION_LIMIT_EXCEEDED`。这是改进（r16 会发出超过 `max_ops` 的
+   非法 PATCH），但它是**行为偏离**，因此必须列在这里。
+
+**逐字节等价证据的覆盖范围**：正因为差异 8 存在，5/5 逐字节等价（以及"与实跑 D
+同字节"的结论）只钉住那些"推导出的 op 数 ≤ `limits.max_ops`"的输入。推导超过
+`max_ops` 的输入在本模块合法 REFUSE，而 r16 会照发——这类输入**不在**逐字节
+证据的覆盖范围内。
+
+相对 r16 的 fail-closed 前置条件（v0.6.0 新增；五个冻结包上均不触发）
+--------------------------------------------------------------------
+- `SYMBOL_TRANSFORM_UNSUPPORTED`：r16 的 `symbol_absolute_pins` 公式只对
+  `(at x y 0)` 且无 `(mirror …)` 的实例成立（源解析器从不读 rotation/mirror）。
+  当修复路径需要引脚几何而目标符号带旋转/镜像时，本模块拒绝——而不是按未旋转
+  公式算出一个错误位置、进而删掉无关对象的标签。旋转/镜像**变换本身未实现**。
+- `C1_TEXT_UNSUPPORTED`：所有会被发射的文本（`place_component` 的 `value`/
+  `footprint`、`diagnosis[].observed`）在发射前按 C1 `_text` 文法校验（字符串、
+  ≤2048 字符、无控制字符、需要时非空）；不合法即拒绝，绝不发射会被
+  `tools.repair_pipeline.parse_proposal` 拒收的提案。
+- `SLOT_COLLISION`：两次 `place_component` 落到同一个授予槽（相同
+  `(x_mil, y_mil)`）时拒绝；`GRANTS_EXHAUSTED` 只数摆放次数，不看不同槽数。
+
 D2 = A（Owner 2026-09-13 决定）：placement 语义只锁成员性
 --------------------------------------------------------
 冻结合同只要求每个 place_component 的坐标**取自**包内 placement_grants；
@@ -68,6 +105,9 @@ PROPOSAL_SCHEMA_VERSION = 1
 MAX_OPS_CONTRACT_CEILING = 8
 MAX_GRANT_SLOTS = 2048
 MAX_DIAGNOSIS = 16
+# 与 tools.repair_pipeline.MAX_TEXT_CHARS 同步（本模块不 import C1 实现，保持自包含；
+# 有测试钉住两者相等）。发射前用它做 C1 文法前置校验。
+MAX_C1_TEXT_CHARS = 2048
 
 PACKAGE_KEYS = (
     "schema_version",
@@ -108,6 +148,9 @@ REASON_PUBLIC_INPUT_MALFORMED = "PUBLIC_INPUT_MALFORMED"
 REASON_OBSERVATION_CONFLICT = "OBSERVATION_CONFLICT"
 REASON_OPERATION_LIMIT_EXCEEDED = "OPERATION_LIMIT_EXCEEDED"
 REASON_GRANTS_EXHAUSTED = "GRANTS_EXHAUSTED"
+REASON_SLOT_COLLISION = "SLOT_COLLISION"
+REASON_SYMBOL_TRANSFORM_UNSUPPORTED = "SYMBOL_TRANSFORM_UNSUPPORTED"
+REASON_C1_TEXT_UNSUPPORTED = "C1_TEXT_UNSUPPORTED"
 REASON_CONTRACT_DRIFT = "CONTRACT_DRIFT"
 REASON_NO_DERIVABLE_PLAN = "NO_DERIVABLE_PLAN"
 
@@ -156,6 +199,39 @@ class _Problem(Exception):
 
 def _bad(explanation: str) -> _Problem:
     return _Problem(REASON_PUBLIC_INPUT_MALFORMED, [], explanation)
+
+
+# ---------------------------------------------------------------------------
+# C1 文本前置校验（发射前）：与 tools.repair_pipeline._text 同一文法。
+# 观测（以及缺件的期望值）本来是公共输入，但**不是**合法的 C1 文本；本模块要么
+# 发射合法提案，要么拒绝——绝不发射 C1 parse_proposal 会拒收的文档。
+# ---------------------------------------------------------------------------
+
+
+def _c1_text_violation(value: Any, allow_empty: bool) -> Optional[str]:
+    """None = 这是合法 C1 文本；否则返回人类可读的违规原因。"""
+    if not isinstance(value, str):
+        return "is not a string"
+    if len(value) > MAX_C1_TEXT_CHARS:
+        return "exceeds %d characters" % MAX_C1_TEXT_CHARS
+    for char in value:
+        if ord(char) < 0x20 or ord(char) == 0x7F:
+            return "contains a control character"
+    if not allow_empty and not value.strip():
+        return "is empty"
+    return None
+
+
+def _require_c1_text(value: Any, where: str, allow_empty: bool = True) -> None:
+    violation = _c1_text_violation(value, allow_empty)
+    if violation is None:
+        return
+    raise _Problem(
+        REASON_C1_TEXT_UNSUPPORTED,
+        [],
+        "%s %s, which C1 cannot express: arm D refuses instead of emitting a "
+        "proposal that tools.repair_pipeline.parse_proposal would reject" % (where, violation),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -318,13 +394,23 @@ class Label:
 
 
 class Symbol:
-    __slots__ = ("ref", "lib_id", "x", "y")
+    """一个符号实例。
 
-    def __init__(self, ref: Optional[str], lib_id: str, x: float, y: float):
+    `rot` / `mirror` 是实例的 `(at x y rot)` 旋转与 `(mirror …)` 轴：r16 的引脚
+    绝对坐标公式只对 rot % 360 == 0 且无 mirror 的实例成立，因此这里必须**解析并
+    保留**它们，供 `symbol_absolute_pins` 做 fail-closed 前置判定（见该函数）。
+    """
+
+    __slots__ = ("ref", "lib_id", "x", "y", "rot", "mirror")
+
+    def __init__(self, ref: Optional[str], lib_id: str, x: float, y: float,
+                 rot: float = 0.0, mirror: Optional[str] = None):
         self.ref = ref
         self.lib_id = lib_id
         self.x = x
         self.y = y
+        self.rot = rot
+        self.mirror = mirror
 
 
 class Schematic:
@@ -389,11 +475,16 @@ def parse_schematic(source_text: str) -> Schematic:
     symbols: List[Symbol] = []
     for block in _balanced_blocks(source_text, r'\(symbol\s+\(lib_id\s'):
         lib = re.search(r'\(lib_id\s+"([^"]+)"\)', block)
-        at = re.search(r'\(at\s+([\-0-9.]+)\s+([\-0-9.]+)', block)
+        # 实例自身的 (at x y [rot])：旋转可选（省略即 0），必须在发射几何判定前
+        # 捕获；r16 的解析器丢掉了它，导致旋转实例的引脚位置算错。
+        at = re.search(r'\(at\s+([\-0-9.]+)\s+([\-0-9.]+)(?:\s+([\-0-9.]+))?', block)
+        mirror_match = re.search(r'\(mirror\s+([A-Za-z]+)\s*\)', block)
         ref_match = re.search(r'\(property\s+"Reference"\s+"([^"]*)"', block)
         if lib and at:
             symbols.append(Symbol(ref_match.group(1) if ref_match else None,
-                                  lib.group(1), float(at.group(1)), float(at.group(2))))
+                                  lib.group(1), float(at.group(1)), float(at.group(2)),
+                                  float(at.group(3)) if at.group(3) else 0.0,
+                                  mirror_match.group(1) if mirror_match else None))
     return Schematic(wires, labels, symbols)
 
 
@@ -579,10 +670,27 @@ def parse_lib_pins(source_text: str) -> Dict[str, Dict[str, Tuple[float, float]]
 
 def symbol_absolute_pins(sch: Schematic, lib_pins: Dict[str, Dict[str, Tuple[float, float]]],
                          ref: str) -> Optional[Dict[str, Tuple[float, float]]]:
-    """Absolute pin positions for one instance (rotation 0, no mirror only)."""
+    """Absolute pin positions for one instance.
+
+    Fail-closed precondition: the ported r16 formula (`sym.x + dx`, `sym.y - dy`)
+    is only valid for `(at x y 0)` with no `(mirror …)`.  A rotated or mirrored
+    instance would yield a **wrong** pin position, and the repair path uses that
+    position to pick the label to delete — i.e. it could delete an unrelated
+    object's label.  The transform is deliberately **not** implemented: such a
+    symbol refuses with SYMBOL_TRANSFORM_UNSUPPORTED instead.
+    """
     for sym in sch.symbols:
         if sym.ref != ref:
             continue
+        if sym.rot % 360 != 0 or sym.mirror:
+            raise _Problem(
+                REASON_SYMBOL_TRANSFORM_UNSUPPORTED,
+                [],
+                "symbol %s (lib_id %s) carries a rotation/mirror transform "
+                "(rot=%s, mirror=%s) that this ported engine cannot map to absolute "
+                "pin coordinates; refusing rather than computing a wrong pin position "
+                "and deleting an unrelated object's label" % (ref, sym.lib_id, sym.rot, sym.mirror),
+            )
         if sym.lib_id not in lib_pins:
             return None
         return {pin: (round(sym.x + dx, 4), round(sym.y - dy, 4))
@@ -667,6 +775,12 @@ def build_plan(mismatches: List[Dict[str, Any]], sch: Schematic,
                 elif points:
                     anchor = (points[0][0], points[0][1] + 5.08)
             chosen = choose_slot(grants, anchor)
+            # C1 前置校验：这两个字段来自观测（footprint）与合同（value），都会被
+            # 原样发射；不合法则拒绝，而不是发射 parse_proposal 拒收的文档。
+            _require_c1_text(mismatch["expected_value"], "place_component value for %s" % ref,
+                             allow_empty=False)
+            _require_c1_text(footprint, "place_component footprint for %s" % ref,
+                             allow_empty=False)
             ops.append({"op": OP_PLACE_COMPONENT, "lib_id": lib_id, "designator": ref,
                         "x_mil": chosen["x_mil"], "y_mil": chosen["y_mil"],
                         "value": mismatch["expected_value"], "footprint": footprint})
@@ -721,6 +835,10 @@ def _diagnosis(mismatches: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                                     m.get("observed_net", m.get("observed_value", "missing")),
                                     m.get("expected_net", m.get("expected_value")))
             for m in items[:4])
+        # C1 前置校验：observed 收纳观测里的 value（wrong_value）与网名，会原样
+        # 进入产物（PATCH 与 REFUSE 都带诊断）——不合法即拒绝。
+        _require_c1_text(rule_id, "diagnosis rule_id", allow_empty=False)
+        _require_c1_text(observed, "diagnosis observed for %s" % rule_id, allow_empty=False)
         diagnosis.append({
             "rule_id": rule_id,
             "observed": observed,
@@ -797,11 +915,12 @@ def build_proposal(package: Dict[str, Any],
         _, _, comp_footprint = observed_state(observation)
         ops, blockers = build_plan(mismatches, schematic, lib_pins, active_contract,
                                    comp_footprint, grants)
+        # 诊断也在这里构造：_diagnosis 的 C1 文本前置校验失败同样是"可绑定拒绝"，
+        # 必须走同一条 _refuse_bound 路径（发射逻辑在下面，不重复 try）。
+        diagnosis = _diagnosis(mismatches)
     except _Problem as problem:
         return _refuse_bound(header, problem.reason_code, problem.missing,
                              problem.explanation)
-
-    diagnosis = _diagnosis(mismatches)
 
     if ops and not blockers:
         if len(ops) > max_ops:
@@ -811,15 +930,27 @@ def build_proposal(package: Dict[str, Any],
                 [],
                 f"derived {len(ops)} operations exceeds limits.max_ops={max_ops}",
             )
-        placements = sum(1 for op in ops if op["op"] == OP_PLACE_COMPONENT)
-        if placements > len(grants):
+        placements = [op for op in ops if op["op"] == OP_PLACE_COMPONENT]
+        if len(placements) > len(grants):
             return _refuse_bound(
                 header,
                 REASON_GRANTS_EXHAUSTED,
                 [],
-                f"derived {placements} placements exceeds the "
+                f"derived {len(placements)} placements exceeds the "
                 f"{len(grants)} granted slot(s); member slot selection is "
                 "host-granted",
+            )
+        # 数"不同槽"而不是"摆放次数"：两次摆放落到同一个授予槽时，runner 的
+        # 成员性检查照样通过，但两个器件会叠在一起——这是几何上不可能的修复。
+        used_slots = {(op["x_mil"], op["y_mil"]) for op in placements}
+        if len(used_slots) != len(placements):
+            return _refuse_bound(
+                header,
+                REASON_SLOT_COLLISION,
+                [],
+                f"derived {len(placements)} placements resolve to only "
+                f"{len(used_slots)} distinct granted slot(s); each placement needs "
+                "its own host-granted slot",
             )
         proposal = dict(header)
         proposal["decision"] = DECISION_PATCH
