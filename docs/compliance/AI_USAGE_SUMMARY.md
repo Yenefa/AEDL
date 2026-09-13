@@ -9,7 +9,7 @@
 >
 > 三层结构：**本文件（work units，默认浏览入口）** → [`AI_USAGE_LOG.md`](AI_USAGE_LOG.md)（逐条索引，脚本生成，禁手改） → `docs/compliance/ai-usage/<ID>.md`（逐条真源）。
 >
-> - 覆盖核验：本文件引用 93 条记录（92 条历史 + 本批自身 1 条），与 `AI_USAGE_LOG.md` 当前 93 条**双向一致**（无遗漏、无重复、无虚构 ID）。
+> - 覆盖核验（2026-09-11，合入 `origin/master` 后重建索引）：本文件引用 95 条记录（91 条历史 + `AI-20260910-PER-3A3AA8…` 1 条 + GH-56 CODEX 条目 1 条 + GH-56 OPENCODE 自主战役条目 1 条 + GH-56 审计/复核条目 1 条），与 `AI_USAGE_LOG.md` 当前 95 条**双向一致**（无遗漏、无重复、无虚构 ID）。
 > - 本文件只做聚合与引用，**不改写任何条目正文**；条目正文的修订请直接改 `ai-usage/<ID>.md` 并重建索引。
 > - **`Human owner` 只在该工作单元的记录中明确出现时才具名**；未具名一律写 `TO_VERIFY`，不默认归属给任何人。
 > - `Human final decision`：`yes` = 有批准 / merge / 裁决记录；`pending` = 条目仍为 `PENDING_HUMAN_REVIEW` 且无 merge 记录；`TO_VERIFY` = 记录未具名。
@@ -53,8 +53,10 @@
 | WU-31 | 2026-09-09 | 贡献归因信息架构重构（Issue #54） | DOCUMENT / ADVISE | Yenefa（2026-09-09 会话批准本方案并给出裁决） | pending — 条目 PENDING_HUMAN_REVIEW；PR 待人工审核 | 1 |
 | WU-32 | 2026-09-09 | W1 范围边界入库（#37 残值提取 + 角色纪律重写） | DOCUMENT / REFACTOR | Percy（提取范围与 #37 关闭裁定由其人工决定） | yes — PR #53 由 Yenefa merge（合并时 REQUEST_CHANGES 的整改项尚未落地，见明细） | 1 |
 | WU-33 | 2026-09-10 | 修复 master 红灯 + #53 遗留整改（M1-2 / M1-5） | DEBUG / DOCUMENT | Percy（「先修 master」优先级由其决定） | pending — 条目 PENDING_HUMAN_REVIEW | 1 |
+| WU-34 | 2026-09-09 / 09-11 | GH-56 Y4-dry 公共输入打包、五例协议修订与 r12 harness 终验（r13 收尾中） | GENERATE_CODE / GENERATE_TEST / DOCUMENT / DEBUG | Yenefa | yes — 2026-09-10 批准 dry scoring 与五例修订；2026-09-11 审查结论 REQUEST_CHANGES，r13 收尾后倾向 APPROVE；实现审核仍 PENDING_HUMAN_REVIEW | 1 |
+| WU-35 | 2026-09-11 | GH-56 自主预冻结战役（r10–r15）：语义闭环、冻结前准备、证据修复、独立复核与 G6 可达性审计 | GENERATE_CODE / GENERATE_TEST / DOCUMENT / DEBUG / RESEARCH | Yenefa（G1–G11 决策与 G10/G11 明确授权） | yes — G11 授权入账；G10 授权更新权威文档；无 merge/冻结授权 | 1 |
 | WU-36 | 2026-09-11 | GH-56 r19/r20 修正版审计与提交 + PR #60 复核取证 | RESEARCH / REVIEW / DOCUMENT | Yenefa（授权提交 GH-56 变更集；PR #60 复核结论由其判定） | pending — 条目 PENDING_HUMAN_REVIEW；PR #61 待人工评审 | 1 |
-| WU-38 | 2026-09-11 | W2 A4/J1 —— Percy 侧交叉复核（八项零越界） | REVIEW / DOCUMENT | Percy（复核执行时点由其决定） | pending — 条目 PENDING_HUMAN_REVIEW；§2 待另一侧执行，§3 依据链未闭合 | 1 |
+| WU-43 | 2026-09-11 | W2 A4/J1 —— Percy 侧交叉复核（八项零越界） | REVIEW / DOCUMENT | Percy（复核执行时点由其决定） | pending — 条目 PENDING_HUMAN_REVIEW；§2 待另一侧执行，§3 依据链未闭合 | 1 |
 
 ## 明细
 
@@ -327,6 +329,25 @@
 - **Human final decision**：pending — 条目 `PENDING_HUMAN_REVIEW`
 - **证据**：该条目「起因」节实测数据——`check` 报 index out of sync、`dev_gate` overall fail、master CI 于 2026-09-09T14:38:07Z 转红；「未处理项」节逐条声明 M1-3 按 ADR-012 保留、M2 留待人工裁决。
 
+### WU-34 · 2026-09-09 / 09-11 — GH-56 Y4-dry harness、五例协议修订与终验（r13 收尾中）
+
+- **Records (1)**：`AI-20260909-CODEX-08B3C72E2039158034BF8831C5648828`
+- **AI role**：GENERATE_CODE / GENERATE_TEST / DOCUMENT / DEBUG
+- **Human owner**：Yenefa
+- **Human final decision**：yes — 2026-09-10 批准 dry scoring 责任边界与五例协议修订；2026-09-11 人工审查结论为 REQUEST_CHANGES（base 过期、run-plan 语义绑定、Issue 协议分叉、台账语义停滞、UTF-8 assert），要求 r13 完成整改后倾向 APPROVE。实现审核仍 `PENDING_HUMAN_REVIEW`，未 merge。
+- **证据**：该条目、ADR-013、[Issue #56](https://github.com/Yenefa/AEDL/issues/56)（协议已固化）；`gh56-y4-dry` host 归档 r1–r13；人工审查记录 `r13/OWNER-REVIEW-REQUEST-CHANGES-20260911.md`。
+- **协议时间线（同一工作单元续记）**：r4–r6 输入治理（PBF-011～016 处置；DC-06 判定 `PUBLIC_INPUT_INSUFFICIENT` 并 `EXCLUDED_BEFORE_FREEZE`）；r7 计分集 6→5（DC-01..DC-05）、30 槽、旧六例 mapping/array/run-plan/freeze hash 永久作废；r8 facts（PBF-001～010）与 runner `y4-dry.v3` 批准、权威文档修订补丁准备；r9 文档一致性修正；r10 独立战役（五例冻结候选生成→删除→再生成逐字节一致、四路独立复核、Owner Packet G1–G11）；r11 候选补丁与 C adapter 候选；r12 `attempts_per_slot=1` 压入 runner（`y4-dry.v4`）、`run_plan_check` 晋升、fresh admit/dev_gate、Source/Obs Readiness Packet；r13 rebase 至 `master@9e749c15`、修复 run-plan slot 语义绑定、UTF-8 fail-closed、Issue 协议固化与台账语义刷新。
+- **当前状态**：`formal_freeze`、C/D 轨迹、A/B 评分、J1 均 `NOT_RUN`；D baseline（PR #60）待改造为同一 `adapter(request_bytes) -> bytes` / `y4-public.v2` 接口。
+
+### WU-35 · 2026-09-11 — GH-56 自主预冻结战役（r10–r15）
+
+- **Records (1)**：`AI-20260911-OPENCODE-B22447B04C07A404EFF381150ADE3195`
+- **AI role**：GENERATE_CODE / GENERATE_TEST / DOCUMENT / DEBUG / RESEARCH
+- **Human owner**：Yenefa；G6 审计与台账记录分别经 2026-09-11 决策授权
+- **Human final decision**：pending — 条目 `PENDING_HUMAN_REVIEW`；正式冻结/计分仍未授权
+- **证据**：该条目、`gh56-y4-dry/r10–r15` host 归档（Owner Packet、critic 报告、可达性审计）、dev_gate 与 admission 回执
+- **边界**：G6 私有 expected-repair 侧仅在 host-only 隔离工作单元使用，未进入任何 proposer-visible 产物
+
 ### WU-36 · 2026-09-11 — GH-56 r19/r20 修正版审计与提交 + PR #60 复核取证
 
 - **Records (1)**：`AI-20260911-OPENCODE-E1C979A5B030BE12E7E3E174226C2BE7`
@@ -336,13 +357,14 @@
 - **证据**：PR #61（commit `e641b5eb`，CI 双绿）；PR #60 review（`CHANGES_REQUESTED`）；r20 归档全链哈希独立复核；真实冻结包 CLI 实测 exit 2 ×2
 - **边界**：未接触 Percy private oracle；复核仅使用公开仓库内容与公开冻结包
 
-### WU-38 · 2026-09-11 — W2 A4 / TASK-J1 交叉复核（Percy 侧）
+### WU-43 · 2026-09-11 — W2 A4 / TASK-J1 交叉复核（Percy 侧）
 
 - **Records (1)**：`AI-20260911-PER-BA94BF6FC9D43C7427A6BCDECC297648`
 - **AI role**：REVIEW / DOCUMENT
 - **Human owner**：Percy（2026-09-11 指令「现在把交叉复核做了」）
 - **Human final decision**：pending — 条目 `PENDING_HUMAN_REVIEW`；W1 止损决策的最终裁定按 W2 r3 归 Yenefa
-- **证据**：该条目「§1 方法与结论」节——11 个 PR、149 个文件、八项逐条核查；「§2/§3 的处理方式」节说明为何不代为执行与不代为作决策；「已知限制」节声明模式检索不能排除等价措辞。
+- **证据**：该条目「§1 方法与结论」节——11 个 PR、149 个文件、八项逐条核查；「§2/§3 的处理方式」节说明为何不代为执行与不代为作决策；「已知限制」节声明模式检索不能排除等价措辞
+- **编号沿革**：本单元先后记作 WU-36、WU-38，均与他人已占号冲突；2026-09-13 让号为 **WU-43**
 
 ---
 
