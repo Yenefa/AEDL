@@ -21,6 +21,13 @@ tools/board_review.py text eol=lf
 # purpose and is unaffected: it matches no .md path.
 *.md text eol=lf
 
+# Byte-frozen evidence overrides the rule above (later rules win): these two
+# handoff files are bound to sha256 values published in Issue #68 and PR #69,
+# so renormalising their line endings would break the provenance chain that
+# the scoring side verifies against. Same reasoning as the repair_pr1 fixtures.
+notes/y4/PBF-001-010-PUBLIC-FACTS.md -text
+notes/y4/PBF-001-010-PUBLIC-FACTS.json -text
+
 delivery/gerbers/* text eol=crlf
 
 # Explicit binaries (untouched bytes)
