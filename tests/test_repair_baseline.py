@@ -1,15 +1,16 @@
-"""AEDL Y4 arm-D baseline tests（v0.5，真实 y4-public.v3 包 → 冻结 Proposal）。
+"""AEDL Y4 arm-D baseline tests（v0.6.0，A-2′ prime：观测 + 公共合同 → 冻结 Proposal）。
 
-与 v0.4 的本质区别（回应 PR #60 第二轮 review）：
-- 输入一律是完整的 y4-public.v3 形状包：public_context 经真实 C1
-  make_public_context 构造（含 leak guard），facts 是**数组**，观测是
-  kicad_netlist_current.v1（components/nets/nodes），坐标只从
-  placement_grants 取，max_ops 从 context.limits 读；
+与 v0.5 的本质区别（Owner 决策 D1 = "C"）：
+- L2 事实文法（interpret_facts / FACT_KINDS）与 ObservationView 已退役：
+  public_facts 不再承载修复推理（只保留"必须是数组"的形状守卫，以免类型不符
+  把包级损坏误判成 exit 2）；
+- 修复由移植自 r16 实跑产物（d_adapter_v3_candidate.py）的规则引擎从 netlist
+  观测 + 公共合同推导。测试通过 build_proposal(package, contract=...) 注入
+  **中性合成合同**（X1/X2/R5 等通用名、NA/NB/NC/ND 等通用网名），不复刻五个
+  计分案例，也不写死任何案例级锚点→网名/UUID/坐标；
 - 每一份输出（PATCH 与 REFUSE 都算）都喂真实 C1 parse_proposal 验证；
-- 数据全部为**中性合成**（X1/X9、NA/NB 等通用名），不复刻五个计分案例，
-  也不写死任何锚点→网名/UUID/坐标的案例级映射；
-- 真实 runner 集成测试（freeze → adapter → collect_result）：y4 runner 在
-  PR #61 分支，合入后 import 成功即自动启用（此前显式 skip，原因注明）。
+- 真实 runner 集成测试仍需要 PR #61 的 tools/y4_dry_runner.py，缺失时自动
+  skip（原因注明），合入后自动启用。
 """
 
 import json
@@ -23,6 +24,7 @@ from tools.repair_baseline import (
     TOOL_VERSION,
     BaselineInputError,
     build_proposal,
+    choose_slot,
     load_package,
     propose_bytes,
     render,
@@ -49,6 +51,7 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "tools" / "repair_baseline.py"
+CONTRACT_PATH = ROOT / "gates" / "contracts" / "m2_schematic_contract_v1.json"
 
 SHA_A = "a" * 64
 SHA_B = "b" * 64
@@ -72,6 +75,180 @@ GRANTS = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# 中性合成 fixture（通用名；唯一几何：Device:R 的引脚在 (0, ±3.81)）
+# ---------------------------------------------------------------------------
+
+SOURCE_TEMPLATE = """(kicad_sch (version 20230121) (paper "A4")
+  (lib_symbols
+    (symbol "Device:R" (pin_numbers hide) (pin_names (offset 0))
+      (property "Reference" "R" (at 2.032 0 90))
+      (property "Value" "R" (at 0 0 90))
+      (symbol "R_0_1"
+        (rectangle (start -1.016 -2.54) (end 1.016 2.54))
+      )
+      (symbol "R_1_1"
+        (pin passive line (at 0 3.81 270) (length 1.27) (name "~" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
+        (pin passive line (at 0 -3.81 90) (length 1.27) (name "~" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
+      )
+    )
+  )
+  (symbol (lib_id "Device:R") (at 100 100 0) (unit 1)
+    (uuid "11111111-1111-1111-1111-111111111111")
+    (property "Reference" "X1" (at 102 100 0))
+    (property "Value" "1k" (at 102 103 0))
+    (property "Footprint" "Test:R_neutral" (at 0 0 0))
+    (pin "1" (uuid "22222222-2222-2222-2222-222222222222"))
+    (pin "2" (uuid "33333333-3333-3333-3333-333333333333"))
+  )
+  (label "NA" (at 100 103.81 0) (uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01"))
+  (label "NA" (at 150 150 0) (uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa02"))
+  (label "NB" (at 160 160 0) (uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa03"))
+  (label "NC" (at 20 20 0) (uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa04"))
+  (label "ND" (at 24 24 0) (uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa05"))
+  (wire (pts (xy 150 150) (xy 160 160)) (stroke (width 0) (type default)) (uuid "44444444-4444-4444-4444-444444444444"))
+{extra}
+)
+"""
+
+SOURCE = SOURCE_TEMPLATE.format(extra="")
+
+# 第二根端点带 NA/NB 的导线：制造"歧义导线匹配"的拒绝路径。
+SOURCE_TWO_WIRES = SOURCE_TEMPLATE.format(
+    extra='  (label "NA" (at 170 170 0) (uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa06"))\n'
+    '  (label "NB" (at 180 180 0) (uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa07"))\n'
+    '  (wire (pts (xy 170 170) (xy 180 180)) (stroke (width 0) (type default))'
+    ' (uuid "55555555-5555-5555-5555-555555555555"))'
+)
+
+# 中性合成合同：只声明规则 id / severity / netlist 项，无任何案例级取值。
+CONTRACT_PIN = {
+    "schema_version": 1,
+    "rules": [
+        {
+            "id": "NEUTRAL_PIN_NET",
+            "severity": "critical",
+            "checks": {"netlist": {"pins": {"X1.2": {"net": "NB"}}}},
+        }
+    ],
+}
+CONTRACT_MISSING = {
+    "schema_version": 1,
+    "rules": [
+        {
+            "id": "NEUTRAL_MISSING_PART",
+            "severity": "major",
+            "checks": {
+                "netlist": {
+                    "components": {"R21": {"value": "10k"}},
+                    "pins": {"R21.1": {"net": "NA"}, "R21.2": {"net": "NB"}},
+                }
+            },
+        }
+    ],
+}
+CONTRACT_MISSING_LABELS = {
+    "schema_version": 1,
+    "rules": [
+        {
+            "id": "NEUTRAL_MISSING_LABELS",
+            "severity": "major",
+            "checks": {
+                "netlist": {
+                    "components": {"R21": {"value": "10k"}},
+                    "pins": {"R21.1": {"net": "NC"}, "R21.2": {"net": "ND"}},
+                }
+            },
+        }
+    ],
+}
+CONTRACT_MISSING_ONE_LABEL = {
+    "schema_version": 1,
+    "rules": [
+        {
+            "id": "NEUTRAL_MISSING_ONE_LABEL",
+            "severity": "minor",
+            "checks": {
+                "netlist": {
+                    "components": {"R21": {"value": "10k"}},
+                    "pins": {"R21.1": {"net": "NC"}, "R21.2": {"net": "NE"}},
+                }
+            },
+        }
+    ],
+}
+CONTRACT_TWO_MISSING = {
+    "schema_version": 1,
+    "rules": [
+        {
+            "id": "NEUTRAL_TWO_MISSING",
+            "severity": "major",
+            "checks": {
+                "netlist": {
+                    "components": {"R21": {"value": "10k"}, "R22": {"value": "10k"}},
+                    "pins": {
+                        "R21.1": {"net": "NA"}, "R21.2": {"net": "NB"},
+                        "R22.1": {"net": "NA"}, "R22.2": {"net": "NB"},
+                    },
+                }
+            },
+        }
+    ],
+}
+CONTRACT_DISCONNECT = {
+    "schema_version": 1,
+    "rules": [
+        {
+            "id": "NEUTRAL_DISCONNECT",
+            "severity": "major",
+            "checks": {"netlist": {"pins": {"X1.2": {"net": None}}}},
+        }
+    ],
+}
+CONTRACT_VALUE = {
+    "schema_version": 1,
+    "rules": [
+        {
+            "id": "NEUTRAL_VALUE",
+            "severity": "major",
+            "checks": {"netlist": {"components": {"X1": {"value": "22k"}}}},
+        }
+    ],
+}
+CONTRACT_UNSUPPORTED = {
+    "schema_version": 1,
+    "rules": [
+        {
+            "id": "NEUTRAL_UNSUPPORTED",
+            "severity": "major",
+            "checks": {"netlist": {"components": {"U9": {"value": "x"}}}},
+        }
+    ],
+}
+CONTRACT_SATISFIED = {
+    "schema_version": 1,
+    "rules": [
+        {
+            "id": "NEUTRAL_SATISFIED",
+            "severity": "major",
+            "checks": {"netlist": {"pins": {"X1.1": {"net": "NA"}}}},
+        }
+    ],
+}
+CONTRACT_TWO_PINS = {
+    "schema_version": 1,
+    "rules": [
+        {
+            "id": "NEUTRAL_TWO_PINS",
+            "severity": "major",
+            "checks": {
+                "netlist": {"pins": {"X1.2": {"net": "NB"}, "X1.9": {"net": "NC"}}}
+            },
+        }
+    ],
+}
+
+
 def netlist_observation(nets, components):
     return {
         "observation_type": "kicad_netlist_current.v1",
@@ -85,42 +262,34 @@ def netlist_observation(nets, components):
     }
 
 
-def comp(ref, value="1k"):
-    return {"ref": ref, "value": value, "footprint": "F", "lib": "Device:R", "part": "R"}
+def comp(ref, value="1k", footprint="Test:R_neutral"):
+    return {"ref": ref, "value": value, "footprint": footprint, "lib": "Device:R", "part": "R"}
 
 
 def net(name, code, nodes):
     return {"code": code, "name": name, "nodes": [{"ref": ref, "pin": pin} for ref, pin in nodes]}
 
 
-# 中性合成观测：X1.1 在 NA 上，X2.1 在 NB 上，其余引脚悬空。
+# X1.1 在 NA 上，X2.1 在 NB 上，其余引脚悬空。
 OBSERVATION = netlist_observation(
     [net("NA", "1", [("X1", "1")]), net("NB", "2", [("X2", "1")])],
     [comp("X1"), comp("X2")],
 )
 
+# X1.2 被错接到 NA（源码里 (100, 103.81) 上有名为 NA 的标签 = X1.2 的绝对位置）
+OBSERVATION_WRONG_LABEL = netlist_observation(
+    [net("NA", "1", [("X1", "1"), ("X1", "2")]), net("NB", "2", [("X2", "1")])],
+    [comp("X1"), comp("X2")],
+)
 
-def connect(fid, anchor, net_name):
-    return {"id": fid, "kind": "connect_pin", "anchor": anchor, "net": net_name}
-
-
-def deletion(fid, uuid, anchor):
-    return {"id": fid, "kind": "delete_object", "uuid": uuid, "anchor": anchor}
-
-
-def place(fid, designator, value="10k", pin_nets=None):
-    return {
-        "id": fid,
-        "kind": "place_component",
-        "designator": designator,
-        "lib_id": "Device:R",
-        "value": value,
-        "footprint": "Resistor_SMD:R_0603_1608Metric",
-        "pin_nets": pin_nets or {"1": "NA", "2": "NB"},
-    }
+# 同前缀兄弟 R5 提供缺件 R21 的 footprint 证据。
+OBSERVATION_WITH_SIBLING = netlist_observation(
+    [net("NA", "1", [("X1", "1")]), net("NB", "2", [("X2", "1")])],
+    [comp("X1"), comp("X2"), comp("R5", footprint="Test:R_neutral")],
+)
 
 
-def make_package(observation_data=OBSERVATION, facts=(), grants=None, limits=None):
+def make_package(observation_data=OBSERVATION, facts=(), grants=None, limits=None, source=SOURCE):
     """真实 C1 context + y4-public.v3 封闭包形状（中性合成数据）。"""
     host = dict(HOST_CONTEXT)
     if limits is not None:
@@ -132,8 +301,8 @@ def make_package(observation_data=OBSERVATION, facts=(), grants=None, limits=Non
     return {
         "schema_version": "y4-public.v3",
         "experiment_version": "test-experiment-neutral-1",
-        "case_public_id": "Y4-001",
-        "source_utf8": "(kicad_sch (version 20230121))",
+        "case_public_id": "Y4-NEUTRAL-001",
+        "source_utf8": source,
         "observation_binding": {
             "source_sha256": SHA_A,
             "observation_sha256": SHA_B,
@@ -154,8 +323,8 @@ def must_parse(proposal):
     return proposal
 
 
-def run_baseline(package):
-    return must_parse(build_proposal(package))
+def run_baseline(package, contract=None):
+    return must_parse(build_proposal(package, contract=contract))
 
 
 class HeaderMixin:
@@ -165,180 +334,185 @@ class HeaderMixin:
             self.assertEqual(proposal[key], context[key], key)
 
 
-class PatchPathTests(HeaderMixin, unittest.TestCase):
+class SlotSelectionSeamTests(unittest.TestCase):
+    """D2 未决缝：所有槽位选择只经过 choose_slot(grants, anchor)。"""
+
+    def test_without_anchor_takes_first_granted_slot(self):
+        self.assertEqual(choose_slot(GRANTS), GRANTS[0])
+
+    def test_with_anchor_takes_nearest_granted_slot(self):
+        # (22, 22) mm 距 grants[0] 最近；(155, 155) mm 距 grants[2] 最近。
+        self.assertEqual(choose_slot(GRANTS, (22.0, 22.0)), GRANTS[0])
+        self.assertEqual(choose_slot(GRANTS, (155.0, 155.0)), GRANTS[2])
+        for anchor in ((22.0, 22.0), (155.0, 155.0), (0.0, 0.0)):
+            chosen = choose_slot(GRANTS, anchor)
+            self.assertIn((chosen["x_mil"], chosen["y_mil"]),
+                          {(g["x_mil"], g["y_mil"]) for g in GRANTS})
+
+
+class DerivationTests(HeaderMixin, unittest.TestCase):
+    """移植引擎的中性合成推导覆盖（注入合同，不走计分案例）。"""
+
     maxDiff = None
 
     def test_floating_pin_gets_net_label(self):
-        package = make_package(facts=[connect("fct-conn-1", "X1.2", "NB")])
-        proposal = run_baseline(package)
+        package = make_package()
+        proposal = run_baseline(package, CONTRACT_PIN)
         self.assertEqual(proposal["decision"], "PATCH")
         self.assertEqual(
             proposal["oplist"]["ops"],
             [{"op": "add_net_label", "name": "NB", "at": "X1.2"}],
         )
         self.assert_header_bound(proposal, package)
-        cited = {fid for entry in proposal["diagnosis"] for fid in entry["fact_ids"]}
-        self.assertEqual(cited, {"fct-conn-1"})
+        entry = proposal["diagnosis"][0]
+        self.assertEqual(entry["rule_id"], "NEUTRAL_PIN_NET")
+        self.assertEqual(entry["requirement_level"], "MANDATORY")
+        self.assertEqual(entry["fact_ids"], [])
+        self.assertIn("contract", entry["rationale"])
+        self.assertIn("X1.2", entry["observed"])
 
-    def test_retarget_deletes_then_relabels(self):
-        package = make_package(
-            facts=[
-                deletion("fct-del-1", "obj-uuid-1", "X1.1"),
-                connect("fct-conn-1", "X1.1", "NB"),
-            ]
-        )
-        proposal = run_baseline(package)
+    def test_wrong_label_is_deleted_then_relabelled(self):
+        proposal = run_baseline(make_package(observation_data=OBSERVATION_WRONG_LABEL),
+                                CONTRACT_PIN)
         self.assertEqual(proposal["decision"], "PATCH")
         self.assertEqual(
             proposal["oplist"]["ops"],
             [
-                {"op": "delete_object", "uuid": "obj-uuid-1"},
-                {"op": "add_net_label", "name": "NB", "at": "X1.1"},
+                {"op": "delete_object", "uuid": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01"},
+                {"op": "add_net_label", "name": "NB", "at": "X1.2"},
             ],
         )
-        cited = {fid for entry in proposal["diagnosis"] for fid in entry["fact_ids"]}
-        self.assertEqual(cited, {"fct-del-1", "fct-conn-1"})
+        self.assertEqual(proposal["diagnosis"][0]["requirement_level"], "MANDATORY")
 
-    def test_place_component_takes_grant_slots_in_order(self):
-        package = make_package(facts=[place("fct-place-1", "X9"), place("fct-place-2", "X8")])
-        proposal = run_baseline(package)
+    def test_missing_component_placed_on_granted_slot(self):
+        proposal = run_baseline(make_package(observation_data=OBSERVATION_WITH_SIBLING),
+                                CONTRACT_MISSING)
         self.assertEqual(proposal["decision"], "PATCH")
+        self.assertEqual(
+            proposal["oplist"]["ops"],
+            [
+                {"op": "delete_object", "uuid": "44444444-4444-4444-4444-444444444444"},
+                {"op": "place_component", "lib_id": "Device:R", "designator": "R21",
+                 "x_mil": 7000, "y_mil": 8000, "value": "10k",
+                 "footprint": "Test:R_neutral"},
+                {"op": "add_net_label", "name": "NA", "at": "R21.1"},
+                {"op": "add_net_label", "name": "NB", "at": "R21.2"},
+            ],
+        )
+        entry = proposal["diagnosis"][0]
+        self.assertEqual(entry["rule_id"], "NEUTRAL_MISSING_PART")
+        self.assertEqual(entry["requirement_level"], "RECOMMENDED")
+        self.assertEqual(entry["fact_ids"], [])
+
+    def test_missing_component_label_midpoint_anchor(self):
+        proposal = run_baseline(make_package(observation_data=OBSERVATION_WITH_SIBLING),
+                                CONTRACT_MISSING_LABELS)
+        ops = proposal["oplist"]["ops"]
+        self.assertEqual([op["op"] for op in ops],
+                         ["place_component", "add_net_label", "add_net_label"])
+        self.assertEqual((ops[0]["x_mil"], ops[0]["y_mil"]), (1000, 2000))
+
+    def test_missing_component_single_label_anchor_offsets_down(self):
+        package = make_package(observation_data=OBSERVATION_WITH_SIBLING)
+        proposal = run_baseline(package, CONTRACT_MISSING_ONE_LABEL)
         ops = proposal["oplist"]["ops"]
         self.assertEqual(ops[0]["op"], "place_component")
-        self.assertEqual(ops[0]["designator"], "X9")
-        self.assertEqual(ops[0]["x_mil"], GRANTS[0]["x_mil"])
-        self.assertEqual(ops[0]["y_mil"], GRANTS[0]["y_mil"])
-        self.assertEqual(
-            ops[1:3],
-            [
-                {"op": "add_net_label", "name": "NA", "at": "X9.1"},
-                {"op": "add_net_label", "name": "NB", "at": "X9.2"},
-            ],
+        # 只有 NC 有标签位置 (20, 20) → 锚点 (20, 25.08) → 最近槽位仍是 grants[0]
+        self.assertEqual((ops[0]["x_mil"], ops[0]["y_mil"]), (1000, 2000))
+        self.assertEqual(proposal["diagnosis"][0]["requirement_level"], "UNKNOWN")
+
+    def test_ambiguous_wire_match_refuses(self):
+        proposal = run_baseline(
+            make_package(observation_data=OBSERVATION_WITH_SIBLING, source=SOURCE_TWO_WIRES),
+            CONTRACT_MISSING,
         )
-        self.assertEqual(ops[3]["designator"], "X8")
-        self.assertEqual(
-            (ops[3]["x_mil"], ops[3]["y_mil"]),
-            (GRANTS[1]["x_mil"], GRANTS[1]["y_mil"]),
-        )
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertEqual(proposal["refusal"]["reason_code"], "NO_DERIVABLE_PLAN")
+        self.assertIn("ambiguous wire match for R21", proposal["refusal"]["explanation"])
 
-    def test_max_ops_read_from_limits_not_hardcoded(self):
-        facts = [place("fct-place-1", "X9")]
-        over = run_baseline(make_package(facts=facts, limits={**BUDGET, "max_ops": 2}))
-        self.assertEqual(over["decision"], "REFUSE")
-        self.assertEqual(over["refusal"]["reason_code"], "OPERATION_LIMIT_EXCEEDED")
-        exact = run_baseline(make_package(facts=facts, limits={**BUDGET, "max_ops": 3}))
-        self.assertEqual(exact["decision"], "PATCH")
-        self.assertEqual(len(exact["oplist"]["ops"]), 3)
+    def test_missing_sibling_footprint_refuses(self):
+        proposal = run_baseline(make_package(), CONTRACT_MISSING)
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertEqual(proposal["refusal"]["reason_code"], "NO_DERIVABLE_PLAN")
+        self.assertIn("insufficient sibling/pin evidence for R21",
+                      proposal["refusal"]["explanation"])
+
+    def test_unsupported_missing_prefix_refuses(self):
+        proposal = run_baseline(make_package(), CONTRACT_UNSUPPORTED)
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertIn("unsupported lib for U9", proposal["refusal"]["explanation"])
+
+    def test_disconnection_not_expressible_refuses(self):
+        proposal = run_baseline(make_package(observation_data=OBSERVATION_WRONG_LABEL),
+                                CONTRACT_DISCONNECT)
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertEqual(proposal["refusal"]["reason_code"], "NO_DERIVABLE_PLAN")
+        self.assertIn("cannot express disconnection for X1.2",
+                      proposal["refusal"]["explanation"])
+
+    def test_wrong_existing_value_not_expressible_refuses(self):
+        proposal = run_baseline(make_package(), CONTRACT_VALUE)
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertIn("no C1 value-update operation for X1",
+                      proposal["refusal"]["explanation"])
+
+    def test_no_mismatch_refuses_without_derivable_plan(self):
+        proposal = run_baseline(make_package(), CONTRACT_SATISFIED)
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertEqual(proposal["refusal"]["reason_code"], "NO_DERIVABLE_PLAN")
+        self.assertEqual(proposal["refusal"]["explanation"],
+                         "no public-derivable repair plan")
+        self.assertEqual(proposal["refusal"]["missing_fact_ids"], [])
+        self.assertTrue(proposal["refusal"]["required_human_decision"])
+
+    def test_default_contract_is_resolved_relative_to_module(self):
+        """不注入合同时读取仓库内公共合同（该合同不含中性 refs → 合法 REFUSE）。"""
+        self.assertTrue(CONTRACT_PATH.is_file())
+        proposal = run_baseline(make_package())
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertEqual(proposal["refusal"]["reason_code"], "NO_DERIVABLE_PLAN")
+
+    def test_render_has_no_trailing_newline(self):
+        self.assertEqual(TOOL_VERSION, "0.6.0")
+        raw = render(run_baseline(make_package(), CONTRACT_PIN))
+        self.assertTrue(raw.startswith(b"{"))
+        self.assertFalse(raw.endswith(b"\n"))
+        self.assertNotIn(b'": ', raw)
+        self.assertNotIn(b'", "', raw)
 
 
-class RefusePathTests(HeaderMixin, unittest.TestCase):
+class BudgetAndGuardTests(HeaderMixin, unittest.TestCase):
     maxDiff = None
 
-    def assert_refuse(self, package, reason_code, missing=None):
-        proposal = run_baseline(package)
+    def test_max_ops_read_from_limits_not_hardcoded(self):
+        package = make_package(limits={**BUDGET, "max_ops": 1})
+        over = run_baseline(package, CONTRACT_TWO_PINS)
+        self.assertEqual(over["decision"], "REFUSE")
+        self.assertEqual(over["refusal"]["reason_code"], "OPERATION_LIMIT_EXCEEDED")
+        exact = run_baseline(make_package(limits={**BUDGET, "max_ops": 2}), CONTRACT_TWO_PINS)
+        self.assertEqual(exact["decision"], "PATCH")
+        self.assertEqual(len(exact["oplist"]["ops"]), 2)
+
+    def test_grants_exhausted_refuses(self):
+        package = make_package(observation_data=OBSERVATION_WITH_SIBLING,
+                               grants=[GRANTS[0]])
+        proposal = run_baseline(package, CONTRACT_TWO_MISSING)
         self.assertEqual(proposal["decision"], "REFUSE")
-        self.assertNotIn("oplist", proposal)
-        refusal = proposal["refusal"]
-        self.assertEqual(refusal["reason_code"], reason_code)
-        if missing is not None:
-            self.assertEqual(refusal["missing_fact_ids"], missing)
-        self.assertTrue(refusal["required_human_decision"])
-        return proposal
+        self.assertEqual(proposal["refusal"]["reason_code"], "GRANTS_EXHAUSTED")
 
-    def test_empty_facts_array_refuses(self):
-        self.assert_refuse(
-            make_package(facts=[]),
-            "PUBLIC_INPUT_INSUFFICIENT",
-            ["public-facts"],
-        )
-
-    def test_non_array_facts_refuse_legally_not_exit_2(self):
-        """第二轮 review 实测的 exit 2 场景：类型不符也必须产出合法 REFUSE。"""
-        for bad_facts in ({"facts": []}, "none supplied", 17):
-            package = make_package(facts=bad_facts)
-            self.assert_refuse(package, "PUBLIC_INPUT_MALFORMED")
-
-    def test_uninterpretable_facts_refuse_with_ids(self):
-        facts = [
-            connect("fct-conn-1", "X1.2", "NB"),
-            {"id": "fct-odd-1", "kind": "annotate_value", "anchor": "X1.1", "value": "1k"},
-            "prose-garbage",
+    def test_diagnosis_is_capped_to_frozen_limit(self):
+        """诊断条目封顶 16：即使注入合同触发更多规则，产物仍是合法 C1 Proposal。"""
+        rules = [
+            {"id": "NEUTRAL_%02d" % index, "severity": "major",
+             "checks": {"netlist": {"pins": {"X1.%d" % index: {"net": "NB"}}}}}
+            for index in range(2, 22)
         ]
-        self.assert_refuse(
-            make_package(facts=facts),
-            "UNINTERPRETABLE_FACTS",
-            ["fact-2", "fct-odd-1"],
-        )
+        proposal = run_baseline(make_package(), {"schema_version": 1, "rules": rules})
+        self.assertLessEqual(len(proposal["diagnosis"]), 16)
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertEqual(proposal["refusal"]["reason_code"], "OPERATION_LIMIT_EXCEEDED")
 
-    def test_malformed_fact_shape_refuses(self):
-        package = make_package(facts=[{"id": "fct-conn-1", "kind": "connect_pin", "anchor": "X1.2"}])
-        self.assert_refuse(package, "PUBLIC_INPUT_MALFORMED")
-
-    def test_unknown_anchor_component_refuses(self):
-        self.assert_refuse(
-            make_package(facts=[connect("fct-conn-1", "X9.1", "NB")]),
-            "PUBLIC_INPUT_INSUFFICIENT",
-            ["observation-X9-1"],
-        )
-
-    def test_retarget_without_deletion_fact_refuses(self):
-        self.assert_refuse(
-            make_package(facts=[connect("fct-conn-1", "X1.1", "NB")]),
-            "PUBLIC_INPUT_INSUFFICIENT",
-            ["delete-X1-1"],
-        )
-
-    def test_satisfied_pin_refuses_without_ops(self):
-        self.assert_refuse(
-            make_package(facts=[connect("fct-conn-1", "X1.1", "NA")]),
-            "ALREADY_SATISFIED",
-            [],
-        )
-
-    def test_satisfied_pin_with_deletion_fact_conflicts(self):
-        self.assert_refuse(
-            make_package(
-                facts=[deletion("fct-del-1", "obj-uuid-1", "X1.1"), connect("fct-conn-1", "X1.1", "NA")]
-            ),
-            "PUBLIC_INPUT_CONFLICT",
-        )
-
-    def test_floating_pin_with_deletion_fact_conflicts(self):
-        self.assert_refuse(
-            make_package(
-                facts=[deletion("fct-del-1", "obj-uuid-1", "X1.2"), connect("fct-conn-1", "X1.2", "NB")]
-            ),
-            "PUBLIC_INPUT_CONFLICT",
-        )
-
-    def test_orphan_deletion_refuses(self):
-        self.assert_refuse(
-            make_package(facts=[deletion("fct-del-1", "obj-uuid-1", "X1.1")]),
-            "PUBLIC_INPUT_INSUFFICIENT",
-            ["connect-X1-1"],
-        )
-
-    def test_duplicate_connect_anchor_conflicts(self):
-        self.assert_refuse(
-            make_package(
-                facts=[connect("fct-conn-1", "X1.2", "NB"), connect("fct-conn-2", "X1.2", "NA")]
-            ),
-            "PUBLIC_INPUT_CONFLICT",
-        )
-
-    def test_duplicate_place_designator_conflicts(self):
-        self.assert_refuse(
-            make_package(facts=[place("fct-place-1", "X9"), place("fct-place-2", "X9")]),
-            "PUBLIC_INPUT_CONFLICT",
-        )
-
-    def test_wrong_existing_value_not_expressible(self):
-        self.assert_refuse(
-            make_package(facts=[place("fct-place-1", "X1", value="47k")]),
-            "NOT_EXPRESSION_IN_PUBLIC_OPS",
-        )
-
-    def test_pin_in_two_nets_refuses(self):
+    def test_pin_in_two_nets_conflicts(self):
         conflicting = netlist_observation(
             [
                 net("NA", "1", [("X1", "1")]),
@@ -346,29 +520,31 @@ class RefusePathTests(HeaderMixin, unittest.TestCase):
             ],
             [comp("X1")],
         )
-        self.assert_refuse(
-            make_package(observation_data=conflicting, facts=[connect("fct-conn-1", "X1.1", "NA")]),
-            "OBSERVATION_CONFLICT",
-        )
+        proposal = run_baseline(make_package(observation_data=conflicting), CONTRACT_PIN)
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertEqual(proposal["refusal"]["reason_code"], "OBSERVATION_CONFLICT")
 
     def test_wrong_observation_type_refuses(self):
-        package = make_package(
-            observation_data={"observation_type": "three_view_draft.v1", "views": {}},
-            facts=[connect("fct-conn-1", "X1.2", "NB")],
-        )
-        self.assert_refuse(package, "PUBLIC_INPUT_MALFORMED")
+        package = make_package(observation_data={"observation_type": "three_view_draft.v1"})
+        proposal = run_baseline(package, CONTRACT_PIN)
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertEqual(proposal["refusal"]["reason_code"], "PUBLIC_INPUT_MALFORMED")
 
-    def test_grants_exhausted_refuses(self):
-        package = make_package(
-            facts=[place("fct-place-1", "X9"), place("fct-place-2", "X8")],
-            grants=[GRANTS[0]],
-        )
-        self.assert_refuse(package, "PLACEMENT_CAPACITY_EXHAUSTED")
+    def test_non_array_facts_refuses_legally_not_exit_2(self):
+        """D1=C 下 facts 不再承载推理，但类型不符仍是合法 REFUSE（不是 exit 2）。"""
+        for bad_facts in ({"facts": []}, "none supplied", 17):
+            package = make_package(facts=bad_facts)
+            proposal = run_baseline(package, CONTRACT_PIN)
+            self.assertEqual(proposal["decision"], "REFUSE")
+            self.assertEqual(proposal["refusal"]["reason_code"], "PUBLIC_INPUT_MALFORMED")
 
     def test_invalid_grants_refuse_legally_not_exit_2(self):
-        for bad_grants in ([], [{"x_mil": 1}], [{"x_mil": 1, "y_mil": 2, "z": 3}], GRANTS + [GRANTS[0]]):
-            package = make_package(facts=[place("fct-place-1", "X9")], grants=bad_grants)
-            self.assert_refuse(package, "PUBLIC_INPUT_MALFORMED")
+        for bad_grants in ([], [{"x_mil": 1}], [{"x_mil": 1, "y_mil": 2, "z": 3}],
+                           GRANTS + [GRANTS[0]]):
+            package = make_package(grants=bad_grants)
+            proposal = run_baseline(package, CONTRACT_PIN)
+            self.assertEqual(proposal["decision"], "REFUSE")
+            self.assertEqual(proposal["refusal"]["reason_code"], "PUBLIC_INPUT_MALFORMED")
 
 
 class PackageLevelTests(unittest.TestCase):
@@ -436,18 +612,75 @@ def del_key(mapping, key):
     return mapping
 
 
+# ---------------------------------------------------------------------------
+# 公共合同驱动的端到端（real contract：公共领域知识，不含案例数据）
+# ---------------------------------------------------------------------------
+
+
+def real_contract():
+    return json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+
+
+def contract_satisfied_observation(contract, drop_pin=None, drop_component=None):
+    """按公共合同的 netlist 期望构造"全部满足"的观测，再注入单一缺口。
+
+    完全由合同内容生成：不写死任何 ref/网名/坐标。
+    """
+    components = {}
+    nets = {}
+
+    def add_component(ref, value):
+        components.setdefault(
+            ref,
+            {"ref": ref, "value": value, "footprint": "Test:R_neutral",
+             "lib": "Device:R", "part": "R"},
+        )
+
+    for rule in contract["rules"]:
+        checks = rule.get("checks", {}).get("netlist", {})
+        for ref, expected in checks.get("components", {}).items():
+            add_component(ref, expected.get("value"))
+        for key, expected in checks.get("pins", {}).items():
+            ref, pin = key.split(".", 1)
+            add_component(ref, "")
+            if drop_component is not None and ref == drop_component:
+                continue
+            net_name = expected.get("net")
+            if net_name is not None and key != drop_pin:
+                nets.setdefault(net_name, []).append((ref, pin))
+    if drop_component is not None:
+        components.pop(drop_component, None)
+    net_list = [net(name, str(index + 1), nodes)
+                for index, (name, nodes) in enumerate(sorted(nets.items()))]
+    return netlist_observation(net_list, [components[ref] for ref in sorted(components)])
+
+
+def first_expected_pin(contract):
+    for rule in contract["rules"]:
+        for key, expected in rule.get("checks", {}).get("netlist", {}).get("pins", {}).items():
+            if expected.get("net") is not None:
+                return key
+    raise AssertionError("real contract has no connected pin expectation")
+
+
 class DeterminismAndCliTests(unittest.TestCase):
     maxDiff = None
 
     def test_deterministic_output_and_adapter_bytes(self):
-        package = make_package(facts=[connect("fct-conn-1", "X1.2", "NB")])
-        first = build_proposal(package)
-        self.assertEqual(render(first), render(build_proposal(package)))
+        package = make_package()
+        first = build_proposal(package, contract=CONTRACT_PIN)
+        self.assertEqual(render(first), render(build_proposal(package, contract=CONTRACT_PIN)))
         package_bytes = json.dumps(package, ensure_ascii=False, sort_keys=True).encode("utf-8")
-        self.assertEqual(propose_bytes(package_bytes), render(first))
+        # adapter 路径（propose_bytes）走仓库内公共合同，同样必须字节确定。
+        self.assertEqual(propose_bytes(package_bytes), render(build_proposal(package)))
+        self.assertEqual(propose_bytes(package_bytes), propose_bytes(package_bytes))
 
-    def test_cli_end_to_end_patch(self):
-        package = make_package(facts=[connect("fct-conn-1", "X1.2", "NB")])
+    def test_cli_end_to_end_patch_with_real_contract(self):
+        contract = real_contract()
+        observation = contract_satisfied_observation(
+            contract, drop_pin=first_expected_pin(contract)
+        )
+        package = make_package(observation_data=observation)
         with tempfile.TemporaryDirectory() as temp_dir:
             package_path = Path(temp_dir) / "package.json"
             package_path.write_bytes(json.dumps(package).encode("utf-8"))
@@ -461,8 +694,11 @@ class DeterminismAndCliTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             raw = out_path.read_bytes()
             self.assertFalse(raw.startswith(b"\xef\xbb\xbf"))
+            self.assertFalse(raw.endswith(b"\n"))
             parsed = parse_proposal(raw)
             self.assertEqual(parsed.decision, "PATCH")
+            self.assertEqual(len(parsed.ops), 1)
+            self.assertEqual(parsed.ops[0]["op"], "add_net_label")
 
     def test_cli_end_to_end_refuse_exits_zero(self):
         package = make_package(facts=[])
@@ -479,7 +715,7 @@ class DeterminismAndCliTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             parsed = parse_proposal(out_path.read_bytes())
             self.assertEqual(parsed.decision, "REFUSE")
-            self.assertEqual(parsed.refusal["reason_code"], "PUBLIC_INPUT_INSUFFICIENT")
+            self.assertEqual(parsed.refusal["reason_code"], "NO_DERIVABLE_PLAN")
 
     def test_cli_rejects_broken_package_with_exit_2(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -495,12 +731,11 @@ class DeterminismAndCliTests(unittest.TestCase):
             self.assertIn("invalid package", result.stderr)
 
 
-def runner_inputs(observation_data, facts, grants=GRANTS, max_ops=8):
+def runner_inputs(observation_data, facts, grants=GRANTS, max_ops=8, source=SOURCE):
     """真实 runner build_package 所需的中性合成公共输入。"""
-    source = '(kicad_sch (version 20230121) (paper "A4"))'
     return {
         "experiment_version": RUNNER_EXPERIMENT_VERSION,
-        "case_public_id": "Y4-001",
+        "case_public_id": "Y4-NEUTRAL-001",
         "context_id": "ctx-y4-neutral-runner-1",
         "target": "candidate/board.kicad_sch",
         "source_utf8": source,
@@ -553,7 +788,9 @@ class RunnerIntegrationTests(unittest.TestCase):
         return json.loads(record_raw)
 
     def test_real_package_patch_end_to_end(self):
-        inputs = runner_inputs(OBSERVATION, [place("fct-place-1", "X9")])
+        contract = real_contract()
+        observation = contract_satisfied_observation(contract, drop_component="R7")
+        inputs = runner_inputs(observation, [])
         package_raw, package_sha = self.freeze(inputs)
         record = self.run_adapter(package_raw, package_sha)
         self.assertEqual(record["record_status"], "RECORDED")
@@ -576,14 +813,16 @@ class RunnerIntegrationTests(unittest.TestCase):
         self.assertEqual(record["binding_status"], "PASS")
         proposal = record["proposal"]
         self.assertEqual(proposal["decision"], "REFUSE")
-        self.assertEqual(proposal["refusal"]["reason_code"], "PUBLIC_INPUT_INSUFFICIENT")
-        self.assertEqual(proposal["refusal"]["missing_fact_ids"], ["public-facts"])
+        self.assertEqual(proposal["refusal"]["reason_code"], "NO_DERIVABLE_PLAN")
+        self.assertEqual(proposal["refusal"]["missing_fact_ids"], [])
 
     def test_real_package_cli_end_to_end(self):
-        inputs = runner_inputs(OBSERVATION, [place("fct-place-1", "X9")])
+        contract = real_contract()
+        observation = contract_satisfied_observation(contract, drop_component="R7")
+        inputs = runner_inputs(observation, [])
         package_raw, _ = self.freeze(inputs)
         with tempfile.TemporaryDirectory() as temp_dir:
-            package_path = Path(temp_dir) / "Y4-001.json"
+            package_path = Path(temp_dir) / "package.json"
             package_path.write_bytes(package_raw)
             out_path = Path(temp_dir) / "proposal.json"
             result = subprocess.run(

@@ -1,70 +1,50 @@
-"""AEDL Y4 · D 组固定规则基线 v0.5.0（真实 y4-public.v3 包 → 冻结 Proposal）。
+"""AEDL Y4 · D 组固定规则基线 v0.6.0（A-2′ prime：观测 + 公共合同 → 冻结 Proposal）。
 
-本版针对 PR #60 第二轮 review（Yenefa，2026-09-11，CHANGES_REQUESTED）重写：
-v0.4 被认定"第一刀真改了，第二/三刀是换壳"——本版直接消费真实冻结包。
+来源与定位（A-2′ prime）
+-----------------------
+本版的推理内核不是重新设计，而是从**计分 30 槽实跑真正使用的产物**逐行移植：
+    r16/candidates/d_adapter_v3_candidate.py
+    tool_hash d83d97e7…（scored 30-slot run 记录的 adapter 实现）
+移植只做两件事：(1) 把内核搬进本仓库的 tools/repair_baseline.py（自带源码解析器
+与 nearest_slot，不再 import notes.y4/*）；(2) 保留 v0.5 的外壳（严格包校验、
+拒绝信封、CLI 退出码、C1 冻结发射器）。因此"实跑过的规则引擎"与本仓库产物
+字节级一致，而不是又一次"换壳"。
 
-对齐的真实协议（来源 origin/feat/gh56-y4-dry-harness，PR #61，2026-09-11 核对）：
-- 包形状 schema_version = "y4-public.v3"（tools/y4_dry_runner.build_package）：
-  封闭字段 {schema_version, experiment_version, case_public_id, source_utf8,
-  observation_binding, public_context, public_context_sha256, budget,
-  instruction, exposure_fields, placement_grants}。
-- D 是 adapter(request_bytes) -> bytes（tools.y4_dry_runner.run_adapter 契约）：
-  输入即整个包的原始字节（C/D 同字节），propose_bytes() 即该适配器。
-- current_observation 真实形状 = kicad_netlist_current.v1
-  （notes/y4/produce_current_observations.py）：{observation_type, components
-  [{ref,value,footprint,lib,part}], nets [{code,name,nodes[{ref,pin,...}]}],
-  coverage}；**引脚不出现在任何 net 的 nodes 里 = 无已断言的连接（悬空）**。
-- public_facts 是**数组**（PBF/BB 事实清单，位于 public_context 内；空数组 =
-  未供给事实），不是对象；类型不符产出合法 REFUSE，不再 exit 2。
-- placement_grants：宿主授权放置槽位列表 [{x_mil,y_mil}]；runner 对
-  place_component 逐坐标做成员性检查（collect_result binding 检查）。
-  **D 的坐标只从 grants 取**：按包内既定顺序取第一个未占用槽（生成器已按
-  (y,x) 规范排序）——成员性由构造保证，无需 D 自查。坐标来源与选择规则在
-  此声明，最终语义归 A2-Y/Percy 冻结（放行前置 #3）。
-- budget（context.limits）：max_ops 1..8 是操作预算上限，D 从 limits.max_ops
-  读取，不再硬编码。
+D1 = "C"：L1 事实 + 白名单化 L1.5 策略子集，**没有 L2**
+-------------------------------------------------------
+v0.5.0 的 L2 事实文法（interpret_facts / FACT_KINDS）与 ObservationView 已删除：
+Owner 决策 D1 = "C" 明确 L2 操作邻域事实不属于冻结合同。于是 public_facts
+**不再承载修复推理**（本版完全忽略其内容，只保留"必须是数组"的形状守卫，
+以免类型不符把包级损坏误判成 exit 2）。D 改为从
+  - 观测：public_context.current_observation（kicad_netlist_current.v1）
+  - 公共合同：gates/contracts/m2_schematic_contract_v1.json（相对本模块解析）
+推导修复——这正是实跑产物已经采用的规则引擎。
 
-对第二轮 review 各点的回应：
-1. 冻结 C1 合同（已认可）：发射器原样保留——头部五字段取自 public_context，
-   decision ∈ {PATCH, REFUSE}，仅公开三原语。
-2. 同一公共输入：D 的输入就是 runner 冻结出的 y4-public.v3 包本身；
-   观察按 kicad_netlist_current.v1 读，facts 按数组消费。有效包一律产出
-   **合法 Proposal（含 REFUSE）**，不再 exit 2；exit 2 仅保留给文件级/包级
-   结构损坏（非 JSON、缺字段、schema_version 不符、context 头非法）。
-3. 信息级别：D 不自带事实草案对象，也不复刻五个计分案例。D 只声明一个
-   **可解释事实文法**（closed grammar，见 FACT_KINDS），对包内事实数组逐条
-   尝试解释：能解释的派生操作；不能解释的逐 id 记入拒绝（UNINTERPRETABLE_
-   FACTS），绝不猜测散文含义。事实形态与信息级别的最终冻结归 A2-Y/Percy
-   （放行前置 #1）；文法外事实在冻结前会使 D 拒绝，这是 fail-closed 的
-   如实表现，不是绕过。
-4. 其他：死代码已删；max_ops 从 limits 读；文档版本改 v3；坐标只从 grants
-   取；测试改用中性合成数据（不复刻五案例）+ 真实 runner 集成测试
-   （PR #61 合入后自动启用）。
+移植的确定性语义（r16 逐条保留）
+------------------------------
+- 网名规范化：`unconnected-*` 表示"未连接"（None）；KiCad 根图纸前缀 `/` 剥掉。
+- 引脚不出现在任何 net 的 nodes 里 = 悬空（None）。
+- op 顺序：delete_object(0) < place_component(1) < add_net_label(2)，
+  随后按 op 的规范 JSON 去重。
+- 诊断条目：rule_id = 公共合同规则 id；requirement_level 由 severity 映射
+  （critical→MANDATORY，major→RECOMMENDED，其余 UNKNOWN）；fact_ids=[]；
+  rationale 只描述公共合同规则。
+- 缺件修复：期望引脚网取自合同，footprint 取自同前缀兄弟，几何取自
+  source_utf8 的库引脚/导线/标签；坐标只从 placement_grants 取。
+- 输出：json.dumps(ensure_ascii=False, sort_keys=True, separators=(",", ":"))，
+  **无尾换行**（与实跑 D 的字节一致）。
 
-可解释事实文法（FACT_KINDS，需求声明，待 A2-Y/Percy 冻结确认）：
-- connect_pin   {id, kind, anchor: REF.PIN, net}      引脚接线路由
-- delete_object {id, kind, uuid, anchor: REF.PIN}     删除错误标签/导线
-- place_component {id, kind, designator, lib_id, value, footprint, pin_nets}
-  （lib_id ∈ {Device:R, Device:C}；坐标自动取自 grants，不在事实里写死）
-
-确定性规则（事实按数组顺序处理，首个问题即终止并拒绝）：
-R1 connect_pin：观测 == 目标网 → 已满足；悬空 → add_net_label；
-   接了别的网 → 必须有同锚点 delete_object 事实（先删后标），缺 → 拒绝。
-R2 place_component：观测中已存在同 designator → 值相同则满足、值不同则
-   NOT_EXPRESSION_IN_PUBLIC_OPS（公开原语无法改值）；不存在 → place_component
-   （坐标取 grants 顺序槽）+ 逐引脚 add_net_label。
-R3 同一锚点出现两条 connect_pin（或同一 designator 两条 place_component）
-   → PUBLIC_INPUT_CONFLICT（无法确定性地派生唯一修复）。
-R4 孤儿删除：delete_object 事实的锚点没有任何 connect_pin 引用 →
-   PUBLIC_INPUT_INSUFFICIENT（D 只为改接而删，不做投机删除）。
-R5 引脚出现在多个网 → OBSERVATION_CONFLICT。
-R6 操作数 > limits.max_ops（或 >8 绝对上限）→ OPERATION_LIMIT_EXCEEDED。
-R7 空事实数组 / 文法外事实 / 形状非法 / facts 类型非数组 / grants 非法 /
-   槽位耗尽 → 对应拒绝码，全部产出合法 REFUSE Proposal。
+D2 未决缝（placement policy 尚未冻结）
+------------------------------------
+所有槽位选择都收敛到唯一的 choose_slot(grants, anchor=None)：当前行为 =
+有 anchor 时 nearest_slot(grants, anchor)，否则 grants[0]（与实跑一致）。
+"槽位是否顺序消耗、是否去重占用"仍**对 Owner 开放**；若冻结为
+"sequential consumption"，只需改这一个函数。槽位**成员性**由 runner 强制
+（place_component 逐坐标做 grants 成员检查），D 永不自造坐标。
 
 用法（D 侧 adapter 的 CLI 形态）
 ----
-    py -3 tools/repair_baseline.py --package Y4-001.json --out proposal.json
+    py -3 tools/repair_baseline.py --package package.json --out proposal.json
 
 退出码：0 = 已产出合法 Proposal（PATCH/REFUSE 均算）；2 = 包文件级结构损坏。
 """
@@ -75,10 +55,11 @@ import argparse
 import json
 import re
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-TOOL_VERSION = "0.5.0"
+TOOL_VERSION = "0.6.0"
 
 PACKAGE_VERSION = "y4-public.v3"
 PROPOSAL_SCHEMA_VERSION = 1
@@ -119,37 +100,34 @@ DECISION_REFUSE = "REFUSE"
 OP_DELETE_OBJECT = "delete_object"
 OP_ADD_NET_LABEL = "add_net_label"
 OP_PLACE_COMPONENT = "place_component"
-PUBLIC_LIB_IDS = ("Device:R", "Device:C")
+OP_ORDER = {OP_DELETE_OBJECT: 0, OP_PLACE_COMPONENT: 1, OP_ADD_NET_LABEL: 2}
 
-# 可解释事实文法：kind -> 封闭字段集（需求声明，最终形状归 A2-Y/Percy 冻结）
-FACT_CONNECT_PIN = "connect_pin"
-FACT_DELETE_OBJECT = "delete_object"
-FACT_PLACE_COMPONENT = "place_component"
-FACT_KINDS: Dict[str, Tuple[str, ...]] = {
-    FACT_CONNECT_PIN: ("id", "kind", "anchor", "net"),
-    FACT_DELETE_OBJECT: ("id", "kind", "uuid", "anchor"),
-    FACT_PLACE_COMPONENT: (
-        "id",
-        "kind",
-        "designator",
-        "lib_id",
-        "value",
-        "footprint",
-        "pin_nets",
-    ),
-}
+REASON_PUBLIC_INPUT_MALFORMED = "PUBLIC_INPUT_MALFORMED"
+REASON_OBSERVATION_CONFLICT = "OBSERVATION_CONFLICT"
+REASON_OPERATION_LIMIT_EXCEEDED = "OPERATION_LIMIT_EXCEEDED"
+REASON_GRANTS_EXHAUSTED = "GRANTS_EXHAUSTED"
+REASON_NO_DERIVABLE_PLAN = "NO_DERIVABLE_PLAN"
 
-REQUIRED_HUMAN_DECISION = (
-    "A2-Y/Percy must freeze the public facts grammar/level and complete the "
-    "package; arm D will not guess."
+# critical→MANDATORY，major→RECOMMENDED，其余→UNKNOWN（r16 语义）
+REQUIREMENT_BY_SEVERITY = {"critical": "MANDATORY", "major": "RECOMMENDED"}
+
+# 公共合同（公共领域知识）相对本模块解析：无硬编码用户路径、无仓库环境变量。
+CONTRACT_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "gates"
+    / "contracts"
+    / "m2_schematic_contract_v1.json"
 )
 
+REQUIRED_HUMAN_DECISION = (
+    "A2-Y/Percy must freeze the D-internal placement slot-selection rule (D2) "
+    "and confirm public contract coverage; arm D will not guess."
+)
+
+_UUID = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 _PATH_RE = re.compile(r"^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$")
-_ANCHOR_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*\.[A-Za-z0-9_]+$")
-_DESIGNATOR_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
-_PIN_KEY_RE = re.compile(r"^[A-Za-z0-9_]{1,16}$")
 _TEXT_RE = re.compile(r"^[^\x00-\x1f\x7f]+$")
 
 
@@ -165,6 +143,10 @@ class _Problem(Exception):
         self.reason_code = reason_code
         self.missing = missing
         self.explanation = explanation
+
+
+def _bad(explanation: str) -> _Problem:
+    return _Problem(REASON_PUBLIC_INPUT_MALFORMED, [], explanation)
 
 
 # ---------------------------------------------------------------------------
@@ -252,7 +234,7 @@ def _validate_context(context: Any) -> Dict[str, Any]:
     for key in ("current_observation", "generic_op_schema", "limits"):
         if not isinstance(context[key], dict):
             raise BaselineInputError(f"{key} must be an object")
-    # public_facts 的类型检查放在引擎层：类型不符产出"合法 REFUSE"而不是
+    # public_facts 的形状守卫放在引擎层：类型不符产出"合法 REFUSE"而不是
     # exit 2（第二轮 review 的放行要求）。此处只要求键存在（封闭字段集）。
     budget = context["limits"]
     for key in BUDGET_KEYS:
@@ -273,199 +255,462 @@ def _validate_context(context: Any) -> Dict[str, Any]:
 def _validate_grants(grants: Any) -> List[Dict[str, int]]:
     """与 runner 的封闭校验一致；非法 → 可绑定拒绝（合法 REFUSE）。"""
     if not isinstance(grants, list) or not grants:
-        raise _Problem(
-            "PUBLIC_INPUT_MALFORMED", [], "placement_grants must be a nonempty list"
-        )
+        raise _bad("placement_grants must be a nonempty list")
     if len(grants) > MAX_GRANT_SLOTS:
-        raise _Problem(
-            "PUBLIC_INPUT_MALFORMED", [], "placement_grants exceeds the policy cap"
-        )
+        raise _bad("placement_grants exceeds the policy cap")
     seen = set()
     slots: List[Dict[str, int]] = []
     for index, slot in enumerate(grants):
         if not isinstance(slot, dict) or set(slot) != set(GRANT_SLOT_KEYS):
-            raise _Problem(
-                "PUBLIC_INPUT_MALFORMED",
-                [],
-                f"placement_grants[{index}] must hold exactly x_mil and y_mil",
-            )
+            raise _bad(f"placement_grants[{index}] must hold exactly x_mil and y_mil")
         pair = (slot["x_mil"], slot["y_mil"])
         if any(isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 1000000 for v in pair):
-            raise _Problem(
-                "PUBLIC_INPUT_MALFORMED",
-                [],
-                f"placement_grants[{index}] coordinates must be integer mil",
-            )
+            raise _bad(f"placement_grants[{index}] coordinates must be integer mil")
         if pair in seen:
-            raise _Problem(
-                "PUBLIC_INPUT_MALFORMED", [], f"placement_grants[{index}] duplicates a slot"
-            )
+            raise _bad(f"placement_grants[{index}] duplicates a slot")
         seen.add(pair)
         slots.append({"x_mil": pair[0], "y_mil": pair[1]})
     return slots
 
 
 # ---------------------------------------------------------------------------
-# 可解释事实文法（数组逐条；文法外 → UNINTERPRETABLE_FACTS，绝不猜测）
+# 公开源码解析器（自包含内联：本分支没有 notes/y4/*，不得 import notes.*）
+# 只移植引擎用得到的最小面：导线几何/标签位置/符号引脚原点。
 # ---------------------------------------------------------------------------
 
 
-def _bad(explanation: str) -> _Problem:
-    return _Problem("PUBLIC_INPUT_MALFORMED", [], explanation)
+# 说明：这里刻意不用 @dataclass——D 适配器可能被宿主用
+# `importlib.util.spec_from_file_location` 载入而不注册进 sys.modules，
+# 在 Python 3.9 下 dataclass + PEP 563 字符串注解会在那时崩溃。普通类等价。
+
+class Wire:
+    __slots__ = ("uuid", "x1", "y1", "x2", "y2")
+
+    def __init__(self, uuid: str, x1: float, y1: float, x2: float, y2: float):
+        self.uuid = uuid
+        self.x1 = x1
+        self.y1 = y1
+        self.x2 = x2
+        self.y2 = y2
+
+    @property
+    def mid(self) -> Tuple[float, float]:
+        return (round((self.x1 + self.x2) / 2, 4), round((self.y1 + self.y2) / 2, 4))
 
 
-def _text(value: Any, where: str) -> str:
-    if not isinstance(value, str) or not _TEXT_RE.match(value):
-        raise _bad(f"{where} must be non-empty text without control chars")
-    if len(value) > 2048:
-        raise _bad(f"{where} exceeds 2048 chars")
-    return value
+class Label:
+    __slots__ = ("name", "x", "y", "uuid")
+
+    def __init__(self, name: str, x: float, y: float, uuid: Optional[str]):
+        self.name = name
+        self.x = x
+        self.y = y
+        self.uuid = uuid
 
 
-def _ident(value: Any, where: str) -> str:
-    if not isinstance(value, str) or not _ID_RE.match(value):
-        raise _bad(f"{where} must match identifier pattern")
-    return value
+class Symbol:
+    __slots__ = ("ref", "lib_id", "x", "y")
+
+    def __init__(self, ref: Optional[str], lib_id: str, x: float, y: float):
+        self.ref = ref
+        self.lib_id = lib_id
+        self.x = x
+        self.y = y
 
 
-def _anchor(value: Any, where: str) -> str:
-    if not isinstance(value, str) or not _ANCHOR_RE.match(value):
-        raise _bad(f"{where} must be a REF.PIN anchor")
-    return value
+class Schematic:
+    __slots__ = ("wires", "labels", "symbols")
+
+    def __init__(self, wires: List[Wire], labels: List[Label], symbols: List[Symbol]):
+        self.wires = wires
+        self.labels = labels
+        self.symbols = symbols
+
+    def labels_at(self, x: float, y: float, tol: float = 0.001) -> List[Label]:
+        return [l for l in self.labels if abs(l.x - x) <= tol and abs(l.y - y) <= tol]
 
 
-def interpret_facts(facts: List[Any]) -> Tuple[List[Dict[str, Any]], List[str]]:
-    """解释事实数组：返回 (可解释事实列表, 文法外事实 id 列表)。
+def _balanced_blocks(source_text: str, opener: str):
+    """Yield balanced-paren blocks that start with `opener`.
 
-    形状非法（缺字段/多字段/值非法）立即以 PUBLIC_INPUT_MALFORMED 终止；
-    文法外 kind 逐条收集，交由调用方拒绝。
+    Limitation: quoted strings containing parentheses are not unescaped; the
+    parser is a best-effort extractor over public source text, not a full s-expr
+    reader.
     """
-    interpretable: List[Dict[str, Any]] = []
-    uninterpretable: List[str] = []
-    for index, record in enumerate(facts):
-        if not isinstance(record, dict):
-            uninterpretable.append(f"fact-{index}")
+    start = re.compile(opener)
+    index = 0
+    while True:
+        m = start.search(source_text, index)
+        if not m:
+            return
+        depth = 0
+        for j in range(m.start(), len(source_text)):
+            ch = source_text[j]
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    yield source_text[m.start():j + 1]
+                    index = j + 1
+                    break
+        else:
+            return
+
+
+def parse_schematic(source_text: str) -> Schematic:
+    wires: List[Wire] = []
+    for block in _balanced_blocks(source_text, r'\(wire\s'):
+        pts = re.search(r'\(pts\s+\(xy\s+([\-0-9.]+)\s+([\-0-9.]+)\)\s+'
+                        r'\(xy\s+([\-0-9.]+)\s+([\-0-9.]+)\)\)', block)
+        uuid_match = re.search(r'\(uuid\s+"(%s)"\)' % _UUID, block)
+        if pts and uuid_match:
+            wires.append(Wire(uuid_match.group(1), float(pts.group(1)),
+                              float(pts.group(2)), float(pts.group(3)),
+                              float(pts.group(4))))
+    labels: List[Label] = []
+    for block in _balanced_blocks(source_text, r'\(label\s'):
+        head = re.search(r'\(label\s+"([^"]*)"\s+\(at\s+([\-0-9.]+)\s+([\-0-9.]+)\s+'
+                         r'[\-0-9.]+\)', block)
+        uuid_match = re.search(r'\(uuid\s+"(%s)"\)' % _UUID, block)
+        if head:
+            labels.append(Label(head.group(1), float(head.group(2)),
+                                float(head.group(3)),
+                                uuid_match.group(1) if uuid_match else None))
+    symbols: List[Symbol] = []
+    for block in _balanced_blocks(source_text, r'\(symbol\s+\(lib_id\s'):
+        lib = re.search(r'\(lib_id\s+"([^"]+)"\)', block)
+        at = re.search(r'\(at\s+([\-0-9.]+)\s+([\-0-9.]+)', block)
+        ref_match = re.search(r'\(property\s+"Reference"\s+"([^"]*)"', block)
+        if lib and at:
+            symbols.append(Symbol(ref_match.group(1) if ref_match else None,
+                                  lib.group(1), float(at.group(1)), float(at.group(2))))
+    return Schematic(wires, labels, symbols)
+
+
+# ---------------------------------------------------------------------------
+# 宿主授权放置槽位（内联 pr61 notes/y4/placement_grants.py 的语义）
+# ---------------------------------------------------------------------------
+
+MM_PER_MIL = 0.0254
+
+
+def nearest_slot(grants: List[Dict[str, int]], x_mm: float, y_mm: float) -> Dict[str, int]:
+    """Deterministic public choice: the granted slot nearest a public anchor."""
+    return min(grants, key=lambda s: ((s["x_mil"] * MM_PER_MIL - x_mm) ** 2
+                                      + (s["y_mil"] * MM_PER_MIL - y_mm) ** 2,
+                                      s["y_mil"], s["x_mil"]))
+
+
+def choose_slot(grants: List[Dict[str, int]],
+                anchor: Optional[Tuple[float, float]] = None) -> Dict[str, int]:
+    """D2 未决缝：D 内部槽位选择规则的唯一入口。
+
+    当前行为 = 有公开锚点（导线中点/期望网标签中点）时取 nearest_slot，
+    没有锚点时取 grants[0]——与计分实跑的 r16 产物完全一致。
+    "槽位顺序消耗 / 占用去重"是否成为 D 内部规则仍对 Owner 开放（D2）；
+    若冻结为 sequential consumption，只需改本函数。槽位**成员性**由 runner
+    强制（place_component 逐坐标做 grants 成员检查），D 永不自造坐标。
+    """
+    if anchor is None:
+        return grants[0]
+    return nearest_slot(grants, anchor[0], anchor[1])
+
+
+# ---------------------------------------------------------------------------
+# 公共合同
+# ---------------------------------------------------------------------------
+
+
+def _load_contract() -> Dict[str, Any]:
+    """公共合同只从仓库内固定相对路径读取（无环境变量、无用户路径）。"""
+    try:
+        return json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise _bad(f"cannot read the public contract at {CONTRACT_PATH}: {exc}") from exc
+
+
+# ---------------------------------------------------------------------------
+# 观测索引（kicad_netlist_current.v1）：引脚不在任何 net = 悬空
+# ---------------------------------------------------------------------------
+
+
+def observed_state(
+    observation: Dict[str, Any],
+) -> Tuple[Dict[str, Optional[str]], Dict[str, str], Dict[str, str]]:
+    """(pin_net, comp_value, comp_footprint)；形状不符 → 合法 REFUSE。"""
+    if not isinstance(observation, dict):
+        raise _bad("current_observation must be an object")
+    if observation.get("observation_type") != OBSERVATION_TYPE:
+        raise _bad(
+            "current_observation.observation_type must be "
+            f"{OBSERVATION_TYPE!r}; arm D cannot read other formats"
+        )
+    raw_components = observation.get("components")
+    if not isinstance(raw_components, list):
+        raise _bad("current_observation.components must be an array")
+    comp_value: Dict[str, str] = {}
+    comp_footprint: Dict[str, str] = {}
+    for index, component in enumerate(raw_components):
+        if not isinstance(component, dict) or not isinstance(component.get("ref"), str):
+            raise _bad(f"current_observation.components[{index}] is malformed")
+        comp_value[component["ref"]] = component.get("value", "")
+        comp_footprint[component["ref"]] = component.get("footprint", "")
+    raw_nets = observation.get("nets")
+    if not isinstance(raw_nets, list):
+        raise _bad("current_observation.nets must be an array")
+    pin_net: Dict[str, Optional[str]] = {}
+    for net_index, net in enumerate(raw_nets):
+        if not isinstance(net, dict) or not isinstance(net.get("name"), str):
+            raise _bad(f"current_observation.nets[{net_index}] is malformed")
+        nodes = net.get("nodes")
+        if not isinstance(nodes, list):
+            raise _bad(f"current_observation.nets[{net_index}].nodes must be an array")
+        name = net["name"]
+        if name.startswith("unconnected-"):
+            connected: Optional[str] = None
+        else:
+            # KiCad 根图纸网名导出为 "/NAME"；合同用裸名。这是确定性的名字
+            # 规范化，不是猜测。
+            connected = name[1:] if name.startswith("/") else name
+        for node in nodes:
+            if not isinstance(node, dict):
+                raise _bad(f"current_observation.nets[{net_index}] node is malformed")
+            ref, pin = node.get("ref"), node.get("pin")
+            if not isinstance(ref, str) or not isinstance(pin, str):
+                raise _bad(
+                    f"current_observation.nets[{net_index}] node ref/pin must be strings"
+                )
+            key = "%s.%s" % (ref, pin)
+            if key in pin_net and pin_net[key] != connected:
+                raise _Problem(
+                    REASON_OBSERVATION_CONFLICT,
+                    [],
+                    f"pin {key} appears in multiple nets "
+                    f"({pin_net[key]} and {connected})",
+                )
+            pin_net[key] = connected
+    return pin_net, comp_value, comp_footprint
+
+
+# ---------------------------------------------------------------------------
+# 合同求值（只有公开 netlist 视图）
+# ---------------------------------------------------------------------------
+
+
+def evaluate_netlist(
+    contract: Dict[str, Any], observation: Dict[str, Any]
+) -> List[Dict[str, Any]]:
+    pin_net, comp_value, _ = observed_state(observation)
+    mismatches: List[Dict[str, Any]] = []
+    for rule in contract.get("rules", []):
+        netlist_checks = rule.get("checks", {}).get("netlist", {})
+        for key, expected in netlist_checks.get("pins", {}).items():
+            ref = key.split(".")[0]
+            if ref not in comp_value:
+                continue  # handled at component level
+            expected_net = expected.get("net")
+            observed_net = pin_net.get(key)
+            if expected_net is None:
+                if observed_net is not None:
+                    mismatches.append({"rule_id": rule["id"], "severity": rule["severity"],
+                                       "kind": "pin_should_be_disconnected", "pin": key,
+                                       "expected_net": None, "observed_net": observed_net})
+            elif observed_net != expected_net:
+                mismatches.append({"rule_id": rule["id"], "severity": rule["severity"],
+                                   "kind": "pin_net", "pin": key,
+                                   "expected_net": expected_net, "observed_net": observed_net})
+        for ref, expected in netlist_checks.get("components", {}).items():
+            expected_value = expected.get("value")
+            if ref not in comp_value:
+                mismatches.append({"rule_id": rule["id"], "severity": rule["severity"],
+                                   "kind": "missing_component", "ref": ref,
+                                   "expected_value": expected_value})
+            elif comp_value[ref] != expected_value:
+                mismatches.append({"rule_id": rule["id"], "severity": rule["severity"],
+                                   "kind": "wrong_value", "ref": ref,
+                                   "expected_value": expected_value, "observed_value": comp_value[ref]})
+    return mismatches
+
+
+# ---------------------------------------------------------------------------
+# 计划派生（r16 语义）
+# ---------------------------------------------------------------------------
+
+
+def parse_lib_pins(source_text: str) -> Dict[str, Dict[str, Tuple[float, float]]]:
+    """Library symbol name -> {pin number: (dx, dy)} from lib_symbols blocks."""
+    libs: Dict[str, Dict[str, Tuple[float, float]]] = {}
+    for block in _balanced_blocks(source_text, r'\(symbol\s+"'):
+        head = re.match(r'\(symbol\s+"([^"]+)"', block)
+        if not head:
             continue
-        kind = record.get("kind")
-        keys = FACT_KINDS.get(kind) if isinstance(kind, str) else None
-        if keys is None:
-            uninterpretable.append(
-                _ident(record["id"], f"facts[{index}].id")
-                if "id" in record and isinstance(record["id"], str) and _ID_RE.match(record["id"])
-                else f"fact-{index}"
-            )
+        pins: Dict[str, Tuple[float, float]] = {}
+        for pin in re.finditer(
+                r'\(pin\s+\w+\s+\w+\s+\(at\s+([\-0-9.]+)\s+([\-0-9.]+)\s+[\-0-9.]+\).*?'
+                r'\(number\s+"([^"]+)"', block, re.S):
+            pins[pin.group(3)] = (float(pin.group(1)), float(pin.group(2)))
+        if pins and ":" in head.group(1):
+            libs[head.group(1)] = pins
+    return libs
+
+
+def symbol_absolute_pins(sch: Schematic, lib_pins: Dict[str, Dict[str, Tuple[float, float]]],
+                         ref: str) -> Optional[Dict[str, Tuple[float, float]]]:
+    """Absolute pin positions for one instance (rotation 0, no mirror only)."""
+    for sym in sch.symbols:
+        if sym.ref != ref:
             continue
-        where = f"facts[{index}]"
-        missing = [key for key in keys if key not in record]
-        extra = [key for key in record if key not in keys]
-        if missing or extra:
-            raise _bad(
-                f"{where} ({kind}) field mismatch: missing={missing} unknown={extra}"
-            )
-        fact_id = _ident(record["id"], f"{where}.id")
-        entry: Dict[str, Any] = {"id": fact_id, "kind": kind}
-        if kind == FACT_CONNECT_PIN:
-            entry["anchor"] = _anchor(record["anchor"], f"{where}.anchor")
-            entry["net"] = _text(record["net"], f"{where}.net")
-        elif kind == FACT_DELETE_OBJECT:
-            entry["uuid"] = _ident(record["uuid"], f"{where}.uuid")
-            entry["anchor"] = _anchor(record["anchor"], f"{where}.anchor")
-        elif kind == FACT_PLACE_COMPONENT:
-            designator = record["designator"]
-            if not isinstance(designator, str) or not _DESIGNATOR_RE.match(designator):
-                raise _bad(f"{where}.designator is not a valid designator")
-            entry["designator"] = designator
-            if record["lib_id"] not in PUBLIC_LIB_IDS:
-                raise _bad(f"{where}.lib_id must be one of {PUBLIC_LIB_IDS}")
-            entry["lib_id"] = record["lib_id"]
-            entry["value"] = _text(record["value"], f"{where}.value")
-            entry["footprint"] = _text(record["footprint"], f"{where}.footprint")
-            pin_nets = record["pin_nets"]
-            if not isinstance(pin_nets, dict) or not pin_nets:
-                raise _bad(f"{where}.pin_nets must be a non-empty object")
-            normalized: Dict[str, str] = {}
-            for pin_key, pin_net in pin_nets.items():
-                if not isinstance(pin_key, str) or not _PIN_KEY_RE.match(pin_key):
-                    raise _bad(f"{where}.pin_nets key {pin_key!r} is not a pin")
-                normalized[pin_key] = _text(pin_net, f"{where}.pin_nets.{pin_key}")
-            entry["pin_nets"] = normalized
-        interpretable.append(entry)
-    all_ids = [entry["id"] for entry in interpretable]
-    if len(set(all_ids)) != len(all_ids):
-        raise _bad("fact ids are not unique")
-    return interpretable, uninterpretable
+        if sym.lib_id not in lib_pins:
+            return None
+        return {pin: (round(sym.x + dx, 4), round(sym.y - dy, 4))
+                for pin, (dx, dy) in lib_pins[sym.lib_id].items()}
+    return None
+
+
+def _sibling_footprint(prefix: str, comp_footprint: Dict[str, str]) -> Optional[str]:
+    candidates = [v for k, v in comp_footprint.items()
+                  if re.match(r'^%s\d+$' % re.escape(prefix), k) and v]
+    if not candidates:
+        return None
+    return Counter(candidates).most_common(1)[0][0]
+
+
+def _label_positions(sch: Schematic, name: str) -> List[Tuple[float, float]]:
+    return sorted((l.x, l.y) for l in sch.labels if l.name == name)
+
+
+def _wire_endpoint_labels(sch: Schematic, wire: Wire) -> List[str]:
+    names = []
+    for point in ((wire.x1, wire.y1), (wire.x2, wire.y2)):
+        names += [l.name for l in sch.labels_at(point[0], point[1])]
+    return names
+
+
+def build_plan(mismatches: List[Dict[str, Any]], sch: Schematic,
+               lib_pins: Dict[str, Dict[str, Tuple[float, float]]],
+               contract: Dict[str, Any], comp_footprint: Dict[str, str],
+               grants: List[Dict[str, int]]) -> Tuple[List[Dict[str, Any]], List[str]]:
+    ops: List[Dict[str, Any]] = []
+    blockers: List[str] = []
+
+    # expected pin nets for missing components (from the contract)
+    expected_pins: Dict[str, Dict[str, str]] = {}
+    for rule in contract.get("rules", []):
+        for key, expected in rule.get("checks", {}).get("netlist", {}).get("pins", {}).items():
+            ref, pin = key.split(".", 1)
+            if expected.get("net"):
+                expected_pins.setdefault(ref, {})[pin] = expected["net"]
+    missing_refs = {m["ref"] for m in mismatches if m["kind"] == "missing_component"}
+    missing_nets = {net for ref in missing_refs for net in expected_pins.get(ref, {}).values()}
+
+    for mismatch in mismatches:
+        kind = mismatch["kind"]
+        if kind in ("pin_net", "pin_should_be_disconnected") and \
+                mismatch.get("expected_net") in missing_nets:
+            # These nets are restored by placing the missing component; touching
+            # their labels now would fight the placement repair.
+            continue
+        if kind == "missing_component":
+            ref = mismatch["ref"]
+            prefix = re.match(r'^[A-Za-z]+', ref).group(0)
+            lib_id = {"R": "Device:R", "C": "Device:C"}.get(prefix)
+            if lib_id is None:
+                blockers.append("unsupported lib for %s" % ref)
+                continue
+            footprint = _sibling_footprint(prefix, comp_footprint)
+            pins = expected_pins.get(ref, {})
+            if footprint is None or len(pins) != 2:
+                blockers.append("insufficient sibling/pin evidence for %s" % ref)
+                continue
+            net_names = sorted(pins.values())
+            # A retained wire whose endpoints carry the two expected nets marks
+            # where the part used to sit: it is deleted, and its midpoint is a
+            # public anchor for choosing a granted slot.
+            wire_matches = [w for w in sch.wires
+                            if sorted(_wire_endpoint_labels(sch, w)) == net_names]
+            anchor: Optional[Tuple[float, float]] = None
+            if len(wire_matches) == 1:
+                anchor = wire_matches[0].mid
+                ops.append({"op": OP_DELETE_OBJECT, "uuid": wire_matches[0].uuid})
+            elif len(wire_matches) > 1:
+                blockers.append("ambiguous wire match for %s" % ref)
+                continue
+            if anchor is None:
+                anchors = [_label_positions(sch, net) for net in net_names]
+                points = [p[0] for p in anchors if p]
+                if len(points) == 2:
+                    anchor = ((points[0][0] + points[1][0]) / 2.0,
+                              (points[0][1] + points[1][1]) / 2.0)
+                elif points:
+                    anchor = (points[0][0], points[0][1] + 5.08)
+            chosen = choose_slot(grants, anchor)
+            ops.append({"op": OP_PLACE_COMPONENT, "lib_id": lib_id, "designator": ref,
+                        "x_mil": chosen["x_mil"], "y_mil": chosen["y_mil"],
+                        "value": mismatch["expected_value"], "footprint": footprint})
+            for pin, net in sorted(pins.items()):
+                ops.append({"op": OP_ADD_NET_LABEL, "name": net, "at": "%s.%s" % (ref, pin)})
+        elif kind == "pin_net":
+            pin = mismatch["pin"]
+            expected_net = mismatch["expected_net"]
+            observed_net = mismatch["observed_net"]
+            if observed_net is None:
+                ops.append({"op": OP_ADD_NET_LABEL, "name": expected_net, "at": pin})
+                continue
+            ref = pin.split(".")[0]
+            abs_pins = symbol_absolute_pins(sch, lib_pins, ref)
+            if not abs_pins or pin.split(".", 1)[1] not in abs_pins:
+                blockers.append("pin geometry unavailable for %s" % pin)
+                continue
+            position = abs_pins[pin.split(".", 1)[1]]
+            candidates = [l for l in sch.labels_at(position[0], position[1])
+                          if l.name == observed_net]
+            if len(candidates) != 1 or not candidates[0].uuid:
+                blockers.append("ambiguous label removal for %s" % pin)
+                continue
+            ops.append({"op": OP_DELETE_OBJECT, "uuid": candidates[0].uuid})
+            ops.append({"op": OP_ADD_NET_LABEL, "name": expected_net, "at": pin})
+        elif kind == "pin_should_be_disconnected":
+            blockers.append("cannot express disconnection for %s" % mismatch["pin"])
+        elif kind == "wrong_value":
+            blockers.append("no C1 value-update operation for %s" % mismatch["ref"])
+
+    unique = {json.dumps(op, sort_keys=True): op for op in ops}
+    ordered = sorted(unique.values(),
+                     key=lambda op: (OP_ORDER[op["op"]], json.dumps(op, sort_keys=True)))
+    return ordered, blockers
+
+
+def _diagnosis(mismatches: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """合同规则视角的诊断条目（rule_id 取合同规则 id，fact_ids 恒为空）。
+
+    条目数封顶于冻结合同的 MAX_DIAGNOSIS：诊断里只承载公共合同规则，超限时
+    截断尾部（按 rule_id 排序后的尾部）而不是让产物超出 C1 的封闭上限——
+    "拒绝也必须是合法 Proposal"是硬约束。真实合同 5 条规则，永不触发。
+    """
+    diagnosis: List[Dict[str, Any]] = []
+    by_rule: Dict[str, List[Dict[str, Any]]] = {}
+    for mismatch in mismatches:
+        by_rule.setdefault(mismatch["rule_id"], []).append(mismatch)
+    for rule_id, items in sorted(by_rule.items())[:MAX_DIAGNOSIS]:
+        severity = items[0].get("severity", "major")
+        observed = "; ".join(
+            "%s=%s(expected %s)" % (m.get("pin") or m.get("ref"),
+                                    m.get("observed_net", m.get("observed_value", "missing")),
+                                    m.get("expected_net", m.get("expected_value")))
+            for m in items[:4])
+        diagnosis.append({
+            "rule_id": rule_id,
+            "observed": observed,
+            "fact_ids": [],
+            "requirement_level": REQUIREMENT_BY_SEVERITY.get(severity, "UNKNOWN"),
+            "rationale": "public contract rule evaluated over the package netlist",
+        })
+    return diagnosis
 
 
 # ---------------------------------------------------------------------------
-# 观测访问（kicad_netlist_current.v1）
-# ---------------------------------------------------------------------------
-
-
-class ObservationView:
-    """netlist 观测的只读索引。引脚不在任何 net = 悬空（生产者声明的语义）。"""
-
-    def __init__(self, observation: Dict[str, Any]):
-        if observation.get("observation_type") != OBSERVATION_TYPE:
-            raise _Problem(
-                "PUBLIC_INPUT_MALFORMED",
-                [],
-                "current_observation.observation_type must be "
-                f"{OBSERVATION_TYPE!r}; arm D cannot read other formats",
-            )
-        self.components: Dict[str, Dict[str, Any]] = {}
-        raw_components = observation.get("components")
-        if not isinstance(raw_components, list):
-            raise _Problem("PUBLIC_INPUT_MALFORMED", [], "components must be an array")
-        for index, comp in enumerate(raw_components):
-            if not isinstance(comp, dict) or not isinstance(comp.get("ref"), str):
-                raise _Problem(
-                    "PUBLIC_INPUT_MALFORMED", [], f"components[{index}] is malformed"
-                )
-            self.components[comp["ref"]] = comp
-        self.pin_net: Dict[Tuple[str, str], str] = {}
-        raw_nets = observation.get("nets")
-        if not isinstance(raw_nets, list):
-            raise _Problem("PUBLIC_INPUT_MALFORMED", [], "nets must be an array")
-        for net_index, net in enumerate(raw_nets):
-            if not isinstance(net, dict) or not isinstance(net.get("name"), str):
-                raise _Problem(
-                    "PUBLIC_INPUT_MALFORMED", [], f"nets[{net_index}] is malformed"
-                )
-            nodes = net.get("nodes")
-            if not isinstance(nodes, list):
-                raise _Problem(
-                    "PUBLIC_INPUT_MALFORMED", [], f"nets[{net_index}].nodes must be an array"
-                )
-            for node in nodes:
-                if not isinstance(node, dict):
-                    raise _Problem(
-                        "PUBLIC_INPUT_MALFORMED", [], f"nets[{net_index}] node malformed"
-                    )
-                stamp = (node.get("ref"), node.get("pin"))
-                if not isinstance(stamp[0], str) or not isinstance(stamp[1], str):
-                    raise _Problem(
-                        "PUBLIC_INPUT_MALFORMED",
-                        [],
-                        f"nets[{net_index}] node ref/pin must be strings",
-                    )
-                if stamp in self.pin_net and self.pin_net[stamp] != net["name"]:
-                    raise _Problem(
-                        "OBSERVATION_CONFLICT",
-                        [],
-                        f"pin {stamp[0]}.{stamp[1]} appears in multiple nets "
-                        f"({self.pin_net[stamp]} and {net['name']})",
-                    )
-                self.pin_net[stamp] = net["name"]
-
-    def net_of(self, ref: str, pin: str) -> Optional[str]:
-        return self.pin_net.get((ref, pin))
-
-    def component(self, ref: str) -> Optional[Dict[str, Any]]:
-        return self.components.get(ref)
-
-
-# ---------------------------------------------------------------------------
-# 提案组装（发射器与 v0.4 相同：冻结五字段 + PATCH/REFUSE + 三原语）
+# 提案组装（冻结发射器：五字段 + PATCH/REFUSE + 三原语）
 # ---------------------------------------------------------------------------
 
 
@@ -483,28 +728,21 @@ def _refuse(reason_code: str, missing: List[str], explanation: str) -> Dict[str,
     }
 
 
-def _diagnose(observed_text: str, fact_ids: List[str], rationale: str) -> Dict[str, Any]:
-    return {
-        "rule_id": "y4-arm-d",
-        "observed": observed_text,
-        "fact_ids": list(fact_ids),
-        "requirement_level": "MANDATORY",
-        "rationale": rationale,
-    }
-
-
-def _finish(header: Dict[str, Any], proposal: Dict[str, Any]) -> Dict[str, Any]:
-    for key, value in header.items():
-        proposal[key] = value
-    if proposal["decision"] == DECISION_PATCH:
-        proposal.pop("refusal", None)
-    else:
-        proposal.pop("oplist", None)
-    proposal["diagnosis"] = proposal.get("diagnosis") or []
+def _refuse_bound(header: Dict[str, Any], reason_code: str, missing: List[str],
+                  explanation: str) -> Dict[str, Any]:
+    """把 shell 级拒绝（结构/预算）绑定到冻结包头部。"""
+    proposal = _refuse(reason_code, missing, explanation)
+    proposal.update(header)
     return proposal
 
 
-def build_proposal(package: Dict[str, Any]) -> Dict[str, Any]:
+def build_proposal(package: Dict[str, Any],
+                   contract: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """从冻结包（+可选注入合同）推导 Proposal。
+
+    contract=None 时读取仓库内公共合同（与实跑 D 使用的同一份）；测试可注入
+    中性合成合同。返回 Proposal 字典（render()/propose_bytes() 负责字节化）。
+    """
     context = package["public_context"]
     header = {
         "schema_version": PROPOSAL_SCHEMA_VERSION,
@@ -514,275 +752,80 @@ def build_proposal(package: Dict[str, Any]) -> Dict[str, Any]:
     }
     max_ops = context["limits"]["max_ops"]
     try:
-        # grants / facts / 观测的一切不兼容都以"合法 REFUSE"表达（退出码 0）；
+        # grants / 观测 / 源码的一切不兼容都以"合法 REFUSE"表达（退出码 0）；
         # exit 2 只保留给包文件级结构损坏（load_document 层）。
         grants = _validate_grants(package["placement_grants"])
         facts = context["public_facts"]
         if not isinstance(facts, list):
-            raise _Problem(
-                "PUBLIC_INPUT_MALFORMED",
-                [],
+            # D1=C：facts 不再承载修复推理，但形状不符仍 fail-closed 成合法 REFUSE。
+            raise _bad(
                 "public_facts must be an array (empty means no supplied facts); "
-                "arm D consumes the frozen y4-public.v3 shape only",
+                "arm D consumes the frozen y4-public.v3 shape only"
             )
-        view = ObservationView(context["current_observation"])
-        if not facts:
-            return _finish(
-                header,
-                _refuse(
-                    "PUBLIC_INPUT_INSUFFICIENT",
-                    ["public-facts"],
-                    "public_facts is empty (no facts supplied); arm D has no "
-                    "approved repair targets and refuses rather than guess",
-                ),
-            )
-        interpretable, uninterpretable = interpret_facts(facts)
-        if uninterpretable:
-            return _finish(
-                header,
-                _refuse(
-                    "UNINTERPRETABLE_FACTS",
-                    uninterpretable,
-                    "these approved fact records are outside arm D's declared "
-                    "grammar (connect_pin/delete_object/place_component); the "
-                    "facts grammar freeze is pending with A2-Y/Percy",
-                ),
-            )
-
-        ops: List[Dict[str, Any]] = []
-        diagnosis: List[Dict[str, Any]] = []
-        used_slots = 0
-        deletions_by_anchor: Dict[str, Dict[str, Any]] = {}
-        connect_seen: Dict[str, str] = {}
-        place_seen: set = set()
-        retargeted_anchors: set = set()
-        for fact in interpretable:
-            if fact["kind"] == FACT_DELETE_OBJECT:
-                if fact["anchor"] in deletions_by_anchor:
-                    raise _bad(
-                        f"more than one delete_object fact for anchor {fact['anchor']}"
-                    )
-                deletions_by_anchor[fact["anchor"]] = fact
-
-        def take_slot() -> Dict[str, int]:
-            nonlocal used_slots
-            if used_slots >= len(grants):
-                raise _Problem(
-                    "PLACEMENT_CAPACITY_EXHAUSTED",
-                    [],
-                    "all placement_grants slots are used; no slot left for the "
-                    "next place_component (D takes slots in package order)",
-                )
-            slot = grants[used_slots]
-            used_slots += 1
-            return slot
-
-        # R1：connect_pin（按数组顺序）
-        for fact in interpretable:
-            if fact["kind"] != FACT_CONNECT_PIN:
-                continue
-            anchor = fact["anchor"]
-            if anchor in connect_seen:
-                raise _Problem(
-                    "PUBLIC_INPUT_CONFLICT",
-                    [],
-                    f"two connect_pin facts target anchor {anchor} "
-                    f"({connect_seen[anchor]!r} and {fact['net']!r}); arm D cannot "
-                    "derive a deterministic repair",
-                )
-            connect_seen[anchor] = fact["net"]
-            ref, _, pin = anchor.partition(".")
-            if ref not in view.components:
-                raise _Problem(
-                    "PUBLIC_INPUT_INSUFFICIENT",
-                    [f"observation-{anchor.replace('.', '-')}"],
-                    f"anchor {anchor} references unknown component {ref}",
-                )
-            observed = view.net_of(ref, pin)
-            target_net = fact["net"]
-            observed_text = (
-                f"pin {anchor} on net {observed}"
-                if observed is not None
-                else f"pin {anchor} floating (absent from all nets)"
-            )
-            deletion = deletions_by_anchor.get(anchor)
-            if observed == target_net:
-                diagnosis.append(
-                    _diagnose(
-                        observed_text,
-                        [fact["id"]],
-                        "observation already matches the approved target; no operation",
-                    )
-                )
-                if deletion is not None:
-                    raise _Problem(
-                        "PUBLIC_INPUT_CONFLICT",
-                        [],
-                        f"delete_object fact for {anchor} targets an "
-                        "already-satisfied pin",
-                    )
-                continue
-            if observed is None:
-                if deletion is not None:
-                    raise _Problem(
-                        "PUBLIC_INPUT_CONFLICT",
-                        [],
-                        f"delete_object fact for {anchor} has nothing to "
-                        "delete: pin is floating",
-                    )
-                ops.append({"op": OP_ADD_NET_LABEL, "name": target_net, "at": anchor})
-                diagnosis.append(
-                    _diagnose(observed_text, [fact["id"]], "floating pin receives the approved net label (R1)")
-                )
-            else:
-                if deletion is None:
-                    raise _Problem(
-                        "PUBLIC_INPUT_INSUFFICIENT",
-                        [f"delete-{anchor.replace('.', '-')}"],
-                        f"pin {anchor} is wired to {observed}; retargeting "
-                        "needs an approved delete_object fact carrying the wrong "
-                        "label uuid, which the package does not supply",
-                    )
-                retargeted_anchors.add(anchor)
-                ops.append({"op": OP_DELETE_OBJECT, "uuid": deletion["uuid"]})
-                ops.append({"op": OP_ADD_NET_LABEL, "name": target_net, "at": anchor})
-                diagnosis.append(
-                    _diagnose(
-                        observed_text,
-                        [deletion["id"], fact["id"]],
-                        "wrong label deleted by approved uuid, approved label added (R1)",
-                    )
-                )
-
-        # R4：孤儿删除（没有任何 connect_pin 引用的 delete_object）
-        for anchor, deletion in deletions_by_anchor.items():
-            if anchor not in retargeted_anchors:
-                raise _Problem(
-                    "PUBLIC_INPUT_INSUFFICIENT",
-                    [f"connect-{anchor.replace('.', '-')}"],
-                    f"delete_object fact {deletion['id']} for {anchor} has no "
-                    "paired connect_pin fact; arm D deletes only to retarget a "
-                    "pin, not speculatively",
-                )
-
-        # R2：place_component（按数组顺序；坐标按 grants 顺序取槽）
-        for fact in interpretable:
-            if fact["kind"] != FACT_PLACE_COMPONENT:
-                continue
-            designator = fact["designator"]
-            if designator in place_seen:
-                raise _Problem(
-                    "PUBLIC_INPUT_CONFLICT",
-                    [],
-                    f"two place_component facts target designator {designator}; "
-                    "arm D cannot derive a deterministic placement",
-                )
-            place_seen.add(designator)
-            existing = view.component(designator)
-            if existing is not None:
-                observed_value = existing.get("value")
-                observed_text = f"component {designator} observed value {observed_value!r}"
-                if observed_value == fact["value"]:
-                    diagnosis.append(
-                        _diagnose(
-                            observed_text,
-                            [fact["id"]],
-                            "component already matches the approved value; no operation",
-                        )
-                    )
-                    continue
-                raise _Problem(
-                    "NOT_EXPRESSION_IN_PUBLIC_OPS",
-                    [],
-                    f"component {designator} exists with value {observed_value!r} but "
-                    f"the approved value is {fact['value']!r}; public primitives "
-                    "cannot modify an existing component",
-                )
-            slot = take_slot()
-            ops.append(
-                {
-                    "op": OP_PLACE_COMPONENT,
-                    "lib_id": fact["lib_id"],
-                    "designator": designator,
-                    "x_mil": slot["x_mil"],
-                    "y_mil": slot["y_mil"],
-                    "value": fact["value"],
-                    "footprint": fact["footprint"],
-                }
-            )
-            diagnosis.append(
-                _diagnose(
-                    f"component {designator} absent from netlist observation",
-                    [fact["id"]],
-                    "approved component placed on host-granted slot "
-                    f"({slot['x_mil']}, {slot['y_mil']}) in package order (R2)",
-                )
-            )
-            for pin_key in sorted(fact["pin_nets"]):
-                ops.append(
-                    {
-                        "op": OP_ADD_NET_LABEL,
-                        "name": fact["pin_nets"][pin_key],
-                        "at": f"{designator}.{pin_key}",
-                    }
-                )
-            diagnosis.append(
-                _diagnose(
-                    f"{len(fact['pin_nets'])} pins of newly placed {designator}",
-                    [fact["id"]],
-                    "pins of newly placed component receive approved net labels (R2)",
-                )
-            )
+        observation = context["current_observation"]
+        source_text = package["source_utf8"]
+        if not isinstance(source_text, str) or not source_text:
+            raise _bad("source_utf8 must be non-empty KiCad s-expression text")
+        active_contract = contract if contract is not None else _load_contract()
+        if not isinstance(active_contract, dict):
+            raise _bad("contract must be an object")
+        mismatches = evaluate_netlist(active_contract, observation)
+        schematic = parse_schematic(source_text)
+        lib_pins = parse_lib_pins(source_text)
+        _, _, comp_footprint = observed_state(observation)
+        ops, blockers = build_plan(mismatches, schematic, lib_pins, active_contract,
+                                   comp_footprint, grants)
     except _Problem as problem:
-        return _finish(header, _refuse(problem.reason_code, problem.missing, problem.explanation))
+        return _refuse_bound(header, problem.reason_code, problem.missing,
+                             problem.explanation)
 
-    if not ops:
-        return _finish(
-            header,
-            _refuse(
-                "ALREADY_SATISFIED",
-                [],
-                "all approved targets already match the observation; the frozen "
-                "schema has no empty patch, so arm D refuses with no change",
-            ),
-        )
-    if len(ops) > max_ops:
-        return _finish(
-            header,
-            _refuse(
-                "OPERATION_LIMIT_EXCEEDED",
+    diagnosis = _diagnosis(mismatches)
+
+    if ops and not blockers:
+        if len(ops) > max_ops:
+            return _refuse_bound(
+                header,
+                REASON_OPERATION_LIMIT_EXCEEDED,
                 [],
                 f"derived {len(ops)} operations exceeds limits.max_ops={max_ops}",
-            ),
-        )
-    if len(diagnosis) > MAX_DIAGNOSIS:
-        return _finish(
-            header,
-            _refuse(
-                "OPERATION_LIMIT_EXCEEDED",
+            )
+        placements = sum(1 for op in ops if op["op"] == OP_PLACE_COMPONENT)
+        if placements > len(grants):
+            return _refuse_bound(
+                header,
+                REASON_GRANTS_EXHAUSTED,
                 [],
-                f"derived {len(diagnosis)} diagnosis entries exceeds the frozen "
-                f"limit of {MAX_DIAGNOSIS}",
-            ),
-        )
+                f"derived {placements} placements exceeds the "
+                f"{len(grants)} granted slot(s); member slot selection is "
+                "host-granted (D2 open)",
+            )
+        proposal = dict(header)
+        proposal["decision"] = DECISION_PATCH
+        proposal["diagnosis"] = diagnosis
+        proposal["oplist"] = {"protocol_version": 2, "target_format": "kicad", "ops": ops}
+        return proposal
 
+    # 引擎无法表达修复：blockers 逐条写明（r16 语义：携带合同规则诊断）。
     proposal = dict(header)
-    proposal["decision"] = DECISION_PATCH
+    proposal["decision"] = DECISION_REFUSE
     proposal["diagnosis"] = diagnosis
-    proposal["oplist"] = {"protocol_version": 2, "target_format": "kicad", "ops": ops}
-    return _finish(header, proposal)
+    proposal["refusal"] = {
+        "reason_code": REASON_NO_DERIVABLE_PLAN,
+        "missing_fact_ids": [],
+        "explanation": "; ".join(blockers) if blockers else "no public-derivable repair plan",
+        "required_human_decision": REQUIRED_HUMAN_DECISION,
+    }
+    return proposal
 
 
 def render(proposal: Dict[str, Any]) -> bytes:
-    return (
-        json.dumps(
-            proposal,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        )
-        + "\n"
+    """冻结字节形态：与实跑 D 一致——无尾换行、ASCII 关闭、键排序、紧凑分隔。"""
+    return json.dumps(
+        proposal,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
     ).encode("utf-8")
 
 
@@ -794,6 +837,11 @@ def propose_bytes(raw: bytes) -> bytes:
     不在适配器内吞掉。
     """
     return render(build_proposal(load_document(raw)))
+
+
+def adapter(request_bytes: bytes) -> bytes:  # runner-compatible interface
+    """runner 兼容入口（C/D 同字节）：propose_bytes 的别名语义。"""
+    return propose_bytes(request_bytes)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
