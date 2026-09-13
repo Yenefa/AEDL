@@ -15,6 +15,7 @@
 
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -28,6 +29,7 @@ from tools.repair_baseline import (
     MAX_DIAGNOSIS,
     MAX_GRANT_SLOTS,
     TOOL_VERSION,
+    BaselineEnvironmentError,
     BaselineInputError,
     build_proposal,
     choose_slot,
@@ -423,28 +425,101 @@ class SlotSelectionSeamTests(unittest.TestCase):
 
 
 class ContractPinTests(unittest.TestCase):
-    """公共合同的内容 pin：仓库文件必须等于 pin；漂移时 fail-closed 成合法 REFUSE。"""
+    """公共合同的内容 pin：仓库文件必须等于 pin。
+
+    合同是本工具**自身**的推导依据，不是"问题内的公开证据"。因此缺失 / 不可读 /
+    漂移都是**环境错误**（`BaselineEnvironmentError`，CLI 退出码 2，且不写任何
+    proposal），而**不是**合法 REFUSE：PR #61 的 runner 把 adapter 异常记成
+    `invocation_error="ADAPTER_ERROR"` / `record_status="REJECTED"`（失败的调用）；
+    伪装成 REFUSE 会让本地工具故障变成一个可计分的 D 响应。
+    """
+
+    maxDiff = None
+
+    def tampered_contract(self, directory, mutate):
+        payload = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+        mutate(payload)
+        path = Path(directory) / "m2_schematic_contract_v1.json"
+        path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        return path
 
     def test_pinned_hash_matches_the_repo_contract(self):
         raw = CONTRACT_PATH.read_bytes()
         self.assertEqual(hashlib.sha256(raw).hexdigest(), CONTRACT_SHA256)
 
-    def test_contract_drift_refuses_legally_not_exit_2(self):
+    def test_contract_drift_reason_code_is_gone(self):
+        """`CONTRACT_DRIFT` 作为 reason code 已删除：它不再是"可绑定的拒绝条件"。"""
+        self.assertFalse(hasattr(repair_baseline, "REASON_CONTRACT_DRIFT"))
+        self.assertFalse(hasattr(repair_baseline, "CONTRACT_DRIFT"))
+
+    def test_contract_drift_is_an_environment_error_not_a_refusal(self):
         package = make_package()
         with tempfile.TemporaryDirectory() as tmp:
-            tampered = Path(tmp) / "m2_schematic_contract_v1.json"
-            payload = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
-            payload["rules"][0]["severity"] = "minor"  # 任何字节改动都算漂移
-            tampered.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            tampered = self.tampered_contract(
+                tmp, lambda payload: payload["rules"][0].__setitem__("severity", "minor")
+            )
+            expected_digest = hashlib.sha256(tampered.read_bytes()).hexdigest()
             original = repair_baseline.CONTRACT_PATH
             repair_baseline.CONTRACT_PATH = tampered
             try:
-                proposal = build_proposal(package)  # 不注入合同 -> 走文件路径与 pin 校验
+                # (1) build_proposal 不吞异常：合同漂移必须原样抛出
+                with self.assertRaises(BaselineEnvironmentError) as caught:
+                    build_proposal(package)  # 不注入合同 -> 走文件路径与 pin 校验
+                # (2) propose_bytes（= adapter 的实现路径）同样原样传播
+                with self.assertRaises(BaselineEnvironmentError):
+                    propose_bytes(json.dumps(package).encode("utf-8"))
             finally:
                 repair_baseline.CONTRACT_PATH = original
-        parse_proposal(render(proposal))  # 仍是合法 C1 Proposal（不是 exit 2）
-        self.assertEqual(proposal["decision"], "REFUSE")
-        self.assertEqual(proposal["refusal"]["reason_code"], "CONTRACT_DRIFT")
+        # 消息必须同时点名路径、观测到的摘要与 pin 的摘要
+        message = str(caught.exception)
+        self.assertIn(str(tampered), message)
+        self.assertIn(expected_digest, message)
+        self.assertIn(CONTRACT_SHA256, message)
+
+    def test_missing_contract_file_is_an_environment_error(self):
+        """不可读（OSError）同样是环境错误，不是 REFUSE。"""
+        package = make_package()
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = Path(tmp) / "absent_contract.json"
+            original = repair_baseline.CONTRACT_PATH
+            repair_baseline.CONTRACT_PATH = missing
+            try:
+                with self.assertRaises(BaselineEnvironmentError) as caught:
+                    build_proposal(package)
+            finally:
+                repair_baseline.CONTRACT_PATH = original
+        self.assertIn(str(missing), str(caught.exception))
+
+    def test_cli_contract_drift_exits_2_and_writes_no_proposal(self):
+        """CLI 必须退出 2、在 stderr 说明，并且**绝不**写出 proposal 文件。
+
+        子进程里无法 monkeypatch，因此把模块复制到一个临时仓库根，让相对本模块解析
+        的 `CONTRACT_PATH` 指向被篡改的合同副本（仓库内的合同文件一个字节都不动）。
+        """
+        package = make_package()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "env"
+            (root / "tools").mkdir(parents=True)
+            (root / "gates" / "contracts").mkdir(parents=True)
+            script = root / "tools" / "repair_baseline.py"
+            shutil.copyfile(SCRIPT, script)
+            self.tampered_contract(
+                root / "gates" / "contracts",
+                lambda payload: payload["rules"][0].__setitem__("severity", "minor"),
+            )
+            package_path = root / "package.json"
+            package_path.write_bytes(json.dumps(package).encode("utf-8"))
+            out_path = root / "proposal.json"
+            result = subprocess.run(
+                [sys.executable, str(script), "--package", str(package_path),
+                 "--out", str(out_path)],
+                capture_output=True, text=True, cwd=str(root),
+            )
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn("environment", result.stderr)
+            self.assertIn("sha256", result.stderr)
+            # 关键：没有写出任何 proposal（否则就等于把环境故障变成了 REFUSE 产物）
+            self.assertFalse(out_path.exists())
 
 
 class DerivationTests(HeaderMixin, unittest.TestCase):
@@ -867,6 +942,118 @@ class BudgetAndGuardTests(HeaderMixin, unittest.TestCase):
             self.assertEqual(proposal["refusal"]["reason_code"], "PUBLIC_INPUT_MALFORMED")
 
 
+class RefusalC1SafetyTests(HeaderMixin, unittest.TestCase):
+    """M1-2：**refusal 载荷自身**也必须是 C1-legal Proposal（单一 choke point）。
+
+    `place_component.value`/`footprint`、`diagnosis[].observed`/`rule_id` 已有发射前
+    校验；此前 `refusal.explanation` / `required_human_decision` / `reason_code` /
+    `missing_fact_ids` 完全未检查，而动态说明会插值观测数据（网名、ref.pin 锚点）。
+    一个 3000 字符或带控制字符的网名因此能产出被真实 C1 `parse_proposal` 以
+    `REPAIR_SCHEMA_INVALID` 拒收的 REFUSE，破坏"每份产物都过 C1"的硬不变量。
+
+    这些用例全部经 `run_baseline`（= 真 C1 `parse_proposal`）验证。
+    """
+
+    maxDiff = None
+
+    def header(self):
+        return {
+            "schema_version": 1,
+            "context_id": "ctx-y4-neutral-1",
+            "target": "candidate/board.kicad_sch",
+            "base_source_sha256": SHA_A,
+        }
+
+    def blocker_contract(self, last_ref):
+        """5 个缺件：诊断每组只取前 4 条，因此 `last_ref` 只进 refusal 说明。
+
+        这正好把"未检查的 refusal 文本"单独隔离出来。
+        """
+        components = {"U1": {"value": "x"}, "U2": {"value": "x"},
+                      "U3": {"value": "x"}, "U4": {"value": "x"}}
+        components[last_ref] = {"value": "x"}
+        return {
+            "schema_version": 1,
+            "rules": [
+                {"id": "NEUTRAL_LONG_BLOCKERS", "severity": "major",
+                 "checks": {"netlist": {"components": components}}},
+            ],
+        }
+
+    # ---- (a) 3000 字符网名 + 重复引脚归属 --------------------------------
+
+    def test_long_net_name_conflict_refuses_and_still_parses(self):
+        long_name = "N" * 3000
+        conflicting = netlist_observation(
+            [net(long_name, "1", [("X1", "1")]), net("NB", "2", [("X1", "1")])],
+            [comp("X1")],
+        )
+        proposal = run_baseline(make_package(observation_data=conflicting), CONTRACT_PIN)
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertEqual(proposal["refusal"]["reason_code"], "OBSERVATION_CONFLICT")
+        explanation = proposal["refusal"]["explanation"]
+        self.assertLessEqual(len(explanation), MAX_C1_TEXT_CHARS)
+        # 窄化证据：3000 字符的网名被截到 64 字符 + 省略号，绝不原样进入说明。
+        self.assertNotIn(long_name, explanation)
+        self.assertIn("N" * 64 + "\u2026", explanation)
+        self.assertIn("NB", explanation)
+
+    # ---- (b) 带控制字符的网名 ---------------------------------------------
+
+    def test_control_character_net_name_conflict_refuses_and_still_parses(self):
+        conflicting = netlist_observation(
+            [net("NA", "1", [("X1", "1")]), net("NB\x01\x02", "2", [("X1", "1")])],
+            [comp("X1")],
+        )
+        proposal = run_baseline(make_package(observation_data=conflicting), CONTRACT_PIN)
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertEqual(proposal["refusal"]["reason_code"], "OBSERVATION_CONFLICT")
+        self.assertNotIn("\x01", render(proposal).decode("utf-8"))
+        self.assertIn("NB", proposal["refusal"]["explanation"])
+        # 控制字符被替换并折叠成单个空格（不是原样透传，也不是连续空白）
+        self.assertNotIn("  ", proposal["refusal"]["explanation"])
+
+    # ---- (c) blockers / NO_DERIVABLE_PLAN 分支 ---------------------------
+
+    def test_long_blocker_text_refuses_with_no_derivable_plan_and_parses(self):
+        proposal = run_baseline(make_package(), self.blocker_contract("Z" * 3000))
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertEqual(proposal["refusal"]["reason_code"], "NO_DERIVABLE_PLAN")
+        explanation = proposal["refusal"]["explanation"]
+        self.assertLessEqual(len(explanation), MAX_C1_TEXT_CHARS)
+        self.assertIn("unsupported lib for U1", explanation)
+
+    def test_control_character_blocker_text_refuses_and_still_parses(self):
+        proposal = run_baseline(make_package(), self.blocker_contract("W\x01\x02" * 400))
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertEqual(proposal["refusal"]["reason_code"], "NO_DERIVABLE_PLAN")
+        self.assertNotIn("\x01", render(proposal).decode("utf-8"))
+
+    # ---- choke point 本身：四个字段逐一归一化 -----------------------------
+
+    def test_refusal_payload_normalises_every_field(self):
+        proposal = repair_baseline._refuse_bound(
+            self.header(),
+            "BAD CODE\x01" + "x" * 3000,
+            ["ok", "bad id!", "y" * 100, "", None],
+            "boom\x00\x01" * 1000,
+        )
+        parse_proposal(render(proposal))  # 硬断言：真 C1 接受
+        refusal = proposal["refusal"]
+        self.assertLessEqual(len(refusal["reason_code"]), MAX_C1_TEXT_CHARS)
+        self.assertNotIn("\x01", refusal["reason_code"])
+        self.assertEqual(refusal["missing_fact_ids"], ["badid", "ok", "y" * 64])
+        self.assertLessEqual(len(refusal["explanation"]), MAX_C1_TEXT_CHARS)
+        self.assertNotIn("\x00", refusal["explanation"])
+        self.assertTrue(refusal["required_human_decision"].strip())
+
+    def test_empty_refusal_text_falls_back_to_a_fixed_sentence(self):
+        proposal = repair_baseline._refuse_bound(self.header(), "\x01\x02", [], "\x00\x01   ")
+        parse_proposal(render(proposal))
+        self.assertEqual(proposal["refusal"]["reason_code"], "REFUSAL_TEXT_UNSUPPORTED")
+        self.assertIn("not expressible as C1 text", proposal["refusal"]["explanation"])
+
+
 class PackageLevelTests(unittest.TestCase):
     """exit 2 仅保留给包文件级/包级结构损坏。"""
 
@@ -1176,6 +1363,40 @@ class RunnerIntegrationTests(unittest.TestCase):
             parsed = parse_proposal(out_path.read_bytes())
             self.assertEqual(parsed.decision, "PATCH")
             self.assertEqual(parsed.context_id, "ctx-y4-neutral-runner-1")
+
+    def test_contract_drift_records_a_failed_invocation_not_a_refusal(self):
+        """M1-1 × PR #61 runner：合同漂移必须记成**失败的调用**，不是合法 REFUSE。
+
+        `run_adapter()` 把 adapter 异常记成 `invocation_error="ADAPTER_ERROR"` /
+        `record_status="REJECTED"`（不可计分）；若 D 把本地环境故障伪装成
+        `REFUSE`，同一个 slot 会得到 `RECORDED` —— 一个可计分的 D 响应。这里断言
+        Owner 的预期记录，并同时断言异常在 `propose_bytes` 处原样传播。
+        """
+        inputs = runner_inputs(OBSERVATION, [])
+        package_raw, package_sha = self.freeze(inputs)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tampered = Path(temp_dir) / "m2_schematic_contract_v1.json"
+            payload = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+            payload["rules"][0]["severity"] = "minor"  # 任何字节改动都算漂移
+            tampered.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            original = repair_baseline.CONTRACT_PATH
+            repair_baseline.CONTRACT_PATH = tampered
+            try:
+                # adapter 不吞异常：直接调用时原样抛出（不是 REFUSE 字节）
+                with self.assertRaises(BaselineEnvironmentError):
+                    propose_bytes(package_raw)
+                # runner 的公开记录路径：异常 → ADAPTER_ERROR / REJECTED
+                record_raw = runner_run_adapter(package_raw, package_sha, RUNNER_META,
+                                                propose_bytes)
+            finally:
+                repair_baseline.CONTRACT_PATH = original
+        record = json.loads(record_raw)
+        self.assertEqual(record["invocation_error"], "ADAPTER_ERROR")
+        self.assertEqual(record["record_status"], "REJECTED")
+        self.assertEqual(record["scoring"], "NOT_RUN")
+        self.assertIsNone(record["proposal"])
+        self.assertEqual(record["raw_output_base64"], "")
+        self.assertEqual(record["proposal_parse_status"], "NOT_RUN")
 
 
 if __name__ == "__main__":

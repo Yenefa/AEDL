@@ -71,6 +71,18 @@ Owner 决策 D1 = "C" 明确 L2 操作邻域事实不属于冻结合同。于是
 - `SLOT_COLLISION`：两次 `place_component` 落到同一个授予槽（相同
   `(x_mil, y_mil)`）时拒绝；`GRANTS_EXHAUSTED` 只数摆放次数，不看不同槽数。
 
+REFUSE 载荷的 C1 合法性（硬不变量）
+------------------------------------
+"**每一份**产物（PATCH 与 REFUSE 都算）都通过 `tools.repair_pipeline.parse_proposal`"
+是硬不变量。`place_component` 的 `value`/`footprint`、`diagnosis[].observed`/
+`rule_id` 在发射前按 C1 文法校验（不合法即 REFUSE / `C1_TEXT_UNSUPPORTED`）；而
+**refusal 载荷自身**（`reason_code` / `missing_fact_ids` / `explanation` /
+`required_human_decision`）由唯一入口 `_refusal_payload()` 构造并归一化：控制字符
+替换为空格、空白连续段折叠、截断到 C1 上限 2048、归一化后为空则回落到固定句子。
+该归一化是**确定性且不抛**的——refusal 构造过程中绝不再抛 `_Problem`（那会递归成
+第二次 refusal 构造）。观测派生文本另有插值处的短形式截断
+（`_bounded_observation_value`），使诊断仍可读却永不撑爆 C1 上限。
+
 D2 = A（Owner 2026-09-13 决定）：placement 语义只锁成员性
 --------------------------------------------------------
 冻结合同只要求每个 place_component 的坐标**取自**包内 placement_grants；
@@ -84,7 +96,20 @@ D 永不自造坐标。
 ----
     py -3 tools/repair_baseline.py --package package.json --out proposal.json
 
-退出码：0 = 已产出合法 Proposal（PATCH/REFUSE 均算）；2 = 包文件级结构损坏。
+退出码
+------
+    0 = 已产出合法 Proposal（PATCH/REFUSE 均算）；
+    2 = **不写任何 proposal 文件**的失败。两类语义不同：
+        * `BaselineInputError` —— 包文件级结构损坏（无法产出绑定 context 的
+          Proposal）；
+        * `BaselineEnvironmentError` —— 本工具**自身**的推导环境不可用：公共合同
+          缺失 / 不可读 / 与 `CONTRACT_SHA256` 漂移。合同是工具的推导依据本身，不
+          属于"问题内证据不足"的空间，因此**不是**可计分的 REFUSE：PR #61 的
+          runner 把 adapter 异常记成 `invocation_error="ADAPTER_ERROR"` /
+          `record_status="REJECTED"`（失败的调用）；把本地工具故障伪装成合法
+          REFUSE 会把它变成一个可计分的 D 响应。
+
+退出码 0 的 REFUSE 只覆盖"包内公开证据不足以推导修复"这一空间。
 """
 
 from __future__ import annotations
@@ -137,6 +162,12 @@ GRANT_SLOT_KEYS = ("x_mil", "y_mil")
 
 OBSERVATION_TYPE = "kicad_netlist_current.v1"
 
+# 观测派生文本进入 proposal 时的短形式上限：网名/ref.pin 锚点是**观测数据**，长度与
+# 字符集都不受 C1 约束。诊断文本仍要可读，但绝不能撑爆 C1 上限（2048）或夹带控制
+# 字符。`_refusal_payload` 的归一化是最终兜底，这里是有意的**窄化**（M1-2）。
+OBSERVATION_TEXT_LIMIT = 64
+OBSERVATION_ELLIPSIS = "\u2026"
+
 DECISION_PATCH = "PATCH"
 DECISION_REFUSE = "REFUSE"
 OP_DELETE_OBJECT = "delete_object"
@@ -151,7 +182,6 @@ REASON_GRANTS_EXHAUSTED = "GRANTS_EXHAUSTED"
 REASON_SLOT_COLLISION = "SLOT_COLLISION"
 REASON_SYMBOL_TRANSFORM_UNSUPPORTED = "SYMBOL_TRANSFORM_UNSUPPORTED"
 REASON_C1_TEXT_UNSUPPORTED = "C1_TEXT_UNSUPPORTED"
-REASON_CONTRACT_DRIFT = "CONTRACT_DRIFT"
 REASON_NO_DERIVABLE_PLAN = "NO_DERIVABLE_PLAN"
 
 # critical→MANDATORY，major→RECOMMENDED，其余→UNKNOWN（r16 语义）
@@ -166,8 +196,12 @@ CONTRACT_PATH = (
 )
 
 # 合同内容的固定 pin（sha256）。合同是本工具的推导依据之一：文件一旦漂移，产物就
-# 不再等价于冻结批次所依据的规则，因此 fail-closed 成合法 REFUSE，而不是静默改变
-# 行为。改合同必须同时改本常量，并留下新的冻结记录（r21 freeze 引用同一份字节）。
+# 不再等价于冻结批次所依据的规则。因此漂移是**环境错误**
+# （`BaselineEnvironmentError` → CLI 退出码 2），不是可计分的 REFUSE——工具自身推导
+# 依据的缺失不属于"问题内证据不足"的空间。改合同必须同时改本常量。
+# 证据口径：当前 pin 与**5/5 计分输出逐字节复现**相容，但 r21 的 receipt **没有**
+# 独立记录合同 blob 的摘要——5/5 复现是强**间接**证据，不是一条"r21 引用同一份
+# 字节"的记录式证明。
 CONTRACT_SHA256 = "5802cbace183161361e1f3e5be868650f84ab336d53a7f30475de4d5af6fb2f6"
 
 REQUIRED_HUMAN_DECISION = (
@@ -176,15 +210,38 @@ REQUIRED_HUMAN_DECISION = (
     "and the public contract, and refuses rather than guessing."
 )
 
+# refusal 载荷归一化（`_refusal_payload`）的固定回落句：任何无法修成合法 C1 文本的
+# 输入（空、纯空白、全控制字符、错类型）都落到这里，绝不发射非法文本，也绝不抛。
+REFUSAL_FALLBACK_REASON_CODE = "REFUSAL_TEXT_UNSUPPORTED"
+REFUSAL_FALLBACK_TEXT = (
+    "arm D refuses: the refusal text was not expressible as C1 text"
+)
+
 _UUID = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 _PATH_RE = re.compile(r"^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$")
 _TEXT_RE = re.compile(r"^[^\x00-\x1f\x7f]+$")
+_WHITESPACE_RE = re.compile(r"\s+")
 
 
 class BaselineInputError(Exception):
     """包文件级结构损坏（CLI 退出码 2）：无法产出任何绑定 context 的 Proposal。"""
+
+
+class BaselineEnvironmentError(Exception):
+    """本工具**自身**的推导环境不可用（CLI 退出码 2，不写 proposal）。
+
+    与 `BaselineInputError` 刻意分开：后者的语义是"包/文件级结构损坏"，本类的语义
+    是"本地工具环境坏了"（公共合同缺失 / 不可读 / 与 pin 漂移）。两者都**不是**可
+    计分的 REFUSE——尤其本类：PR #61 runner 把 adapter 异常记成
+    `invocation_error="ADAPTER_ERROR"` / `record_status="REJECTED"`，即"失败的调用"，
+    而合法 REFUSE 是 `RECORDED`。把本地环境故障伪装成合法 REFUSE 会污染实验语义。
+
+    本类**绝不**在 `build_proposal()` 内被捕获（`except _Problem` 只捕 `_Problem`），
+    也不在 `adapter()` / `propose_bytes()` 内被捕获：它必须原样传播给 runner（被记
+    为失败的调用），或在 CLI 层变成退出码 2。
+    """
 
 
 class _Problem(Exception):
@@ -523,29 +580,66 @@ def choose_slot(grants: List[Dict[str, int]],
 
 
 def _load_contract() -> Dict[str, Any]:
-    """公共合同只从仓库内固定相对路径读取（无环境变量、无用户路径），并校验内容 pin。"""
+    """公共合同只从仓库内固定相对路径读取（无环境变量、无用户路径），并校验内容 pin。
+
+    任何失败都是**环境错误**（`BaselineEnvironmentError`），不是合法 REFUSE：合同
+    是本工具自身的推导依据，不是"问题内的公开证据"。见模块 docstring 的退出码约定。
+    """
     try:
         raw = CONTRACT_PATH.read_bytes()
     except OSError as exc:
-        raise _bad(f"cannot read the public contract at {CONTRACT_PATH}: {exc}") from exc
+        raise BaselineEnvironmentError(
+            f"cannot read the public contract at {CONTRACT_PATH}: {exc}"
+        ) from exc
     digest = hashlib.sha256(raw).hexdigest()
     if digest != CONTRACT_SHA256:
-        raise _Problem(
-            REASON_CONTRACT_DRIFT,
-            [],
+        raise BaselineEnvironmentError(
             "the public contract at %s has sha256 %s but this tool is pinned to %s: "
-            "the derivation basis changed, so arm D refuses instead of silently "
-            "producing different repairs" % (CONTRACT_PATH, digest, CONTRACT_SHA256),
+            "the derivation basis of the tool itself changed, so this is a local "
+            "environment error, not a scorable refusal"
+            % (CONTRACT_PATH, digest, CONTRACT_SHA256)
         )
     try:
         return json.loads(raw.decode("utf-8"))
     except (UnicodeError, ValueError) as exc:
-        raise _bad(f"public contract at {CONTRACT_PATH} is not valid UTF-8 JSON: {exc}") from exc
+        # 与 pin 匹配的字节不可能是非法 JSON（pin 指向的就是那份合法合同），因此本
+        # 分支实际不可达；保留它只为"取不到推导依据"这一类失败保持同一语义——
+        # 环境错误，而不是合法 REFUSE。
+        raise BaselineEnvironmentError(
+            f"the pinned public contract at {CONTRACT_PATH} is not valid UTF-8 JSON: {exc}"
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
 # 观测索引（kicad_netlist_current.v1）：引脚不在任何 net = 悬空
 # ---------------------------------------------------------------------------
+
+
+def _plain_text(value: Any) -> str:
+    """任意值 → 无控制字符、空白折叠的单行文本（确定性且**不抛**）。
+
+    两个归一化步骤（M1-2）：(1) 把 C1 禁止的控制字符（`< 0x20` 与 `0x7F`）替换为空格；
+    (2) 把空白连续段折叠成一个空格。绝不抛异常——调用点都在"不能再产生第二次
+    `_Problem`"的路径上。
+    """
+    text = value if isinstance(value, str) else ("" if value is None else str(value))
+    replaced = "".join(
+        " " if (ord(char) < 0x20 or ord(char) == 0x7F) else char for char in text
+    )
+    return _WHITESPACE_RE.sub(" ", replaced)
+
+
+def _bounded_observation_value(value: Any) -> str:
+    """观测值 → 有界、无控制字符、确定性（不抛）的诊断片段。
+
+    仅用于把**观测数据**插值进拒绝说明（如 `OBSERVATION_CONFLICT` 的网名）：截断到
+    `OBSERVATION_TEXT_LIMIT` 字符并加省略号，使消息仍可诊断却永不超过 C1 上限。
+    `None`（"该引脚未连接"）保留原 f-string 的 "None" 呈现。
+    """
+    text = _plain_text("None" if value is None else value)
+    if len(text) > OBSERVATION_TEXT_LIMIT:
+        return text[:OBSERVATION_TEXT_LIMIT] + OBSERVATION_ELLIPSIS
+    return text
 
 
 def observed_state(
@@ -596,11 +690,16 @@ def observed_state(
                 )
             key = "%s.%s" % (ref, pin)
             if key in pin_net and pin_net[key] != connected:
+                # 该说明是**唯一**一处把观测数据（网名、ref.pin 锚点）插值进拒绝文本
+                # 的地方：先窄化，再由 _refusal_payload 兜底归一化。
                 raise _Problem(
                     REASON_OBSERVATION_CONFLICT,
                     [],
-                    f"pin {key} appears in multiple nets "
-                    f"({pin_net[key]} and {connected})",
+                    "pin %s appears in multiple nets (%s and %s)" % (
+                        _bounded_observation_value(key),
+                        _bounded_observation_value(pin_net[key]),
+                        _bounded_observation_value(connected),
+                    ),
                 )
             pin_net[key] = connected
     return pin_net, comp_value, comp_footprint
@@ -854,17 +953,61 @@ def _diagnosis(mismatches: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
+def _refusal_text(value: Any, fallback: str) -> str:
+    """任意值 → 合法 C1 文本（≤2048、无控制字符、非空白）。确定性且**不抛**。
+
+    refusal 构造过程中绝不能抛 `_Problem`：那会递归成第二次 refusal 构造。修不好的
+    输入（错类型/空/纯空白/全控制字符）回落到 `fallback`（一个固定的通用句子）。
+    """
+    cleaned = _plain_text(value).strip()
+    if len(cleaned) > MAX_C1_TEXT_CHARS:
+        cleaned = cleaned[:MAX_C1_TEXT_CHARS].strip()
+    return cleaned or fallback
+
+
+def _refusal_fact_ids(missing: Any) -> List[str]:
+    """`missing_fact_ids` → C1 identifier 列表（`[A-Za-z0-9_-]{1,64}`，无重复）。
+
+    条目内部生成，但仍逐一归一化：只保留 C1 合法字符、截断 64、丢弃空串与非字符串
+    条目（非字符串本来就不是 identifier，不臆造一个）、去重排序。
+    """
+    if not isinstance(missing, (list, tuple, set, frozenset)):
+        return []
+    identifiers = set()
+    for item in missing:
+        if not isinstance(item, str):
+            continue
+        safe = "".join(
+            char for char in item
+            if char.isascii() and (char.isalnum() or char in "_-")
+        )[:64]
+        if safe:
+            identifiers.add(safe)
+    return sorted(identifiers)
+
+
+def _refusal_payload(reason_code: Any, missing: Any, explanation: Any) -> Dict[str, Any]:
+    """refusal 载荷构造的**唯一**入口（单一 choke point）。
+
+    `_refuse()`、`_refuse_bound()` 与 `build_proposal()` 的 blockers /
+    `NO_DERIVABLE_PLAN` 分支都必须经过这里——没有任何路径能绕过归一化把未检查的
+    文本（长网名、控制字符、错类型）发射出去。四个字段全部归一化为合法 C1 文本。
+    """
+    return {
+        "reason_code": _refusal_text(reason_code, REFUSAL_FALLBACK_REASON_CODE),
+        "missing_fact_ids": _refusal_fact_ids(missing),
+        "explanation": _refusal_text(explanation, REFUSAL_FALLBACK_TEXT),
+        "required_human_decision": _refusal_text(REQUIRED_HUMAN_DECISION,
+                                                 REFUSAL_FALLBACK_TEXT),
+    }
+
+
 def _refuse(reason_code: str, missing: List[str], explanation: str) -> Dict[str, Any]:
     return {
         "schema_version": PROPOSAL_SCHEMA_VERSION,
         "decision": DECISION_REFUSE,
         "diagnosis": [],
-        "refusal": {
-            "reason_code": reason_code,
-            "missing_fact_ids": sorted(set(missing)),
-            "explanation": explanation,
-            "required_human_decision": REQUIRED_HUMAN_DECISION,
-        },
+        "refusal": _refusal_payload(reason_code, missing, explanation),
     }
 
 
@@ -959,15 +1102,16 @@ def build_proposal(package: Dict[str, Any],
         return proposal
 
     # 引擎无法表达修复：blockers 逐条写明（r16 语义：携带合同规则诊断）。
+    # 拒绝载荷同样必须过同一个 choke point（`_refusal_payload`），否则长/带控制
+    # 字符的 blockers 会发射出 C1 parse_proposal 拒收的文档。
     proposal = dict(header)
     proposal["decision"] = DECISION_REFUSE
     proposal["diagnosis"] = diagnosis
-    proposal["refusal"] = {
-        "reason_code": REASON_NO_DERIVABLE_PLAN,
-        "missing_fact_ids": [],
-        "explanation": "; ".join(blockers) if blockers else "no public-derivable repair plan",
-        "required_human_decision": REQUIRED_HUMAN_DECISION,
-    }
+    proposal["refusal"] = _refusal_payload(
+        REASON_NO_DERIVABLE_PLAN,
+        [],
+        "; ".join(blockers) if blockers else "no public-derivable repair plan",
+    )
     return proposal
 
 
@@ -986,8 +1130,10 @@ def propose_bytes(raw: bytes) -> bytes:
     """D 侧适配器：request_bytes（冻结包原始字节）→ Proposal 字节。
 
     与 tools.y4_dry_runner.run_adapter 的 adapter(request_bytes) -> bytes
-    契约一致；BaselineInputError（包级结构损坏）向上抛给调用方记录，
-    不在适配器内吞掉。
+    契约一致；`BaselineInputError`（包级结构损坏）与 `BaselineEnvironmentError`
+    （本地工具环境坏了）都原样向上抛给调用方记录，**不在适配器内吞掉**：
+    runner 把它们记成 `invocation_error="ADAPTER_ERROR"` /
+    `record_status="REJECTED"`，而这正是它们应得的语义（失败的调用，不是 REFUSE）。
     """
     return render(build_proposal(load_document(raw)))
 
@@ -1006,6 +1152,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         proposal = build_proposal(load_package(Path(args.package)))
     except BaselineInputError as exc:
         print(f"baseline: invalid package: {exc}", file=sys.stderr)
+        return 2
+    except BaselineEnvironmentError as exc:
+        # 本地工具环境故障：退出码 2，且**绝不**写出 proposal——把它写成 REFUSE 会
+        # 在 runner 里变成一个可计分的 D 响应（见模块 docstring 的退出码约定）。
+        print(f"baseline: tool environment error: {exc}", file=sys.stderr)
         return 2
     Path(args.out).write_bytes(render(proposal))
     print(f"baseline: wrote {proposal['decision']} proposal to {args.out}")
