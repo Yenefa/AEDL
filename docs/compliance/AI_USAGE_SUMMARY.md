@@ -56,7 +56,7 @@
 | WU-34 | 2026-09-09 / 09-11 | GH-56 Y4-dry 公共输入打包、五例协议修订与 r12 harness 终验（r13 收尾中） | GENERATE_CODE / GENERATE_TEST / DOCUMENT / DEBUG | Yenefa | yes — 2026-09-10 批准 dry scoring 与五例修订；2026-09-11 审查结论 REQUEST_CHANGES，r13 收尾后倾向 APPROVE；实现审核仍 PENDING_HUMAN_REVIEW | 1 |
 | WU-35 | 2026-09-11 | GH-56 自主预冻结战役（r10–r15）：语义闭环、冻结前准备、证据修复、独立复核与 G6 可达性审计 | GENERATE_CODE / GENERATE_TEST / DOCUMENT / DEBUG / RESEARCH | Yenefa（G1–G11 决策与 G10/G11 明确授权） | yes — G11 授权入账；G10 授权更新权威文档；无 merge/冻结授权 | 1 |
 | WU-36 | 2026-09-11 | GH-56 r19/r20 修正版审计与提交 + PR #60 复核取证 | RESEARCH / REVIEW / DOCUMENT | Yenefa（授权提交 GH-56 变更集；PR #60 复核结论由其判定） | pending — 条目 PENDING_HUMAN_REVIEW；PR #61 待人工评审 | 1 |
-| WU-42 | 2026-09-09 / 09-13 | E5 招募登记（3 人确认）+ 第一段改期至 09-28 | DOCUMENT | Percy（招募结果口述；改期裁定） | pending — 条目 PENDING_HUMAN_REVIEW；PR #58 待人工评审 | 1 |
+| WU-37 | 2026-09-09 / 09-13 | E5 招募登记（3 人确认）+ 第一段改期至 09-28 | DOCUMENT | Percy（招募结果口述；改期裁定） | pending — 条目 PENDING_HUMAN_REVIEW；PR #58 待人工评审 | 1 |
 
 ## 明细
 
@@ -357,14 +357,15 @@
 - **证据**：PR #61（commit `e641b5eb`，CI 双绿）；PR #60 review（`CHANGES_REQUESTED`）；r20 归档全链哈希独立复核；真实冻结包 CLI 实测 exit 2 ×2
 - **边界**：未接触 Percy private oracle；复核仅使用公开仓库内容与公开冻结包
 
-### WU-42 · 2026-09-09 / 09-13 — E5 招募登记与第一段改期
+### WU-37 · 2026-09-09 / 09-13 — E5 招募登记与第一段改期
 
 - **Records (1)**：`AI-20260909-PER-E93BEF7F1FF78F5D64FC89E1657FFA20`
 - **AI role**：DOCUMENT
 - **Human owner**：Percy（2026-09-09 口述招募结果：联系 4 人成 3 人；2026-09-13 裁定第一段改期 09-20 → 09-28）
 - **Human final decision**：pending — 条目 `PENDING_HUMAN_REVIEW`；PR #58 待人工评审
-- **证据**：条目「人类指令与事实来源」节记录口述内容与 Agent 的口径判定；「更正（2026-09-13）」节记录改期理由（对齐任务卡 A1 窗口）且不改写原记录
-- **边界**：三人真实背景未独立核实（条目「已知限制」已声明）；改期仅涉文档，未接触任何 E5 逐字记录
+- **证据**：条目「人类指令与事实来源」节记录口述内容与 Agent 的口径判定；「更正（2026-09-13）」节记录改期理由，原记录未改写
+- **边界**：三人真实背景未独立核实（条目已声明）；改期仅涉文档，未接触任何 E5 逐字记录
+- **编号沿革**：本单元原记 WU-34，Yenefa 于 2026-09-11 改为 **WU-37** 以避让 #61/#62；本次保留该号
 
 ---
 
