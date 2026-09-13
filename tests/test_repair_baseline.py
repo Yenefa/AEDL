@@ -761,10 +761,15 @@ class DeterminismAndCliTests(unittest.TestCase):
 
 
 def runner_inputs(observation_data, facts, grants=GRANTS, max_ops=8, source=SOURCE):
-    """真实 runner build_package 所需的中性合成公共输入。"""
+    """真实 runner build_package 所需的中性合成公共输入。
+
+    case_public_id 必须取自 runner 的允许集合（`Y4-001..005`，见
+    `tools/y4_dry_runner.py::build_package`）——这是 runner 的**命名空间要求**，
+    不是案例级映射：这里喂进去的观测仍是合成的（合同满足态去掉一个元件）。
+    """
     return {
         "experiment_version": RUNNER_EXPERIMENT_VERSION,
-        "case_public_id": "Y4-NEUTRAL-001",
+        "case_public_id": "Y4-001",
         "context_id": "ctx-y4-neutral-runner-1",
         "target": "candidate/board.kicad_sch",
         "source_utf8": source,
