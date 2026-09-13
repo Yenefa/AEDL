@@ -12,10 +12,12 @@ Status: `PENDING_HUMAN_REVIEW`. Scored case set: 5 (DC-01..DC-05); canonical exp
 > accordingly: `y4-dry.v3` froze the five-case set (`freeze` accepts exactly the
 > five neutral IDs Y4-001..Y4-005 under the canonical experiment version, and
 > fails closed on four/six cases, duplicate IDs and wrong versions);
-> `y4-dry.v4` locks the canonical `attempts_per_slot=1` invariant (metadata
+> `y4-dry.v4` locked the canonical `attempts_per_slot=1` invariant (metadata
 > `attempt` must be exactly 1; 0/2/3/booleans fail closed; repetitions remain
-> 1..3; a failed or retried generation cannot create a second formal slot). See
-> `DC06_INPUT_GOVERNANCE_INCIDENT.md` and the r7/r8 host deliveries.
+> 1..3; a failed or retried generation cannot create a second formal slot);
+> **the current runner identity is `y4-dry.v5`**, whose packages carry
+> `y4-public.v3` and which adds the `placement_grants` grant-membership check.
+> See `DC06_INPUT_GOVERNANCE_INCIDENT.md` and the r7/r8 host deliveries.
 
 Execution continuation prepared six fresh current-observation candidates with
 generation-time bindings using an actual task-local KiCad 10.0.6 XML exporter,
@@ -109,6 +111,7 @@ canonical experiment version. Each object has these closed fields:
 | `current_observation` | Nonempty public object, supplied rather than synthesized |
 | `observation_binding` | Exactly `source_sha256`, `observation_sha256`, `producer_id`; supplied by the observation producer |
 | `public_facts` | Public fact array; empty explicitly means none supplied |
+| `placement_grants` | Required nonempty neutral placement slot list (`x_mil`/`y_mil`); `place_component` coordinates must hit a granted slot |
 | `budget` | `max_ops`, `max_request_bytes`, `max_output_tokens`, `timeout_ms` |
 
 `max_ops` is 1–8 and `max_request_bytes` is 1–65536. `max_request_bytes` is the
@@ -126,7 +129,7 @@ py -3.9 -m tools.y4_dry_runner freeze --inputs <approved-public-inputs.json> --o
 ```
 
 The output is five canonical JSON packages plus `manifest.json`, written last.
-Each `y4-public.v2` package contains a C1 `make_public_context` projection, exact source text,
+Each `y4-public.v3` package contains a C1 `make_public_context` projection, exact source text,
 source hash, context digest, generic operation schema, budget, frozen generic
 instruction and exposure field list. There are no source filesystem paths or
 private assets in a package. Freeze order is independent of input array order.

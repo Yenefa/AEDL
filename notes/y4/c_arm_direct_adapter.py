@@ -1,4 +1,4 @@
-"""Direct single-shot C adapter for OpenCode Go (formal C path — config v2).
+"""Direct single-shot C adapter for OpenCode Go (formal C path — config v3).
 
 Discovered from the local provider catalog (`~/.cache/opencode/models.json`) and
 the official Go docs: provider `opencode-go`, OpenAI-compatible
