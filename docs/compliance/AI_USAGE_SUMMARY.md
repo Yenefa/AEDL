@@ -9,7 +9,7 @@
 >
 > 三层结构：**本文件（work units，默认浏览入口）** → [`AI_USAGE_LOG.md`](AI_USAGE_LOG.md)（逐条索引，脚本生成，禁手改） → `docs/compliance/ai-usage/<ID>.md`（逐条真源）。
 >
-> - 覆盖核验（2026-09-11，合入 `origin/master` 后重建索引）：本文件引用 94 条记录（90 条历史 + `AI-20260910-PER-3A3AA8…` 1 条 + GH-56 CODEX 条目 1 条 + GH-56 OPENCODE 自主战役条目 1 条 + GH-56 审计/复核条目 1 条），与 `AI_USAGE_LOG.md` 当前 94 条**双向一致**（无遗漏、无重复、无虚构 ID）。
+> - 覆盖核验（2026-09-13，合入 `origin/master`（含 PR #61）后重建索引）：本文件引用 96 条记录（92 条历史 + WU-34/WU-35 条目 2 条 + WU-39 单元 2 条：`AI-20260910-LIO-4CADC9CD6CC1E745477A23F629A1AAD5` 与 `AI-20260913-OPENCODE-B411981B20EBDA38FBC7F2E6B2AD30D4`），与 `AI_USAGE_LOG.md` 当前 96 条**双向一致**（无遗漏、无重复、无虚构 ID）。
 > - 本文件只做聚合与引用，**不改写任何条目正文**；条目正文的修订请直接改 `ai-usage/<ID>.md` 并重建索引。
 > - **`Human owner` 只在该工作单元的记录中明确出现时才具名**；未具名一律写 `TO_VERIFY`，不默认归属给任何人。
 > - `Human final decision`：`yes` = 有批准 / merge / 裁决记录；`pending` = 条目仍为 `PENDING_HUMAN_REVIEW` 且无 merge 记录；`TO_VERIFY` = 记录未具名。
@@ -56,6 +56,7 @@
 | WU-34 | 2026-09-09 / 09-11 | GH-56 Y4-dry 公共输入打包、五例协议修订与 r12 harness 终验（r13 收尾中） | GENERATE_CODE / GENERATE_TEST / DOCUMENT / DEBUG | Yenefa | yes — 2026-09-10 批准 dry scoring 与五例修订；2026-09-11 审查结论 REQUEST_CHANGES，r13 收尾后倾向 APPROVE；实现审核仍 PENDING_HUMAN_REVIEW | 1 |
 | WU-35 | 2026-09-11 | GH-56 自主预冻结战役（r10–r15）：语义闭环、冻结前准备、证据修复、独立复核与 G6 可达性审计 | GENERATE_CODE / GENERATE_TEST / DOCUMENT / DEBUG / RESEARCH | Yenefa（G1–G11 决策与 G10/G11 明确授权） | yes — G11 授权入账；G10 授权更新权威文档；无 merge/冻结授权 | 1 |
 | WU-36 | 2026-09-11 | GH-56 r19/r20 修正版审计与提交 + PR #60 复核取证 | RESEARCH / REVIEW / DOCUMENT | Yenefa（授权提交 GH-56 变更集；PR #60 复核结论由其判定） | pending — 条目 PENDING_HUMAN_REVIEW；PR #61 待人工评审 | 1 |
+| WU-39 | 2026-09-13 | GH-56 PR #60 A2-L D 基线（LIO 初版 → A-2′ 端口）与 master 合并后台账重建 | GENERATE_CODE / GENERATE_TEST / DEBUG / DOCUMENT / REVIEW | Yenefa（D1=C / D2=A / A-2′ 路线、WU-39 与 push 授权由其给出） | pending — 条目 PENDING_HUMAN_REVIEW；PR #60 待人工复核 v0.6 | 2 |
 
 ## 明细
 
@@ -355,6 +356,15 @@
 - **Human final decision**：pending — AI 条目 `PENDING_HUMAN_REVIEW`；PR #61 待人工评审；PR #60 已由 Owner 判定 `CHANGES_REQUESTED`
 - **证据**：PR #61（commit `e641b5eb`，CI 双绿）；PR #60 review（`CHANGES_REQUESTED`）；r20 归档全链哈希独立复核；真实冻结包 CLI 实测 exit 2 ×2
 - **边界**：未接触 Percy private oracle；复核仅使用公开仓库内容与公开冻结包
+
+### WU-39 · 2026-09-13 — GH-56 PR #60 A2-L D 基线（LIO 初版 → A-2′ 端口）与机械收尾
+
+- **Records (2)**：`AI-20260910-LIO-4CADC9CD6CC1E745477A23F629A1AAD5`（v0.3–v0.5 初版）、`AI-20260913-OPENCODE-B411981B20EBDA38FBC7F2E6B2AD30D4`（v0.6 A-2′ 端口 + 机械收尾）
+- **AI role**：GENERATE_CODE / GENERATE_TEST / DEBUG / DOCUMENT / REVIEW
+- **Human owner**：Yenefa（2026-09-13 会话给出 D1=C、D2=A、A-2′ 路线、WU-39 与 push 授权）
+- **Human final decision**：pending — 两条目均 `PENDING_HUMAN_REVIEW`；PR #60 待人工复核 v0.6
+- **证据**：五个冻结计分包逐字节等价 5/5（host 侧 `gh56-y4-dry/r23/candidates/a2l-port/PORT-EQUIVALENCE-RECEIPT.json`，不入库）；`unittest tests.test_repair_baseline` OK 35（skipped=3）；`unittest discover -s tests` OK 552（skipped=3）；合并 `origin/master@c286489` 后台账 `check` fail → `build`（94 条）→ `check` OK
+- **边界**：未接触 Percy private oracle；引擎只读仓库内公共合同与公共包内观测/源码
 
 ---
 
