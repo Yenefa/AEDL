@@ -34,13 +34,14 @@ Owner 决策 D1 = "C" 明确 L2 操作邻域事实不属于冻结合同。于是
 - 输出：json.dumps(ensure_ascii=False, sort_keys=True, separators=(",", ":"))，
   **无尾换行**（与实跑 D 的字节一致）。
 
-D2 未决缝（placement policy 尚未冻结）
-------------------------------------
-所有槽位选择都收敛到唯一的 choose_slot(grants, anchor=None)：当前行为 =
-有 anchor 时 nearest_slot(grants, anchor)，否则 grants[0]（与实跑一致）。
-"槽位是否顺序消耗、是否去重占用"仍**对 Owner 开放**；若冻结为
-"sequential consumption"，只需改这一个函数。槽位**成员性**由 runner 强制
-（place_component 逐坐标做 grants 成员检查），D 永不自造坐标。
+D2 = A（Owner 2026-09-13 决定）：placement 语义只锁成员性
+--------------------------------------------------------
+冻结合同只要求每个 place_component 的坐标**取自**包内 placement_grants；
+**D 内部如何挑选**不是合同约束，属实现细节。当前行为 = 实跑语义：有公开
+锚点（导线中点/期望网标签中点）时取最近槽 nearest_slot(grants, anchor)，
+否则取 grants[0]，全部收敛在 choose_slot() 一个函数内，便于日后单点替换。
+槽位**成员性**由 runner 强制（place_component 逐坐标做 grants 成员检查），
+D 永不自造坐标。
 
 用法（D 侧 adapter 的 CLI 形态）
 ----
@@ -52,6 +53,7 @@ D2 未决缝（placement policy 尚未冻结）
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -106,6 +108,7 @@ REASON_PUBLIC_INPUT_MALFORMED = "PUBLIC_INPUT_MALFORMED"
 REASON_OBSERVATION_CONFLICT = "OBSERVATION_CONFLICT"
 REASON_OPERATION_LIMIT_EXCEEDED = "OPERATION_LIMIT_EXCEEDED"
 REASON_GRANTS_EXHAUSTED = "GRANTS_EXHAUSTED"
+REASON_CONTRACT_DRIFT = "CONTRACT_DRIFT"
 REASON_NO_DERIVABLE_PLAN = "NO_DERIVABLE_PLAN"
 
 # critical→MANDATORY，major→RECOMMENDED，其余→UNKNOWN（r16 语义）
@@ -119,9 +122,15 @@ CONTRACT_PATH = (
     / "m2_schematic_contract_v1.json"
 )
 
+# 合同内容的固定 pin（sha256）。合同是本工具的推导依据之一：文件一旦漂移，产物就
+# 不再等价于冻结批次所依据的规则，因此 fail-closed 成合法 REFUSE，而不是静默改变
+# 行为。改合同必须同时改本常量，并留下新的冻结记录（r21 freeze 引用同一份字节）。
+CONTRACT_SHA256 = "5802cbace183161361e1f3e5be868650f84ab336d53a7f30475de4d5af6fb2f6"
+
 REQUIRED_HUMAN_DECISION = (
-    "A2-Y/Percy must freeze the D-internal placement slot-selection rule (D2) "
-    "and confirm public contract coverage; arm D will not guess."
+    "Public contract-rule coverage or additional public evidence for the repair "
+    "that arm D cannot express; arm D derives only from the frozen public inputs "
+    "and the public contract, and refuses rather than guessing."
 )
 
 _UUID = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
@@ -404,13 +413,13 @@ def nearest_slot(grants: List[Dict[str, int]], x_mm: float, y_mm: float) -> Dict
 
 def choose_slot(grants: List[Dict[str, int]],
                 anchor: Optional[Tuple[float, float]] = None) -> Dict[str, int]:
-    """D2 未决缝：D 内部槽位选择规则的唯一入口。
+    """取槽规则的唯一入口——**实现细节，不是合同约束**（D2 已决为 A）。
 
     当前行为 = 有公开锚点（导线中点/期望网标签中点）时取 nearest_slot，
-    没有锚点时取 grants[0]——与计分实跑的 r16 产物完全一致。
-    "槽位顺序消耗 / 占用去重"是否成为 D 内部规则仍对 Owner 开放（D2）；
-    若冻结为 sequential consumption，只需改本函数。槽位**成员性**由 runner
-    强制（place_component 逐坐标做 grants 成员检查），D 永不自造坐标。
+    没有锚点时取 grants[0]——与计分实跑产物完全一致。
+    D2（Owner 2026-09-13 = A）：冻结合同只要求坐标**取自** placement_grants，
+    不规定 D 内部如何挑选；因此本函数属实现，改它不需要新决策。槽位**成员性**
+    由 runner 强制（place_component 逐坐标做 grants 成员检查），D 永不自造坐标。
     """
     if anchor is None:
         return grants[0]
@@ -423,11 +432,24 @@ def choose_slot(grants: List[Dict[str, int]],
 
 
 def _load_contract() -> Dict[str, Any]:
-    """公共合同只从仓库内固定相对路径读取（无环境变量、无用户路径）。"""
+    """公共合同只从仓库内固定相对路径读取（无环境变量、无用户路径），并校验内容 pin。"""
     try:
-        return json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+        raw = CONTRACT_PATH.read_bytes()
     except OSError as exc:
         raise _bad(f"cannot read the public contract at {CONTRACT_PATH}: {exc}") from exc
+    digest = hashlib.sha256(raw).hexdigest()
+    if digest != CONTRACT_SHA256:
+        raise _Problem(
+            REASON_CONTRACT_DRIFT,
+            [],
+            "the public contract at %s has sha256 %s but this tool is pinned to %s: "
+            "the derivation basis changed, so arm D refuses instead of silently "
+            "producing different repairs" % (CONTRACT_PATH, digest, CONTRACT_SHA256),
+        )
+    try:
+        return json.loads(raw.decode("utf-8"))
+    except (UnicodeError, ValueError) as exc:
+        raise _bad(f"public contract at {CONTRACT_PATH} is not valid UTF-8 JSON: {exc}") from exc
 
 
 # ---------------------------------------------------------------------------
@@ -797,7 +819,7 @@ def build_proposal(package: Dict[str, Any],
                 [],
                 f"derived {placements} placements exceeds the "
                 f"{len(grants)} granted slot(s); member slot selection is "
-                "host-granted (D2 open)",
+                "host-granted",
             )
         proposal = dict(header)
         proposal["decision"] = DECISION_PATCH

@@ -13,6 +13,7 @@
   skip（原因注明），合入后自动启用。
 """
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -21,6 +22,8 @@ import unittest
 from pathlib import Path
 
 from tools.repair_baseline import (
+    CONTRACT_PATH,
+    CONTRACT_SHA256,
     TOOL_VERSION,
     BaselineInputError,
     build_proposal,
@@ -29,6 +32,7 @@ from tools.repair_baseline import (
     propose_bytes,
     render,
 )
+import tools.repair_baseline as repair_baseline
 from tools.repair_pipeline import (
     canonical_json_bytes,
     hash_bytes,
@@ -335,7 +339,7 @@ class HeaderMixin:
 
 
 class SlotSelectionSeamTests(unittest.TestCase):
-    """D2 未决缝：所有槽位选择只经过 choose_slot(grants, anchor)。"""
+    """取槽是**实现细节**（D2 = A）：所有槽位选择只经过 choose_slot(grants, anchor)。"""
 
     def test_without_anchor_takes_first_granted_slot(self):
         self.assertEqual(choose_slot(GRANTS), GRANTS[0])
@@ -348,6 +352,31 @@ class SlotSelectionSeamTests(unittest.TestCase):
             chosen = choose_slot(GRANTS, anchor)
             self.assertIn((chosen["x_mil"], chosen["y_mil"]),
                           {(g["x_mil"], g["y_mil"]) for g in GRANTS})
+
+
+class ContractPinTests(unittest.TestCase):
+    """公共合同的内容 pin：仓库文件必须等于 pin；漂移时 fail-closed 成合法 REFUSE。"""
+
+    def test_pinned_hash_matches_the_repo_contract(self):
+        raw = CONTRACT_PATH.read_bytes()
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), CONTRACT_SHA256)
+
+    def test_contract_drift_refuses_legally_not_exit_2(self):
+        package = make_package()
+        with tempfile.TemporaryDirectory() as tmp:
+            tampered = Path(tmp) / "m2_schematic_contract_v1.json"
+            payload = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+            payload["rules"][0]["severity"] = "minor"  # 任何字节改动都算漂移
+            tampered.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            original = repair_baseline.CONTRACT_PATH
+            repair_baseline.CONTRACT_PATH = tampered
+            try:
+                proposal = build_proposal(package)  # 不注入合同 -> 走文件路径与 pin 校验
+            finally:
+                repair_baseline.CONTRACT_PATH = original
+        parse_proposal(render(proposal))  # 仍是合法 C1 Proposal（不是 exit 2）
+        self.assertEqual(proposal["decision"], "REFUSE")
+        self.assertEqual(proposal["refusal"]["reason_code"], "CONTRACT_DRIFT")
 
 
 class DerivationTests(HeaderMixin, unittest.TestCase):
