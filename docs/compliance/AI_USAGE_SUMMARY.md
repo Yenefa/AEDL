@@ -9,7 +9,7 @@
 >
 > 三层结构：**本文件（work units，默认浏览入口）** → [`AI_USAGE_LOG.md`](AI_USAGE_LOG.md)（逐条索引，脚本生成，禁手改） → `docs/compliance/ai-usage/<ID>.md`（逐条真源）。
 >
-> - 覆盖核验（2026-09-13，合入 `origin/master`（含 PR #61）后重建索引）：本文件引用 97 条记录（93 条历史 + WU-34/WU-35 条目 2 条 + WU-39 单元 2 条：`AI-20260910-LIO-4CADC9CD6CC1E745477A23F629A1AAD5` 与 `AI-20260913-OPENCODE-B411981B20EBDA38FBC7F2E6B2AD30D4`），与 `AI_USAGE_LOG.md` 当前 97 条**双向一致**（无遗漏、无重复、无虚构 ID）。
+> - 覆盖核验（2026-09-13，WU-40 入库后重建索引）：本文件引用 98 条记录（上一轮 97 条 + WU-40 单元 1 条：`AI-20260912-PER-221898A27E0C3DCC8A60E5138378DBCF`），与 `AI_USAGE_LOG.md` 当前 98 条**双向一致**（无遗漏、无重复、无虚构 ID）。
 > - 本文件只做聚合与引用，**不改写任何条目正文**；条目正文的修订请直接改 `ai-usage/<ID>.md` 并重建索引。
 > - **`Human owner` 只在该工作单元的记录中明确出现时才具名**；未具名一律写 `TO_VERIFY`，不默认归属给任何人。
 > - `Human final decision`：`yes` = 有批准 / merge / 裁决记录；`pending` = 条目仍为 `PENDING_HUMAN_REVIEW` 且无 merge 记录；`TO_VERIFY` = 记录未具名。
@@ -57,6 +57,7 @@
 | WU-35 | 2026-09-11 | GH-56 自主预冻结战役（r10–r15）：语义闭环、冻结前准备、证据修复、独立复核与 G6 可达性审计 | GENERATE_CODE / GENERATE_TEST / DOCUMENT / DEBUG / RESEARCH | Yenefa（G1–G11 决策与 G10/G11 明确授权） | yes — G11 授权入账；G10 授权更新权威文档；无 merge/冻结授权 | 1 |
 | WU-36 | 2026-09-11 | GH-56 r19/r20 修正版审计与提交 + PR #60 复核取证 | RESEARCH / REVIEW / DOCUMENT | Yenefa（授权提交 GH-56 变更集；PR #60 复核结论由其判定） | pending — 条目 PENDING_HUMAN_REVIEW；PR #61 待人工评审 | 1 |
 | WU-39 | 2026-09-13 | GH-56 PR #60 A2-L D 基线（LIO 初版 → A-2′ 端口）与 master 合并后台账重建 | GENERATE_CODE / GENERATE_TEST / DEBUG / DOCUMENT / REVIEW | Yenefa（D1=C / D2=A / A-2′ 路线、WU-39 与 push 授权由其给出） | pending — 条目 PENDING_HUMAN_REVIEW；PR #60 待人工复核 v0.6 | 2 |
+| WU-40 | 2026-09-12 | B5 前置 —— C3–C6 独立验收扰动判据（28 条，判据先于实现） | RESEARCH / DOCUMENT | Percy（决定先做 B5 前置；裁定公开方式/位置/冻结时点） | pending — 条目 PENDING_HUMAN_REVIEW；PR 待人工评审 | 1 |
 | WU-42 | 2026-09-12 | P3 F-U1-04 措辞人工核验入库（A3 rubric 冻结前置） | RESEARCH / DOCUMENT | Percy（打开冻结原件目视核对，裁定措辞为 `recommended`） | pending — 条目 PENDING_HUMAN_REVIEW；PR #64 待人工评审 | 1 |
 
 ## 明细
@@ -366,6 +367,15 @@
 - **Human final decision**：pending — 两条目均 `PENDING_HUMAN_REVIEW`；PR #60 待人工复核 v0.6
 - **证据**：五个冻结计分包逐字节等价 5/5（host 侧 `gh56-y4-dry/r23/candidates/a2l-port/PORT-EQUIVALENCE-RECEIPT.json`，不入库）；`unittest tests.test_repair_baseline` OK 35（skipped=3）；`unittest discover -s tests` OK 552（skipped=3）；合并 `origin/master@c286489` 后台账 `check` fail → `build`（94 条）→ `check` OK
 - **边界**：未接触 Percy private oracle；引擎只读仓库内公共合同与公共包内观测/源码
+
+### WU-40 · 2026-09-12 — B5 前置：C3–C6 独立验收扰动判据
+
+- **Records (1)**：`AI-20260912-PER-221898A27E0C3DCC8A60E5138378DBCF`
+- **AI role**：RESEARCH / DOCUMENT
+- **Human owner**：Percy（决定先做 B5 前置；裁定 Q-B5-1 公开方式、Q-B5-2 位置、Q-B5-3 冻结时点；批准开 PR）
+- **Human final decision**：pending — 条目 `PENDING_HUMAN_REVIEW`；PR 待人工评审
+- **证据**：条目「起因」节记录 C3–C6 在 master 零命中的实测；「本次改动」节列出四组 28 条扰动与通用规则；「未处理项」节声明判据未冻结、载荷未生成、B5 正体未执行
+- **边界**：判据来自 PR-1 实现合同与任务卡，不来自实现代码（尚不存在）；AI 未实现 C3–C6
 
 ### WU-42 · 2026-09-12 — P3 F-U1-04 措辞人工核验入库
 
