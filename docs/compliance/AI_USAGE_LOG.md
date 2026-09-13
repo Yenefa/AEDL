@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 98 条。完整正文在各自条目文件中；本索引只做导航。
+共 99 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -139,3 +139,4 @@
 ## 2026-09-13
 
 - [`AI-20260913-OPENCODE-B411981B20EBDA38FBC7F2E6B2AD30D4`](ai-usage/AI-20260913-OPENCODE-B411981B20EBDA38FBC7F2E6B2AD30D4.md) — GH-56 / PR #60 A2-L D 基线 A-2′（移植已实跑规则引擎）+ master 合并后台账重建（WU-39）
+- [`AI-20260913-PER-445F3D15CF2E66B15EB89A1D34135E3D`](ai-usage/AI-20260913-PER-445F3D15CF2E66B15EB89A1D34135E3D.md) — C3 证据收口（Percy 侧）—— 证据等级词表、TO_VERIFY 全仓盘点与分流、E5 局限预登记
