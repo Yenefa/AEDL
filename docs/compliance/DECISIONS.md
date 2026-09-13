@@ -2,6 +2,26 @@
 
 > 关键工程与治理决策使用 `ADR-NNN`。状态只表示决策是否采用，不等于人工审核台账已经完成。
 
+## ADR-013 — Y4-dry 生成与独立评分分离
+
+- 日期：2026-09-10
+- 状态：Human decision approved；实现仍为 `PENDING_HUMAN_REVIEW`，不等于 merge 或完整实验验收。
+- Decision owner: Yenefa
+- Proposal source: Mixed
+- Final decision: Human
+- Implementation: AI-assisted
+- Review authority: Yenefa（架构/实现）；Percy（独立评分与验收）
+- Promotion / merge authority: Yenefa
+- 问题：C1 `parse_proposal` 仅校验 Proposal；C2 `compare_delta(before, after, bound)` 需要真实 after observation 与 host-bound 预期，不能直接给 dry Proposal 打 A 分。
+- 候选方案：新增 symbolic executor 后调用 C2；或 A2 只输出原始 Proposal，由 A3 独立评分。选择后者，避免引入第二套修复执行语义。
+- 决策：A2 冻结 public input，C/D 使用相同接口，C1 校验并记录原始输出；A/B 两维均交 A3/Percy 使用独立 oracle 评分，A2 `scoring=NOT_RUN`。Y4-dry 不调用 C2 评分，不新增 fake/symbolic executor。C2 留给 C3–C6 就绪后的 Y4-native 真实 candidate execution 与 fresh AfterObservation。
+- 配套完整性：public package v2 增加生成方提供的 source/observation 双 hash 与 producer 标识，拒绝错配或过期数据对；这只是声明与内容一致性，不替代 C3 独立导出、权威来源或真实性证明。C1/C2 与 Proposal schema 不变。
+- AI 参与：分析接口差异、提出生成/评分分离方案、按批准实现 harness/绑定/测试；同一工作单元 `AI-20260909-CODEX-08B3C72E2039158034BF8831C5648828`。
+- 团队自主判断：Yenefa 于当前 Codex 会话明确批准「dry scoring 架构裁决，并更新 Issue #56」，并要求 summary/envelope、binding/tests 及复验；Codex 仅同步决定。未将代码状态改为 HUMAN_REVIEWED/ACCEPTED。
+- Reference：[Issue #56](https://github.com/Yenefa/AEDL/issues/56) 的 Human-approved dry scoring decision；2026-09-10 当前用户指令。
+- 影响：允许新增的 Y4 draft package binding 字段；不读取 private oracle，不改 sandbox，不豁免 #51，不宣称 dry 正确性等于 native 修复成功。
+- 复查条件：五例（DC-01..DC-05；DC-06 为 `EXCLUDED_BEFORE_FREEZE` / `UNSCORED_GOVERNANCE_INCIDENT`）public inputs 准备/审查、A3 rubric 冻结、J1 决策，或进入 Y4-native 实际观察验证时复查。真实实验结果仍为 NOT_RUN。
+
 ## ADR 字段规范（2026-09-09 起适用于新 ADR）
 
 > 目的：把"谁提出、谁决定、谁实现、谁有权 review / merge"从正文散文提升为**显式字段**。
