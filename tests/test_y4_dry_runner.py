@@ -370,6 +370,21 @@ class ResultTests(unittest.TestCase):
         with self.assertRaises(y4.Y4Error):
             y4.load_package(raw, y4.hash_bytes(raw))
 
+    def test_tuple_nested_denied_field_is_rejected_at_build(self):
+        inputs = public_input()
+        inputs["current_observation"] = {"objects": ({"a_score": 1},)}
+        inputs["observation_binding"]["observation_sha256"] = y4.hash_bytes(
+            y4.canonical_json_bytes(inputs["current_observation"]))
+        with self.assertRaises(y4.Y4Error):
+            y4.build_package(inputs)
+
+    def test_non_json_public_value_is_rejected_at_build(self):
+        inputs = public_input()
+        inputs["current_observation"] = {"objects": [{"labels": {"x", "y"}}]}
+        inputs["observation_binding"]["observation_sha256"] = "0" * 64
+        with self.assertRaises(y4.Y4Error):
+            y4.build_package(inputs)
+
     def test_duplicate_result_json_keys_are_rejected(self):
         raw = y4.collect_result(self.package, self.digest, self.output, metadata(), 10)
         raw = b'{"scoring":"NOT_RUN",' + raw[1:]

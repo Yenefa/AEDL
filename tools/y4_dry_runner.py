@@ -118,13 +118,18 @@ def _public(value):
             if key.lower() in DENIED:
                 raise Y4Error("denied public field: %s" % key)
             _public(child)
-    elif isinstance(value, list):
+    elif isinstance(value, (list, tuple)):
         for child in value:
             _public(child)
     elif isinstance(value, str):
         normalized = value.lower().replace("\\", "/")
         if any(token in normalized for token in DENIED_TOKENS):
             raise Y4Error("denied public content")
+
+    elif value is None or type(value) in (bool, int, float):
+        return
+    else:
+        raise Y4Error("unsupported public value type: %s" % type(value).__name__)
 
 
 def _json(raw):
@@ -243,6 +248,7 @@ def freeze_cases(cases, output):
     for doc, raw in sorted(zip(docs, packages), key=lambda pair: pair[0]["case_public_id"]):
         filename = doc["case_public_id"] + ".json"
         write_once(output / filename, raw)
+        load_package(raw, hash_bytes(raw))
         manifest["cases"].append({"case_public_id": doc["case_public_id"],
                                    "file": filename, "sha256": hash_bytes(raw)})
     # A missing manifest identifies an incomplete batch; never consume it.
