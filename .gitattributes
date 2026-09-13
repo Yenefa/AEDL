@@ -21,6 +21,20 @@ tools/board_review.py text eol=lf
 # purpose and is unaffected: it matches no .md path.
 *.md text eol=lf
 
+# Per-author audit records: ai-usage/<ID>.md belongs to whoever wrote it, and
+# the ledger README says not to modify another author's entry. The rule above
+# would renormalise theirs the next time anyone touches the tree, so entries
+# are pinned. The shared documents that actually caused the two incidents -
+# the pre-registered plan and AI_USAGE_SUMMARY.md - stay covered.
+docs/compliance/ai-usage/*.md -text
+
+# Byte-frozen evidence overrides the rule above (later rules win): these two
+# handoff files are bound to sha256 values published in Issue #68 and PR #69,
+# so renormalising their line endings would break the provenance chain that
+# the scoring side verifies against. Same reasoning as the repair_pr1 fixtures.
+notes/y4/PBF-001-010-PUBLIC-FACTS.md -text
+notes/y4/PBF-001-010-PUBLIC-FACTS.json -text
+
 delivery/gerbers/* text eol=crlf
 
 # Explicit binaries (untouched bytes)
