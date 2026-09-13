@@ -1,6 +1,6 @@
 # B5 前置：C3–C6 独立验收扰动判据（草案）
 
-> 状态：`DRAFT — NOT FROZEN`（draft-2）。起草：Claude Code（Percy 会话），2026-09-12。
+> 状态：`DRAFT — NOT FROZEN`（draft-3）。起草：Claude Code（Percy 会话），2026-09-12。
 > 任务：W2 r3 卡 **B5｜C3–C6 独立验收，Owner: Percy，6h**。
 > **纪律：判据必须先于实现冻结。** C3–C6 在 master 上一行未落地（§0.2 实测），所以此刻写判据天然没有实现曝光——这与 A3 rubric 是同一条纪律。
 > **红线：Percy 不实现 C3–C6**（W2 r3「永久隔离纪律」）。本文件只定义验收怎么判，不给实现方案。
@@ -24,6 +24,7 @@
 |---|---|
 | PR-1 实现合同 `docs/competition/internal/AEDL_PR1_实现合同_20260907.md`（master 冻结版）§5 hash/身份/exact/protected、§7 五条许可的执行语义、§8 模块接口与回执、§9 thin verifier 与 commit 谓词、§10 状态机与 fail-closed、§11 每个 commit 的 acceptance | 每条扰动「被验的主张」与「期望红在哪」 |
 | W2 r3 任务卡 B5 的四条扰动 | 扰动清单的骨架 |
+| Y4 方案 `AEDL_W1_Y4_AI_vs_Script_实验方案.md` §5「运行结果使用 `PASS / FAIL / UNKNOWN / NOT_RUN / TOOL_ERROR / NOT_APPLICABLE`」 | 判定状态的词表（§1 规则 5、§3 记录格式）。**该词表不出自 PR-1 合同**，是仓库既有的全链状态语义，特此注明出处 |
 
 **不作为来源**：C3–C6 的实现代码（尚不存在）。实现落地后也**不得**据其行为反向修改本判据——那正是「照着实现写判据」。
 
@@ -48,7 +49,7 @@
 2. **必须红在指定的地方**。每条扰动预先写死「哪个字段 / 哪个 status / 哪个 reason code 必须非 PASS」。**因别的原因失败不算通过**——它没有证明被验的那条独立性（§4 称为「假红」）。
 3. **最低标准是没有 COMMITTED**。合同 §9 的 commit 谓词是**合取**，没有「置信度高」「仅 warning」「多数 checks PASS」的例外。扰动之后若出现 `TransactionStatus = COMMITTED`，该条直接判失败。
 4. **回执必须诚实**：失败 phase 之前的必需结果为 `null` / `NOT_RUN`，不得填假 PASS（§10）。`deferred.erc` 等必须保持 `NOT_RUN`。
-5. **六态照用**：`PASS / FAIL / UNKNOWN / NOT_RUN / TOOL_ERROR / NOT_APPLICABLE`。`UNKNOWN`、`TOOL_ERROR` **不等于**通过；任一 required check 为 `NOT_RUN` 也不得 PASS（合同 §11 C3 原话）。
+5. **六态照用**：`PASS / FAIL / UNKNOWN / NOT_RUN / TOOL_ERROR / NOT_APPLICABLE`（词表出自 Y4 方案 §5，见 §0.1）。`UNKNOWN`、`TOOL_ERROR` **不等于**通过；任一 required check 为 `NOT_RUN` 也不得 PASS（合同 §11 C3 原话）。`NOT_APPLICABLE` 只用于**事前范围**就排除的条目（例如某条扰动依赖的接口在该 commit 的范围之外），**不得**在扰动失败后临时扩大使用——同 Y4 方案 §5「`NOT_APPLICABLE` 必须由事前范围和理由确定」。
 6. **逐条留证**：每条扰动按 §3 的格式记录，含实际输出的关键字段与证据路径。
 7. **不因「已知限制」放宽**。实现方声明某条是已知限制，不改变判定；要放宽须先改本判据，并按 §5 声明改动发生在观测之前还是之后。
 
@@ -66,7 +67,7 @@
 | **C3-P2** | 导出进程 `exit=0`，但产出**空文件 / 坏 XML** | `checks.fresh_export` FAIL 或 TOOL_ERROR；不得因 exit=0 视为成功 |
 | **C3-P3** | 在导出与解析之间修改 stage 源文件 | `checks.source_hash_binding` FAIL —— 三个 source hash（导出前 / 导出后 / 解析结束）不再相等 |
 | **C3-P4** | verifier 返回后**替换报告文件**或 staged manifest | commit 谓词落空（§9：「verifier 返回后重算 stage source/report hashes 与回执一致」），最终非 COMMITTED |
-| **C3-P5** | toolchain manifest 指向**非 10.0.5** 的 KiCad，或 txn/policy/tool 绑定与请求不符 | 非 PASS；缺值或版本不同**不得静默通过** |
+| **C3-P5** | toolchain manifest 指向**非 10.0.5** 的 KiCad，或 txn/policy/tool 绑定与请求不符 | `ThinVerificationResult.status` 非 PASS，且失配体现在 `toolchain_sha256` / `patch_sha256` / `bound_policy_sha256` / `txn_id` 之一（§9：verifier 先重算 snapshot、stage 与依赖 hash，输入不匹配即返回非 PASS）；reason code 取 `REPAIR_INPUT_DRIFT`（§8 固定 reason codes）。缺值或版本不同**不得静默通过** |
 | **C3-P6** | 让 coverage 不完整（漏一个 pin / 零 coverage），或制造 native 观察与 KiCad 导出分歧 | `coverage.complete=false` 或 `parser_agreement` 非 PASS |
 | **C3-P7** | 把任一 required check 置为 `NOT_RUN`，或把 `deferred.erc` 伪写成 PASS | 整体非 PASS；`deferred.erc` 必须仍是 `NOT_RUN` |
 
@@ -128,7 +129,7 @@
 | **C6-P3** | verify 通过之后**替换 stage** | 拒绝提交 |
 | **C6-P4** | DC-06 的 REFUSE 路径 | **零 native 调用、零 design 写** |
 | **C6-P5** | thin verifier PASS | **不得**触发正式 promotion；U3 仍 `BLOCKED_POWER_THERMAL`；`full_verification_status` 与 `formal_evidence_status` 保持 `NOT_RUN` |
-| **C6-P6** | 五条 run_round 真实跑完 | route 与 exact/protected 吻合；**保留旁路等负例不得产生候选提交** |
+| **C6-P6** | 五条 run_round 真实跑完；负例取 E3 的「**保留旁路**」形态——按合同 §7，E3 唯一允许的最终变化包含「两条旁路删除」，负例即补齐两只 22R 电阻但**不删除那两条竖向旁路线** | 正例：route 与 exact/protected 吻合并 `COMMITTED`。负例：`DeltaCheck.unexpected` 非空或 `actual_delta_sha256 != authorized_delta_sha256`，`compare_protected` 报保护投影不等，`TransactionStatus != COMMITTED`——**不得产生候选提交** |
 
 **通过判据**：P1/P2 必须以失败（而非 SKIP）结束；P3–P6 均无候选字节被提交，且回执字段未被抬高。
 **假红示例**：未设置 opt-in 就运行——那本来就允许 SKIP，验不到任何东西。
@@ -143,7 +144,7 @@ claim:             <被验的主张，引合同章节>
 method:            <扰动怎么做；作用在哪个副本>
 expected_red:      <字段 + 状态 + reason code>
 observed:          <实际输出的关键字段原文>
-verdict:           PASS | FAIL | UNKNOWN | TOOL_ERROR | NOT_RUN
+verdict:           PASS | FAIL | UNKNOWN | TOOL_ERROR | NOT_RUN | NOT_APPLICABLE
 committed:         <是否出现 COMMITTED —— 出现即整条失败>
 evidence:          <报告 / 回执 / 日志路径与 sha256>
 run_by / run_at:   Percy / <时间>
@@ -200,4 +201,5 @@ notes:             <含「假红」判断说明>
 | 版本 | 日期 | 状态 | 备注 |
 |---|---|---|---|
 | draft-1 | 2026-09-12 | `DRAFT — NOT FROZEN` | 初稿：四组共 28 条扰动，逐条钉在合同 §5/§7/§8/§9/§10/§11；当前状态经 master `c286489` 实测（C3–C6 全部未落地）；三项待决 |
+| draft-3 | 2026-09-13 | `DRAFT — NOT FROZEN` | 按 PR #66 复核意见修订：六态词表注明出自 Y4 方案 §5（不在 PR-1 合同内）并说明 `NOT_APPLICABLE` 的用法，§3 记录格式的 `verdict` 与之对齐；`C3-P5` 补字段锚点与 reason code；`C6-P6` 定义「保留旁路」负例并补锚点 |
 | draft-2 | 2026-09-12 | `DRAFT — NOT FROZEN` | Percy 裁定 Q-B5-1/2/3，三项均采纳建议：判据公开、扰动载荷 host-side 保留；位置不变；冻结点定在 C3 合入之前。据此改写抬头状态块、§5 新增载荷保留条、§6 改为已决、新增 §7 冻结程序 |
