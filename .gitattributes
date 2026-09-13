@@ -13,6 +13,14 @@ notes/m2-evidence-reset/generated/bom_stock_current.json text eol=lf
 delivery/bom.csv text eol=lf
 delivery/pos.csv text eol=lf
 tools/board_review.py text eol=lf
+# Markdown is LF everywhere. Two separate incidents had Windows tooling
+# rewrite whole .md files to CRLF - the pre-registered Y4 plan (PR #61
+# review M1-2) and this repo's own ledger summary on 2026-09-12 - which
+# inflates diffs to whole-file rewrites and moves the file hashes that
+# freeze commitments depend on. The Gerber rule below keeps CRLF on
+# purpose and is unaffected: it matches no .md path.
+*.md text eol=lf
+
 delivery/gerbers/* text eol=crlf
 
 # Explicit binaries (untouched bytes)
