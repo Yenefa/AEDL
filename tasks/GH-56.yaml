@@ -1,0 +1,87 @@
+task: GH-56
+base:
+  branch: feat/gh56-y4-dry-harness
+  sha: 9e749c15ecdedd74e86c71d4c32aa0a946ecc319
+goal: |
+  Implement the W2 A2-Y public-only Y4-dry package and raw Proposal collector.
+scope: |
+  GH-56 tools/tests/notes/y4 plus this envelope and current AI usage records.
+  Use existing C1 projection/parser. No C1/C2 contract changes, synthetic
+  executor, A/B scoring, native writes, private answer access or D solver.
+  Real five-case freeze (DC-01..DC-05; DC-06 excluded before freeze) requires
+  owner-provided public inputs; never invent them.
+dependencies: []
+allowed_paths:
+  - tools/y4_dry_runner.py
+  - tests/test_y4_dry_runner.py
+  - notes/y4/**
+  - tasks/GH-56.yaml
+  - docs/compliance/ai-usage/AI-20260909-CODEX-*.md
+  - docs/compliance/ai-usage/AI-20260911-OPENCODE-*.md
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/compliance/AI_USAGE_SUMMARY.md
+  - docs/compliance/DECISIONS.md
+  # Y4 authority plan: git core.quotepath (default true) renders the non-ASCII
+  # filename quoted+octal-escaped in `diff --name-only`, so allow both the plain
+  # path and the quote/escape-tolerant token form.
+  - docs/competition/internal/AEDL_W1_Y4_AI_vs_Script_*
+  - "*AEDL_W1_Y4_AI_vs_Script_*"
+forbidden_paths:
+  - gates/**
+  - src/**
+  - tests/fixtures/**
+  - docs/evidence/**
+  - sandbox_runtime/**
+acceptance: |
+  Deterministic five-case public-only packaging and byte hashes; C1 parsing;
+  wrong binding rejected; exact raw output retained even on parse failure;
+  immutable result files; no scores; C/D use the same request/output contract.
+  Relevant tests and bound dev_gate run with truthful receipts.
+change_budget:
+  expected_files: 22  # +formal C adapter files for Owner review (notes/y4, Owner-directed 2026-09-11)
+  expected_modules: [tools, tests, notes/y4, tasks, docs/compliance, docs/competition]
+  cross_module: false
+  contract_change: true  # Approved Y4 draft package v2 binding; C1/C2 APIs unchanged.
+  evidence_semantics_change: false
+provenance: |
+  Current user: directly continue the attached W2 Yenefa task on 2026-09-09.
+  Freshness verified with GitHub master API and git fetch origin --prune.
+  Issue creation baseline 1b1c48e is historical; this new task starts at current
+  master 63bc7e3. No existing GH-56 envelope is being replaced.
+  Initial admission used an external draft on the clean task worktree, then
+  copied identical bytes into tasks/GH-56.yaml for gate hash binding.
+  On 2026-09-10 Yenefa explicitly approved the dry scoring boundary, Issue #56
+  update, summary/allowed-path additions and source-observation binding/tests.
+  This revision adds the approved draft Y4 package v2 field; it changes no
+  frozen C1/C2 API or formal Evidence semantics. ADR records the human decision.
+  The existing reviewed task diff is retained and re-admitted with allow_dirty;
+  the revised envelope hash replaces the old admission binding, with no drift
+  or dependency bypass. Approval is for these revisions, not merge or gate waiver.
+  2026-09-11 r13: rebased the worktree onto master@9e749c15 (PR #57 merged) on
+  owner instruction; resolved the AI_USAGE_LOG/SUMMARY overlap (index rebuilt
+  from entry files; curated summary merged and GH-56 renumbered WU-34); the base
+  sha above is updated accordingly. No AI_USAGE ledger entry is added or
+  removed by this revision.
+  2026-09-11 r15 (Owner decisions G10/G11): the Owner authorized recording the
+  autonomous campaign in the AI usage ledger and preparing/updating the current
+  Y4 authority document after G6 resolution. Two paths are therefore added to
+  this envelope: the OPENCODE campaign entry and the Y4 authority plan (the
+  latter allowed via an ASCII-prefix glob so git path-escaping of the Chinese
+  filename cannot defeat the scope check). No formal freeze, scored run or
+  merge is authorized by these additions.
+  2026-09-11 r16 (Owner G6b work unit): picked up notes/y4/source_parser.py,
+  notes/y4/placement_grants.py and their tests (neutral public placement grants,
+  runner v5 y4-public.v3 with grant-membership enforcement). Budget raised to 19
+  files accordingly; C1 operation shape unchanged.
+  2026-09-11 r19 (Owner token-budget revision): the formal direct C adapter
+  sources are added to the reviewed change set
+  (notes/y4/c_arm_direct_transport.cjs, notes/y4/c_arm_direct_adapter.py and
+  notes/y4/test_c_arm_direct_adapter.py) so the executable formal C path is
+  independently reviewable rather than an unreviewed host file. Budget raised
+  to 22 files. No benchmark semantics changed by this addition.
+exceptions:
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "https://github.com/Yenefa/AEDL/issues/56 — 2026-09-10 user explicitly requests revision of the existing GH-56 worktree: approved dry scoring, summary/envelope paths, source-observation binding and reruns."
+escalation:
+  owner: Yenefa
