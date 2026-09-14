@@ -1324,7 +1324,61 @@ class FreshExportTests(unittest.TestCase):
         self.assertEqual(result["checks"]["exact_topology_delta"]["status"], "NOT_RUN")
 
 
+    def test_the_export_format_of_kicad_10_0_5_is_modelled_exactly(self):
+        """Pins come from net nodes; virtual power symbols stay out of both."""
+        observation = circuit()
+        virtual = component("#FLG01", lib_id="power:PWR_FLAG")
+        flag_pin = pin(virtual, "1")
+        observation["components"].append(virtual)
+        observation["pins"].append(flag_pin)
+        observation["source_objects"].append(
+            source_object(virtual["identity"]["component_uuid"], "symbol"))
+        target = next(part for part in observation["partitions"]
+                      if any(member["reference"] == "R1" and member["number"] == "1"
+                             for member in part["members"]))
+        target["members"].append(flag_pin["identity"])
+        observation = refresh(observation)
+
+        def export_bytes(observation, drop=None):
+            real = [row for row in observation["components"]
+                    if not row["reference"].startswith("#")]
+            parts = ['<export version="E"><components>']
+            for row in real:
+                parts.append('<comp ref="%s"><value>%s</value></comp>'
+                             % (row["reference"], row["value"]))
+            parts.append('</components><nets>')
+            for index, part in enumerate(observation["partitions"]):
+                members = [(member["reference"], member["number"])
+                           for member in part["members"]
+                           if not member["reference"].startswith("#")
+                           and (member["reference"], member["number"]) != drop]
+                if not members:
+                    continue
+                nodes = "".join('<node ref="%s" pin="%s"/>' % member for member in members)
+                parts.append('<net code="%d" name="N%d">%s</net>' % (index + 1, index, nodes))
+            parts.append('</nets></export>')
+            return "".join(parts).encode("utf-8")
+
+        components, nets = verification._kicad_partition(export_bytes(observation))
+        coverage, agree = verification._projected_coverage(observation, components, nets)
+        self.assertTrue(coverage["complete"], coverage)
+        self.assertTrue(agree)
+        self.assertEqual(coverage["expected_pin_count"], 4)
+        self.assertEqual(coverage["observed_pin_count"], 4)
+        self.assertEqual(coverage["expected_pin_keys_sha256"],
+                         coverage["observed_pin_keys_sha256"])
+        self.assertNotIn("#FLG01", components)
+
+        components, nets = verification._kicad_partition(export_bytes(observation, drop=("R2", "2")))
+        coverage, agree = verification._projected_coverage(observation, components, nets)
+        self.assertFalse(coverage["complete"])
+        self.assertFalse(agree)
+        self.assertNotEqual(coverage["expected_pin_keys_sha256"],
+                            coverage["observed_pin_keys_sha256"])
+
+
 if __name__ == "__main__":
     unittest.main()
+
 
 

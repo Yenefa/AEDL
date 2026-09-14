@@ -1395,24 +1395,37 @@ def _kicad_partition(raw):
     return components, nets
 
 
-def _partition_groups(observation):
-    return {frozenset((member["reference"], member["number"])
-                      for member in part["members"])
-            for part in observation["partitions"]}
+def _partition_groups(observation, drop_virtual=False):
+    groups = set()
+    for part in observation["partitions"]:
+        members = {(member["reference"], member["number"]) for member in part["members"]
+                   if not (drop_virtual and str(member["reference"]).startswith("#"))}
+        if members:
+            groups.add(frozenset(members))
+    return groups
 
 
 def _projected_coverage(observation, components, nets):
-    """Coverage of one export against the source observation, plus agreement."""
+    """Coverage of one export against the source observation, plus agreement.
+
+    KiCad 10.0.5 exports every pin as a net node and omits virtual symbols
+    (references starting with '#', such as power flags) from <components>, so
+    the placed nodes are the exported pin inventory and the expected component
+    inventory is the source's non-virtual set.  When an export does carry
+    per-component pin lists, they must agree with the placed nodes.
+    """
     source_pins = {(row["identity"]["reference"], row["identity"]["number"])
                    for row in observation["pins"]}
     source_components = {row["reference"] for row in observation["components"]}
-    exported_pins, duplicated = set(), False
+    virtual_components = {reference for reference in source_components
+                          if reference.startswith("#")}
+    declared_pins, duplicated = set(), False
     for reference, numbers in components.items():
         for number in numbers:
             key = (reference, number)
-            if key in exported_pins:
+            if key in declared_pins:
                 duplicated = True
-            exported_pins.add(key)
+            declared_pins.add(key)
     placed = set()
     placement_conflict = False
     for nodes in nets:
@@ -1420,32 +1433,37 @@ def _projected_coverage(observation, components, nets):
             if key in placed:
                 placement_conflict = True
             placed.add(key)
-    unknown = (exported_pins | placed) - source_pins
+    unknown = (declared_pins | placed) - source_pins
+    expected_pins = {key for key in source_pins if key[0] not in virtual_components}
+    expected_components = source_components - virtual_components
     pin_lookup = {(row["identity"]["reference"], row["identity"]["number"]): row
                   for row in observation["pins"]}
     component_lookup = {row["reference"]: row for row in observation["components"]}
-    observed_keys = exported_pins & placed
-    observed_pin_ids = sorted([pin_lookup[key]["identity"] for key in observed_keys
-                               if key in pin_lookup and key in source_pins],
+    observed_pin_ids = sorted([pin_lookup[key]["identity"] for key in placed
+                               if key in pin_lookup and key in expected_pins],
+                              key=canonical_json_bytes)
+    expected_pin_ids = sorted([pin_lookup[key]["identity"] for key in expected_pins],
                               key=canonical_json_bytes)
     observed_component_ids = sorted([component_lookup[ref]["identity"]
-                                     for ref in set(components)
-                                     if ref in source_components],
+                                     for ref in set(components) & expected_components],
+                                    key=canonical_json_bytes)
+    expected_component_ids = sorted([component_lookup[ref]["identity"]
+                                     for ref in expected_components],
                                     key=canonical_json_bytes)
     groups = {frozenset(nodes) for nodes in nets if nodes}
-    complete = bool(exported_pins == source_pins and placed == source_pins and
+    complete = bool(placed == expected_pins and declared_pins <= placed and
                     not duplicated and not placement_conflict and not unknown and
-                    set(components) == source_components)
+                    set(components) == expected_components)
     coverage = {
-        "expected_pin_count": len(source_pins),
+        "expected_pin_count": len(expected_pins),
         "observed_pin_count": len(observed_pin_ids),
-        "expected_pin_keys_sha256": observation["coverage"]["expected_pin_keys_sha256"],
+        "expected_pin_keys_sha256": canonical_sha256("topology", expected_pin_ids),
         "observed_pin_keys_sha256": canonical_sha256("topology", observed_pin_ids),
-        "expected_component_keys_sha256": observation["coverage"]["expected_component_keys_sha256"],
+        "expected_component_keys_sha256": canonical_sha256("topology", expected_component_ids),
         "observed_component_keys_sha256": canonical_sha256("topology", observed_component_ids),
         "complete": complete,
     }
-    agree = bool(complete and groups == _partition_groups(observation))
+    agree = bool(complete and groups == _partition_groups(observation, drop_virtual=True))
     return coverage, agree
 
 
