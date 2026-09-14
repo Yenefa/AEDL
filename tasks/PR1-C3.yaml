@@ -81,6 +81,11 @@ exceptions:
   allow_dirty:
     granted_by: Yenefa
     decision_ref: "PR-1 合同 §11 C3 + tasks/W1-C2.yaml allow_dirty 先例 + PR #71 合入判据冻结并放行 C3"
+  # 终端复核（clean-tree re-admit）需要：分支首个提交后 HEAD 必然离开 base.sha，
+  # 与 W1-C2 同一情形、同一授权链。
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "同上；base 0d31a8b 为分支起点，提交后按 W1-C2 rebaseline 先例重锚"
 
 escalation:
   owner: Yenefa
