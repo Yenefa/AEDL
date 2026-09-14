@@ -1,6 +1,6 @@
 # B5 前置：C3–C6 独立验收扰动判据（草案）
 
-> 状态：`DRAFT — NOT FROZEN`（draft-3）。起草：Claude Code（Percy 会话），2026-09-12。
+> 状态：`DRAFT — NOT FROZEN`（draft-4）。起草：Claude Code（Percy 会话），2026-09-12；draft-4 修正 2026-09-13。
 > 任务：W2 r3 卡 **B5｜C3–C6 独立验收，Owner: Percy，6h**。
 > **纪律：判据必须先于实现冻结。** C3–C6 在 master 上一行未落地（§0.2 实测），所以此刻写判据天然没有实现曝光——这与 A3 rubric 是同一条纪律。
 > **红线：Percy 不实现 C3–C6**（W2 r3「永久隔离纪律」）。本文件只定义验收怎么判，不给实现方案。
@@ -47,7 +47,8 @@
 
 1. **只在副本上扰动**：绝不改 master、不改真实候选设计、不改冻结夹具。扰动对象是临时工作区中的拷贝。
 2. **必须红在指定的地方**。每条扰动预先写死「哪个字段 / 哪个 status / 哪个 reason code 必须非 PASS」。**因别的原因失败不算通过**——它没有证明被验的那条独立性（§4 称为「假红」）。
-3. **最低标准是没有 COMMITTED**。合同 §9 的 commit 谓词是**合取**，没有「置信度高」「仅 warning」「多数 checks PASS」的例外。扰动之后若出现 `TransactionStatus = COMMITTED`，该条直接判失败。
+3. **最低标准是没有 COMMITTED**。合同 §9 的 commit 谓词是**合取**，没有「置信度高」「仅 warning」「多数 checks PASS」的例外。**扰动之后**若出现 `TransactionStatus = COMMITTED`，该条直接判失败。
+   - **唯一例外：`C6-P6` 的正例。** 它是**未施加扰动**的对照路径（五条 run_round 正常跑完），其 `COMMITTED` 正是被验的正确行为，本条不适用；本条约束的是 `C6-P6` 的**负例**与其余 27 条。**对照路径之外不得再设第二个例外**——若将来需要新增正例，必须同时改本条与该组通过判据，不得只改一处。
 4. **回执必须诚实**：失败 phase 之前的必需结果为 `null` / `NOT_RUN`，不得填假 PASS（§10）。`deferred.erc` 等必须保持 `NOT_RUN`。
 5. **六态照用**：`PASS / FAIL / UNKNOWN / NOT_RUN / TOOL_ERROR / NOT_APPLICABLE`（词表出自 Y4 方案 §5，见 §0.1）。`UNKNOWN`、`TOOL_ERROR` **不等于**通过；任一 required check 为 `NOT_RUN` 也不得 PASS（合同 §11 C3 原话）。`NOT_APPLICABLE` 只用于**事前范围**就排除的条目（例如某条扰动依赖的接口在该 commit 的范围之外），**不得**在扰动失败后临时扩大使用——同 Y4 方案 §5「`NOT_APPLICABLE` 必须由事前范围和理由确定」。
 6. **逐条留证**：每条扰动按 §3 的格式记录，含实际输出的关键字段与证据路径。
@@ -108,9 +109,9 @@
 | **C5-P4** | 越界路径、兄弟 candidate 链接、硬链接 / symlink / reparse point | 拒绝（§10 要求逐路径分量检查 link count 与实际身份，不能只查 workspace root） |
 | **C5-P5** | 绕过单写者锁 / 并发第二个事务 / GUI 占用 | 拒绝 |
 | **C5-P6** | 幂等键 `(run_id,candidate_id,patch_id)` 相同，但 proposal/patch/policy/context digest 不同 | `BLOCKED` |
-| **C5-P7** | 在写前 / 写后 / 验证后 / commit 前后**中断进程**，再重启恢复 | `ROLLBACK` 且 `rollback.status=VERIFIED`，`cause_status` 保留原失败类别；**不得**记成功；无 COMMITTED terminal record 时即使有 COMMIT_INTENT 且 live=after 也按恢复规则 2 处理 |
+| **C5-P7** | 在写前 / 写后 / 验证后 / **commit 的 terminal record 写成之前**（含 replace 已完成、`COMMIT_INTENT` 已落盘）**中断进程**，再重启恢复。**不含**「terminal record 已写成之后」的中断：该子情形按合同恢复规则 4「存在完整 terminal record 时，只有全部源/报告/依赖匹配才重用结果」应当**重用 `COMMITTED`**，与本组「七条都红」的通过判据互斥，故**不在本条、也不在本文件 28 条之内**（§5：B5 只验独立性与 fail-closed）；若需验收该子情形须另立条目，并在通过判据里单独豁免 | `ROLLBACK` 且 `rollback.status=VERIFIED`，`cause_status` 保留原失败类别；**不得**记成功；无 COMMITTED terminal record 时即使有 COMMIT_INTENT 且 live=after 也按恢复规则 2 处理。且 **`rollback.byte_equal=true`**；**不得只凭 `rollback.status` 自报判定 VERIFIED**——须将 live target 与写前快照（round snapshot / 已记录的 before bytes）做**独立比对**（逐字节 / sha256 / 文件集合），并把比对结果记入 §3 的 `observed`。依据：合同 §10 恢复规则 1「逐 bytes/manifest 核对后 `rollback.status=VERIFIED`」、规则 2「恢复后逐字节与 hash、文件集合均匹配才 VERIFIED」，最终回执 L405 已定义 `rollback.byte_equal` 字段——本条只把验收锚点钉到该字段，不新增合同要求 |
 
-**通过判据**：七条都红在授权 / 事务边界，且回执能区分「设计失败」与「工具故障」（verifier FAIL → `cause_status=BLOCKED`，保留 `verifier.status=FAIL`）。
+**通过判据**：七条都红在授权 / 事务边界，且回执能区分「设计失败」与「工具故障」（verifier FAIL → `cause_status=BLOCKED`，保留 `verifier.status=FAIL`）。本组所需的「提交前重核实际文件与验证回执」由 **`C3-P4`** 覆盖（§9 commit 谓词：verifier 返回后重算 stage source/report hashes 与回执一致），C5 组内**不另设条目**——记此归属是为了「主张 → 证据」可追溯。
 **特别注意两个误读**（合同明写，判据必须体现）：
 
 - **design 恢复成功 ≠ 修复成功**；
@@ -131,7 +132,7 @@
 | **C6-P5** | thin verifier PASS | **不得**触发正式 promotion；U3 仍 `BLOCKED_POWER_THERMAL`；`full_verification_status` 与 `formal_evidence_status` 保持 `NOT_RUN` |
 | **C6-P6** | 五条 run_round 真实跑完；负例取 E3 的「**保留旁路**」形态——按合同 §7，E3 唯一允许的最终变化包含「两条旁路删除」，负例即补齐两只 22R 电阻但**不删除那两条竖向旁路线** | 正例：route 与 exact/protected 吻合并 `COMMITTED`。负例：`DeltaCheck.unexpected` 非空或 `actual_delta_sha256 != authorized_delta_sha256`，`compare_protected` 报保护投影不等，`TransactionStatus != COMMITTED`——**不得产生候选提交** |
 
-**通过判据**：P1/P2 必须以失败（而非 SKIP）结束；P3–P6 均无候选字节被提交，且回执字段未被抬高。
+**通过判据**：P1/P2 必须以失败（而非 SKIP）结束；**P3–P5** 均无候选字节被提交，且回执字段未被抬高；**P6 正负例分开判**——其**正例**（五条 run_round 正常路径）必须真实 `COMMITTED`，这是 C6 唯一允许出现候选提交的条目；其**负例**（E3「保留旁路」形态）不得产生任何候选提交。
 **假红示例**：未设置 opt-in 就运行——那本来就允许 SKIP，验不到任何东西。
 
 ---
@@ -201,5 +202,6 @@ notes:             <含「假红」判断说明>
 | 版本 | 日期 | 状态 | 备注 |
 |---|---|---|---|
 | draft-1 | 2026-09-12 | `DRAFT — NOT FROZEN` | 初稿：四组共 28 条扰动，逐条钉在合同 §5/§7/§8/§9/§10/§11；当前状态经 master `c286489` 实测（C3–C6 全部未落地）；三项待决 |
-| draft-3 | 2026-09-13 | `DRAFT — NOT FROZEN` | 按 PR #66 复核意见修订：六态词表注明出自 Y4 方案 §5（不在 PR-1 合同内）并说明 `NOT_APPLICABLE` 的用法，§3 记录格式的 `verdict` 与之对齐；`C3-P5` 补字段锚点与 reason code；`C6-P6` 定义「保留旁路」负例并补锚点 |
 | draft-2 | 2026-09-12 | `DRAFT — NOT FROZEN` | Percy 裁定 Q-B5-1/2/3，三项均采纳建议：判据公开、扰动载荷 host-side 保留；位置不变；冻结点定在 C3 合入之前。据此改写抬头状态块、§5 新增载荷保留条、§6 改为已决、新增 §7 冻结程序 |
+| draft-3 | 2026-09-13 | `DRAFT — NOT FROZEN` | 按 PR #66 复核意见修订：六态词表注明出自 Y4 方案 §5（不在 PR-1 合同内）并说明 `NOT_APPLICABLE` 的用法，§3 记录格式的 `verdict` 与之对齐；`C3-P5` 补字段锚点与 reason code；`C6-P6` 定义「保留旁路」负例并补锚点 |
+| draft-4 | 2026-09-13 | `DRAFT — NOT FROZEN` | 按交付侧复核意见（PR #66 两条，Owner 裁定一次改完）并入验收侧自查，共修订**五处**，**条数不变：仍 28 条（C3 7 / C4 8 / C5 7 / C6 6）**。① §C6 通过判据——P6 含正例（必须 `COMMITTED`），原「P3–P6 均不得提交」与之冲突，改为 P3–P5 不得提交 + P6 正/负例分开判；② `C5-P7` 期望红点名 `rollback.byte_equal=true` 并要求独立字节比对，不再只凭 `rollback.status` 自报（合同 §10 恢复规则 1/2 与最终回执 L405 已定义 VERIFIED 含字节相等，本条只把验收锚点钉到该字段）；③ C5 通过判据注明「提交前重核」由 `C3-P4` 覆盖；④ **验收侧自查补**：§1 规则 3「扰动之后若出现 `COMMITTED`，该条直接判失败」是**全局**规则，同样禁止 P6 正例——①只改组内判据不足以消除矛盾，故补写唯一例外并锁死「不得再设第二个例外」；⑤ **验收侧自查补**：`C5-P7` 扰动点原写「commit 前后」，其中「terminal record 写成之后」的子情形按恢复规则 4 应**重用 `COMMITTED`**，与本组「七条都红」互斥——扰动点收窄至 terminal record 之前，并声明该子情形不在 28 条之内。另把版本表按序号排正（原为 draft-1 / draft-3 / draft-2）。**本次修正发生在任何观测之前**（C3–C6 未落地、28 条均 `NOT_RUN`，见 §0.2），不触发 §5 / §7 第 3 条「观测后修正不得重判」 |
