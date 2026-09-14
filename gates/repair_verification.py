@@ -1324,3 +1324,392 @@ def bind_inputs(request):
                                           "unverifiable binding input: %s" % exc, "SNAPSHOT")]
     return result
 
+# ---------------------------------------------------------------------------
+# C3: thin verification of staged candidate bytes (contract section 9)
+# ---------------------------------------------------------------------------
+
+_VERIFICATION_REQUEST_FIELDS = {"txn_id", "run_id", "candidate_id", "patch_sha256",
+                                "bound_policy_sha256", "snapshot_root", "stage_root",
+                                "relative_target", "before_manifest", "staged_manifest",
+                                "bound_policy", "toolchain_manifest", "native_before",
+                                "native_after", "report_root"}
+_THIN_RESULT_FIELDS = {"schema_version", "scope", "status", "txn_id", "run_id",
+                       "candidate_id", "patch_sha256", "bound_policy_sha256",
+                       "before_source_sha256", "staged_source_sha256",
+                       "toolchain_sha256", "checks", "coverage", "parser_agreement",
+                       "authorized_delta_sha256", "actual_delta_sha256",
+                       "unexpected_delta", "missing_delta", "protected_changes",
+                       "dependencies_unchanged", "exports", "reports", "deferred",
+                       "reasons"}
+_THIN_SCOPE = "PR1_CANDIDATE_BYTES"
+_DEFERRED = {"erc": "NOT_RUN", "semantic_runner": "NOT_RUN",
+             "formal_evidence": "NOT_RUN"}
+
+
+def _check(status, codes=(), paths=()):
+    return {"status": status, "reason_codes": list(codes),
+            "artifact_paths": list(paths)}
+
+
+def _kicad_partition(raw):
+    """Read one kicadxml export as {components, nets}; anything odd fails closed."""
+    try:
+        root = ElementTree.fromstring(raw)
+    except ElementTree.ParseError as exc:
+        raise ObservationError("unparseable netlist: %s" % exc) from exc
+    if root.tag != "export":
+        raise ObservationError("unknown export root %r" % root.tag)
+    components = {}
+    section = root.find("components")
+    if section is None:
+        raise ObservationError("the export carries no component inventory")
+    for comp in section.findall("comp"):
+        reference = comp.get("ref")
+        if not reference:
+            raise ObservationError("an exported component carries no reference")
+        if reference in components:
+            raise ObservationError("duplicate exported component %s" % reference)
+        numbers = []
+        pins = comp.find("pins")
+        if pins is not None:
+            for item in pins.findall("pin"):
+                number = item.get("num")
+                if not number:
+                    raise ObservationError("an exported pin carries no number")
+                if number in numbers:
+                    raise ObservationError("duplicate exported pin %s.%s" % (reference, number))
+                numbers.append(number)
+        components[reference] = sorted(numbers)
+    nets = []
+    section = root.find("nets")
+    if section is None:
+        raise ObservationError("the export carries no net section")
+    for net in section.findall("net"):
+        nodes = []
+        for node in net.findall("node"):
+            reference, number = node.get("ref"), node.get("pin")
+            if not reference or not number:
+                raise ObservationError("an exported node is missing its identity")
+            nodes.append((reference, number))
+        nets.append(sorted(set(nodes)))
+    return components, nets
+
+
+def _partition_groups(observation):
+    return {frozenset((member["reference"], member["number"])
+                      for member in part["members"])
+            for part in observation["partitions"]}
+
+
+def _projected_coverage(observation, components, nets):
+    """Coverage of one export against the source observation, plus agreement."""
+    source_pins = {(row["identity"]["reference"], row["identity"]["number"])
+                   for row in observation["pins"]}
+    source_components = {row["reference"] for row in observation["components"]}
+    exported_pins, duplicated = set(), False
+    for reference, numbers in components.items():
+        for number in numbers:
+            key = (reference, number)
+            if key in exported_pins:
+                duplicated = True
+            exported_pins.add(key)
+    placed = set()
+    placement_conflict = False
+    for nodes in nets:
+        for key in nodes:
+            if key in placed:
+                placement_conflict = True
+            placed.add(key)
+    unknown = (exported_pins | placed) - source_pins
+    pin_lookup = {(row["identity"]["reference"], row["identity"]["number"]): row
+                  for row in observation["pins"]}
+    component_lookup = {row["reference"]: row for row in observation["components"]}
+    observed_keys = exported_pins & placed
+    observed_pin_ids = sorted([pin_lookup[key]["identity"] for key in observed_keys
+                               if key in pin_lookup and key in source_pins],
+                              key=canonical_json_bytes)
+    observed_component_ids = sorted([component_lookup[ref]["identity"]
+                                     for ref in set(components)
+                                     if ref in source_components],
+                                    key=canonical_json_bytes)
+    groups = {frozenset(nodes) for nodes in nets if nodes}
+    complete = bool(exported_pins == source_pins and placed == source_pins and
+                    not duplicated and not placement_conflict and not unknown and
+                    set(components) == source_components)
+    coverage = {
+        "expected_pin_count": len(source_pins),
+        "observed_pin_count": len(observed_pin_ids),
+        "expected_pin_keys_sha256": observation["coverage"]["expected_pin_keys_sha256"],
+        "observed_pin_keys_sha256": canonical_sha256("topology", observed_pin_ids),
+        "expected_component_keys_sha256": observation["coverage"]["expected_component_keys_sha256"],
+        "observed_component_keys_sha256": canonical_sha256("topology", observed_component_ids),
+        "complete": complete,
+    }
+    agree = bool(complete and groups == _partition_groups(observation))
+    return coverage, agree
+
+
+_COMPARABLE_COMPONENT_FIELDS = ("reference", "lib_id", "value", "footprint", "unit",
+                                  "position_nm", "rotation", "mirror", "dnp", "in_bom",
+                                  "on_board")
+
+
+def _component_view(observation):
+    rows = [{field: row[field] for field in _COMPARABLE_COMPONENT_FIELDS}
+            for row in observation["components"]]
+    return sorted(rows, key=canonical_json_bytes)
+
+
+def _pin_view(observation):
+    rows = [[row["identity"]["reference"], row["identity"]["number"], row["name"],
+             row["electrical_type"], row["no_connect"]] for row in observation["pins"]]
+    return sorted(rows, key=canonical_json_bytes)
+
+
+def _native_agreement(observation, native):
+    """Compare the source observation with the host native read of the same bytes.
+
+    Only comparable partitions, component fields and pin state are compared;
+    reader-specific definition digests are not, so a disagreement here means
+    the two observations do not describe the same design.
+    """
+    if not isinstance(native, dict):
+        return "UNKNOWN", ["REPAIR_COVERAGE_INCOMPLETE"]
+    try:
+        normalized = normalize_observation(native)
+    except (ObservationError, ValueError, TypeError, KeyError, IndexError):
+        return "UNKNOWN", ["REPAIR_PARSER_DISAGREEMENT"]
+    if (_partition_groups(normalized) != _partition_groups(observation)
+            or _component_view(normalized) != _component_view(observation)
+            or _pin_view(normalized) != _pin_view(observation)):
+        return "FAIL", ["REPAIR_PARSER_DISAGREEMENT"]
+    return "PASS", []
+
+
+def _read_target(root, relative):
+    path = _resolve_within(root, relative)
+    if not os.path.isfile(path) or _is_link(path):
+        raise ObservationError("the design target is missing or a link")
+    return path, _read_bytes(path)
+
+
+def verify_stage(request):
+    """Bind fresh exports of the snapshot and the stage to their real bytes.
+
+    Contract section 9: PASS requires the four required checks to PASS, both
+    coverage records complete with equal keysets, both parser agreements PASS,
+    exactly one completed BEFORE and AFTER export, equal authorized/actual
+    delta hashes, empty diff lists and unchanged dependencies.  Anything else
+    is reported with the unperformed checks kept NOT_RUN; a partial result is
+    never PASS.
+    """
+    result = {
+        "schema_version": 1, "scope": _THIN_SCOPE, "status": "UNKNOWN",
+        "txn_id": None, "run_id": None, "candidate_id": None,
+        "patch_sha256": None, "bound_policy_sha256": None,
+        "before_source_sha256": None, "staged_source_sha256": None,
+        "toolchain_sha256": None,
+        "checks": {"fresh_export": _check("NOT_RUN"),
+                   "source_hash_binding": _check("NOT_RUN"),
+                   "exact_topology_delta": _check("NOT_RUN"),
+                   "protected_diff": _check("NOT_RUN")},
+        "coverage": {"before": None, "after": None},
+        "parser_agreement": {"before": _check("NOT_RUN"), "after": _check("NOT_RUN")},
+        "authorized_delta_sha256": None, "actual_delta_sha256": None,
+        "unexpected_delta": [], "missing_delta": [], "protected_changes": [],
+        "dependencies_unchanged": False, "exports": [], "reports": None,
+        "deferred": dict(_DEFERRED), "reasons": [],
+    }
+    try:
+        _closed(request, _VERIFICATION_REQUEST_FIELDS, "verification request")
+        result["txn_id"] = _text(request["txn_id"], "transaction id")
+        result["run_id"] = _text(request["run_id"], "run id")
+        result["candidate_id"] = _text(request["candidate_id"], "candidate id")
+        result["patch_sha256"] = _sha(request["patch_sha256"], "patch digest")
+        result["bound_policy_sha256"] = _sha(request["bound_policy_sha256"],
+                                             "bound policy digest")
+        relative_target = _text(request["relative_target"], "target path")
+        report_root = _absolute(request["report_root"], "report root")
+        toolchain = toolchain_manifest(request["toolchain_manifest"])
+        result["toolchain_sha256"] = canonical_sha256("toolchain", toolchain)
+        binding = bind_inputs({"txn_id": request["txn_id"], "run_id": request["run_id"],
+                               "candidate_id": request["candidate_id"],
+                               "relative_target": relative_target,
+                               "snapshot_root": request["snapshot_root"],
+                               "stage_root": request["stage_root"],
+                               "before_manifest": request["before_manifest"],
+                               "staged_manifest": request["staged_manifest"],
+                               "bound_policy": request["bound_policy"],
+                               "bound_policy_sha256": request["bound_policy_sha256"],
+                               "toolchain": toolchain})
+        if binding["status"] != "PASS":
+            result["status"] = binding["status"] if binding["status"] != "TOOL_ERROR" else "TOOL_ERROR"
+            result["reasons"] = binding["reasons"]
+            return result
+        bound = request["bound_policy"]
+        result["authorized_delta_sha256"] = bound["authorized_delta_sha256"]
+        before_path, before_raw = _read_target(request["snapshot_root"], relative_target)
+        after_path, after_raw = _read_target(request["stage_root"], relative_target)
+        before_sha, after_sha = hash_bytes(before_raw), hash_bytes(after_raw)
+        result["before_source_sha256"] = before_sha
+        result["staged_source_sha256"] = after_sha
+        try:
+            before_observation = observe_source(before_raw)
+            after_observation = observe_source(after_raw)
+        except ObservationError as exc:
+            result["reasons"] = [_reason_code("REPAIR_COVERAGE_INCOMPLETE",
+                                              "the candidate bytes are outside the qualified "
+                                              "profile: %s" % exc)]
+            return result
+        exports, halt = [], None
+        for role, root in (("BEFORE", request["snapshot_root"]), ("AFTER", request["stage_root"])):
+            outcome = fresh_export({"txn_id": request["txn_id"], "role": role,
+                                    "source_root": root,
+                                    "relative_source": relative_target,
+                                    "output_dir": os.path.join(report_root, "exports",
+                                                               request["txn_id"], role.lower()),
+                                    "toolchain": toolchain})
+            if outcome["proof"] is not None:
+                exports.append(outcome["proof"])
+            if outcome["status"] != "PASS" and halt is None:
+                halt = outcome
+        result["exports"] = exports
+        if halt is not None:
+            code = halt["reasons"][0]["code"] if halt["reasons"] else "REPAIR_TOOL_PROTOCOL_ERROR"
+            result["checks"]["fresh_export"] = _check(
+                "FAIL", [code], [proof["xml_path"] for proof in exports])
+            if code == "REPAIR_SOURCE_UNBOUND":
+                result["checks"]["source_hash_binding"] = _check(
+                    "FAIL", [code], [proof["xml_path"] for proof in exports])
+            result["status"] = ("BLOCKED" if code in ("REPAIR_EXPORT_STALE", "REPAIR_SOURCE_UNBOUND")
+                                else "TOOL_ERROR")
+            result["reasons"] = halt["reasons"]
+            return result
+        expected_sources = {"BEFORE": before_sha, "AFTER": after_sha}
+        mismatched = [proof for proof in exports
+                      if not (proof["completed"]
+                              and proof["source_before_sha256"]
+                              == proof["source_after_sha256"]
+                              == proof["source_parse_end_sha256"]
+                              == expected_sources[proof["role"]])]
+        result["checks"]["fresh_export"] = _check(
+            "PASS" if not mismatched else "FAIL",
+            [] if not mismatched else ["REPAIR_TOOL_PROTOCOL_ERROR"],
+            [proof["xml_path"] for proof in exports])
+        result["checks"]["source_hash_binding"] = _check(
+            "PASS" if not mismatched else "FAIL",
+            [] if not mismatched else ["REPAIR_SOURCE_UNBOUND"],
+            [proof["xml_path"] for proof in exports])
+        if mismatched:
+            result["status"] = "BLOCKED"
+            result["reasons"] = [_reason_code("REPAIR_SOURCE_UNBOUND",
+                                              "an export proof does not bind to the request source")]
+            return result
+        coverage, agreement = {}, {}
+        for proof, role, observation in ((exports[0], "BEFORE", before_observation),
+                                         (exports[1], "AFTER", after_observation)):
+            if proof["role"] != role:
+                raise ObservationError("the export proofs are not one BEFORE and one AFTER")
+            raw = _read_bytes(proof["xml_path"])
+            if hash_bytes(raw) != proof["xml_sha256"]:
+                result["status"] = "BLOCKED"
+                result["reasons"] = [_reason_code("REPAIR_EXPORT_STALE",
+                                                  "an exported netlist changed after its proof")]
+                return result
+            try:
+                components, nets = _kicad_partition(raw)
+            except ObservationError as exc:
+                result["status"] = "TOOL_ERROR"
+                result["reasons"] = [_reason_code("REPAIR_TOOL_PROTOCOL_ERROR", str(exc))]
+                return result
+            key = role.lower()
+            coverage[key], agree = _projected_coverage(observation, components, nets)
+            native_status, native_codes = _native_agreement(
+                observation, request["native_before" if role == "BEFORE" else "native_after"])
+            if not coverage[key]["complete"]:
+                agreement[key] = _check("FAIL", ["REPAIR_COVERAGE_INCOMPLETE"], [proof["xml_path"]])
+            elif not agree:
+                agreement[key] = _check("FAIL", ["REPAIR_PARSER_DISAGREEMENT"], [proof["xml_path"]])
+            elif native_status != "PASS":
+                agreement[key] = _check(native_status,
+                                        native_codes or ["REPAIR_PARSER_DISAGREEMENT"],
+                                        [proof["xml_path"]])
+            else:
+                agreement[key] = _check("PASS", [], [proof["xml_path"]])
+        result["coverage"] = coverage
+        result["parser_agreement"] = agreement
+        reports = []
+        for proof in exports:
+            reports.append({"path": os.path.relpath(proof["xml_path"], report_root).replace(os.sep, "/"),
+                            "sha256": proof["xml_sha256"],
+                            "size_bytes": os.path.getsize(proof["xml_path"]),
+                            "role": "READONLY_DEPENDENCY"})
+        result["reports"] = {"version": 1, "files": reports}
+        incomplete = [role for role in ("before", "after") if not coverage[role]["complete"]]
+        disagreement = [role for role in ("before", "after")
+                        if agreement[role]["status"] != "PASS"]
+        if incomplete or disagreement:
+            result["status"] = "UNKNOWN"
+            result["reasons"] = [_reason_code(
+                "REPAIR_COVERAGE_INCOMPLETE" if incomplete else "REPAIR_PARSER_DISAGREEMENT",
+                "an export does not cover the complete source inventory" if incomplete
+                else "the export, the source and the native read disagree")]
+            return result
+        delta = compare_delta(before_observation, after_observation, bound)
+        protected = compare_protected(before_observation, after_observation, bound,
+                                      {"before": request["before_manifest"],
+                                       "after": request["staged_manifest"]})
+        result["checks"]["exact_topology_delta"] = _check(delta["status"],
+                                                          [item["code"] for item in delta["reasons"]])
+        result["checks"]["protected_diff"] = _check(protected["status"],
+                                                    [item["code"] for item in protected["reasons"]])
+        result["actual_delta_sha256"] = delta["actual_delta_sha256"]
+        result["unexpected_delta"] = delta["unexpected"]
+        result["missing_delta"] = delta["missing"]
+        result["protected_changes"] = protected["changes"]
+        result["dependencies_unchanged"] = protected["dependencies_unchanged"]
+        if delta["status"] != "PASS" or protected["status"] != "PASS":
+            result["status"] = "FAIL"
+            result["reasons"] = (delta["reasons"] + protected["reasons"]) or [
+                _reason_code("REPAIR_DELTA_MISMATCH", "the staged bytes are not the authorized change")]
+            return result
+        keysets_equal = all(
+            coverage[role]["expected_pin_keys_sha256"] == coverage[role]["observed_pin_keys_sha256"]
+            and coverage[role]["expected_component_keys_sha256"]
+            == coverage[role]["observed_component_keys_sha256"]
+            and coverage[role]["complete"] for role in ("before", "after"))
+        invariants = (len(exports) == 2
+                      and {proof["role"] for proof in exports} == {"BEFORE", "AFTER"}
+                      and all(proof["completed"] for proof in exports)
+                      and keysets_equal
+                      and delta["actual_delta_sha256"] == bound["authorized_delta_sha256"]
+                      and not result["unexpected_delta"] and not result["missing_delta"]
+                      and not result["protected_changes"]
+                      and protected["dependencies_unchanged"]
+                      and len(result["checks"]) == 4
+                      and all(check["status"] == "PASS" for check in result["checks"].values()))
+        result["status"] = "PASS" if invariants else "UNKNOWN"
+        if not invariants:
+            result["reasons"] = [_reason_code("REPAIR_DELTA_MISMATCH",
+                                              "the PASS invariants of section 9 are not all met")]
+        return result
+    except ObservationError as exc:
+        result["status"] = "BLOCKED"
+        result["reasons"] = [_reason_code("REPAIR_INPUT_DRIFT",
+                                          "unverifiable verification input: %s" % exc)]
+        return result
+
+
+def write_thin_verification(result, report_root):
+    """Freeze one ThinVerificationResult next to its exports."""
+    _closed(result, _THIN_RESULT_FIELDS, "thin verification result")
+    root = _absolute(report_root, "report root")
+    if not os.path.isdir(root) or _is_link(root):
+        raise ObservationError("the report root must exist and not be a link")
+    path = os.path.join(root, "thin_verification_%s.json" % result["txn_id"])
+    payload = json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2).encode("utf-8")
+    with open(path, "wb") as handle:
+        handle.write(payload)
+    return path, hash_bytes(payload)
+
+

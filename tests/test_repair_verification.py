@@ -938,21 +938,44 @@ args = sys.argv[1:]
 source = args[-1]
 output = args[args.index("--output") + 1]
 name = os.path.basename(source)
+folder = os.path.dirname(source)
 if "slow" in name:
     time.sleep(5)
 if "fail" in name:
     sys.exit(3)
-with open(output, "w", encoding="utf-8") as handle:
-    if "empty" in name:
-        handle.write("")
-    elif "bad" in name:
-        handle.write("<netlist")
-    else:
-        handle.write("<export><netlist><nets /></netlist></export>")
-if "drift" in name:
+if "empty" in name:
+    payload = b""
+elif "bad" in name:
+    payload = b"<netlist"
+elif os.path.exists(os.path.join(folder, "export_plan.xml")):
+    with open(os.path.join(folder, "export_plan.xml"), "rb") as handle:
+        payload = handle.read()
+else:
+    payload = b'<export version="E"><components><comp ref="R1"><pins><pin num="1"/><pin num="2"/></pins></comp></components><nets><net code="1" name="A"><node ref="R1" pin="1"/></net><net code="2" name="B"><node ref="R1" pin="2"/></net></nets></export>'
+with open(output, "wb") as handle:
+    handle.write(payload)
+if os.path.exists(os.path.join(folder, "drift_after_export")):
     with open(source, "ab") as handle:
         handle.write(b"drift")
 '''
+
+
+def plan_from_observation(observation):
+    """TEST_ONLY netlist that agrees with one observation by construction."""
+    components = {}
+    for row in observation["pins"]:
+        components.setdefault(row["identity"]["reference"], []).append(row["identity"]["number"])
+    parts = ['<export version="E"><components>']
+    for reference in sorted(components):
+        pins = "".join('<pin num="%s"/>' % number for number in sorted(components[reference]))
+        parts.append('<comp ref="%s"><pins>%s</pins></comp>' % (reference, pins))
+    parts.append('</components><nets>')
+    for index, partition in enumerate(observation["partitions"]):
+        nodes = "".join('<node ref="%s" pin="%s"/>' % (member["reference"], member["number"])
+                        for member in partition["members"])
+        parts.append('<net code="%d" name="N%d">%s</net>' % (index + 1, index, nodes))
+    parts.append('</nets></export>')
+    return "".join(parts).encode("utf-8")
 
 
 class FreshExportTests(unittest.TestCase):
@@ -989,8 +1012,11 @@ class FreshExportTests(unittest.TestCase):
         (root / name).write_bytes(body)
         return root, name
 
-    def export(self, name="design.kicad_sch", role="BEFORE", output=None, **overrides):
+    def export(self, name="design.kicad_sch", role="BEFORE", output=None, marker=None,
+               **overrides):
         root, relative = self.source(name)
+        if marker:
+            (root / marker).write_bytes(b"1")
         target = output or (self.root / ("out_%s_%s" % (role, name.replace(".", "_"))))
         request = {"txn_id": "txn-1", "role": role, "source_root": str(root),
                    "relative_source": relative, "output_dir": str(target),
@@ -1053,7 +1079,7 @@ class FreshExportTests(unittest.TestCase):
                 self.assertIsNone(result["xml_bytes"])
 
     def test_source_change_between_export_and_parse_is_not_bound(self):
-        result = self.export(name="drift.kicad_sch")
+        result = self.export(name="drift.kicad_sch", marker="drift_after_export")
         self.assertEqual(result["status"], "FAIL", result["reasons"])
         self.assertEqual(result["reasons"][0]["code"], "REPAIR_SOURCE_UNBOUND")
         proof = result["proof"]
@@ -1157,6 +1183,148 @@ class FreshExportTests(unittest.TestCase):
         self.assertEqual(result["reasons"][0]["code"], "REPAIR_INPUT_DRIFT")
 
 
+    def design_tree(self, name, raw, plan, marker=None):
+        root = self.root / name
+        root.mkdir(parents=True, exist_ok=True)
+        (root / "design.kicad_sch").write_bytes(raw)
+        (root / "export_plan.xml").write_bytes(plan)
+        if marker:
+            (root / marker).write_bytes(b"1")
+        return root
+
+    def design_manifest(self, root, name="design.kicad_sch"):
+        raw = (root / name).read_bytes()
+        return {"version": 1, "files": [{"path": name,
+                                         "sha256": hashlib.sha256(raw).hexdigest(),
+                                         "size_bytes": len(raw), "role": "TARGET"}]}
+
+    def scenario(self, stage_raw=None, stage_plan=None, stage_marker=None,
+                 native_before=None, native_after=None, **tool_overrides):
+        raw = mini()
+        observation = verification.observe_source(raw)
+        stage_raw = raw if stage_raw is None else stage_raw
+        stage_observation = verification.observe_source(stage_raw)
+        snapshot = self.design_tree("snapshot_candidate", raw,
+                                    plan_from_observation(observation))
+        stage = self.design_tree("stage_candidate", stage_raw,
+                                 plan_from_observation(stage_observation)
+                                 if stage_plan is None else stage_plan,
+                                 marker=stage_marker)
+        bound = policy(observation, copy.deepcopy(observation))
+        self._scenarios = getattr(self, "_scenarios", 0) + 1
+        reports = self.root / ("reports_%d" % self._scenarios)
+        reports.mkdir(parents=True)
+        request = {"txn_id": "txn-c3", "run_id": "run-1", "candidate_id": "cand-1",
+                   "patch_sha256": "a" * 64,
+                   "bound_policy_sha256": verification.canonical_sha256("policy-bound", bound),
+                   "snapshot_root": str(snapshot), "stage_root": str(stage),
+                   "relative_target": "design.kicad_sch",
+                   "before_manifest": self.design_manifest(snapshot),
+                   "staged_manifest": self.design_manifest(stage),
+                   "bound_policy": bound,
+                   "toolchain_manifest": self.toolchain(**tool_overrides),
+                   "native_before": observation if native_before is None else native_before,
+                   "native_after": stage_observation if native_after is None else native_after,
+                   "report_root": str(reports)}
+        return request, observation
+
+    def test_thin_verification_passes_only_with_complete_agreement_and_authorized_delta(self):
+        request, _ = self.scenario()
+        result = verification.verify_stage(request)
+        self.assertEqual(result["status"], "PASS", result["reasons"])
+        self.assertEqual(result["scope"], "PR1_CANDIDATE_BYTES")
+        self.assertEqual(sorted(result["checks"]),
+                         ["exact_topology_delta", "fresh_export", "protected_diff",
+                          "source_hash_binding"])
+        self.assertTrue(all(check["status"] == "PASS" for check in result["checks"].values()))
+        self.assertEqual({proof["role"] for proof in result["exports"]}, {"BEFORE", "AFTER"})
+        self.assertTrue(all(proof["completed"] for proof in result["exports"]))
+        for role in ("before", "after"):
+            self.assertTrue(result["coverage"][role]["complete"])
+            self.assertEqual(result["coverage"][role]["expected_pin_keys_sha256"],
+                             result["coverage"][role]["observed_pin_keys_sha256"])
+            self.assertEqual(result["coverage"][role]["expected_component_keys_sha256"],
+                             result["coverage"][role]["observed_component_keys_sha256"])
+            self.assertEqual(result["parser_agreement"][role]["status"], "PASS")
+        self.assertEqual(result["authorized_delta_sha256"], result["actual_delta_sha256"])
+        self.assertEqual(result["unexpected_delta"], [])
+        self.assertEqual(result["missing_delta"], [])
+        self.assertEqual(result["protected_changes"], [])
+        self.assertTrue(result["dependencies_unchanged"])
+        self.assertEqual(result["deferred"], {"erc": "NOT_RUN", "semantic_runner": "NOT_RUN",
+                                              "formal_evidence": "NOT_RUN"})
+        path, digest = verification.write_thin_verification(result, request["report_root"])
+        self.assertTrue(path.endswith(".json"))
+        self.assertEqual(len(digest), 64)
+        frozen = json.loads(Path(path).read_text(encoding="utf-8"))
+        self.assertEqual(frozen["status"], "PASS")
+        self.assertEqual(frozen["checks"], result["checks"])
+        self.assertEqual(frozen["reports"], result["reports"])
+
+    def test_partial_or_misgrouped_exports_are_unknown_never_pass(self):
+        observation = verification.observe_source(mini())
+        partial = plan_from_observation(observation).replace(b'<node ref="R1" pin="2"/>', b"")
+        request, _ = self.scenario(stage_plan=partial)
+        result = verification.verify_stage(request)
+        self.assertEqual(result["status"], "UNKNOWN", result["reasons"])
+        self.assertFalse(result["coverage"]["after"]["complete"])
+        self.assertEqual(result["parser_agreement"]["after"]["status"], "FAIL")
+        self.assertIn("REPAIR_COVERAGE_INCOMPLETE",
+                      result["parser_agreement"]["after"]["reason_codes"])
+        self.assertEqual(result["checks"]["exact_topology_delta"]["status"], "NOT_RUN")
+        self.assertNotEqual(result["coverage"]["after"]["expected_pin_keys_sha256"],
+                            result["coverage"]["after"]["observed_pin_keys_sha256"])
+
+        nodes = "".join('<node ref="%s" pin="%s"/>' % (row["identity"]["reference"],
+                                                            row["identity"]["number"])
+                        for row in observation["pins"])
+        merged = ('<export version="E"><components><comp ref="R1"><pins>'
+                  '<pin num="1"/><pin num="2"/></pins></comp></components>'
+                  '<nets><net code="1" name="N0">%s</net></nets></export>' % nodes).encode("utf-8")
+        self.assertIn(b'<node ref="R1" pin="2"/>', merged)
+        request, _ = self.scenario(stage_plan=merged)
+        result = verification.verify_stage(request)
+        self.assertEqual(result["status"], "UNKNOWN", result["reasons"])
+        self.assertTrue(result["coverage"]["after"]["complete"])
+        self.assertEqual(result["parser_agreement"]["after"]["status"], "FAIL")
+        self.assertIn("REPAIR_PARSER_DISAGREEMENT",
+                      result["parser_agreement"]["after"]["reason_codes"])
+
+    def test_native_misread_is_rejected_at_the_verifier(self):
+        request, observation = self.scenario()
+        misread = copy.deepcopy(observation)
+        misread["components"][0]["value"] = "33R"
+        request["native_after"] = misread
+        result = verification.verify_stage(request)
+        self.assertEqual(result["status"], "UNKNOWN", result["reasons"])
+        self.assertEqual(result["parser_agreement"]["after"]["status"], "FAIL")
+        self.assertIn("REPAIR_PARSER_DISAGREEMENT",
+                      result["parser_agreement"]["after"]["reason_codes"])
+        self.assertEqual(result["checks"]["exact_topology_delta"]["status"], "NOT_RUN")
+
+    def test_unauthorized_stage_change_is_a_delta_failure(self):
+        changed = mini().replace(b'(property "Value" "22R")', b'(property "Value" "33R")')
+        self.assertNotEqual(changed, mini())
+        request, _ = self.scenario(stage_raw=changed)
+        result = verification.verify_stage(request)
+        self.assertEqual(result["status"], "FAIL", result["reasons"])
+        self.assertEqual(result["checks"]["exact_topology_delta"]["status"], "FAIL")
+        self.assertEqual(result["checks"]["protected_diff"]["status"], "FAIL")
+        self.assertTrue(result["unexpected_delta"])
+        self.assertNotEqual(result["authorized_delta_sha256"], result["actual_delta_sha256"])
+
+    def test_source_drift_during_export_blocks_and_binds_fail(self):
+        request, _ = self.scenario(stage_marker="drift_after_export")
+        result = verification.verify_stage(request)
+        self.assertEqual(result["status"], "BLOCKED", result["reasons"])
+        self.assertEqual(result["checks"]["fresh_export"]["status"], "FAIL")
+        self.assertEqual(result["checks"]["source_hash_binding"]["status"], "FAIL")
+        self.assertIn("REPAIR_SOURCE_UNBOUND",
+                      result["checks"]["source_hash_binding"]["reason_codes"])
+        self.assertEqual(result["checks"]["exact_topology_delta"]["status"], "NOT_RUN")
+
+
 if __name__ == "__main__":
     unittest.main()
+
 

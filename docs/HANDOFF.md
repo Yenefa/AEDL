@@ -406,8 +406,9 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
 
 ### C3 小项 1–2 候选（DSH 会话；分支 `feat-pr1-c3-fresh-export`，base `0d31a8b`）
 
-- **落地**：`gates/repair_verification.py` 的 `toolchain_manifest()` / `fresh_export()` / `bind_inputs()`（合同 §9：两次独立新导出、三个 source SHA256、导出目录本次新建、不复用旧 XML、exit=0 不等于成功），与 `tests/test_repair_verification.py::FreshExportTests`（9 例，宿主桩 CLI，不读 fixture）。
-- **验证**：`py -3.9 -m unittest tests.test_repair_verification` → 65 OK；CPython 3.11.15 → 65 OK；`py -3.9 -m tools.dev_gate --envelope tasks/PR1-C3.yaml --admit-receipt …` → status pass（main_tests 634 OK、sandbox 283 OK）。
-- **NOT_RUN**：真 KiCad 10.0.5 原生导出；C3-P1..P7 独立扰动（属 Percy／B5）；C3 小项 3–4（coverage／parser_agreement／exact_topology_delta／protected_diff 与 `ThinVerificationResult` 装配）。**本卡不含 `verify_stage`**，因此当前不存在任何能对输入返回 PASS 的 KICAD_VERIFY 入口。
+- **落地**：合同 §11 C3 的**四个小项全部**——`gates/repair_verification.py` 的 `toolchain_manifest()` / `fresh_export()` / `bind_inputs()` / `verify_stage()` / `write_thin_verification()`（两次独立新导出、导出前/后/解析结束三个 source SHA256、导出目录本次新建、不复用旧 XML、exit=0 不等于成功；kicadxml 组件清单与网络分组和 source AST、native 观察三方互校；四项 required checks 齐备才可能 PASS），与 `tests/test_repair_verification.py::FreshExportTests`（**14 例**，宿主桩 CLI，不读 fixture）。
+- **验证**：`py -3.9 -m unittest tests.test_repair_verification` → 70 OK；`py -3.9 -m unittest discover -s tests` → **Ran 639, OK**；`py -3.9 -m tools.dev_gate --envelope tasks/PR1-C3.yaml --admit-receipt …` → status pass（main_tests 639 OK、sandbox 283 OK）。
+- **NOT_RUN**：真 KiCad 10.0.5 原生导出；C3-P1..P7 独立扰动（属 Percy／B5）。`verify_stage` 已存在并只在四项 required checks 全 PASS、两份 coverage 完整且 keyset 相等、两份 parser agreement PASS、delta hash 相等且三个 diff 列表为空时返回 PASS；其余一律 `BLOCKED / TOOL_ERROR / FAIL / UNKNOWN`，未做项保持 `NOT_RUN`。
+- **最大未验证面**：导出的 kicadxml 互校只用测试构造的 netlist 验证过，尚未与真实 kicad-cli 10.0.5 产物对照；装好工具链后必须先做这一项再执行 C3 组扰动。
 - **边界上报**：`docs/competition/SCOPE_BOUNDARY_W1.md` §2.3 的「`gates/repair_verification.py` 零文件 I/O，故结构上不可能读到 private 答案」论证，因 C3 按合同 §9 在该模块内执行导出而不再成立；需在 C3 合入时由 Owner 与验收侧改写为「宿主绝对路径绑定 + 只读声明根 + 扰动测试证明不读 private」。
 - **状态**：`PENDING_HUMAN_REVIEW`；未 merge、未 approve。下一步为 C3 小项 3–4。
