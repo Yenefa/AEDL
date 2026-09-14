@@ -8,6 +8,8 @@ import copy
 import hashlib
 import json
 from pathlib import Path
+import sys
+import tempfile
 import unittest
 import uuid
 
@@ -928,5 +930,233 @@ class SourceParserTests(unittest.TestCase):
 
 
 
+STUB_CLI = '''import os
+import sys
+import time
+
+args = sys.argv[1:]
+source = args[-1]
+output = args[args.index("--output") + 1]
+name = os.path.basename(source)
+if "slow" in name:
+    time.sleep(5)
+if "fail" in name:
+    sys.exit(3)
+with open(output, "w", encoding="utf-8") as handle:
+    if "empty" in name:
+        handle.write("")
+    elif "bad" in name:
+        handle.write("<netlist")
+    else:
+        handle.write("<export><netlist><nets /></netlist></export>")
+if "drift" in name:
+    with open(source, "ab") as handle:
+        handle.write(b"drift")
+'''
+
+
+class FreshExportTests(unittest.TestCase):
+    """C3 sub-items 1-2: fresh export proofs and stage/source binding.
+
+    These tests drive a host-provided toolchain binding whose executable is a
+    local stub, so they establish the software contract only: two new exports,
+    three source hashes, no reuse of a leftover XML, honest proofs.  A real
+    KiCad 10.0.5 run is a separate native qualification and stays NOT_RUN here.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.stub = self.root / "fake_kicad_cli.py"
+        self.stub.write_text(STUB_CLI, encoding="utf-8")
+        self.stub_sha = hashlib.sha256(self.stub.read_bytes()).hexdigest()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def toolchain(self, **overrides):
+        manifest = {"version": 1, "kicad_cli": str(self.stub),
+                    "kicad_version": "10.0.5", "kicad_cli_sha256": self.stub_sha,
+                    "launcher_argv": [sys.executable],
+                    "arguments": list(verification.EXPORT_ARGUMENTS),
+                    "timeout_seconds": 60, "environment": {}}
+        manifest.update(overrides)
+        return manifest
+
+    def source(self, name="design.kicad_sch", body=b"(kicad_sch)"):
+        root = self.root / ("src_" + name.replace(".", "_"))
+        root.mkdir(parents=True, exist_ok=True)
+        (root / name).write_bytes(body)
+        return root, name
+
+    def export(self, name="design.kicad_sch", role="BEFORE", output=None, **overrides):
+        root, relative = self.source(name)
+        target = output or (self.root / ("out_%s_%s" % (role, name.replace(".", "_"))))
+        request = {"txn_id": "txn-1", "role": role, "source_root": str(root),
+                   "relative_source": relative, "output_dir": str(target),
+                   "toolchain": self.toolchain(**overrides)}
+        return verification.fresh_export(request)
+
+    def test_before_and_after_exports_are_independently_proven(self):
+        seen = []
+        for role in ("BEFORE", "AFTER"):
+            result = self.export(role=role)
+            self.assertEqual(result["status"], "PASS", result["reasons"])
+            proof = result["proof"]
+            self.assertEqual(proof["role"], role)
+            self.assertEqual(proof["exit_code"], 0)
+            self.assertTrue(proof["completed"])
+            self.assertEqual(proof["source_before_sha256"], proof["source_after_sha256"])
+            self.assertEqual(proof["source_after_sha256"], proof["source_parse_end_sha256"])
+            self.assertEqual(proof["xml_sha256"], hashlib.sha256(result["xml_bytes"]).hexdigest())
+            self.assertEqual(proof["argv"][-1], str(self.root / "src_design_kicad_sch" / "design.kicad_sch"))
+            self.assertEqual(proof["argv"][-2], proof["xml_path"])
+            self.assertIn("netlist", proof["argv"])
+            seen.append(proof["xml_path"])
+        self.assertEqual(len(set(seen)), 2)
+
+    def test_leftover_xml_is_never_reused_and_one_directory_serves_one_export(self):
+        root, relative = self.source(name="fail.kicad_sch")
+        stale = self.root / "stale_dir"
+        stale.mkdir()
+        (stale / "before.net.xml").write_bytes(b"<export><netlist><old /></netlist></export>")
+        request = {"txn_id": "txn-1", "role": "BEFORE", "source_root": str(root),
+                   "relative_source": relative, "output_dir": str(stale),
+                   "toolchain": self.toolchain()}
+        result = verification.fresh_export(request)
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertEqual(result["reasons"][0]["code"], "REPAIR_EXPORT_STALE")
+        self.assertIsNone(result["proof"])
+        self.assertEqual((stale / "before.net.xml").read_bytes(),
+                         b"<export><netlist><old /></netlist></export>")
+
+        fresh = self.root / "single_use"
+        first = self.export(name="design.kicad_sch", output=fresh)
+        self.assertEqual(first["status"], "PASS")
+        second_request = {"txn_id": "txn-1", "role": "BEFORE",
+                          "source_root": str(self.root / "src_design_kicad_sch"),
+                          "relative_source": "design.kicad_sch",
+                          "output_dir": str(fresh), "toolchain": self.toolchain()}
+        second = verification.fresh_export(second_request)
+        self.assertEqual(second["status"], "BLOCKED")
+        self.assertEqual(second["reasons"][0]["code"], "REPAIR_EXPORT_STALE")
+
+    def test_failed_empty_and_broken_exports_are_not_results(self):
+        for name, status, code in (("fail.kicad_sch", "TOOL_ERROR", "REPAIR_TOOL_PROTOCOL_ERROR"),
+                                   ("empty.kicad_sch", "FAIL", "REPAIR_TOOL_PROTOCOL_ERROR"),
+                                   ("bad.kicad_sch", "FAIL", "REPAIR_TOOL_PROTOCOL_ERROR")):
+            with self.subTest(name=name):
+                result = self.export(name=name)
+                self.assertEqual(result["status"], status, result["reasons"])
+                self.assertEqual(result["reasons"][0]["code"], code)
+                self.assertFalse(result["proof"]["completed"])
+                self.assertIsNone(result["xml_bytes"])
+
+    def test_source_change_between_export_and_parse_is_not_bound(self):
+        result = self.export(name="drift.kicad_sch")
+        self.assertEqual(result["status"], "FAIL", result["reasons"])
+        self.assertEqual(result["reasons"][0]["code"], "REPAIR_SOURCE_UNBOUND")
+        proof = result["proof"]
+        self.assertFalse(proof["completed"])
+        self.assertNotEqual(proof["source_before_sha256"], proof["source_parse_end_sha256"])
+
+    def test_tool_version_and_argument_gaps_fail_closed(self):
+        missing = self.export(name="tool_missing.kicad_sch",
+                              kicad_cli=str(self.root / "missing-kicad-cli.exe"))
+        self.assertEqual(missing["status"], "TOOL_ERROR")
+        self.assertEqual(missing["reasons"][0]["code"], "REPAIR_TOOL_UNAVAILABLE")
+        drifted = self.export(name="tool_digest.kicad_sch", kicad_cli_sha256="0" * 64)
+        self.assertEqual(drifted["status"], "TOOL_ERROR")
+        self.assertEqual(drifted["reasons"][0]["code"], "REPAIR_TOOL_UNAVAILABLE")
+        wrong_version = self.export(name="tool_version.kicad_sch", kicad_version="9.0.0")
+        self.assertEqual(wrong_version["status"], "BLOCKED")
+        self.assertEqual(wrong_version["reasons"][0]["code"], "REPAIR_INPUT_DRIFT")
+        wrong_arguments = self.export(name="tool_args.kicad_sch",
+                                      arguments=list(verification.EXPORT_ARGUMENTS) + ["--flat"])
+        self.assertEqual(wrong_arguments["status"], "BLOCKED")
+        self.assertEqual(wrong_arguments["reasons"][0]["code"], "REPAIR_INPUT_DRIFT")
+
+    def test_export_timeout_is_a_tool_error_not_a_skip(self):
+        result = self.export(name="slow.kicad_sch", timeout_seconds=1)
+        self.assertEqual(result["status"], "TOOL_ERROR", result["reasons"])
+        self.assertEqual(result["reasons"][0]["code"], "REPAIR_TIMEOUT")
+
+    def test_relative_paths_cannot_escape_their_root(self):
+        root, _ = self.source()
+        for relative in ("../outside.kicad_sch", "/absolute.kicad_sch", "C:/outside.kicad_sch",
+                         "sub/../../outside.kicad_sch"):
+            with self.subTest(relative=relative):
+                result = verification.fresh_export(
+                    {"txn_id": "txn-1", "role": "BEFORE", "source_root": str(root),
+                     "relative_source": relative, "output_dir": str(self.root / "escape_out"),
+                     "toolchain": self.toolchain()})
+                self.assertEqual(result["status"], "BLOCKED")
+                self.assertEqual(result["reasons"][0]["code"], "REPAIR_INPUT_DRIFT")
+
+    def bound_policy(self):
+        bound = {"version": 1, "rule_id": "E1", "route": "STRICT",
+                 "policy_file_sha256": "0" * 64, "authority_context_digest": "1" * 64,
+                 "before_source_sha256": "2" * 64, "before_topology_sha256": "3" * 64,
+                 "pin_identity_map": {}, "object_identity_map": {},
+                 "captured_partitions": {}, "new_component_roles": {},
+                 "expected_after": {}, "authorized_delta": [],
+                 "authorized_delta_sha256": "4" * 64,
+                 "protected_projection_sha256": "5" * 64,
+                 "operation_constraints": {}}
+        return bound, verification.canonical_sha256("policy-bound", bound)
+
+    def manifest(self, root, name):
+        raw = (root / name).read_bytes()
+        return {"version": 1, "files": [{"path": name,
+                                         "sha256": hashlib.sha256(raw).hexdigest(),
+                                         "size_bytes": len(raw), "role": "TARGET"}]}
+
+    def binding(self):
+        snapshot = self.root / "snapshot"
+        stage = self.root / "stage"
+        for directory in (snapshot, stage):
+            directory.mkdir(exist_ok=True)
+        (snapshot / "design.kicad_sch").write_bytes(b"(kicad_sch before)")
+        (stage / "design.kicad_sch").write_bytes(b"(kicad_sch after)")
+        bound, digest = self.bound_policy()
+        return {"txn_id": "txn-1", "run_id": "run-1", "candidate_id": "cand-1",
+                "relative_target": "design.kicad_sch",
+                "snapshot_root": str(snapshot), "stage_root": str(stage),
+                "before_manifest": self.manifest(snapshot, "design.kicad_sch"),
+                "staged_manifest": self.manifest(stage, "design.kicad_sch"),
+                "bound_policy": bound, "bound_policy_sha256": digest,
+                "toolchain": self.toolchain()}
+
+    def test_bind_inputs_recomputes_manifests_policy_and_toolchain(self):
+        request = self.binding()
+        result = verification.bind_inputs(request)
+        self.assertEqual(result["status"], "PASS", result["reasons"])
+        self.assertEqual(result["staged_target"], "design.kicad_sch")
+        self.assertEqual(result["toolchain_sha256"],
+                         verification.canonical_sha256("toolchain", request["toolchain"]))
+        self.assertEqual(sorted(result["staged_files"]), ["design.kicad_sch"])
+
+    def test_bind_inputs_rejects_byte_policy_and_target_drift(self):
+        request = self.binding()
+        (self.root / "stage" / "design.kicad_sch").write_bytes(b"(kicad_sch tampered)")
+        result = verification.bind_inputs(request)
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertEqual(result["reasons"][0]["code"], "REPAIR_INPUT_DRIFT")
+        self.assertEqual(result["reasons"][0]["stage"], "SNAPSHOT")
+
+        request = self.binding()
+        request["bound_policy_sha256"] = "0" * 64
+        result = verification.bind_inputs(request)
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertEqual(result["reasons"][0]["code"], "REPAIR_INPUT_DRIFT")
+
+        request = self.binding()
+        request["relative_target"] = "other.kicad_sch"
+        result = verification.bind_inputs(request)
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertEqual(result["reasons"][0]["code"], "REPAIR_INPUT_DRIFT")
+
+
 if __name__ == "__main__":
     unittest.main()
+

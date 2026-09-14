@@ -17,8 +17,12 @@ import copy
 from decimal import Decimal, localcontext
 import hashlib
 import json
+import os
 import re
+import stat
+import subprocess
 import uuid
+import xml.etree.ElementTree as ElementTree
 
 
 DIGEST_KINDS = ("manifest", "proposal", "patch", "policy-bound", "topology",
@@ -1031,3 +1035,292 @@ def observe_source(raw):
         if isinstance(exc, ObservationError):
             raise
         raise ObservationError("incomplete source: %s" % exc) from exc
+
+# ---------------------------------------------------------------------------
+# C3: fresh KiCad export bound to staged bytes (contract section 9)
+#
+# The frozen PR-1 command is kicad-cli sch export netlist --format kicadxml.
+# Every export runs in a directory this run created, with shell=false, and is
+# only accepted when the process completed, exited 0, produced a non-empty
+# parseable XML and the source bytes hash is identical before the export,
+# after the export and after parsing.  A leftover XML is never a result.
+# ---------------------------------------------------------------------------
+
+REQUIRED_KICAD_VERSION = "10.0.5"
+EXPORT_TIMEOUT_SECONDS = 60
+EXPORT_ARGUMENTS = ("sch", "export", "netlist", "--format", "kicadxml", "--output")
+_TOOLCHAIN_FIELDS = {"version", "kicad_cli", "kicad_version", "kicad_cli_sha256",
+                     "launcher_argv", "arguments", "timeout_seconds", "environment"}
+_EXPORT_REQUEST_FIELDS = {"txn_id", "role", "source_root", "relative_source",
+                          "output_dir", "toolchain"}
+_BINDING_REQUEST_FIELDS = {"txn_id", "run_id", "candidate_id", "relative_target",
+                           "snapshot_root", "stage_root", "before_manifest",
+                           "staged_manifest", "bound_policy", "bound_policy_sha256",
+                           "toolchain"}
+_FILE_MANIFEST_FIELDS = {"version", "files"}
+
+
+class _ExportHalt(ValueError):
+    """A fail-closed export outcome that must stay attributable."""
+
+    def __init__(self, status, code, detail, proof=None):
+        ValueError.__init__(self, detail)
+        self.status = status
+        self.code = code
+        self.detail = detail
+        self.proof = proof
+
+
+def _reason_code(code, detail, stage="KICAD_VERIFY"):
+    return {"code": code, "stage": stage, "object_id": None, "detail": detail}
+
+
+def _read_bytes(path):
+    try:
+        with open(path, "rb") as handle:
+            return handle.read()
+    except OSError as exc:
+        raise ObservationError("unreadable file: %s" % exc) from exc
+
+
+def _is_link(path):
+    """True for symlinks and Windows reparse points (junctions included)."""
+    try:
+        info = os.lstat(path)
+    except OSError:
+        return False
+    if stat.S_ISLNK(info.st_mode):
+        return True
+    attributes = getattr(info, "st_file_attributes", 0)
+    return bool(attributes & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0))
+
+
+def _absolute(path, label):
+    text = _text(path, label)
+    if not os.path.isabs(text):
+        raise ObservationError("%s must be absolute" % label)
+    return os.path.normpath(text)
+
+
+def _resolve_within(root, relative):
+    """Resolve a candidate-relative path strictly inside its declared root."""
+    root_path = _absolute(root, "declared root")
+    rel = _text(relative, "candidate-relative path")
+    if rel.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:", rel):
+        raise ObservationError("candidate-relative path must not be absolute")
+    parts = rel.replace("\\", "/").split("/")
+    if any(part in ("", ".", "..") for part in parts):
+        raise ObservationError("unsafe candidate-relative path")
+    if _is_link(root_path):
+        raise ObservationError("the declared root must not be a link")
+    cursor = root_path
+    for part in parts:
+        cursor = os.path.join(cursor, part)
+        if os.path.exists(cursor) and _is_link(cursor):
+            raise ObservationError("linked path components are not allowed")
+    real_root = os.path.realpath(root_path)
+    real_target = os.path.realpath(cursor)
+    if os.path.commonpath([real_root, real_target]) != real_root:
+        raise ObservationError("path escapes its declared root")
+    return cursor
+
+
+def toolchain_manifest(manifest):
+    """Validate the host toolchain binding, or raise ObservationError.
+
+    The manifest carries the absolute kicad-cli path, its digest, the pinned
+    version, the frozen command arguments and the symbol/config environment.
+    A missing value or a different version never proceeds silently.
+    """
+    _closed(manifest, _TOOLCHAIN_FIELDS, "toolchain manifest")
+    if type(manifest["version"]) is not int or manifest["version"] != 1:
+        raise ObservationError("unsupported toolchain manifest version")
+    executable = _text(manifest["kicad_cli"], "kicad-cli path")
+    if not os.path.isabs(executable):
+        raise ObservationError("the kicad-cli path must be absolute")
+    if _text(manifest["kicad_version"], "kicad version") != REQUIRED_KICAD_VERSION:
+        raise ObservationError("the toolchain does not pin KiCad %s" % REQUIRED_KICAD_VERSION)
+    _sha(manifest["kicad_cli_sha256"], "kicad-cli digest")
+    launcher = manifest["launcher_argv"]
+    if not isinstance(launcher, list) or any(
+            not isinstance(item, str) or not item for item in launcher):
+        raise ObservationError("the launcher argv must be a list of non-empty strings")
+    if any(not os.path.isabs(item) for item in launcher):
+        raise ObservationError("launcher argv entries must be absolute paths")
+    arguments = manifest["arguments"]
+    if not isinstance(arguments, list) or tuple(arguments) != EXPORT_ARGUMENTS:
+        raise ObservationError("the export arguments are not the frozen command")
+    _integer(manifest["timeout_seconds"], "toolchain timeout", 1)
+    if manifest["timeout_seconds"] > EXPORT_TIMEOUT_SECONDS:
+        raise ObservationError("the toolchain timeout exceeds the frozen %d seconds"
+                               % EXPORT_TIMEOUT_SECONDS)
+    environment = manifest["environment"]
+    if not isinstance(environment, dict):
+        raise ObservationError("the toolchain environment must be a mapping")
+    for key, value in environment.items():
+        _text(key, "environment name")
+        _text(value, "environment value", empty=True)
+    return manifest
+
+
+def fresh_export(request):
+    """Run one new export and return {status, role, proof, xml_bytes, reasons}.
+
+    Two calls of this function (role BEFORE from the snapshot root, role AFTER
+    from the stage root) are what the thin verifier binds.  The proof is
+    returned even when the outcome is a failure, so a receipt can show what
+    actually happened; a proof never claims completion the run did not reach.
+    """
+    result = {"status": "TOOL_ERROR", "role": None, "proof": None, "xml_bytes": None,
+              "reasons": [_reason_code("REPAIR_TOOL_PROTOCOL_ERROR",
+                                       "the fresh export did not complete")]}
+    try:
+        _closed(request, _EXPORT_REQUEST_FIELDS, "fresh export request")
+        role = _text(request["role"], "export role")
+        if role not in ("BEFORE", "AFTER"):
+            raise ObservationError("the export role must be BEFORE or AFTER")
+        result["role"] = role
+        txn_id = _text(request["txn_id"], "transaction id")
+        toolchain = toolchain_manifest(request["toolchain"])
+        digest = canonical_sha256("toolchain", toolchain)
+        source = _resolve_within(request["source_root"], request["relative_source"])
+        if not os.path.isfile(source) or _is_link(source):
+            raise ObservationError("the export source is missing or a link")
+        output_dir = _absolute(request["output_dir"], "export output directory")
+        if os.path.exists(output_dir) or _is_link(output_dir):
+            raise _ExportHalt("BLOCKED", "REPAIR_EXPORT_STALE",
+                              "the export directory must be created by this run; "
+                              "a leftover directory or XML is never reused")
+        try:
+            os.makedirs(output_dir)
+        except OSError as exc:
+            raise _ExportHalt("BLOCKED", "REPAIR_EXPORT_STALE",
+                              "the export directory could not be created fresh: %s" % exc) from exc
+        executable = toolchain["kicad_cli"]
+        if not os.path.isfile(executable) or _is_link(executable):
+            raise _ExportHalt("TOOL_ERROR", "REPAIR_TOOL_UNAVAILABLE",
+                              "the pinned kicad-cli binary is missing")
+        if hash_bytes(_read_bytes(executable)) != toolchain["kicad_cli_sha256"]:
+            raise _ExportHalt("TOOL_ERROR", "REPAIR_TOOL_UNAVAILABLE",
+                              "the kicad-cli binary no longer matches its pinned digest")
+        xml_path = os.path.join(output_dir, role.lower() + ".net.xml")
+        argv = (list(toolchain["launcher_argv"]) + [executable]
+                + list(toolchain["arguments"]) + [xml_path, source])
+        before = hash_bytes(_read_bytes(source))
+        environment = dict(os.environ)
+        environment.update(toolchain["environment"])
+        try:
+            completed = subprocess.run(argv, shell=False, cwd=output_dir,
+                                       timeout=toolchain["timeout_seconds"],
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                       env=environment)
+        except subprocess.TimeoutExpired as exc:
+            raise _ExportHalt("TOOL_ERROR", "REPAIR_TIMEOUT",
+                              "the export exceeded the frozen timeout") from exc
+        except OSError as exc:
+            raise _ExportHalt("TOOL_ERROR", "REPAIR_TOOL_UNAVAILABLE",
+                              "the export process could not start: %s" % exc) from exc
+        after = hash_bytes(_read_bytes(source))
+        xml_bytes = None
+        if os.path.isfile(xml_path) and not _is_link(xml_path):
+            xml_bytes = _read_bytes(xml_path)
+        parse_end = hash_bytes(_read_bytes(source))
+        parsed = False
+        if xml_bytes:
+            try:
+                ElementTree.fromstring(xml_bytes)
+                parsed = True
+            except ElementTree.ParseError:
+                parsed = False
+        proof = {"role": role, "txn_id": txn_id, "argv": argv,
+                 "exit_code": completed.returncode,
+                 "source_before_sha256": before, "source_after_sha256": after,
+                 "source_parse_end_sha256": parse_end, "xml_path": xml_path,
+                 "xml_sha256": hash_bytes(xml_bytes) if xml_bytes else None,
+                 "toolchain_sha256": digest,
+                 "completed": bool(completed.returncode == 0 and parsed and
+                                   before == after == parse_end)}
+        result["proof"] = proof
+        if before != after or after != parse_end:
+            raise _ExportHalt("FAIL", "REPAIR_SOURCE_UNBOUND",
+                              "the source changed while it was exported and parsed", proof)
+        if completed.returncode != 0:
+            raise _ExportHalt("TOOL_ERROR", "REPAIR_TOOL_PROTOCOL_ERROR",
+                              "the export process exited %d" % completed.returncode, proof)
+        if not xml_bytes:
+            raise _ExportHalt("FAIL", "REPAIR_TOOL_PROTOCOL_ERROR",
+                              "exit=0 produced no netlist file", proof)
+        if not parsed:
+            raise _ExportHalt("FAIL", "REPAIR_TOOL_PROTOCOL_ERROR",
+                              "exit=0 produced an unparseable netlist", proof)
+        result.update(status="PASS", xml_bytes=xml_bytes, reasons=[])
+        return result
+    except _ExportHalt as halt:
+        result["status"] = halt.status
+        if halt.proof is not None:
+            result["proof"] = halt.proof
+        result["reasons"] = [_reason_code(halt.code, halt.detail)]
+        return result
+    except ObservationError as exc:
+        result["status"] = "BLOCKED"
+        result["reasons"] = [_reason_code("REPAIR_INPUT_DRIFT",
+                                          "unverifiable export input: %s" % exc)]
+        return result
+
+
+def _tree_digest(root, manifest, label):
+    files, target = _manifest(manifest)
+    observed = {}
+    for path, row in sorted(files.items()):
+        absolute = _resolve_within(root, path)
+        if not os.path.isfile(absolute) or _is_link(absolute):
+            raise _BindingError("%s file %s is missing or a link" % (label, path))
+        raw = _read_bytes(absolute)
+        if len(raw) != row["size_bytes"] or hash_bytes(raw) != row["sha256"]:
+            raise _BindingError("%s file %s does not match its declared manifest"
+                                % (label, path))
+        observed[path] = {"sha256": row["sha256"], "size_bytes": row["size_bytes"],
+                          "role": row["role"]}
+    return observed, target
+
+
+def bind_inputs(request):
+    """Recompute snapshot/stage manifests, policy and toolchain bindings.
+
+    This is the C3 "verifier first recomputes the snapshot, stage and
+    dependency hashes; a mismatched input is not PASS" step.  It reads real
+    bytes; it does not execute a tool and does not publish anything.
+    """
+    result = {"status": "BLOCKED", "txn_id": None, "before_files": None,
+              "staged_files": None, "before_target": None, "staged_target": None,
+              "toolchain_sha256": None, "reasons": []}
+    try:
+        _closed(request, _BINDING_REQUEST_FIELDS, "stage binding request")
+        result["txn_id"] = _text(request["txn_id"], "transaction id")
+        _text(request["run_id"], "run id")
+        _text(request["candidate_id"], "candidate id")
+        relative_target = _text(request["relative_target"], "target path")
+        toolchain = toolchain_manifest(request["toolchain"])
+        result["toolchain_sha256"] = canonical_sha256("toolchain", toolchain)
+        bound = request["bound_policy"]
+        _closed(bound, _BOUND_FIELDS, "bound policy")
+        _sha(request["bound_policy_sha256"], "bound policy digest")
+        if request["bound_policy_sha256"] != canonical_sha256("policy-bound", bound):
+            raise _BindingError("the bound policy digest does not match the supplied policy")
+        before_files, before_target = _tree_digest(request["snapshot_root"],
+                                                   request["before_manifest"], "snapshot")
+        staged_files, staged_target = _tree_digest(request["stage_root"],
+                                                   request["staged_manifest"], "stage")
+        if before_target != relative_target or staged_target != relative_target:
+            raise _BindingError("a manifest target does not match the requested target")
+        result.update(status="PASS", before_files=before_files,
+                      staged_files=staged_files, before_target=before_target,
+                      staged_target=staged_target)
+    except _BindingError as exc:
+        result["reasons"] = [_reason_code("REPAIR_INPUT_DRIFT", str(exc), "SNAPSHOT")]
+    except ObservationError as exc:
+        result["status"] = "UNKNOWN"
+        result["reasons"] = [_reason_code("REPAIR_INPUT_DRIFT",
+                                          "unverifiable binding input: %s" % exc, "SNAPSHOT")]
+    return result
+

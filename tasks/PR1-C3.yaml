@@ -1,0 +1,86 @@
+# Task Envelope — PR1-C3 fresh KiCad export bound to staged bytes (gates/repair_verification)
+# 手写自 PR-1 Implementation Contract §9/§11 C3 + tasks/W1-C2.yaml 先例。
+# Human review + admission required before execution.
+
+task: PR1-C3
+
+base:
+  branch: feat-pr1-c3-fresh-export
+  sha: 0d31a8bc9c61b7616dd440926fc7fff23f9b4135
+
+goal: |
+  PR-1 Commit 3（合同 §11 C3）：gates/repair_verification.py 的 fresh KiCad 导出绑定，
+  与 tests/test_repair_verification.py::FreshExportTests。
+  §9：KICAD_VERIFY 内对 snapshot before 与 stage after 各执行一次新的导出，固定 KiCad
+  10.0.5 与宿主配置的符号环境；使用 shell=false；输出目录为本次唯一新目录，启动前不存在
+  输出文件；不按 mtime 单独认定新鲜；不调用 gates/run_gates.py --skip-kicad 或历史
+  netlist fallback。记录 source 在导出前、导出后、解析结束三个 SHA256；两次进程都必须
+  正常完成、exit=0、产出非空且可解析的本轮 XML。
+  §11 C3 小项顺序：先两次独立新导出，再 source/依赖绑定，再 coverage 与 native 一致性，
+  再四项 PASS 不变量。
+  B5 判据（notes/b5-acceptance/C3-C6_PERTURBATION_CRITERIA_DRAFT.md，全文 sha256
+  0db60076…，PR #71 合入，判据先于实现冻结）C3-P1..C3-P7 必须红在指定位置。
+  本卡只做小项 1–2（导出证明 + source/依赖绑定），小项 3–4 与 C4/C5 不在本卡。
+
+scope: |
+  Writable paths are whitelisted in allowed_paths; everything else is FOREIGN (read-only).
+  不修改 run_gates.py / schematic_semantics.py / 既有 M2 合同 / Sandbox protocol / akcli 源码；
+  不做 ERC/semantic runner 集成；不实现 akcli_adapter（C4）与 run_round/bind_policy/
+  recover_incomplete（C5）；无 candidate 提交、无 rollback、无 promotion 功能。
+  verify_stage 不得在小项 3–4 落地前对任何输入返回 PASS。
+
+dependencies: []
+
+allowed_paths:
+  - gates/repair_verification.py
+  - tests/test_repair_verification.py
+  - tests/fixtures/repair_pr1/**
+  - docs/HANDOFF.md
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/compliance/ai-usage/**
+  - tasks/PR1-C3.yaml
+  # 人类裁定 2026-09-14（本会话）：登记本会话 Agent 代号 DSH + J1 工具链决定入档。
+  # 依据 AGENTS.md 2.2「越界需对应 Owner 确认」；Owner = Yenefa，已明示批准。
+  - tools/build_ai_usage_index.py
+  - docs/ID_MAP.md
+
+forbidden_paths:
+  - notes/b5-acceptance/**        # 判据冻结后不改（B5 §5/§7）
+  - tools/repair_pipeline.py      # C5
+  - tools/akcli_adapter.py        # C4
+  - gates/run_gates.py
+  - gates/schematic_semantics.py
+  - gates/contracts/**
+  - sandbox_runtime/**
+  - src/**
+  - delivery/**
+  - docs/evidence/**
+
+acceptance: |
+  - tests.test_repair_verification.FreshExportTests 全绿（新增；C2 的
+    DeltaAndProtectedTests / SourceParserTests / FixtureProvenanceTests 保持绿）
+  - tests.test_repair_verification 全类无回归
+  - 小项 1–2 软件行为：旧 XML 残留而导出失败不得通过；exit=0 但空/坏 XML 不得通过；
+    导出与解析之间源字节改变必须体现在 source_hash_binding；错 txn/policy/tool 绑定
+    必须以 REPAIR_INPUT_DRIFT 拒绝；导出目录非本次新建即 fail-closed
+  - 真 KiCad 10.0.5 原生运行：NOT_RUN（本机无 kicad-cli，见 PR #70 J1 readiness gap）
+  - C3-P1..C3-P7 独立扰动执行：NOT_RUN（属 Percy/B5，不在本卡）
+  - 台账 + HANDOFF 如实追加
+
+change_budget:
+  expected_files: 6
+  expected_modules: [gates, tests, tasks, docs]
+  cross_module: true
+  contract_change: false
+  evidence_semantics_change: false
+
+exceptions:
+  # Agent cannot self-authorize. 脏树来源 = envelope 本体存在于工作树（C1/C2 先例：
+  # 文件无法包含自身提交）。授权链：大统领 2026-09-07 冻结 PR-1 contract 后指令开写
+  # C1–C6（tasks/W1-C2.yaml 同链）；PR #71（2026-09-14 合入）明确「可以开 C3 了」。
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "PR-1 合同 §11 C3 + tasks/W1-C2.yaml allow_dirty 先例 + PR #71 合入判据冻结并放行 C3"
+
+escalation:
+  owner: Yenefa
