@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 98 条。完整正文在各自条目文件中；本索引只做导航。
+共 99 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -139,3 +139,6 @@
 ## 2026-09-13
 
 - [`AI-20260913-OPENCODE-B411981B20EBDA38FBC7F2E6B2AD30D4`](ai-usage/AI-20260913-OPENCODE-B411981B20EBDA38FBC7F2E6B2AD30D4.md) — GH-56 / PR #60 A2-L D 基线 A-2′（移植已实跑规则引擎）+ master 合并后台账重建（WU-39）
+## 2026-09-14
+
+- [`AI-20260914-PER-52FE93917DBF433FDB47F5867F93DC3F`](ai-usage/AI-20260914-PER-52FE93917DBF433FDB47F5867F93DC3F.md) — stall detector: progress_keys 约定 —— Finding.details 显式声明哪些字段参与「修复是否有进展」判断

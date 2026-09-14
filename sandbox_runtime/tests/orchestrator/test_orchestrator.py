@@ -7,6 +7,7 @@ side effects, and the human approval boundary before promotion.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 import unittest
@@ -35,6 +36,7 @@ from aedl_sandbox.protocol import (
     Outcome,
     PolicyDecision,
 )
+from aedl_sandbox.state import finding_fingerprint
 from aedl_sandbox.workspace import CandidateWorkspace
 
 try:
@@ -529,6 +531,113 @@ class V2IdentityAndApprovalReceiptTests(OrchestratorTestBase):
         self.assertTrue(receipt.approved_at)
         self.assertEqual(request.approval_status, ApprovalStatus.APPROVED)
         self.assertEqual(request.candidate_hash, receipt.candidate_sha256)
+
+
+def _voltage_finding(measured, **extra):
+    """A quantitative finding: static message, measured value in details."""
+    details = {"measured_voltage": measured, "progress_keys": ["measured_voltage"]}
+    details.update(extra)
+    return {
+        "code": "VOLTAGE_ERROR",
+        "message": "voltage out of range",
+        "source": "verifier",
+        "details": details,
+    }
+
+
+class FindingFingerprintProgressKeysTests(unittest.TestCase):
+    """`details["progress_keys"]` opts specific fields into stall detection.
+
+    Without it the fingerprint stays exactly `(code, message)`, which is what
+    every finding in the tree relies on today. `details` remains free-form
+    diagnostic context: putting a number in it is NOT by itself a claim that
+    the number represents repair progress.
+    """
+
+    def test_declared_progress_value_change_changes_fingerprint(self):
+        # 7.0 V -> 3.7 V is real progress even though code and message repeat.
+        before = finding_fingerprint([_voltage_finding(7.0)])
+        after = finding_fingerprint([_voltage_finding(3.7)])
+        self.assertNotEqual(
+            before,
+            after,
+            "a change in a declared progress field must not read as a stall",
+        )
+
+    def test_undeclared_detail_churn_keeps_fingerprint_stable(self):
+        # Same measured voltage, different diagnostic noise -> still stalled.
+        before = finding_fingerprint(
+            [_voltage_finding(7.0, timestamp="2026-09-14T00:00:00Z", path="/a/one")]
+        )
+        after = finding_fingerprint(
+            [_voltage_finding(7.0, timestamp="2026-09-14T00:05:00Z", path="/b/two")]
+        )
+        self.assertEqual(
+            before,
+            after,
+            "undeclared details are diagnostic context, not a progress signal",
+        )
+
+    def test_without_progress_keys_semantics_are_unchanged(self):
+        # The existing contract: no declaration -> (code, message) only.
+        base = {
+            "code": "PATH_ESCAPE",
+            "message": "resolved write path escapes the candidate root",
+            "source": "file_policy",
+        }
+        first = finding_fingerprint([dict(base, details={"path": "/tmp/one"})])
+        second = finding_fingerprint([dict(base, details={"path": "/tmp/two"})])
+        self.assertEqual(first, second)
+
+        # And byte-identical to the pre-progress_keys fingerprint, so that
+        # `previous_finding_fingerprint` values already written into
+        # checkpoints stay comparable after this change.
+        legacy_pairs = sorted(
+            [str(f.get("code", "")), str(f.get("message", ""))]
+            for f in [dict(base, details={"path": "/tmp/one"})]
+        )
+        legacy = hashlib.sha256(
+            json.dumps(legacy_pairs, sort_keys=True, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        ).hexdigest()
+        self.assertEqual(first, legacy)
+
+    def test_progress_keys_order_does_not_change_fingerprint(self):
+        def finding(keys):
+            return {
+                "code": "VOLTAGE_ERROR",
+                "message": "voltage out of range",
+                "source": "verifier",
+                "details": {
+                    "measured_voltage": 7.0,
+                    "measured_current": 0.2,
+                    "progress_keys": list(keys),
+                },
+            }
+
+        forward = finding_fingerprint([finding(["measured_voltage", "measured_current"])])
+        reverse = finding_fingerprint([finding(["measured_current", "measured_voltage"])])
+        duplicated = finding_fingerprint(
+            [finding(["measured_current", "measured_voltage", "measured_current"])]
+        )
+        self.assertEqual(forward, reverse, "the declaration is a set, not a sequence")
+        self.assertEqual(forward, duplicated)
+
+    def test_declared_but_absent_key_is_distinguishable_from_present(self):
+        # absent -> present is itself a change the stall detector must see.
+        absent = finding_fingerprint(
+            [
+                {
+                    "code": "VOLTAGE_ERROR",
+                    "message": "voltage out of range",
+                    "source": "verifier",
+                    "details": {"progress_keys": ["measured_voltage"]},
+                }
+            ]
+        )
+        present = finding_fingerprint([_voltage_finding(7.0)])
+        self.assertNotEqual(absent, present)
 
 
 if __name__ == "__main__":

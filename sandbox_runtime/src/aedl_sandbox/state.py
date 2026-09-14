@@ -124,11 +124,61 @@ def encode_receipt(receipt: EvidenceReceipt, event_type: str) -> dict[str, Any]:
     }
 
 
+PROGRESS_KEYS_FIELD = "progress_keys"
+_PROGRESS_VALUE_ABSENT = "<absent>"  # cannot collide: json.dumps() output is always quoted/bracketed
+
+
+def _progress_signature(finding: Mapping[str, Any]) -> list[list[str]] | None:
+    """Canonical (key, value) signature for the declared progress fields.
+
+    ``details`` is diagnostic context. A finding opts a subset of it into stall
+    detection by listing those key names under ``details["progress_keys"]``;
+    everything else in ``details`` stays out of the fingerprint, so a changing
+    timestamp or path never reads as repair progress.
+
+    Returns ``None`` when nothing is declared, which keeps the fingerprint on
+    the original ``(code, message)`` form -- see ``finding_fingerprint``.
+    """
+    details = finding.get("details")
+    if not isinstance(details, Mapping):
+        return None
+    declared = details.get(PROGRESS_KEYS_FIELD)
+    if not isinstance(declared, (list, tuple)) or not declared:
+        return None
+    # Sorted + de-duplicated: the declaration is a set, so reordering it must
+    # not change the fingerprint.
+    keys = sorted({str(key) for key in declared})
+    signature = []
+    for key in keys:
+        if key in details:
+            encoded = json.dumps(
+                details[key], sort_keys=True, separators=(",", ":"), default=str
+            )
+        else:
+            # A declared-but-absent key is itself a distinguishable state:
+            # absent -> present must register as a change.
+            encoded = _PROGRESS_VALUE_ABSENT
+        signature.append([key, encoded])
+    return signature
+
+
 def finding_fingerprint(findings: Iterable[Mapping[str, Any]]) -> str:
-    """Deterministic fingerprint over finding (code, message) pairs."""
-    pairs = sorted(
-        [str(finding.get("code", "")), str(finding.get("message", ""))]
-        for finding in findings
-    )
-    canonical = json.dumps(pairs, sort_keys=True, separators=(",", ":"))
+    """Deterministic fingerprint over findings, for stall detection.
+
+    Each finding contributes ``(code, message)``; a finding that declares
+    ``details["progress_keys"]`` additionally contributes the canonical values
+    of exactly those keys.
+
+    Findings that declare nothing hash **byte-identically to the original
+    (code, message) form**, so fingerprints recorded in existing checkpoints
+    stay comparable across this change.
+    """
+    entries = []
+    for finding in findings:
+        entry = [str(finding.get("code", "")), str(finding.get("message", ""))]
+        signature = _progress_signature(finding)
+        if signature is not None:
+            entry.append(signature)
+        entries.append(entry)
+    canonical = json.dumps(sorted(entries), sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
