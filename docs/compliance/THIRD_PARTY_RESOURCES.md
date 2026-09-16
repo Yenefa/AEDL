@@ -99,6 +99,16 @@
 - 对应模块：`tools/generate_m2_ops.py`、`src/hardware/m2-board/ops_gen.json`
 - 备注：实际可执行路径属于本机环境，不作为跨机器固定路径。
 
+2026-09-16 SchGen DEV writer 续接（不替代以上 M2 历史来源记录）：
+- 独立源码来自 tipoLi5890/akcli 的 v0.21.0 commit
+  68c2df5e43db2f822ab8dbfea36f777396897d8d；公开 commit archive 与 PyPI sdist
+  均保留原包和哈希。220 个 Python 源文件逐字节匹配 project toolchain 安装包。
+- 该源码包 LICENSE 为 MIT；本地审查补丁保留第三方归属与 LICENSE，不随 AEDL
+  源码分发完整安装。此核验限定该归档，不追溯证明其他 Hermes 安装来源。
+- 当前任务隔离树修改 4 个 writer 文件并增加合成测试、文档；未升级或覆盖绑定
+  toolchain。补丁是本地 DEV 工程候选，不构成上游已采纳、正式环境已绑定或发布。
+- 来源/完整差异/检查见 Codex 输出 dev04-writer-fix-v1/QUALIFICATION.md。
+
 ## RES-006
 
 - 名称：jlcpcb CLI / JLC assembly catalog
@@ -216,3 +226,44 @@
 - 关联模块：`src/hardware/edd001-board/evidence/sandbox_bundle_manifest_v1.json`、
   `gates/contracts/edd001_power_contract_v1.json`（DRAFT）
 - 关联 AI Usage：AI-20260902-005（原 004，撞号改号，见台账该条目说明）；关联 Evidence：EVID-20260902-002
+
+## RES-011
+
+- 名称：SchGen 已曝光 DEV 数据/原生生成产物及上游连接集合评分器。
+- 类型：外部 benchmark 与只读评分实现；融合角色：DEV_ONLY。
+- 来源：本地 ../SchGen，commit 0707520c587984651cd32908acfd9b117876e93b；
+  ../scratch/schgen-data/SchGen_dataset.jsonl SHA256
+  769c69ea1e476790a0abb3aa844215734be03faedb59dd5a94e1f02902bdf469。
+- 版本：netlist_comparison_new.py SHA256
+  b9f06ba9c10344d32b7ab4801ec1d8cac7523ac39ba7de588ddcfcb71516bfd8。
+- 用途：本轮只回放此前 stage1 的 10 个已曝光 DEV 输入；评分在修复全部终态后单独运行。
+- License / 授权 / 关键义务：TO_VERIFY；不因本次本地复核推断公开再分发权。
+- 是否修改上游源码：否；是否随本次源码差异再分发：否。
+- AEDL 边界：AEDL 增加输入绑定、修复后独立回读/回滚和分母保全；生成器、数据和
+  连接集合评分算法属于第三方。0 提升不能被表述为 Primary 成功。
+- 支持工具：RES-005 akcli 0.21.0 protocol 2（本地 project toolchain）；KiCad 8.0.9
+  为 DEV 回放环境，KiCad 10.0.5 仅用于独立合成夹具/兼容性诊断，二者不混合计分。
+- 合规状态：TO_VERIFY；关联：notes/schgen-dev-chain/TASK.md，
+  AI-20260915-CODEX-6494FC57AD37D48D0AA798AF232AF68E。
+
+SchGen DEV 归因补充资料（2026-09-15，仅本地查阅，不再分发 PDF；授权 TO_VERIFY）：
+[Microchip AN1149](https://ww1.microchip.com/downloads/en/appnotes/01149a.pdf)，
+第 4–5 页的 PMOS gate/source-selection 工作条件；
+[Infineon IRLML6402 datasheet](https://www.infineon.com/assets/row/public/documents/24/49/infineon-irlml6402-datasheet-en.pdf)，
+P-channel 类型与电气参数。用于 DEV-05 风险分析，不是参考答案或正式修复许可。
+
+2026-09-16 DEV-05/06 合同补充（仍归 RES-011 的 DEV_ONLY 归因资料）：
+- Infineon / International Rectifier IRLML6402，2014-04-28 版，第 1、7 页用于
+  物理 G/S/D 编号与封装合同；本轮官方 URL 下载的只读本地副本有 SHA256 绑定。
+- [Infineon PSoC 4200M datasheet](https://www.infineon.com/assets/row/public/documents/30/49/infineon-psoc-4200m-datasheet-datasheet-en.pdf)，
+  001-93963 Rev. *M / 2024-02-16，第 18–24 页用于 64-TQFP 电源和 I2C 功能合同；
+  官方 URL 下载、本地哈希绑定。
+- [Micro One ME6211 V20](https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_MICRONE-Nanjing-Micro-One-Elec-ME6211C33R5G_C235316.pdf)，
+  使用项目已有 U3_ME6211C33R5G/ME6211_V20_lcsc_official.pdf 中第 3–4 页的 M5
+  型号/针脚表。本轮该 URL 获取未成功，不声称重新下载或已绑定精确订货后缀。
+- 资料没有修改；PDF 不随本次 source review bundle 再分发；License / 再分发义务
+  TO_VERIFY。文档不是 AEDL 自研，也不是参考答案。完整路径/哈希/页码见 Codex
+  outputs/schgen-dev-mainline/dev05-dev06-contracts-v1/document-bindings.json。
+- 工作流：已安装 systematic-debugging 与 pdf:pdf 技能用于根因隔离和 PDF 阅读；
+  只复用工作流，无技能代码进入产品；技能公开再分发 TO_VERIFY，本轮不再分发。
+- 关联：notes/schgen-dev-chain/TASK.md、EVID-20260915-001；未扩展自动修复语法。

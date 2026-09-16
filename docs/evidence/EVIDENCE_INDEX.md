@@ -249,3 +249,73 @@ AP63205/5V 值）：经冻结 PDF 原文重新核对，DS41326 Rev. 3-2 Table 2 
 不受影响）；EV 板 corroboration 同步收窄至 power-entry 段（VBUS → SS34 → protected
 rail），buck 段证据责任归 datasheet + 冻结拓扑。本条目为更正记录，不替代原
 Evidence（其元数据冻结结论不受影响）。
+
+## EVID-20260915-001 — SchGen exposed DEV development record
+
+2026-09-16 DEV-05/06 原生根因对照（当前新增，非配对 repair run）：
+dev05-dev06-contracts-v1/run-01/isolation.json；6 次新鲜 KiCad 8.0.9 导出覆盖两基线、
+U1 去重副本、A/B/AB 删线副本。DEV-05 整组 1–5 引脚重复，U1.4 出现次数 2→1，
+其他原生分区不变。DEV-06 仅删 B 已消除供电/回流合网与 C1/C2/C4 旁路；删 A 不消除
+合网且断开 U1.50。因此早先多个独立桥接的几何推断撤回，不删历史证据。10/11 为
+真实且仍未接的电源脚；PMOS 引脚/封装和 I2C 运行方式分别列为器件/功能合同项。
+报告 CONTRACT-REVIEW.md、contracts.json、document-bindings.json 明确第三方来源、
+参考曝光、未决项和停止规则。诊断不算 after、repair success、headroom 或新分母。
+本轮不重跑 writer 全套，已有 INDEPENDENT-REVIEW.md 为 agent review，非人工签发。
+最新门禁/哈希检查见同目录 VERIFICATION.md，dev-gate-dev05-dev06-contracts.json。
+源码零新增变更；未安装候选、未 apply、未评分；PENDING_HUMAN_REVIEW。
+
+2026-09-16 writer 修复资格补充（DEV_ONLY，非正式 repair efficacy）：D1–D3 已答复，
+按精确表格、保留 strict-nets、5 脚合同另案。当前任务内隔离 akcli 0.21.0 补丁有
+4 个 writer 文件变更，安装包不变。qualification-20260916 绑定原始样本、输入合同、
+协议与源码，3 次新鲜 KiCad 8 导出通过；正确单位预览 P1/P2/P3 全通过，完整对象
+差异仅删 2 线加 1 线，junction 新增 0，原有 11 个不变。全套 3533 pass / 111 skip /
+2 fail，两项失败在干净源码复现；ruff/mypy pass。DEV-04 命名 +5V 拆分仍被 D2 策略
+阻断，无 apply 或 after 分数，不改变 run-audited 的 N=B=P=10、ΔJ=0。见任务输出
+dev04-writer-fix-v1/QUALIFICATION.md 和 qualification-20260916/qualification.json。
+
+**DEV-04 writer 诊断续记**：dev04-writer-diagnosis-v1/DIAGNOSIS.md 与 run-03。
+原三操作表误将 mm 数值传给 mil 数组，吸附后线段塌缩；全图 auto_junctions
+使空操作也报告 unnamed-net MERGE。KiCad 8 仅在原长线分段后观察到该合并。
+正确单位的预览 P1–P3 通过，但还有 5 个额外 junction、预测模型分歧和命名网
+策略限制；没有申请执行 apply，没有豁免 strict-nets，也没有新 after 分数。
+5 次官方 dry-run、13 次原生导出，诊断断言通过；D1–D3 待用户裁定。
+检查回执：dev-gate-dev04-diagnosis.json；当前配对评分仍为下方 scores-audited。
+
+**最新续跑：run-audited / scores-audited**。全体 N=B=P=10、10 ABSTAINED、ΔJ=0；
+新增 preflight 在 writer 前把 DEV-04/05/06 转复核。DEV-04 显式请求分区不符；
+DEV-05 同一原生 U1.4 出现在两个 NC 网；DEV-06 供电/回流脚同网。
+DEV-08/09 未建立真实缺陷，不能把低 J 自动计入 repairable headroom。DEV-09 的
+对称 jumper 引脚置换只用于分数解释，原生设计与官方 J=1/3 不变。
+专项 27/27（含 3 个真实 writer 控制），完整 gate 见 dev-gate-audited.json。
+新增 attribution-v1/ATTRIBUTION.md、adjudication.json、input-bindings.json；
+人工归因参考已曝光并披露，非盲审、非正式 H1/Primary gate、非制造放行。
+所有归因保留 PENDING_HUMAN_REVIEW。
+
+**前次导入结论（替代下方第一阶段的电气解释）**：空 symbol_instances 块造成 KiCad 8
+导入截断，9/10 原始 DEV 存在风险。专用兼容导入层仅去除空旧块，保留其他 AST、
+对象图、原始字节和哈希。候选与参考各 10/10 导入通过；run-ingested / scores-ingested
+为当前有效 DEV 对照：10 ABSTAINED，N=B=P=10、ΔJ=0；baseline mean J=0.55454717696097，
+J<=0.95 的样本数从旧记录 8 个变为 5 个。此变化不属于修复收益。
+专项 19/19 pass；KiCad 8 写入控制 2/2 符合预期；main suite 644 OK（3 skip 已另行
+实跑）；dev_gate-ingested.json 仍 FAIL（主干已有 sandbox junction 故障）。
+新增记录：ingest-v3、references-ingested、run-ingested、scores-ingested、
+native8-writer-qualification、focused-tests-ingested.txt、dev-gate-ingested.json。
+以下保留第一阶段历史，用于复盘，不能作为通过 headroom gate 的证据。
+
+- 分类：DEV_ONLY；本项是开发运行索引，非 gates/run_gates.py 正式 Evidence，
+  非 preregistered SchGen 实验或制造放行。
+- 主张：新 DEV 入口保全输入清单的 10 个分母，使用实际 after 重新导出计分，
+  不以 writer receipt 代替原生连接证据。
+- 关联：notes/schgen-dev-chain/TASK.md；AI-20260915-CODEX-6494FC57AD37D48D0AA798AF232AF68E；RES-011。
+- 环境：KiCad 8.0.9 / akcli 0.21.0 / Python 3.9；合成控制单独用 KiCad 10.0.5。
+- Runs：3 次相同已曝光 DEV 的工程回放（初始 protocol header 错误记录保留；
+  后续改正与最终 empty-export 拦截版本）；2 次分离评分，最终 N=B=P=10、ΔJ=0。
+- 最终结果：1 VERIFIED_ROLLBACK、9 ABSTAINED；0 改善、0 终态恶化。
+  一个候选返回 applied=true 但新网表未满足三个声明连接，已拦截并保留候选。
+- 测试：专项 15/15 通过；main suite 640 OK（3 个真实工具测试另行实跑）；
+  sandbox suite 283 中 junction 测试 ERROR，在未修改主干相同复现，dev_gate=FAIL。
+- 原始记录：当前 Codex 任务 outputs/schgen-dev-mainline/ 的 run-final、scores-final、
+  controls-current、focused-tests.txt、dev-gate-final.json；源码和请求/产物均有 SHA256 绑定。
+- 已知限制：未扩大修复策略；SchGen/KiCad 8 的 writer/native 分歧仍待定位；
+  当前 protocol 保持 UNBOUND，HELD_OUT / 新模型调用 NOT_RUN。
+- 人工核验：PENDING_HUMAN_REVIEW。
