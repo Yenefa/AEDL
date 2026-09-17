@@ -282,3 +282,14 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
 - 验证：tests.test_akcli_adapter 65 OK（skipped=4）；discover 690 OK（skipped=4）；真原生资格 3 OK（DC-04/DC-05 逐字节不变）。
 - 待办：C4-P2..P8；`created_uuids` 与实际新增顶层对象的对应关系未校验（合同 §8 要求），已上报待裁定。
 - 状态：PENDING_HUMAN_REVIEW。
+
+## 2026-09-17 C4 created UUID ↔ 实际新增对象绑定（卡 PR1-C4-UUIDS，分支 fix-pr1-c4-created-uuid-binding）
+
+- 起因：PR #76 评审裁定 `created_uuids` 对应关系是真实合同缺口（合同 §8），单独立 implementation fix card。base = master `1814548`。
+- **开工探针发现的缺陷**：`source_objects()` 未按 C2 口径遍历文档子节点 —— native 观察永远只报 1 个 source 对象（DC-04 真实有 114 个），且身份带字面引号、AST 编码与 C2 不同。已改为复用 verifier 的纯 source helper（同口径、同编码）。
+- 绑定实现：`op_results[].created_uuids` 并集必须恰好等于 fresh before/after 顶层对象差集；非 canonical UUID / 重复 UUID → TOOL_ERROR；集合不等 → BLOCKED / REPAIR_DELTA_MISMATCH。
+- 真工具链事实：DC-04 / DC-05 均为 114 → 117 个顶层对象，新增 3 = 上报 3，**严格相等**，故按严格相等实现（无容差）。
+- 测试夹具同步修正：stage 改为 verifier 可解析源码（uuid 加引号）；桩 CLI / 桩 writer 改为在文档内插入与回执一致的对象（旧桩只在文档外追加文本）。新增 4 例绑定回归 + 承接 PR #76 的 P1 `created_uuids` 断言（钉住观测 UUID）。
+- 验证：tests.test_akcli_adapter 69 OK（skipped=4）；discover 694 OK（skipped=4）；真原生 3 OK（DC-04/DC-05 逐字节不变且上报集合 == 新增集合）。
+- 上报：adapter 现依赖 `gates.repair_verification` 的三个私有 source helper（如需正式化应在合同层给公共名）；`root:<kind>` 身份按严格一致口径会阻断（fail-closed，已文档化）；本卡只闭合回执 vs artifact，独立 delta 仍归 verifier。
+- 状态：PENDING_HUMAN_REVIEW。
