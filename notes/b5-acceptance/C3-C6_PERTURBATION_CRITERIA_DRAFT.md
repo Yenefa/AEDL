@@ -87,7 +87,7 @@
 |---|---|---|
 | **C4-P1** | 工具回执写 `applied=true`，但 stage 源 bytes **未改变** | `StageApplyResult.status = BLOCKED`；`changed=false` 与 `applied` 矛盾必须被抓 |
 | **C4-P2** | `applied` 字段缺失 / `false` / JSON 层面伪造的 `true`（含伪造 `authorized=true`） | BLOCKED，绝不 `APPLIED_TO_STAGE` |
-| **C4-P3** | 走 API 路径（`CONSTRAINED_EXCEPTION`）：回执**没有** `applied` 字段，`tool.tool_applied=null` | `null` **不得**被当作 affirmative applied evidence。合同 §8（L253）规定该路径**原生没有** `applied` 字段，所以事实上的 `null` **本身不构成红**。该路径只有在 `op_results` 完整（逐一覆盖 `0..n-1` 且 status 全 `ok`）、stage 源 bytes **确实改变**、fresh reread 成功、且 connectivity 检查成立（§8 L257）时，才可判 `APPLIED_TO_STAGE`（§8 L255：「exception 同样要求每个 op ok、真实字节改变及重读成功；不能用 API list 非空作为成功条件」）。**红 = 缺上述任一独立条件却仍判成功**，或以「API list 非空」代替这些条件。注：`tool_applied` 在 STRICT 路径上必须为 `true`、在本路径上必须为 `null`，两者不得互相套用 |
+| **C4-P3** | 走 `CONSTRAINED_EXCEPTION` API 路径，`tool_applied=null`。**本条 = 一个正对照 + 一个真扰动，合计仍只算 P3 一条**。**正对照**：`null` 且独立条件全部成立（`op_results` 完整且全 `ok`、源 bytes 确实改变、fresh reread 成功、connectivity gate 成立）→ **允许** `APPLIED_TO_STAGE`，用以证明 `null` 本身不是失败。**负扰动（计入本组「八条都红」的就是这一条）**：保持 `tool_applied=null`、`op_results` 非空且全 `ok`，但**移除一个预先写死的独立成功条件 —— 固定取「源 bytes 不改变」** | 负扰动必须**非** `APPLIED_TO_STAGE`，且 `reasons` 含 `REPAIR_EFFECT_MISMATCH`。**两个方向都判失败**：正对照被判红 = 把 `null` 误当失败；负扰动被判成功 = 只凭 API list 非空就认 applied。`tool_applied=null` **本身不构成红**（合同 §8 L253：API 原生没有 `applied` 字段；L255：「不能用 API list 非空作为成功条件」）。注：`tool_applied` 在 STRICT 路径上必须为 `true`、在本路径上必须为 `null`，两者不得互相套用。**本条的 verdict 只按负扰动判定**，正对照是控制组 |
 | **C4-P4** | `op_results` 缺项 / 重复 index / 任一 `status=error` | BLOCKED（必须逐一覆盖 `0..n-1` 且全 `ok`） |
 | **C4-P5** | strict 被拒后**自动改走 exception** | 必须拒绝：route 在 PRECHECK 冻结，不得先试 strict 再升级 |
 | **C4-P6** | akcli 版本 ≠ `0.21.0`，或符号库 digest 不符 | 拒绝，不得静默继续 |
@@ -201,7 +201,7 @@ notes:             <含「假红」判断说明>
    | 项 | 值 |
    |---|---|
    | 触发 | C4-P3 原把「API 路径没有 `applied` 字段」这一**设计事实**当成失败依据；合同 §8 L253 规定该字段在本路径**本就为 `null`**，L255 规定本路径的成功由独立条件判定 |
-   | 修正范围 | **仅 C4-P3 一行**。C4-P1/P2/P4–P8、C3/C5/C6、§1/§3/§4/§5/§6 正文均未改；条数不变（仍 28 条：C3 7 / C4 8 / C5 7 / C6 6） |
+   | 修正范围 | **仅 C4-P3 一行**。C4-P1/P2/P4–P8、C3/C5/C6、§1/§3/§4/§5/§6 正文均未改；条数不变（仍 28 条：C3 7 / C4 8 / C5 7 / C6 6）。C4-P3 写成一个**正对照 + 一个真扰动**：只有负扰动计入本组「八条都红」，正对照是控制组 |
    | 旧（draft-4）全文 sha256 | `0db600762b06056f0da0479f23d5ee702311732f932fc8581ea17edfe1070a7c`（21105 B，git blob oid `c36a14b4b6277f015eceee34dca6f12e8767140f`；2026-09-13 由 `158f450` 登记，经 PR #71 于 2026-09-14T03:01Z 合入 master `0d31a8b`） |
    | 新（draft-5）全文 sha256 | 见同提交的 AI 台账条目 `AI-20260917-DSH-…`（按第 2 步登记）；本文件**不自带**自身哈希，以免自指 |
    | **哈希方法（重要）** | 取 **git blob（LF）字节**的 sha256：`git cat-file blob <ref>:notes/b5-acceptance/C3-C6_PERTURBATION_CRITERIA_DRAFT.md`，对输出字节做 sha256。**不要**直接哈希 Windows 工作树文件：`core.autocrlf=true` 且本文件在 `.gitattributes` 中无规则，检出为 CRLF，实测同一文件为 21312 B / `D97DBF5488F1859CF045BA94009991EE9F3A142EA92C09A4C251C17AD8B3A32B`。工作树字节与冻结值不符**不构成**篡改证据 |
@@ -209,7 +209,11 @@ notes:             <含「假红」判断说明>
    | 修正时点 | **发生在任何观测之前**：C4-P3 至今 `NOT_RUN`，尚无任何 native P3 qualification 被记录；故不触发第 3 条「观测之后的修正不得用于重判」 |
    | 依据 | 合同 §8（`docs/competition/internal/AEDL_PR1_实现合同_20260907.md` L236 / L253 / L255 / L257 / L263 / L371）；`docs/HANDOFF.md` L249–L250；`tasks/PR1-C4.yaml` L91；实现实测（`tools/akcli_adapter.py`：CONSTRAINED_EXCEPTION 路径 `tool_applied is not None` → 拒；STRICT 路径 `is not True` → 拒） |
 
-   **未纳入本次 erratum、另报的两项**（保持授权边界，不顺手改）：§0.2 的「C3–C6 未落地」实测表已过期（C3 于 2026-09-14、C4 于 2026-09-17 落地）；C4-P2 的表述同样只对 STRICT 路径成立，未在本卡授权范围内。
+   **合入前评审修订（本轮）**：只把 C4-P3 从「`null` 不是失败」补成**完整的扰动结构** —— 否则该条在正常 DC-01 上会**合法成功**，与本组「八条都红在 adapter 层」的通过判据自相矛盾。现定义为一个**正对照**（`null` + 独立条件全成立 → 允许 `APPLIED_TO_STAGE`，证明 `null` 本身不是失败）加一个**真扰动**（移除预先写死的独立成功条件：**源 bytes 不改变** → 必须非 `APPLIED_TO_STAGE`），**verdict 只按负扰动判定**，正对照是控制组。由于该修订发生在**合入之前**，draft-5 **只有一个哈希**（本文件未发布过中间版本）。
+
+   **不会新设 §1 规则 3 的第二个例外**：该规则约束的是 `COMMITTED`，而 `COMMITTED` 属 pipeline 层的 `TransactionStatus`；adapter 层根本不产生该状态（实测 `tools/akcli_adapter.py` 全文零命中），故本条正对照不触碰「不得再设第二个例外」。
+
+   **未纳入本次 erratum、另报的两项**（保持授权边界，不顺手改）：§0.2 的「C3–C6 未落地」实测表已过期（C3 于 2026-09-14、C4 于 2026-09-17 落地）；C4-P2 的表述同样只对 STRICT 路径成立，未在本卡授权范围内。**C4-P2 与 P3 不同：P2 已经有过观测**，将来若要改文字，**不得**宣称「观测前 erratum」。
 
 ---
 
