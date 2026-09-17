@@ -99,14 +99,25 @@ forbidden_paths:
   - .gitattributes
 
 acceptance: |
-  - C4-P3 行的期望红改为：`tool_applied=null` **不得**被当作 affirmative applied evidence；
-    CONSTRAINED_EXCEPTION 只有在 `op_results` 完整（覆盖 0..n-1 且全 ok）、stage 字节真实改变、
-    fresh reread 成功、connectivity 检查成立等**独立条件全部成立**时才可 `APPLIED_TO_STAGE`。
-    回执缺少 `applied` 字段本身**不构成**红；红是「缺了上述任一独立条件却被判成功」
+  - C4-P3 必须包含**完整实验结构**，且本 acceptance 与 draft-5 逐条同步（防止判据日后被改回
+    模糊结构而 acceptance 仍算满足）：
+      **正对照（positive control）**：`tool_applied=null`、`op_results` 完整（覆盖 0..n-1）
+        且全 `ok`、stage 源 bytes 确实改变、fresh reread 成功、connectivity gate 成立
+        → **允许** `APPLIED_TO_STAGE`（证明 `null` 本身不是失败）
+      **负扰动（negative perturbation，固定形态）**：`tool_applied=null`、`op_results` 非空
+        且全 `ok`、**源 bytes 不改变** → **必须非** `APPLIED_TO_STAGE`，
+        且 `reasons` 含 `REPAIR_EFFECT_MISMATCH`
+      **判定有效性（qualification validity）**：**正对照必须先通过**；正对照失败 →
+        本条记 `NOT_RUN` / qualification invalid，**不得**因负扰动是红的就算 PASS；
+        组判据「八条都红」中 P3 的一票由**负扰动**决定，正对照是控制组
   - 登记 draft-4 全文 sha256 = `0db600762b06056f0da0479f23d5ee702311732f932fc8581ea17edfe1070a7c`
-    → draft-5 新 sha256，并写明**计算方法**（blob 字节，非 Windows 工作树字节）
-  - 明确记录：**本 erratum 发生在任何 native P3 qualification 之前**（P3 至今 NOT_RUN），
-    因此不触发 §5 / §7 第 3 条「观测之后的修正不得用于重判」
+    → draft-5 **最终生效 / 冻结** sha256，并写明**计算方法**（git blob / LF 字节，
+    非 Windows 工作树字节）；PR 内出现过的 candidate（`29483b9b…` / 提交 `cd48153`）
+    **从未合入、从未生效**，**不得**作为冻结版本引用
+  - 明确记录：**本 erratum 发生在任何正式 C4-P3 qualification / verdict 之前**。实现层**已有**
+    既存 stub-level 行为测试，故**不得**声称「任何观测之前」；但这些测试**从未按 C4-P3 判据
+    形成验收 verdict**（C4-P3 至今 `NOT_RUN`），故本次修正**不用于重判任何既有 P3 结果**，
+    不触发 §5 / §7 第 3 条「观测之后的修正不得用于重判」
   - 文件头把 `DRAFT — NOT FROZEN` 与实际冻结历史理顺：说明 draft-4 曾按 §7 冻结并登记 hash、
     draft-5 是 Owner 授权的 **post-freeze erratum**，并给出状态口径
   - 版本表新增 draft-5 行，说明只修 C4-P3 一处、条数不变（仍 28 条：C3 7 / C4 8 / C5 7 / C6 6）
