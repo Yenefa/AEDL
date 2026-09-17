@@ -237,9 +237,19 @@ def _resolve_within(root, relative):
         cursor = os.path.join(cursor, part)
         if os.path.exists(cursor) and _is_link(cursor):
             raise AdapterInputError("linked path components are not allowed")
-    if os.path.commonpath([os.path.realpath(root), os.path.realpath(cursor)]) != os.path.realpath(root):
+    if _common_root(os.path.realpath(root), os.path.realpath(cursor),
+                    "the resolved path") != os.path.realpath(root):
         raise AdapterInputError("the path escapes its declared root")
     return cursor
+
+
+def _common_root(left, right, label):
+    """os.path.commonpath, but a cross-drive pair is an input error, not a crash."""
+    try:
+        return os.path.commonpath([left, right])
+    except ValueError as exc:
+        raise AdapterInputError("%s cannot be compared with the declared root: %s"
+                                % (label, exc)) from exc
 
 
 def _has_linked_component(path):
@@ -955,7 +965,7 @@ def _validate_proposal(proposal):
         if row["requirement_level"] not in _REQUIREMENT_LEVELS:
             raise AdapterInputError("unsupported diagnosis requirement level")
         _text(row["rationale"], "diagnosis rationale", empty=True)
-    return oplist
+    return proposal
 
 
 def _normalize_operation(row, label):
@@ -1026,6 +1036,10 @@ def apply_stage(stage_request):
         if canonical_sha256("proposal", host_patch["proposal"]) != _sha(host_patch["proposal_sha256"],
                                                                         "proposal digest"):
             raise AdapterInputError("the proposal does not match its own digest")
+        if proposal["context_id"] != host_patch["context_id"]:
+            raise AdapterInputError("the proposal context does not match the host patch context")
+        if proposal["target"] != host_patch["target"]:
+            raise AdapterInputError("the proposal target does not match the host patch target")
         base = _closed(host_patch["base"], _BASE_FIELDS, "base binding")
         _sha(base["topology_sha256"], "base topology digest")
         if not isinstance(base["files"], dict):
@@ -1062,15 +1076,27 @@ def apply_stage(stage_request):
         decisions = authority["decisions"]
         if not isinstance(decisions, list):
             raise AdapterInputError("authority decisions must be a list")
-        allowed = set()
+        resolved = {}
         for index, row in enumerate(decisions):
             _closed(row, _DECISION_FIELDS, "authority decision %d" % index)
-            _identifier(row["capability"], "decision capability")
+            capability = _identifier(row["capability"], "decision capability")
             if row["effect"] not in _AUTHORITY_EFFECTS:
                 raise AdapterInputError("unsupported authority effect")
-            if row["effect"] == "ALLOW":
-                allowed.add(row["capability"])
-        missing = [name for name in CAPABILITIES if name not in allowed]
+            if capability in resolved:
+                result.update(status="BLOCKED",
+                              reasons=[_reason("REPAIR_AUTH_DENIED",
+                                               "capability %s carries more than one resolved decision"
+                                               % capability, stage="PRECHECK")])
+                return result
+            resolved[capability] = row["effect"]
+        denied = sorted(name for name, effect in resolved.items() if effect == "DENY")
+        if denied:
+            result.update(status="BLOCKED",
+                          reasons=[_reason("REPAIR_AUTH_DENIED",
+                                           "the host resolved DENY for %s" % ", ".join(denied),
+                                           stage="PRECHECK")])
+            return result
+        missing = [name for name in CAPABILITIES if resolved.get(name) != "ALLOW"]
         if missing:
             result.update(status="BLOCKED",
                           reasons=[_reason("REPAIR_AUTH_DENIED",
@@ -1084,7 +1110,7 @@ def apply_stage(stage_request):
         stage_target = _existing_file(_resolve_within(stage_root, stage_request["stage_target"]),
                                       "stage target")
         op_list_path = _absolute(stage_request["oplist_path"], "op-list path")
-        if os.path.commonpath([stage_root, op_list_path]) != stage_root:
+        if _common_root(stage_root, op_list_path, "the op-list path") != stage_root:
             raise AdapterInputError("the op-list path escapes the stage root")
         oplist_path = _existing_file(
             _resolve_within(stage_root, os.path.relpath(op_list_path, stage_root).replace(os.sep, "/")),
@@ -1096,7 +1122,7 @@ def apply_stage(stage_request):
         result["tool"]["mode"] = "CLI" if route == "STRICT" else "PYTHON_WRITER"
         result["tool"]["version"] = toolchain["akcli_version"]
         result["tool"]["artifact_sha256"] = toolchain["akcli_artifact_sha256"]
-        proposed = _normalize_operations(proposal["ops"], "proposal op-list")
+        proposed = _normalize_operations(proposal["oplist"]["ops"], "proposal op-list")
         on_disk = _closed(parse_json_bytes(_read_bytes(oplist_path), "op-list"),
                           _OPLIST_FIELDS, "op-list")
         if (on_disk["protocol_version"] != OPLIST_PROTOCOL
@@ -1110,6 +1136,12 @@ def apply_stage(stage_request):
             return result
         before = _read_bytes(stage_target)
         result["before_source_sha256"] = hash_bytes(before)
+        if result["before_source_sha256"] != proposal["base_source_sha256"]:
+            result.update(status="BLOCKED",
+                          reasons=[_reason("REPAIR_INPUT_DRIFT",
+                                           "the stage bytes are not the proposal base source: the "
+                                           "proposal is stale for this artefact", stage="PRECHECK")])
+            return result
         native_before = _native_read(toolchain, stage_root, stage_request["stage_target"],
                                      artifact_root)
         if native_before["status"] != "PASS":
@@ -1181,7 +1213,10 @@ def _execute_strict(toolchain, stage_target, oplist_path, artifact_root):
     receipt = {"exit_code": None, "tool_applied": None, "op_results": [],
                "connectivity_findings": []}
     executable = toolchain["akcli_executable"]
-    if not os.path.isfile(executable) or _is_link(executable):
+    # Host-frozen executables are allowed to be symlinks: packaged interpreters
+    # and CLIs are routinely linked (for example /opt/.../bin/python ->
+    # python3.9).  Only data paths keep the strict no-link component rule.
+    if not os.path.isfile(executable):
         return receipt, "TOOL_ERROR", [_reason("REPAIR_TOOL_UNAVAILABLE",
                                                "the pinned akcli executable is missing")]
     argv = _strict_argv(toolchain, stage_target, oplist_path)
@@ -1233,7 +1268,7 @@ def _execute_exception(toolchain, stage_target, oplist, artifact_root):
     """Exactly one constrained writer call through the fixed Python worker."""
     receipt = {"exit_code": None, "tool_applied": None, "op_results": [],
                "connectivity_findings": []}
-    if not os.path.isfile(toolchain["worker_python"]) or _is_link(toolchain["worker_python"]):
+    if not os.path.isfile(toolchain["worker_python"]):
         return receipt, "TOOL_ERROR", [_reason("REPAIR_TOOL_UNAVAILABLE",
                                                "the pinned worker interpreter is missing")]
     request = {"oplist": oplist, "stage_path": stage_target,
@@ -1357,12 +1392,19 @@ def _verify_effect(route, result, native_before, native_after, toolchain, op_cou
     if connectivity_status == "UNKNOWN":
         return "UNKNOWN", reasons + connectivity_reasons
     reasons.extend(connectivity_reasons)
-    receipt_blocking = [row for row in (tool["connectivity_findings"] or [])
-                        if row["severity"] in BLOCKING_SEVERITIES]
-    if receipt_blocking and not connectivity_reasons:
-        reasons.append(_reason("REPAIR_EFFECT_MISMATCH",
+    receipt = tool["connectivity_findings"] or []
+    fresh_has_blocking = any(row["severity"] in BLOCKING_SEVERITIES for row in fresh_after)
+    fresh_has_no_connect = any(row["code"] == NO_CONNECT_CODE for row in fresh_after)
+    receipt_blocking = [row for row in receipt if row["severity"] in BLOCKING_SEVERITIES]
+    receipt_no_connect = [row for row in receipt if row["code"] == NO_CONNECT_CODE]
+    if receipt_blocking and not fresh_has_blocking:
+        reasons.append(_reason("REPAIR_TOOL_PROTOCOL_ERROR",
                                "the writer receipt reports %d ERROR/CRITICAL connectivity finding(s) "
-                               "even though the fresh read did not" % len(receipt_blocking)))
+                               "the fresh read did not" % len(receipt_blocking)))
+    if receipt_no_connect and not fresh_has_no_connect:
+        reasons.append(_reason("REPAIR_TOOL_PROTOCOL_ERROR",
+                               "the writer receipt reports %d %s finding(s) the fresh read did not"
+                               % (len(receipt_no_connect), NO_CONNECT_CODE)))
     if reasons:
         return "BLOCKED", reasons
     return "APPLIED_TO_STAGE", []

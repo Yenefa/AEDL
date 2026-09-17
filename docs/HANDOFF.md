@@ -264,3 +264,12 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
 - 验证：tests.test_akcli_adapter 57 OK；discover 681 OK；真原生资格 2 OK（DC-04/DC-05 仍逐字节一致）；junction 用例实测执行（非 skip）。
 - 遗留上报：合同当前没有 host-frozen background warning 的绑定通道，故本版所有 WARNING 一律阻断；需要 Owner/验收侧决定是否新增该通道。
 - 状态：PENDING_HUMAN_REVIEW；未 merge。
+
+## 2026-09-17 PR #75 第二轮 REQUEST_CHANGES 整改（同一工作单元续记）
+
+- 触发：Owner 第二轮评审——Ubuntu CI 红（blocker）+ stale proposal/TOCTOU + authority 冲突 + receipt-only NC + Windows 跨盘 commonpath + PR 正文数字过期。
+- CI 根因：ubuntu-latest 的 hosted Python `bin/python` 是符号链接，被 `_is_link` 判成解释器缺失，导致 ExceptionWriterTests 全 4 例失败。已改为「宿主冻结的可执行文件允许符号链接，数据路径仍禁链接组件」。
+- 其余整改见台账补记②：base_source_sha256/context_id/target 三项 internal binding（写前失败）、authority 重复或 DENY 一律 BLOCKED、回执与 fresh read 分项矛盾即阻断、`_common_root` 把跨盘 ValueError 转成输入错误。
+- 口径承认：C4 把 `bound_policy` 当作 host-bound opaque payload，不宣称自行重验完整 BoundPolicy。
+- 验证：C4 63 OK（skipped=3）；全量 688 OK（skipped=3）；真原生资格 2 OK（DC-04/05 逐字节不变）。
+- 状态：PENDING_HUMAN_REVIEW；未 merge。

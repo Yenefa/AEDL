@@ -80,3 +80,18 @@
 验证（原文）：py -3.9 -m unittest tests.test_akcli_adapter → Ran **57**, OK（skipped=2）；py -3.9 -m unittest discover -s tests → Ran **681**, OK（skipped=2）；真原生资格（opt-in）→ Ran **2**, OK，DC-04/DC-05 仍 APPLIED_TO_STAGE 且 before/after 与本机独立复现逐字节一致；junction 逃逸用例实测执行（非 skip）并通过。
 
 状态：本轮为 PR #75 的整改提交；merge 仍待人工，AI 不 merge、不 approve。
+
+### 2026-09-17 补记②——PR #75 第二轮 REQUEST_CHANGES 整改（不改写以上原文）
+
+Owner 第二轮评审（针对 cdf4f03）：1 项 CI blocker + 3 项 P1/P2 + 文档同步。逐条：
+
+1. **Ubuntu CI 红（BLOCKER）** → 取回 Actions 失败日志定位：`ExceptionWriterTests` 全 4 例在 ubuntu-latest 上失败，原因是 **hosted Python 的 `bin/python` 是指向 `python3.9` 的符号链接**，被适配器的 `_is_link` 判为「pinned worker interpreter is missing」。修法：**宿主冻结的可执行文件（worker_python / akcli_executable）允许是符号链接**（打包解释器/CLI 常规如此），数据路径（stage target、op-list）保留逐组件 no-link 规则。新增 `test_a_symlinked_worker_interpreter_is_accepted`（Windows 无开发者模式时 skip，Linux CI 实跑）。
+2. **stale proposal / TOCTOU（P1）** → 新增三项 internal binding，全部在任何 writer call 之前：`hash_bytes(stage bytes) == proposal.base_source_sha256`（否则 BLOCKED/REPAIR_INPUT_DRIFT）、`proposal.context_id == host_patch.context_id`、`proposal.target == host_patch.target`。回归：`test_a_stale_proposal_base_is_input_drift`、`test_a_proposal_that_disagrees_with_the_host_patch_is_input_drift`（均 0 次 writer 调用）。
+3. **authority 冲突/重复（P1）** → decisions 改为「每个 capability 恰好一个 resolved decision」：重复 capability → BLOCKED，任何 DENY → BLOCKED，然后才要求 TOOL_EXECUTE/FILE_WRITE 的显式 ALLOW。回归：`test_a_conflicting_or_duplicated_authority_decision_is_refused`（ALLOW+DENY、重复 ALLOW、无关 capability DENY 三种）。
+4. **receipt-only NO_CONNECT_CONFLICT（P2）** → 回执与 fresh read 分项比对：回执报 ERROR/CRITICAL 而 fresh read 没有、或回执报 NO_CONNECT_CONFLICT 而 fresh read 没有 → BLOCKED/REPAIR_TOOL_PROTOCOL_ERROR（矛盾本身即阻断，不挑一个信）。回归：`test_a_receipt_only_no_connect_conflict_is_an_inconsistency`。
+5. **Windows 跨盘 commonpath 裸异常（P2）** → 新增 `_common_root()` 把 `ValueError` 转成 `AdapterInputError`，op-list 与 `_resolve_within` 都走它。回归：`test_a_cross_drive_op_list_is_an_input_error_not_a_crash`（mock 出跨盘 ValueError）。
+6. **bound_policy 口径（P2 建议）** → 已在 PR 正文与本节如实承认：C4 把 `bound_policy` 视为 **host-bound opaque payload**，只要求其存在与 digest 绑定，不宣称 C4 自己重验完整 BoundPolicy；完整 authorized delta / protected diff 由 verifier 与 pipeline 负责。
+
+验证（原文）：tests.test_akcli_adapter → Ran **63**, OK（skipped=3，其中 2 为未 opt-in 原生资格、1 为本机无法建文件符号链接）；discover -s tests → Ran **688**, OK（skipped=3）；真原生资格（opt-in）→ Ran **2**, OK，DC-04/DC-05 仍 APPLIED_TO_STAGE 且 before/after 与本机独立复现逐字节一致。
+
+状态：本轮为 PR #75 的第二轮整改提交；merge 仍待人工，AI 不 merge、不 approve。

@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO not in sys.path:
@@ -308,6 +309,10 @@ def main():
     elif mode == "moved-warning":
         _rewrite_sidecar(target, [{"code": "DANGLING_ENDPOINT", "severity": "WARNING",
                                    "message": "same code, different object", "refs": ["U7"]}])
+    elif mode == "receipt-only-nc":
+        # the receipt claims an NC conflict the fresh read cannot see
+        connectivity = [{"code": "NO_CONNECT_CONFLICT", "severity": "WARNING",
+                         "message": "receipt only"}]
     if mode != "forged-applied":
         with open(target, "ab") as handle:
             handle.write(b'\n(label "stub-cli" (uuid 00000000-0000-4000-8000-000000000001))\n')
@@ -462,9 +467,14 @@ class AdapterCase(unittest.TestCase):
         manifest.update(overrides)
         return manifest
 
-    def proposal(self, ops=None):
+    def stage_bytes(self):
+        with open(self.target, "rb") as handle:
+            return handle.read()
+
+    def proposal(self, ops=None, base_source_sha256=None):
         return {"schema_version": 1, "context_id": "CTX-1", "target": "design/fault.kicad_sch",
-                "base_source_sha256": canonical_sha256("manifest", "SRC"), "decision": "PATCH",
+                "base_source_sha256": base_source_sha256 or hash_bytes(self.stage_bytes()),
+                "decision": "PATCH",
                 "oplist": {"protocol_version": 2, "target_format": "kicad",
                            "ops": ops if ops is not None else self.oplist_ops},
                 "diagnosis": []}
@@ -811,6 +821,69 @@ class RouteAndBindingTests(AdapterCase):
         result = adapter.apply_stage(request)
         self.assertEqual(result["status"], "BLOCKED")
 
+    def test_a_stale_proposal_base_is_input_drift(self):
+        patch = self.host_patch()
+        with open(self.target, "ab") as handle:
+            handle.write(b'\n(label "moved-on" (uuid 00000000-0000-4000-8000-000000000009))\n')
+        result = adapter.apply_stage(self.stage_request(patch))
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("REPAIR_INPUT_DRIFT", self.codes(result))
+        self.assertEqual(self.call_log(), [])
+
+    def test_a_proposal_that_disagrees_with_the_host_patch_is_input_drift(self):
+        for mutation in ({"context_id": "CTX-2"}, {"target": "design/other.kicad_sch"}):
+            patch = self.host_patch()
+            patch["proposal"].update(mutation)
+            patch["proposal_sha256"] = canonical_sha256("proposal", patch["proposal"])
+            patch["patch_sha256"] = canonical_sha256(
+                "patch", {key: value for key, value in patch.items() if key != "patch_sha256"})
+            result = adapter.apply_stage(self.stage_request(patch))
+            self.assertEqual(result["status"], "BLOCKED", mutation)
+            self.assertIn("REPAIR_INPUT_DRIFT", self.codes(result))
+            self.assertEqual(self.call_log(), [], mutation)
+
+    def test_a_conflicting_or_duplicated_authority_decision_is_refused(self):
+        mutations = [[{"capability": "TOOL_EXECUTE", "effect": "ALLOW"},
+                      {"capability": "TOOL_EXECUTE", "effect": "DENY"},
+                      {"capability": "FILE_WRITE", "effect": "ALLOW"}],
+                     [{"capability": "TOOL_EXECUTE", "effect": "ALLOW"},
+                      {"capability": "TOOL_EXECUTE", "effect": "ALLOW"},
+                      {"capability": "FILE_WRITE", "effect": "ALLOW"}],
+                     [{"capability": "TOOL_EXECUTE", "effect": "ALLOW"},
+                      {"capability": "FILE_WRITE", "effect": "ALLOW"},
+                      {"capability": "HOUSEKEEPING", "effect": "DENY"}]]
+        for decisions in mutations:
+            patch = self.host_patch()
+            patch["authority"]["decisions"] = decisions
+            patch["patch_sha256"] = canonical_sha256(
+                "patch", {key: value for key, value in patch.items() if key != "patch_sha256"})
+            result = adapter.apply_stage(self.stage_request(patch))
+            self.assertEqual(result["status"], "BLOCKED", decisions)
+            self.assertIn("REPAIR_AUTH_DENIED", self.codes(result))
+            self.assertEqual(self.call_log(), [], decisions)
+
+    def test_a_cross_drive_op_list_is_an_input_error_not_a_crash(self):
+        other = os.path.join(self.root, "other-drive")
+        os.makedirs(other)
+        op_list = os.path.join(other, "oplist.json")
+        with open(op_list, "w", encoding="utf-8", newline="\n") as handle:
+            json.dump({"protocol_version": 2, "target_format": "kicad", "ops": self.oplist_ops},
+                      handle)
+        request = self.stage_request()
+        request["oplist_path"] = op_list
+        with mock.patch.object(adapter.os.path, "commonpath",
+                               side_effect=ValueError("Paths don't have the same drive")):
+            result = adapter.apply_stage(request)
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("REPAIR_INPUT_DRIFT", self.codes(result))
+        self.assertEqual(self.call_log(), [])
+
+    def test_a_receipt_only_no_connect_conflict_is_an_inconsistency(self):
+        self.mode = "receipt-only-nc"
+        result = adapter.apply_stage(self.stage_request())
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("REPAIR_TOOL_PROTOCOL_ERROR", self.codes(result))
+
     def test_malformed_stage_requests_are_blocked_without_raising(self):
         mutations = [{"txn_id": []}, {"txn_id": "bad id!"}, {"oplist_path": 5},
                      {"native_artifact_root": None}, {"stage_root": "relative/path"},
@@ -857,6 +930,17 @@ class ExceptionWriterTests(AdapterCase):
         self.write_stage(payload)
         result = adapter.apply_stage(self.stage_request())
         self.assertEqual(result["status"], "BLOCKED")
+
+    def test_a_symlinked_worker_interpreter_is_accepted(self):
+        link = os.path.join(self.root, "python-link")
+        try:
+            os.symlink(sys.executable, link)
+        except (OSError, NotImplementedError, AttributeError):
+            self.skipTest("this platform cannot create a file symlink without elevation")
+        toolchain = self.toolchain()
+        toolchain["worker_python"] = link
+        result = adapter.apply_stage(self.stage_request(self.host_patch(toolchain=toolchain)))
+        self.assertEqual(result["status"], "APPLIED_TO_STAGE", result["reasons"])
 
     def test_exactly_one_worker_write_call_is_made(self):
         adapter.apply_stage(self.stage_request())
@@ -1080,9 +1164,11 @@ class NativeQualificationTests(unittest.TestCase):
                           os.path.join(stage, "oplist.json"))
             with open(os.path.join(stage, "oplist.json"), encoding="utf-8") as handle:
                 ops = json.load(handle)["ops"]
+            with open(os.path.join(stage, "fault.kicad_sch"), "rb") as handle:
+                base_source_sha256 = hash_bytes(handle.read())
             proposal = {"schema_version": 1, "context_id": "CTX-1",
                         "target": "design/fault.kicad_sch",
-                        "base_source_sha256": canonical_sha256("manifest", "SRC"),
+                        "base_source_sha256": base_source_sha256,
                         "decision": "PATCH",
                         "oplist": {"protocol_version": 2, "target_format": "kicad", "ops": ops},
                         "diagnosis": []}
