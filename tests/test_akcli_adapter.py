@@ -748,21 +748,51 @@ class RouteAndBindingTests(AdapterCase):
         manifest["akcli_executable"] = cli
         manifest["akcli_artifact_sha256"] = _distribution_digest(package, version="0.19.0")
         manifest["environment"]["PYTHONPATH"] = package
+        before = self.stage_bytes()
         result = adapter.apply_stage(self.stage_request(self.host_patch(toolchain=manifest)))
         self.assertEqual(result["status"], "TOOL_ERROR")
         self.assertIn("REPAIR_TOOL_UNAVAILABLE", self.codes(result))
+        # PRECHECK settles the toolchain, so a mismatched writer is never started
+        self.assertEqual(self.call_log(), [])
+        self.assertEqual(self.stage_bytes(), before)
 
     def test_a_distribution_digest_mismatch_is_a_tool_error(self):
         toolchain = self.toolchain(artifact="0" * 64)
+        before = self.stage_bytes()
         result = adapter.apply_stage(self.stage_request(self.host_patch(toolchain=toolchain)))
         self.assertEqual(result["status"], "TOOL_ERROR")
         self.assertIn("REPAIR_TOOL_UNAVAILABLE", self.codes(result))
+        self.assertEqual(self.call_log(), [])
+        self.assertEqual(self.stage_bytes(), before)
 
     def test_a_symbol_digest_mismatch_is_a_tool_error(self):
         toolchain = self.toolchain(symbol="1" * 64)
+        before = self.stage_bytes()
         result = adapter.apply_stage(self.stage_request(self.host_patch(toolchain=toolchain)))
         self.assertEqual(result["status"], "TOOL_ERROR")
         self.assertIn("REPAIR_TOOL_UNAVAILABLE", self.codes(result))
+        self.assertEqual(self.call_log(), [])
+        self.assertEqual(self.stage_bytes(), before)
+
+    def test_an_akcli_that_changes_between_the_two_reads_is_a_tool_error(self):
+        """The one toolchain property that genuinely cannot be settled before the write."""
+        real = adapter._native_read
+        seen = []
+
+        def drifting(toolchain, root, relative, artifact_root):
+            result = real(toolchain, root, relative, artifact_root)
+            seen.append(result)
+            if result["status"] == "PASS" and len(seen) == 2:
+                probe = dict(result["tool"] or {})
+                probe["artifact_sha256"] = "2" * 64
+                result = dict(result, tool=probe)
+            return result
+
+        with mock.patch.object(adapter, "_native_read", side_effect=drifting):
+            result = adapter.apply_stage(self.stage_request())
+        self.assertEqual(result["status"], "TOOL_ERROR")
+        self.assertIn("REPAIR_TOOL_UNAVAILABLE", self.codes(result))
+        self.assertNotEqual(result["status"], "APPLIED_TO_STAGE")
 
     def test_a_tampered_host_patch_is_input_drift(self):
         patch = self.host_patch()
@@ -1413,6 +1443,48 @@ class NativePerturbationTests(_NativeToolchainMixin, unittest.TestCase):
     # on +5V, so the writer reports status/applied "applied" with a created UUID,
     # an ok op and zero connectivity findings -- while the artefact never changes.
     P1_REPEAT_LABEL = [{"op": "add_net_label", "name": "+5V", "at": "C1.1"}]
+
+    def test_the_writer_is_never_started_when_the_symbol_digest_does_not_match(self):
+        """PRECHECK settles the toolchain, so a mismatched tool must not write first.
+
+        Regression for the ordering defect PR #78 found in the P6 qualification: the
+        real write used to run to completion (exit 0, stage bytes already modified)
+        before the digest comparison happened in the effect check.
+        """
+        import shutil as _shutil
+        cli = self._akcli()
+        toolchain = self._measure(cli, "DC-04")
+        toolchain["symbol_digest"] = "1" * 64
+        stage = os.path.join(self.root, "precheck")
+        os.makedirs(stage)
+        _shutil.copy2(os.path.join(self.FIXTURES, "DC-04", "fault.kicad_sch"),
+                      os.path.join(stage, "fault.kicad_sch"))
+        _shutil.copy2(os.path.join(self.FIXTURES, "DC-04", "repair_ops.json"),
+                      os.path.join(stage, "oplist.json"))
+        with open(os.path.join(stage, "oplist.json"), encoding="utf-8") as handle:
+            ops = json.load(handle)["ops"]
+        body = self._patch(toolchain, ops, "DC-04", stage)
+        with open(os.path.join(stage, "fault.kicad_sch"), "rb") as handle:
+            before = handle.read()
+
+        calls = []
+        real = adapter.subprocess.run
+
+        def record(argv, *args, **kwargs):
+            calls.append(list(argv))
+            return real(argv, *args, **kwargs)
+
+        with mock.patch.object(adapter.subprocess, "run", side_effect=record):
+            result = adapter.apply_stage(self._stage_request(
+                body, stage, os.path.join(self.root, "artifacts-precheck")))
+
+        self.assertEqual(result["status"], "TOOL_ERROR", result["reasons"])
+        self.assertIn("REPAIR_TOOL_UNAVAILABLE", [row["code"] for row in result["reasons"]])
+        # the strict writer was never invoked ...
+        self.assertEqual([row for row in calls if "draw" in row], [])
+        # ... and the stage is byte-identical to what it was before the attempt
+        with open(os.path.join(stage, "fault.kicad_sch"), "rb") as handle:
+            self.assertEqual(handle.read(), before)
 
     def test_the_native_read_matches_the_c2_source_objects(self):
         """C4's own observation must describe the same objects C2's reader sees."""
