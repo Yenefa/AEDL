@@ -1,0 +1,113 @@
+# Task Envelope — PR1-C4 pinned strict and constrained writer adapter
+# 手写自 PR-1 Implementation Contract §2/§7/§8/§11 C4 + tasks/PR1-C3.yaml 先例。
+# Human review + admission required before execution.
+
+task: PR1-C4
+
+base:
+  branch: feat-pr1-c4-akcli-adapter
+  sha: 0d31a8bc9c61b7616dd440926fc7fff23f9b4135
+
+goal: |
+  PR-1 Commit 4（合同 §11 C4 `feat(repair): add pinned strict and constrained
+  writer adapter`）：`tools/akcli_adapter.py` 的 `read_native` / `apply_stage` /
+  `worker_main` 与 `tests/test_akcli_adapter.py`。
+  合同 §8 接口固定：`read_request={host_binding, absolute_read_root,
+  relative_target}` → NativeReadResult（含 connectivity_findings）；
+  `stage_request={host_patch, txn_id, stage_root, stage_target, oplist_path,
+  native_artifact_root}` → StageApplyResult（七个闭合字段 + tool 回执）。
+  STRICT 精确命令 `akcli draw <stage.sch> --ops <host-oplist.json> --apply
+  --strict-nets --no-erc --json`（argv 数组、shell=false、单次写调用）；
+  CONSTRAINED_EXCEPTION 走同文件固定 Python worker，只调用
+  `akcli.writers.kicad.apply(oplist, stage_path, apply=True, sources=None,
+  backup_dir=host_dir, backup_depth=1, tol_nm=0, verify_out=findings,
+  allow_open=False)`，API 原生没有 applied 字段 → 回执 `tool_applied=null`，
+  不得伪造 true。
+  STRICT 只有 exit=0、标准 draw-result、applied=true、op_results 完整覆盖
+  0..n-1 且全 ok、源 bytes 改变并成功重读时才返回 APPLIED_TO_STAGE；
+  exit=6 的合法拒绝错误对象识别为 BLOCKED / REPAIR_STRICT_REFUSED，
+  不伪报 malformed；dry-run（applied=false）与首次 no-op 不通过。
+  route 在 PRECHECK 冻结：E1/E2/E3 直接 exception，DC-04/DC-05 直接 strict；
+  不得先试 strict 被拒后自动升级，也不得把任何 exit=6 翻译成成功。
+  任何 ERROR/CRITICAL connectivity finding 阻断；新增 WARNING 与任何
+  NO_CONNECT_CONFLICT 阻断；未知 severity → UNKNOWN，不降为 INFO。
+
+scope: |
+  Writable paths are whitelisted in allowed_paths; everything else is FOREIGN
+  (read-only). 不修改 run_gates.py / schematic_semantics.py / repair_verification.py /
+  repair_pipeline.py / 既有 M2 合同 / Sandbox protocol / akcli 源码；
+  不做 ERC runner 集成、不提交 candidate、无 rollback、无 promotion、不生成
+  正式 Evidence；不重跑或改写 B5 判据（notes/b5-acceptance/** 冻结）。
+  本卡只做 C4；C5/C6 不在本卡。
+
+  Impact Analysis
+
+  Direct modifications:   tools/akcli_adapter.py（新）、tests/test_akcli_adapter.py（新）、
+                          tasks/PR1-C4.yaml（新）、docs/HANDOFF.md（追加）、
+                          docs/compliance/ai-usage/<ID>.md（新）、
+                          docs/compliance/AI_USAGE_LOG.md（生成索引重建）
+  Potentially affected:   后续 C5 pipeline 的 adapter 调用面；C6 原生资格入口
+  Explicitly not touched: gates/**、src/**、sandbox_runtime/**、delivery/**、
+                          notes/**、tests/fixtures/repair_pr1/**（只读复用）、
+                          docs/competition/**、AGENTS.md
+  Risk: MEDIUM（原生写入路径与回执语义；错误候选由闭合回执与单次写调用约束）
+
+  change_budget:
+    expected_files: 6
+    expected_modules: [tools, tests, tasks, docs]
+    cross_module: false
+    contract_change: false
+    evidence_semantics_change: false
+
+dependencies: []
+
+allowed_paths:
+  - tools/akcli_adapter.py
+  - tests/test_akcli_adapter.py
+  - tasks/PR1-C4.yaml
+  - docs/HANDOFF.md
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/compliance/ai-usage/**
+  # Agent 代号 DSH 已由 Yenefa 于 2026-09-14 批准登记；该登记只存在于未合入的
+  # feat-pr1-c3-fresh-export，故本分支从 master 起点需机械重放同一登记（不新增授权）。
+  - docs/ID_MAP.md
+  - tools/build_ai_usage_index.py
+
+forbidden_paths:
+  - gates/**
+  - tools/repair_pipeline.py
+  - src/**
+  - sandbox_runtime/**
+  - delivery/**
+  - notes/b5-acceptance/**
+  - docs/evidence/**
+  - docs/competition/**
+  - tests/fixtures/repair_pr1/**
+
+acceptance: |
+  - tests.test_akcli_adapter 全绿（合同 §11 C4 指定入口）
+  - strict exit6 合法错误对象 → BLOCKED / REPAIR_STRICT_REFUSED，且 stage 字节不变
+  - exit0 dry-run（applied=false）、applied 缺失、applied=true 但字节未变 → 绝不 APPLIED_TO_STAGE
+  - API 路径 tool_applied=null，且"API list 非空"不构成成功条件
+  - op_results 缺项 / 重复 index / 任一 status=error → BLOCKED
+  - akcli 版本 ≠ 0.21.0 或发行包/符号 digest 不符 → 拒绝，不静默继续
+  - 单轮只有一次写调用；strict 被拒不得自动改走 exception；route 与绑定规则不符即拒
+  - 新增 WARNING / 任何 NO_CONNECT_CONFLICT / ERROR-CRITICAL → 阻断
+  - 路径逃逸、链接组件、patch_sha256 不符 → REPAIR_INPUT_DRIFT 拒绝
+  - 真 akcli 0.21.0 + KiCad 10.0.5 原生资格：未 opt-in 时 SKIP 并如实标注；
+    opt-in 后缺工具/坏版本必须 FAIL，不得 SKIP 变绿
+  - dev_gate 带本 envelope 跑通；台账 + HANDOFF 如实追加；状态 PENDING_HUMAN_REVIEW
+
+exceptions:
+  # Agent cannot self-authorize. 脏树来源 = envelope 本体存在于工作树
+  # （C1/C2/C3 先例：文件无法包含自身提交）。
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "用户 2026-09-16 本会话指令「开吧，向下推进」；同 tasks/W1-C2.yaml / tasks/PR1-C3.yaml 授权链"
+  # 终端复核（clean-tree re-admit）需要：分支首个提交后 HEAD 必然离开 base.sha。
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "同上；base 0d31a8b 为分支起点，提交后按 W1-C2/PR1-C3 rebaseline 先例重锚"
+
+escalation:
+  owner: Yenefa

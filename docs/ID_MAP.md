@@ -25,7 +25,7 @@
 |---|---|---|
 | `Yenefa` | Yenefa | 项目负责人（大统领）；原 `sca331613-commits`，2026-09-01 改名 |
 | `la4876949-bot` | Percy | 正式团队成员（AEDL_TEAM）；第二名真人协作者，2026-09-01 确认 |
-| —（Agent 代号登记处） | YEN/PER/LIO=真人；ZCODE/CODEX/CLAUDE/OPENCODE/BOT=Agent | AI 台账 actor 前缀（GH-49）；新代号先同时登记本表与 `tools/build_ai_usage_index.py` REGISTERED_ACTORS 再启用 |
+| —（Agent 代号登记处） | YEN/PER/LIO=真人；ZCODE/CODEX/CLAUDE/OPENCODE/BOT/DSH=Agent | AI 台账 actor 前缀（GH-49）；新代号先同时登记本表与 `tools/build_ai_usage_index.py` REGISTERED_ACTORS 再启用。`DSH` 于 2026-09-14 由 Yenefa 批准登记（DeepSeek Harness 会话） |
 
 ## 按需加载路由（任务类型 → 必读文件）
 

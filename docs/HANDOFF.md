@@ -240,3 +240,36 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
   envelope `tasks/W1-C2.yaml` + admission 链补齐。
 - 验证：repair_verification 56/56（3.9/3.13）、repair_contract 92/92、全量 474/474 OK。
 - 状态：`PENDING_HUMAN_REVIEW`（PR 送审中）。C3（fresh KiCad export）待 C2 合并后另卡。
+
+## 2026-09-17 PR-1 C4 候选交接（AI-20260917-DSH-525A0E8BBDFDEFA274AA1A6CA95F43EE）
+
+### C4 pinned strict and constrained writer adapter（分支 feat-pr1-c4-akcli-adapter，base 0d31a8b）
+
+- 落地：合同 §11 C4 的 §8 三入口——read_native（闭合校验 + 宿主只读授权 + 声明根内解析 + 固定 worker 经 akcli.readers 收集完整原生观察并 normalize）、apply_stage（HostPatch 自校验、route 与 ROUTE_BY_RULE 冻结一致、双 ALLOW 凭据、toolchain 重算、op-list 与绑定 proposal 一致）、worker_main（固定 READ / APPLY_EXCEPTION）。
+- STRICT：单次精确 argv、shell=false；exit=6 合法拒绝对象 → BLOCKED / REPAIR_STRICT_REFUSED 且不自动改走 exception；applied 缺失/false/伪造 true → 绝不 APPLIED_TO_STAGE；回执必须逐一覆盖 0..n-1 且全 ok、字节真改变并成功重读。
+- CONSTRAINED_EXCEPTION：固定 Python worker 调 akcli.writers.kicad.apply(...)；API 无 applied 字段 → tool_applied 强制 null。
+- 连通性：ERROR/CRITICAL、新增 WARNING、任何 NO_CONNECT_CONFLICT 阻断；未知 severity → UNKNOWN（不降为 INFO；akcli 的 NOTE 显式映射为 INFO 并保留 raw_severity）。
+- 测试：tests/test_akcli_adapter.py 45 例（宿主桩 akcli 包 + 桩 CLI）；tests.test_akcli_adapter → Ran 45 OK（skipped=1）；全量 discover → Ran 670 OK（skipped=1，master 基线 625，无回归）。
+- 真原生资格（opt-in，AEDL_PR1_NATIVE=1 + AEDL_AKCLI_PYTHON）：NativeQualificationTests → Ran 2 OK。五个夹具 DC-01..DC-05 经 read_native 全部 PASS 并产出规范化观察（DC-04 = 22 组件 / 84 pin / 29 分区，complete=true）；真 strict 路由在 DC-04、DC-05 上 APPLIED_TO_STAGE，3/3 op ok，before/after 与 2026-09-16 本机独立复现逐字节一致（DC-04 655f585d→2f660180；DC-05 08393ee9→033e4efa）。实测 akcli 0.21.0、发行包摘要 a81c1a4d、本设计 embedded symbol digest 9a0473ff。
+- NOT_RUN：CONSTRAINED_EXCEPTION 对真 akcli writer（无 E1/E2/E3 原生夹具，只用桩验证软件语义）；C4-P1..P8 扰动（属验收侧 B5）；C5/C6；candidate 提交与正式 Evidence。
+- 需人工裁定的实现判断：① symbol_digest 定义为文档内嵌符号库摘要（akcli 0.21.0 不暴露全局 cache 目录）；② 原生观察的 sheet/pin UUID 由适配器确定性派生（akcli 不返回逐 pin 实例 UUID），C3 的 native 比较不含身份故当前成立；③ severity 的 NOTE→INFO 显式映射；④ launcher_argv 只用于 CLI，worker 一律以 worker_python -m 启动。四项均写入台账条目「实现中做出的、需人工复核的判断」。
+- 范围外机械改动：docs/ID_MAP.md 与 tools/build_ai_usage_index.py 重放 Yenefa 2026-09-14 已批准的 DSH 代号登记（原登记只在未合入的 PR #72 分支），已在 envelope 授权链与台账中标注。
+- 状态：PENDING_HUMAN_REVIEW；未 commit、未 push、未建 PR（等 Owner 指示）。
+
+## 2026-09-17 PR #75 人工 REQUEST_CHANGES 整改（AI-20260917-DSH-525A0E8BBDFDEFA274AA1A6CA95F43EE 续记）
+
+- 触发：Owner 对 head c2800df 的评审——3 项 blocker（op-list 只比较 op 名称 / fresh-after 仍以 writer 回执为事实源 / warning 对象身份丢失且无 host-frozen background）+ 3 项应修（闭合校验未递归 / op-list 路径 containment 只做 lexical commonpath / coverage 自证与 no_connect 硬编码）。
+- 整改：逐条见台账条目补记。核心口径改为「工具说成功不算，fresh artifact 自己说了才算」。
+- 新增回归：same-op/different-arguments；回执干净但 fresh 出现新 WARNING；warning 换对象；畸形嵌套 proposal/oplist/op 不抛异常；op-list 经目录 junction 逃逸。另加 background 白名单机制单测、reader 库存不一致或无可交叉核对 → UNKNOWN、畸形 stage_request 不抛异常、proposal 自身 digest 不符。
+- 验证：tests.test_akcli_adapter 57 OK；discover 681 OK；真原生资格 2 OK（DC-04/DC-05 仍逐字节一致）；junction 用例实测执行（非 skip）。
+- 遗留上报：合同当前没有 host-frozen background warning 的绑定通道，故本版所有 WARNING 一律阻断；需要 Owner/验收侧决定是否新增该通道。
+- 状态：PENDING_HUMAN_REVIEW；未 merge。
+
+## 2026-09-17 PR #75 第二轮 REQUEST_CHANGES 整改（同一工作单元续记）
+
+- 触发：Owner 第二轮评审——Ubuntu CI 红（blocker）+ stale proposal/TOCTOU + authority 冲突 + receipt-only NC + Windows 跨盘 commonpath + PR 正文数字过期。
+- CI 根因：ubuntu-latest 的 hosted Python `bin/python` 是符号链接，被 `_is_link` 判成解释器缺失，导致 ExceptionWriterTests 全 4 例失败。已改为「宿主冻结的可执行文件允许符号链接，数据路径仍禁链接组件」。
+- 其余整改见台账补记②：base_source_sha256/context_id/target 三项 internal binding（写前失败）、authority 重复或 DENY 一律 BLOCKED、回执与 fresh read 分项矛盾即阻断、`_common_root` 把跨盘 ValueError 转成输入错误。
+- 口径承认：C4 把 `bound_policy` 当作 host-bound opaque payload，不宣称自行重验完整 BoundPolicy。
+- 验证：C4 63 OK（skipped=3）；全量 688 OK（skipped=3）；真原生资格 2 OK（DC-04/05 逐字节不变）。
+- 状态：PENDING_HUMAN_REVIEW；未 merge。
