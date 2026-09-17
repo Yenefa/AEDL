@@ -31,6 +31,17 @@ level, NOTE, which has no blocking meaning; it is normalized to INFO while
 raw_severity is preserved on every finding.  Any other value leaves the
 comparison UNKNOWN and therefore blocks.  NOTE is mapped explicitly rather than
 treated as unknown so that the mapping is auditable.
+
+Evidence boundary (this must not be read as a qualification claim).  The native
+observation is assembled by the pinned reader alone, so its coverage record is
+cross-checked against that reader's own component/pin summary and against the
+primitive pin count: that catches a reader silently dropping objects, but it is
+NOT an independent proof that nothing is missing.  Independent coverage is the
+verifier's job - gates.repair_verification compares the source AST and the fresh
+KiCad export against this native observation.  no_connect is not established by
+either the C2 source observation or this native read in the current contract
+version, so the field stays inert in comparisons and is never claimed as
+attested.
 """
 
 import argparse
@@ -51,6 +62,8 @@ AKCLI_VERSION = "0.21.0"
 AKCLI_UPSTREAM_COMMIT = "68c2df5e43db2f822ab8dbfea36f777396897d8d"
 STRICT_ARGUMENTS = ("draw", "--apply", "--strict-nets", "--no-erc", "--json")
 OPLIST_FLAG = "--ops"
+OPLIST_PROTOCOL = 2
+OPLIST_TARGET_FORMAT = "kicad"
 WORKER_MODES = ("READ", "APPLY_EXCEPTION")
 ROUTES = ("STRICT", "CONSTRAINED_EXCEPTION")
 ROUTE_BY_RULE = {"E1": "CONSTRAINED_EXCEPTION", "E2": "CONSTRAINED_EXCEPTION",
@@ -85,13 +98,24 @@ def _reason(code, detail, stage="STAGE_APPLY", object_id=None):
 # closed input validation (contract section 4)
 # ---------------------------------------------------------------------------
 
-def _closed(value, fields, label):
+def _reject_unknown(value, fields, label):
     if not isinstance(value, dict):
         raise AdapterInputError("%s must be an object" % label)
     unknown = sorted(set(value) - set(fields))
-    missing = sorted(set(fields) - set(value))
     if unknown:
         raise AdapterInputError("%s has unknown fields: %s" % (label, ", ".join(unknown)))
+    return value
+
+
+def _required(value, name, label):
+    if name not in value:
+        raise AdapterInputError("%s is missing the required field %s" % (label, name))
+    return value[name]
+
+
+def _closed(value, fields, label):
+    _reject_unknown(value, fields, label)
+    missing = sorted(set(fields) - set(value))
     if missing:
         raise AdapterInputError("%s is missing fields: %s" % (label, ", ".join(missing)))
     return value
@@ -218,6 +242,25 @@ def _resolve_within(root, relative):
     return cursor
 
 
+def _has_linked_component(path):
+    """True when the path itself or any existing component is a link/reparse point."""
+    text = os.path.normpath(path)
+    parts = text.replace("\\", "/").split("/")
+    if parts and re.match(r"^[A-Za-z]:$", parts[0]):
+        cursor = parts[0] + os.sep
+        parts = parts[1:]
+    else:
+        cursor = os.sep
+        parts = text.split(os.sep)
+    for part in parts:
+        if not part:
+            continue
+        cursor = os.path.join(cursor, part)
+        if os.path.exists(cursor) and _is_link(cursor):
+            return True
+    return False
+
+
 def _existing_file(path, label):
     if not os.path.isfile(path) or _is_link(path):
         raise AdapterInputError("%s is missing or a link" % label)
@@ -316,24 +359,45 @@ def _finding_keys(findings):
             if row["severity"] in ("WARNING", "ERROR", "CRITICAL")}
 
 
-def connectivity_verdict(before, after):
-    """(status, reasons) for the before/after connectivity comparison."""
+def connectivity_verdict(before, after, background=None):
+    """(status, reasons) for the fresh before/after connectivity comparison.
+
+    after is a fresh native read, never a writer receipt.  A WARNING is tolerated
+    only when the host froze that exact (code, object) pair as background; the
+    frozen set is empty in this contract version, so every WARNING blocks.
+    """
+    frozen = _BACKGROUND_WARNINGS if background is None else frozenset(background)
     reasons = []
     if any(row["severity"] == "UNKNOWN" for row in after):
         return "UNKNOWN", [_reason("REPAIR_TOOL_PROTOCOL_ERROR",
-                                   "the write reported a connectivity severity this adapter cannot normalize")]
+                                   "the fresh read reported a connectivity severity this adapter "
+                                   "cannot normalize")]
     if any(row["severity"] in BLOCKING_SEVERITIES for row in after):
         reasons.append(_reason("REPAIR_EFFECT_MISMATCH",
-                               "the write produced an ERROR/CRITICAL connectivity finding"))
+                               "the fresh read produced an ERROR/CRITICAL connectivity finding"))
     if any(row["code"] == NO_CONNECT_CODE for row in after):
         reasons.append(_reason("REPAIR_EFFECT_MISMATCH",
-                               "the write produced a %s finding" % NO_CONNECT_CODE))
+                               "the fresh read produced a %s finding" % NO_CONNECT_CODE))
     known = _finding_keys(before)
-    new_warnings = [row for row in after
-                    if row["severity"] == "WARNING" and (row["code"], str(row["object_id"])) not in known]
+    new_warnings, unfrozen = [], []
+    for row in after:
+        if row["severity"] != "WARNING":
+            continue
+        key = (row["code"], str(row["object_id"]))
+        if key in frozen:
+            continue
+        if key in known:
+            unfrozen.append(row)
+        else:
+            new_warnings.append(row)
     if new_warnings:
         reasons.append(_reason("REPAIR_EFFECT_MISMATCH",
-                               "the write produced %d new WARNING finding(s)" % len(new_warnings)))
+                               "the fresh read produced %d new WARNING finding(s) whose code+object "
+                               "was not present before" % len(new_warnings)))
+    if unfrozen:
+        reasons.append(_reason("REPAIR_EFFECT_MISMATCH",
+                               "the fresh read still carries %d WARNING finding(s) the host has not "
+                               "frozen as background" % len(unfrozen)))
     if reasons:
         return "BLOCKED", reasons
     return "PASS", []
@@ -413,10 +477,13 @@ def _native_connectivity(target):
     findings = []
     for row in rows:
         severity = getattr(row, "severity", None)
+        refs = sorted(str(item) for item in (getattr(row, "refs", None) or []))
+        # The contract compares warnings by code AND object; dropping the reader's
+        # refs would make two different objects look like the same finding.
         findings.append({"code": str(getattr(row, "code", "UNKNOWN_FINDING")),
                          "severity": str(getattr(severity, "value", severity)),
                          "message": str(getattr(row, "message", "") or "")[: _MAX_TEXT],
-                         "object_id": None})
+                         "object_id": "|".join(refs) if refs else None})
     return findings
 
 
@@ -483,8 +550,22 @@ def _worker_read(request):
                           for ref, number in net.members], key=canonical_json_bytes)
         names = sorted("/" + str(name) for name in (net.source_names or [net.name]))
         partitions.append({"key": "", "members": members, "names": names})
+    metadata = getattr(schematic, "metadata", None) or {}
+    declared_components = metadata.get("component_count")
+    declared_pins = metadata.get("pin_count")
+    primitive_pins = len(getattr(primitives, "pins", None) or [])
+    coverage_basis = {
+        "reader_metadata_present": bool(metadata),
+        "component_count_matches": (None if declared_components is None
+                                    else declared_components == len(components)),
+        "pin_count_matches": None if declared_pins is None else declared_pins == len(pins),
+        "primitive_pin_count": primitive_pins,
+        "primitive_pin_count_matches": (None if not primitive_pins
+                                        else primitive_pins == len(pins)),
+    }
     return {"source_sha256": source_sha256,
             "components": components, "pins": pins, "partitions": partitions,
+            "coverage_basis": coverage_basis,
             "counts": {"components": len(components), "pins": len(pins),
                        "partitions": len(partitions)},
             "primitives": {name: len(getattr(primitives, name))
@@ -789,6 +870,19 @@ def read_native(read_request, artifact_root=None):
                                            "the native read reported an unknown connectivity severity",
                                            stage="PRECHECK")])
             return result
+        basis = payload.get("coverage_basis") or {}
+        disagreeing = [name for name in ("component_count_matches", "pin_count_matches",
+                                         "primitive_pin_count_matches")
+                       if basis.get(name) is False]
+        if not basis.get("reader_metadata_present") and not basis.get("primitive_pin_count"):
+            disagreeing.append("no_independent_inventory")
+        if disagreeing:
+            result.update(status="UNKNOWN",
+                          reasons=[_reason("REPAIR_COVERAGE_INCOMPLETE",
+                                           "the pinned reader's own inventories disagree (%s), so the "
+                                           "native observation is not complete"
+                                           % ", ".join(sorted(disagreeing)), stage="PRECHECK")])
+            return result
         result.update(status="PASS", reasons=[])
         return result
     except (AdapterInputError, ValueError, KeyError, TypeError) as exc:
@@ -811,6 +905,96 @@ _HOST_PATCH_FIELDS = {"schema_version", "run_id", "candidate_id", "round_id", "p
                       "route", "bound_policy", "patch_sha256"}
 _AUTHORITY_FIELDS = {"context_digest", "resolved_authorization_refs", "decisions"}
 _POLICY_FIELDS = {"id", "file_sha256", "bound_rule_id", "bound_policy_sha256"}
+_DECISION_FIELDS = {"capability", "effect"}
+_BASE_FIELDS = {"files", "topology_sha256"}
+_PROPOSAL_FIELDS = {"schema_version", "context_id", "target", "base_source_sha256",
+                    "decision", "oplist", "diagnosis"}
+_DIAGNOSIS_FIELDS = {"rule_id", "observed", "fact_ids", "requirement_level", "rationale"}
+_OPLIST_FIELDS = {"protocol_version", "target_format", "ops"}
+_REQUIREMENT_LEVELS = ("MANDATORY", "RECOMMENDED", "MARGIN", "UNKNOWN")
+_OPERATION_FIELDS = {"delete_object": {"op", "uuid"},
+                     "add_net_label": {"op", "name", "at", "scope", "rotation"},
+                     "place_component": {"op", "lib_id", "designator", "x_mil", "y_mil",
+                                         "value", "footprint", "rotation", "mirror", "unit"}}
+_AUTHORITY_EFFECTS = ("ALLOW", "DENY")
+_REFERENCE_PIN = re.compile(r"^[A-Za-z0-9_+\-]{1,64}\.[A-Za-z0-9_+\-]{1,16}\Z")
+_MAX_DIAGNOSIS = 16
+
+# The frozen contract has no host-bound "background warning" channel, so nothing
+# is frozen and every connectivity WARNING blocks.  connectivity_verdict still
+# takes the set explicitly so the comparison is testable and a future contract
+# can bind it.
+_BACKGROUND_WARNINGS = frozenset()
+
+
+def _validate_proposal(proposal):
+    """Recursively closed Proposal (PATCH branch, contract section 4)."""
+    _closed(proposal, _PROPOSAL_FIELDS, "proposal")
+    if _integer(proposal["schema_version"], "proposal schema version", 1) != 1:
+        raise AdapterInputError("unsupported proposal schema version")
+    _identifier(proposal["context_id"], "proposal context id")
+    _text(proposal["target"], "proposal target")
+    _sha(proposal["base_source_sha256"], "proposal base source")
+    if proposal["decision"] != "PATCH":
+        raise AdapterInputError("only a PATCH proposal can reach the native writer")
+    oplist = _closed(proposal["oplist"], _OPLIST_FIELDS, "proposal op-list")
+    if _integer(oplist["protocol_version"], "protocol version", 1) != OPLIST_PROTOCOL:
+        raise AdapterInputError("the proposal does not use oplist protocol %d" % OPLIST_PROTOCOL)
+    if oplist["target_format"] != OPLIST_TARGET_FORMAT:
+        raise AdapterInputError("the proposal does not target %s" % OPLIST_TARGET_FORMAT)
+    diagnosis = proposal["diagnosis"]
+    if not isinstance(diagnosis, list) or len(diagnosis) > _MAX_DIAGNOSIS:
+        raise AdapterInputError("the proposal diagnosis must hold at most %d rows" % _MAX_DIAGNOSIS)
+    for index, row in enumerate(diagnosis):
+        _closed(row, _DIAGNOSIS_FIELDS, "proposal diagnosis %d" % index)
+        _text(row["rule_id"], "diagnosis rule", empty=True)
+        _text(row["observed"], "diagnosis observation", empty=True)
+        facts = row["fact_ids"]
+        if not isinstance(facts, list) or any(not isinstance(item, str) for item in facts):
+            raise AdapterInputError("diagnosis fact_ids must be a list of strings")
+        if row["requirement_level"] not in _REQUIREMENT_LEVELS:
+            raise AdapterInputError("unsupported diagnosis requirement level")
+        _text(row["rationale"], "diagnosis rationale", empty=True)
+    return oplist
+
+
+def _normalize_operation(row, label):
+    """Closed, default-filled Operation v1.
+
+    Comparing operation names alone would let an authorized operation drift into
+    a different one while keeping its type, so every field that reaches the
+    native writer is compared after normalization.
+    """
+    if not isinstance(row, dict) or row.get("op") not in _OPERATION_FIELDS:
+        raise AdapterInputError("%s is not a supported Operation v1" % label)
+    kind = row["op"]
+    _reject_unknown(row, _OPERATION_FIELDS[kind], label)
+    if kind == "delete_object":
+        return {"op": kind, "uuid": _identifier(_required(row, "uuid", label), "operation uuid")}
+    if kind == "add_net_label":
+        if row.get("scope", "local") != "local" or row.get("rotation", 0) != 0:
+            raise AdapterInputError("%s only permits scope=local and rotation=0" % label)
+        anchor = _text(_required(row, "at", label), "label anchor")
+        if not _REFERENCE_PIN.match(anchor):
+            raise AdapterInputError("%s must anchor at REF.PIN" % label)
+        return {"op": kind, "name": _text(_required(row, "name", label), "label name"),
+                "at": anchor, "scope": "local", "rotation": 0}
+    if row.get("rotation", 0) != 0 or row.get("mirror", "none") != "none" or row.get("unit", 1) != 1:
+        raise AdapterInputError("%s only permits rotation=0, mirror=none, unit=1" % label)
+    return {"op": kind, "lib_id": _text(_required(row, "lib_id", label), "library id"),
+            "designator": _identifier(_required(row, "designator", label), "designator"),
+            "x_mil": _integer(_required(row, "x_mil", label), "x_mil"),
+            "y_mil": _integer(_required(row, "y_mil", label), "y_mil"),
+            "value": _text(_required(row, "value", label), "value", empty=True),
+            "footprint": _text(_required(row, "footprint", label), "footprint", empty=True),
+            "rotation": 0, "mirror": "none", "unit": 1}
+
+
+def _normalize_operations(ops, label):
+    if not isinstance(ops, list) or not 1 <= len(ops) <= _MAX_OPS:
+        raise AdapterInputError("%s must hold 1..%d operations" % (label, _MAX_OPS))
+    return [_normalize_operation(row, "%s operation %d" % (label, index))
+            for index, row in enumerate(ops)]
 
 
 def stage_result_template(txn_id=None):
@@ -838,6 +1022,14 @@ def apply_stage(stage_request):
         body = {key: value for key, value in host_patch.items() if key != "patch_sha256"}
         if canonical_sha256("patch", body) != host_patch["patch_sha256"]:
             raise AdapterInputError("the host patch does not match its own digest")
+        proposal = _validate_proposal(host_patch["proposal"])
+        if canonical_sha256("proposal", host_patch["proposal"]) != _sha(host_patch["proposal_sha256"],
+                                                                        "proposal digest"):
+            raise AdapterInputError("the proposal does not match its own digest")
+        base = _closed(host_patch["base"], _BASE_FIELDS, "base binding")
+        _sha(base["topology_sha256"], "base topology digest")
+        if not isinstance(base["files"], dict):
+            raise AdapterInputError("base files must be a mapping")
         policy = _closed(host_patch["policy"], _POLICY_FIELDS, "policy binding")
         _identifier(policy["id"], "policy id")
         _sha(policy["file_sha256"], "policy digest")
@@ -863,10 +1055,21 @@ def apply_stage(stage_request):
         route = host_patch["route"]
         authority = _closed(host_patch["authority"], _AUTHORITY_FIELDS, "authority")
         _sha(authority["context_digest"], "authorization context digest")
-        if not authority["resolved_authorization_refs"]:
-            raise AdapterInputError("the host patch carries no resolved authorization")
-        allowed = {row.get("capability") for row in authority["decisions"]
-                   if isinstance(row, dict) and row.get("effect") == "ALLOW"}
+        references = authority["resolved_authorization_refs"]
+        if (not isinstance(references, list) or not references
+                or any(not isinstance(item, str) or not item for item in references)):
+            raise AdapterInputError("the host patch carries no host-resolved authorization")
+        decisions = authority["decisions"]
+        if not isinstance(decisions, list):
+            raise AdapterInputError("authority decisions must be a list")
+        allowed = set()
+        for index, row in enumerate(decisions):
+            _closed(row, _DECISION_FIELDS, "authority decision %d" % index)
+            _identifier(row["capability"], "decision capability")
+            if row["effect"] not in _AUTHORITY_EFFECTS:
+                raise AdapterInputError("unsupported authority effect")
+            if row["effect"] == "ALLOW":
+                allowed.add(row["capability"])
         missing = [name for name in CAPABILITIES if name not in allowed]
         if missing:
             result.update(status="BLOCKED",
@@ -883,21 +1086,26 @@ def apply_stage(stage_request):
         op_list_path = _absolute(stage_request["oplist_path"], "op-list path")
         if os.path.commonpath([stage_root, op_list_path]) != stage_root:
             raise AdapterInputError("the op-list path escapes the stage root")
-        oplist_path = _existing_file(op_list_path, "op-list path")
+        oplist_path = _existing_file(
+            _resolve_within(stage_root, os.path.relpath(op_list_path, stage_root).replace(os.sep, "/")),
+            "op-list path")
         artifact_root = _absolute(stage_request["native_artifact_root"], "native artifact root")
+        if _has_linked_component(artifact_root):
+            raise AdapterInputError("the native artifact root must not contain a link")
         os.makedirs(artifact_root, exist_ok=True)
         result["tool"]["mode"] = "CLI" if route == "STRICT" else "PYTHON_WRITER"
         result["tool"]["version"] = toolchain["akcli_version"]
         result["tool"]["artifact_sha256"] = toolchain["akcli_artifact_sha256"]
-        proposed = host_patch["proposal"]["oplist"]["ops"]
-        if not isinstance(proposed, list) or not 1 <= len(proposed) <= _MAX_OPS:
-            raise AdapterInputError("the proposal op-list must hold 1..%d operations" % _MAX_OPS)
-        oplist = parse_json_bytes(_read_bytes(oplist_path), "op-list")
-        ops = oplist.get("ops")
-        if not isinstance(ops, list) or [row.get("op") for row in ops] != [row.get("op") for row in proposed]:
+        proposed = _normalize_operations(proposal["ops"], "proposal op-list")
+        on_disk = _closed(parse_json_bytes(_read_bytes(oplist_path), "op-list"),
+                          _OPLIST_FIELDS, "op-list")
+        if (on_disk["protocol_version"] != OPLIST_PROTOCOL
+                or on_disk["target_format"] != OPLIST_TARGET_FORMAT
+                or _normalize_operations(on_disk["ops"], "op-list") != proposed):
             result.update(status="BLOCKED",
                           reasons=[_reason("REPAIR_INPUT_DRIFT",
-                                           "the on-disk op-list disagrees with the bound proposal",
+                                           "the on-disk op-list is not the authorized proposal "
+                                           "operation for operation",
                                            stage="PRECHECK")])
             return result
         before = _read_bytes(stage_target)
@@ -911,7 +1119,7 @@ def apply_stage(stage_request):
         result["native_before"] = {"source_sha256": native_before["source_sha256"],
                                    "observation": native_before["observation"]}
         receipt, status, reasons = _execute_route(route, toolchain, stage_target,
-                                                  oplist_path, oplist, artifact_root)
+                                                  oplist_path, on_disk, artifact_root)
         result["tool"].update(receipt)
         after = _read_bytes(stage_target)
         result["after_source_sha256"] = hash_bytes(after)
@@ -935,7 +1143,7 @@ def apply_stage(stage_request):
         result["native_after"] = {"source_sha256": native_after["source_sha256"],
                                   "observation": native_after["observation"]}
         status, reasons = _verify_effect(route, result, native_before, native_after,
-                                         toolchain, len(ops))
+                                         toolchain, len(proposed))
         result.update(status=status, reasons=reasons)
         return result
     except AdapterInputError as exc:
@@ -1140,10 +1348,21 @@ def _verify_effect(route, result, native_before, native_after, toolchain, op_cou
     if route == "STRICT" and tool["tool_applied"] is not True:
         reasons.append(_reason("REPAIR_EFFECT_MISMATCH",
                                "the strict receipt does not report applied=true"))
-    _status, connectivity_reasons = connectivity_verdict(
-        native_before.get("connectivity_findings") or [],
-        tool["connectivity_findings"])
+    # The writer receipt is never the source of truth for the after state; the
+    # fresh native read is.  A blocking severity the receipt reports still blocks
+    # (fail-closed union), but new warnings are judged on the fresh read alone.
+    fresh_before = native_before.get("connectivity_findings") or []
+    fresh_after = (native_after or {}).get("connectivity_findings") or []
+    connectivity_status, connectivity_reasons = connectivity_verdict(fresh_before, fresh_after)
+    if connectivity_status == "UNKNOWN":
+        return "UNKNOWN", reasons + connectivity_reasons
     reasons.extend(connectivity_reasons)
+    receipt_blocking = [row for row in (tool["connectivity_findings"] or [])
+                        if row["severity"] in BLOCKING_SEVERITIES]
+    if receipt_blocking and not connectivity_reasons:
+        reasons.append(_reason("REPAIR_EFFECT_MISMATCH",
+                               "the writer receipt reports %d ERROR/CRITICAL connectivity finding(s) "
+                               "even though the fresh read did not" % len(receipt_blocking)))
     if reasons:
         return "BLOCKED", reasons
     return "APPLIED_TO_STAGE", []

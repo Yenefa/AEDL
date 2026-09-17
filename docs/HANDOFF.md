@@ -255,3 +255,12 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
 - 需人工裁定的实现判断：① symbol_digest 定义为文档内嵌符号库摘要（akcli 0.21.0 不暴露全局 cache 目录）；② 原生观察的 sheet/pin UUID 由适配器确定性派生（akcli 不返回逐 pin 实例 UUID），C3 的 native 比较不含身份故当前成立；③ severity 的 NOTE→INFO 显式映射；④ launcher_argv 只用于 CLI，worker 一律以 worker_python -m 启动。四项均写入台账条目「实现中做出的、需人工复核的判断」。
 - 范围外机械改动：docs/ID_MAP.md 与 tools/build_ai_usage_index.py 重放 Yenefa 2026-09-14 已批准的 DSH 代号登记（原登记只在未合入的 PR #72 分支），已在 envelope 授权链与台账中标注。
 - 状态：PENDING_HUMAN_REVIEW；未 commit、未 push、未建 PR（等 Owner 指示）。
+
+## 2026-09-17 PR #75 人工 REQUEST_CHANGES 整改（AI-20260917-DSH-525A0E8BBDFDEFA274AA1A6CA95F43EE 续记）
+
+- 触发：Owner 对 head c2800df 的评审——3 项 blocker（op-list 只比较 op 名称 / fresh-after 仍以 writer 回执为事实源 / warning 对象身份丢失且无 host-frozen background）+ 3 项应修（闭合校验未递归 / op-list 路径 containment 只做 lexical commonpath / coverage 自证与 no_connect 硬编码）。
+- 整改：逐条见台账条目补记。核心口径改为「工具说成功不算，fresh artifact 自己说了才算」。
+- 新增回归：same-op/different-arguments；回执干净但 fresh 出现新 WARNING；warning 换对象；畸形嵌套 proposal/oplist/op 不抛异常；op-list 经目录 junction 逃逸。另加 background 白名单机制单测、reader 库存不一致或无可交叉核对 → UNKNOWN、畸形 stage_request 不抛异常、proposal 自身 digest 不符。
+- 验证：tests.test_akcli_adapter 57 OK；discover 681 OK；真原生资格 2 OK（DC-04/DC-05 仍逐字节一致）；junction 用例实测执行（非 skip）。
+- 遗留上报：合同当前没有 host-frozen background warning 的绑定通道，故本版所有 WARNING 一律阻断；需要 Owner/验收侧决定是否新增该通道。
+- 状态：PENDING_HUMAN_REVIEW；未 merge。

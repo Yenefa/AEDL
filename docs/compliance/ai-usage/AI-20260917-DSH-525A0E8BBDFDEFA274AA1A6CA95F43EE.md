@@ -63,3 +63,20 @@
 
 - 本条目与代码在合入前状态为 `PENDING_HUMAN_REVIEW`；AI 不 merge、不 approve。
 - 上述四项实现判断（尤其 `symbol_digest` 定义与身份约定）需 Owner 或验收侧裁定后才能作为冻结语义。
+
+### 2026-09-17 补记 —— PR #75 人工 REQUEST_CHANGES 整改（不改写以上原文）
+
+人工评审（Owner，2026-09-17，针对 head c2800df）给出 REQUEST_CHANGES：3 项 blocker + 3 项应修。逐条整改：
+
+1. **op-list 只比较 op 名称（BLOCKER）** → 新增 _normalized_operations/_normalize_operation：按合同 §4 的 Operation v1 逐字段闭合校验并补默认值（rotation=0、mirror=none、unit=1、scope=local），比较**规范化后的完整 op 对象**，并同时绑定 oplist 的 protocol_version 与 target_format；另补 proposal_sha256 重算（canonical_sha256("proposal", host_patch["proposal"])）。
+2. **fresh-after 连通性仍以 writer 回执为事实源（BLOCKER）** → _verify_effect 改用 **fresh native_after 的 connectivity findings** 作 after 事实源；writer 回执仅保留为回执审计，并在其报告 ERROR/CRITICAL 时仍然阻断（fail-closed 并集），新 warning 判定只用 fresh read。
+3. **warning 对象身份丢失 + 缺 host-frozen background（BLOCKER）** → _native_connectivity 保留 akcli finding 的 refs 作为对象身份；connectivity_verdict(before, after, background=...) 显式接受 background 集合；本版合同没有 host-frozen background 通道，_BACKGROUND_WARNINGS 为空 → **所有 WARNING 阻断**（取更保守的 fail-closed），并把「缺该通道」作为边界问题上报 Owner。
+4. **闭合校验未递归（应修）** → proposal（PATCH 分支全字段 + diagnosis 行）、oplist、base、authority.decisions、op 逐层闭合；新增 _reject_unknown/_required，可选字段不再被误当必填。
+5. **op-list 路径 containment 只做 lexical commonpath（应修）** → op-list 改用与 stage target 同级的 _resolve_within（逐组件拒绝 symlink/reparse point + realpath 包含）；native_artifact_root 增加链接组件拒绝（它与 stage 是分离的 host 区域，故只做链接检查、不要求 disjoint）。
+6. **coverage.complete 自证 + no_connect 硬编码（应修）** → worker 用 akcli 自身的 metadata.component_count / metadata.pin_count 与 read_primitives().pins 做交叉核对；任一对不上、或没有任何交叉核对可用 → UNKNOWN / REPAIR_COVERAGE_INCOMPLETE。模块 docstring 明确 coverage 是「内部交叉核对，不是独立证明」（独立核对归 verifier：C3 的 _native_agreement）；no_connect 明确记为**当前合同版本未被任何一侧建立**（C2 的 source 观察同样硬编码 False），保持 inert 且不声称已证。
+
+新增回归（对应用户点名的 5 条）：same-op/different-arguments → 0 次 writer 调用 + REPAIR_INPUT_DRIFT；回执干净但 fresh after 出现新 WARNING → BLOCKED；warning 从 R1 移到 U7 → BLOCKED 且对象身份被保留；畸形嵌套 proposal/oplist/op → 闭合 BLOCKED 且不抛异常；op-list 经目录 junction 逃逸 → BLOCKED。另加：background 白名单机制的直接单测、reader 库存不一致/无交叉核对 → UNKNOWN、畸形 stage_request 不抛异常、proposal 自身 digest 不符 → REPAIR_INPUT_DRIFT。
+
+验证（原文）：py -3.9 -m unittest tests.test_akcli_adapter → Ran **57**, OK（skipped=2）；py -3.9 -m unittest discover -s tests → Ran **681**, OK（skipped=2）；真原生资格（opt-in）→ Ran **2**, OK，DC-04/DC-05 仍 APPLIED_TO_STAGE 且 before/after 与本机独立复现逐字节一致；junction 逃逸用例实测执行（非 skip）并通过。
+
+状态：本轮为 PR #75 的整改提交；merge 仍待人工，AI 不 merge、不 approve。

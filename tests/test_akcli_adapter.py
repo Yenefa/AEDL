@@ -9,6 +9,7 @@ when the host opts in through AEDL_PR1_NATIVE=1 and AEDL_AKCLI_PYTHON.
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -108,6 +109,11 @@ class Schematic(object):
     def __init__(self, data):
         self.components = [Component(row) for row in data["components"]]
         self.nets = [Net(row) for row in data["nets"]]
+        if "metadata" in data:
+            self.metadata = data["metadata"]
+        else:
+            self.metadata = {"component_count": len(self.components),
+                             "pin_count": sum(len(row.pins) for row in self.components)}
 
 
 class Symbol(object):
@@ -123,12 +129,13 @@ class Library(object):
 
 
 class Primitives(object):
-    wires = []
-    junctions = []
-    labels = []
-    pins = []
-    buses = []
-    bus_entries = []
+    def __init__(self, pin_count):
+        self.wires = []
+        self.junctions = []
+        self.labels = []
+        self.pins = [None] * pin_count
+        self.buses = []
+        self.bus_entries = []
 
 
 def read_sch(path):
@@ -136,8 +143,11 @@ def read_sch(path):
 
 
 def read_primitives(path):
-    _sidecar(path)
-    return Primitives()
+    data = _sidecar(path)
+    count = data.get("primitive_pin_count")
+    if count is None:
+        count = sum(len(row.get("pins", [])) for row in data.get("components", []))
+    return Primitives(count)
 
 
 def read_embedded_library(path):
@@ -228,6 +238,15 @@ def _bump(kind):
             handle.write(kind + "\n")
 
 
+def _rewrite_sidecar(target, findings):
+    path = target + ".native.json"
+    with open(path, encoding="utf-8") as handle:
+        data = json.load(handle)
+    data["connectivity"] = findings
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(data, handle)
+
+
 def _ops(count, status="ok"):
     return [{"op_index": index, "op": "place_component" if index == 0 else "add_net_label",
              "status": status, "created_uuids": ["aaaaaaaa-bbbb-cccc-dddd-%012d" % index],
@@ -280,6 +299,15 @@ def main():
     elif mode == "unknown-severity":
         connectivity = [{"code": "MYSTERY", "severity": "CATASTROPHIC",
                          "message": "unknown level"}]
+    if mode in ("new-warning", "no-connect", "error-severity", "unknown-severity"):
+        _rewrite_sidecar(target, connectivity)
+    elif mode == "silent-warning":
+        # the receipt stays clean; only the fresh read can see the new warning
+        _rewrite_sidecar(target, [{"code": "DANGLING_ENDPOINT", "severity": "WARNING",
+                                   "message": "introduced by the write", "refs": ["U7"]}])
+    elif mode == "moved-warning":
+        _rewrite_sidecar(target, [{"code": "DANGLING_ENDPOINT", "severity": "WARNING",
+                                   "message": "same code, different object", "refs": ["U7"]}])
     if mode != "forged-applied":
         with open(target, "ab") as handle:
             handle.write(b'\n(label "stub-cli" (uuid 00000000-0000-4000-8000-000000000001))\n')
@@ -357,6 +385,19 @@ def _distribution_digest(package, version="0.21.0"):
     return canonical_sha256("manifest", rows)
 
 
+def _make_directory_link(target, link):
+    """Create a directory junction/symlink, or return None when unavailable."""
+    if os.name == "nt":
+        completed = subprocess.run(["cmd", "/c", "mklink", "/J", link, target],
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return link if completed.returncode == 0 else None
+    try:
+        os.symlink(target, link, target_is_directory=True)
+    except OSError:
+        return None
+    return link
+
+
 def _symbol_digest(payload):
     """Mirror the adapter's embedded-library symbol digest exactly."""
     rows = []
@@ -374,9 +415,11 @@ class AdapterCase(unittest.TestCase):
 
     rule = "DC-04"
     route = "STRICT"
-    oplist_ops = [{"op": "place_component", "lib_id": "Device:R"},
-                  {"op": "add_net_label", "name": "+3V3"},
-                  {"op": "add_net_label", "name": "BOOT"}]
+    oplist_ops = [{"op": "place_component", "lib_id": "Device:R", "designator": "R9",
+                   "x_mil": 1350, "y_mil": 10150, "value": "10k",
+                   "footprint": "Resistor_SMD:R_0603_1608Metric"},
+                  {"op": "add_net_label", "name": "+3V3", "at": "R9.1"},
+                  {"op": "add_net_label", "name": "BOOT", "at": "R9.2"}]
 
     def setUp(self):
         self.root = tempfile.mkdtemp(prefix="aedl-c4-")
@@ -419,12 +462,20 @@ class AdapterCase(unittest.TestCase):
         manifest.update(overrides)
         return manifest
 
+    def proposal(self, ops=None):
+        return {"schema_version": 1, "context_id": "CTX-1", "target": "design/fault.kicad_sch",
+                "base_source_sha256": canonical_sha256("manifest", "SRC"), "decision": "PATCH",
+                "oplist": {"protocol_version": 2, "target_format": "kicad",
+                           "ops": ops if ops is not None else self.oplist_ops},
+                "diagnosis": []}
+
     def host_patch(self, rule=None, route=None, toolchain=None, ops=None, patch_id="PATCH-1"):
         toolchain = toolchain or self.toolchain()
+        proposal = self.proposal(ops)
         body = {"schema_version": 1, "run_id": "RUN-1", "candidate_id": "CAND-1",
                 "round_id": "ROUND-1", "patch_id": patch_id, "context_id": "CTX-1",
-                "proposal": {"oplist": {"ops": ops if ops is not None else self.oplist_ops}},
-                "proposal_sha256": canonical_sha256("proposal", "P"),
+                "proposal": proposal,
+                "proposal_sha256": canonical_sha256("proposal", proposal),
                 "target": "design/fault.kicad_sch",
                 "base": {"files": {}, "topology_sha256": canonical_sha256("topology", "T")},
                 "policy": {"id": "POLICY-1", "file_sha256": canonical_sha256("manifest", "F"),
@@ -542,12 +593,36 @@ class StrictReceiptTests(AdapterCase):
         self.assertEqual(result["status"], "BLOCKED")
         self.assertIn("REPAIR_EFFECT_MISMATCH", self.codes(result))
 
-    def test_an_existing_warning_does_not_block(self):
-        warnings = [{"code": "DANGLING_ENDPOINT", "severity": "WARNING", "message": "known"}]
+    def test_an_existing_warning_that_is_not_host_frozen_still_blocks(self):
+        warnings = [{"code": "DANGLING_ENDPOINT", "severity": "WARNING", "message": "known",
+                     "refs": ["R1"]}]
         self.write_stage(sidecar(connectivity=warnings))
-        self.mode = "new-warning"
         result = adapter.apply_stage(self.stage_request())
-        self.assertEqual(result["status"], "APPLIED_TO_STAGE", result["reasons"])
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("REPAIR_EFFECT_MISMATCH", self.codes(result))
+
+    def test_a_warning_that_moved_to_another_object_blocks(self):
+        warnings = [{"code": "DANGLING_ENDPOINT", "severity": "WARNING", "message": "on R1",
+                     "refs": ["R1"]}]
+        self.write_stage(sidecar(connectivity=warnings))
+        self.mode = "moved-warning"
+        result = adapter.apply_stage(self.stage_request())
+        self.assertEqual(result["status"], "BLOCKED")
+        details = " | ".join(row["detail"] for row in result["reasons"])
+        self.assertIn("new WARNING", details)
+        before = adapter.normalize_connectivity(
+            [{"code": "DANGLING_ENDPOINT", "severity": "WARNING", "refs": ["R1"]}])[0]
+        after = adapter.normalize_connectivity(
+            [{"code": "DANGLING_ENDPOINT", "severity": "WARNING", "refs": ["U7"]}])[0]
+        self.assertEqual(before[0]["object_id"], "R1")
+        self.assertEqual(after[0]["object_id"], "U7")
+
+    def test_a_clean_receipt_cannot_hide_a_new_warning_in_the_fresh_read(self):
+        self.mode = "silent-warning"
+        result = adapter.apply_stage(self.stage_request())
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("REPAIR_EFFECT_MISMATCH", self.codes(result))
+        self.assertEqual(result["tool"]["connectivity_findings"], [])
 
     def test_a_no_connect_conflict_blocks(self):
         self.mode = "no-connect"
@@ -645,6 +720,82 @@ class RouteAndBindingTests(AdapterCase):
         self.assertEqual(result["status"], "BLOCKED")
         self.assertIn("REPAIR_INPUT_DRIFT", self.codes(result))
 
+    def test_the_same_operation_with_different_arguments_is_input_drift(self):
+        disk_ops = [{"op": "add_net_label", "name": "GND", "at": "U1.44"}]
+        with open(self.oplist_path, "w", encoding="utf-8", newline="\n") as handle:
+            json.dump({"protocol_version": 2, "target_format": "kicad", "ops": disk_ops}, handle)
+        patch = self.host_patch(ops=[{"op": "add_net_label", "name": "BOOT0", "at": "U1.44"}])
+        result = adapter.apply_stage(self.stage_request(patch))
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("REPAIR_INPUT_DRIFT", self.codes(result))
+        self.assertEqual(self.call_log(), [])
+
+    def test_a_proposal_that_does_not_match_its_own_digest_is_input_drift(self):
+        patch = self.host_patch()
+        patch["proposal_sha256"] = "0" * 64
+        patch["patch_sha256"] = canonical_sha256(
+            "patch", {key: value for key, value in patch.items() if key != "patch_sha256"})
+        result = adapter.apply_stage(self.stage_request(patch))
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("REPAIR_INPUT_DRIFT", self.codes(result))
+        self.assertEqual(self.call_log(), [])
+
+    def test_malformed_nested_inputs_are_blocked_without_raising(self):
+        mutations = [{"proposal": []},
+                     {"proposal": {"oplist": []}},
+                     {"proposal": {"oplist": {"protocol_version": 2, "target_format": "kicad",
+                                              "ops": [{"op": "delete_object", "uuid": "u",
+                                                       "cascade": True}]}}},
+                     {"base": []},
+                     {"authority": {"context_digest": "0" * 64,
+                                    "resolved_authorization_refs": "not-a-list",
+                                    "decisions": []}},
+                     {"authority": {"context_digest": "0" * 64,
+                                    "resolved_authorization_refs": ["host:ledger:1"],
+                                    "decisions": [{}]}},
+                     {"policy": {"id": "POLICY-1", "file_sha256": "0" * 64,
+                                 "bound_rule_id": "DC-04"}}]
+        for mutation in mutations:
+            patch = self.host_patch()
+            patch.update(mutation)
+            if "proposal" in mutation:
+                patch["proposal_sha256"] = canonical_sha256("proposal", patch["proposal"])
+            patch["patch_sha256"] = canonical_sha256(
+                "patch", {key: value for key, value in patch.items() if key != "patch_sha256"})
+            result = adapter.apply_stage(self.stage_request(patch))
+            self.assertEqual(result["status"], "BLOCKED", mutation)
+            self.assertEqual(self.call_log(), [], mutation)
+
+    def test_malformed_operations_are_blocked_without_raising(self):
+        cases = [[{"op": "add_net_label", "name": "BOOT0"}],
+                 [{"op": "explode", "uuid": "u"}],
+                 [{"op": "delete_object", "uuid": "u", "cascade": True}],
+                 [{"op": "place_component", "lib_id": "Device:R", "designator": "R9",
+                   "x_mil": "1350", "y_mil": 10150, "value": "10k", "footprint": "f"}],
+                 [{"op": "add_net_label", "name": "n", "at": "not-a-pin"}],
+                 [{"op": "add_net_label", "name": "n", "at": "U1.44", "scope": "global"}]]
+        for ops in cases:
+            result = adapter.apply_stage(self.stage_request(self.host_patch(ops=ops)))
+            self.assertEqual(result["status"], "BLOCKED", ops)
+            self.assertEqual(self.call_log(), [], ops)
+
+    def test_an_op_list_that_escapes_through_a_linked_directory_is_blocked(self):
+        outside = os.path.join(self.root, "outside")
+        os.makedirs(outside)
+        with open(os.path.join(outside, "oplist.json"), "w", encoding="utf-8",
+                  newline="\n") as handle:
+            json.dump({"protocol_version": 2, "target_format": "kicad", "ops": self.oplist_ops},
+                      handle)
+        link = os.path.join(self.stage, "linked")
+        if _make_directory_link(outside, link) is None:
+            self.skipTest("this platform cannot create a directory link without elevation")
+        request = self.stage_request()
+        request["oplist_path"] = os.path.join(link, "oplist.json")
+        result = adapter.apply_stage(request)
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("REPAIR_INPUT_DRIFT", self.codes(result))
+        self.assertEqual(self.call_log(), [])
+
     def test_an_op_list_outside_the_stage_root_is_refused(self):
         outside = os.path.join(self.root, "outside.json")
         with open(outside, "w", encoding="utf-8") as handle:
@@ -659,6 +810,17 @@ class RouteAndBindingTests(AdapterCase):
         request["stage_target"] = "../escape.kicad_sch"
         result = adapter.apply_stage(request)
         self.assertEqual(result["status"], "BLOCKED")
+
+    def test_malformed_stage_requests_are_blocked_without_raising(self):
+        mutations = [{"txn_id": []}, {"txn_id": "bad id!"}, {"oplist_path": 5},
+                     {"native_artifact_root": None}, {"stage_root": "relative/path"},
+                     {"stage_target": 42}, {"host_patch": []}]
+        for mutation in mutations:
+            request = self.stage_request()
+            request.update(mutation)
+            result = adapter.apply_stage(request)
+            self.assertEqual(result["status"], "BLOCKED", mutation)
+            self.assertEqual(self.call_log(), [], mutation)
 
     def test_a_missing_stage_target_is_blocKed(self):
         request = self.stage_request()
@@ -741,6 +903,29 @@ class ReadNativeTests(AdapterCase):
                                      artifact_root=self.artifacts)
         self.assertEqual(result["status"], "BLOCKED")
 
+    def test_a_reader_inventory_disagreement_is_unknown_not_complete(self):
+        payload = sidecar()
+        payload["metadata"] = {"component_count": 5, "pin_count": 5}
+        self.write_stage(payload)
+        result = adapter.read_native({"host_binding": self.binding(),
+                                      "absolute_read_root": self.stage,
+                                      "relative_target": "fault.kicad_sch"},
+                                     artifact_root=self.artifacts)
+        self.assertEqual(result["status"], "UNKNOWN")
+        self.assertIn("REPAIR_COVERAGE_INCOMPLETE", [row["code"] for row in result["reasons"]])
+
+    def test_a_reader_that_offers_no_cross_check_is_unknown_not_complete(self):
+        payload = sidecar()
+        payload["metadata"] = {}
+        payload["primitive_pin_count"] = 0
+        self.write_stage(payload)
+        result = adapter.read_native({"host_binding": self.binding(),
+                                      "absolute_read_root": self.stage,
+                                      "relative_target": "fault.kicad_sch"},
+                                     artifact_root=self.artifacts)
+        self.assertEqual(result["status"], "UNKNOWN")
+        self.assertIn("REPAIR_COVERAGE_INCOMPLETE", [row["code"] for row in result["reasons"]])
+
     def test_the_read_reports_connectivity_findings(self):
         self.write_stage(sidecar(connectivity=[{"code": "DANGLING_ENDPOINT",
                                                 "severity": "WARNING", "message": "x"}]))
@@ -760,6 +945,22 @@ class NormalizationTests(unittest.TestCase):
         self.assertEqual(status, "OK")
         self.assertEqual(findings[0]["severity"], "INFO")
         self.assertEqual(findings[0]["raw_severity"], "NOTE")
+
+    def test_a_background_frozen_warning_is_the_only_tolerated_warning(self):
+        before = [{"code": "DANGLING_ENDPOINT", "severity": "WARNING", "message": "known",
+                   "object_id": "R1"}]
+        after = [{"code": "DANGLING_ENDPOINT", "severity": "WARNING", "message": "known",
+                  "object_id": "R1"}]
+        self.assertEqual(adapter.connectivity_verdict(before, after)[0], "BLOCKED")
+        self.assertEqual(
+            adapter.connectivity_verdict(before, after,
+                                         background={("DANGLING_ENDPOINT", "R1")})[0], "PASS")
+        moved = [{"code": "DANGLING_ENDPOINT", "severity": "WARNING", "message": "known",
+                  "object_id": "U7"}]
+        status, reasons = adapter.connectivity_verdict(
+            before, moved, background={("DANGLING_ENDPOINT", "R1")})
+        self.assertEqual(status, "BLOCKED")
+        self.assertIn("new WARNING", " | ".join(row["detail"] for row in reasons))
 
     def test_an_unknown_severity_is_indeterminate(self):
         findings, status = adapter.normalize_connectivity(
@@ -879,10 +1080,16 @@ class NativeQualificationTests(unittest.TestCase):
                           os.path.join(stage, "oplist.json"))
             with open(os.path.join(stage, "oplist.json"), encoding="utf-8") as handle:
                 ops = json.load(handle)["ops"]
+            proposal = {"schema_version": 1, "context_id": "CTX-1",
+                        "target": "design/fault.kicad_sch",
+                        "base_source_sha256": canonical_sha256("manifest", "SRC"),
+                        "decision": "PATCH",
+                        "oplist": {"protocol_version": 2, "target_format": "kicad", "ops": ops},
+                        "diagnosis": []}
             body = {"schema_version": 1, "run_id": "RUN-1", "candidate_id": "CAND-1",
                     "round_id": "ROUND-1", "patch_id": "PATCH-" + case, "context_id": "CTX-1",
-                    "proposal": {"oplist": {"ops": ops}},
-                    "proposal_sha256": canonical_sha256("proposal", ops),
+                    "proposal": proposal,
+                    "proposal_sha256": canonical_sha256("proposal", proposal),
                     "target": "design/fault.kicad_sch",
                     "base": {"files": {}, "topology_sha256": canonical_sha256("topology", "T")},
                     "policy": {"id": "POLICY-1", "file_sha256": canonical_sha256("manifest", "F"),
