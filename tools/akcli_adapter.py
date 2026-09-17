@@ -1144,6 +1144,13 @@ def apply_stage(stage_request):
             return result
         result["native_before"] = {"source_sha256": native_before["source_sha256"],
                                    "observation": native_before["observation"]}
+        # PRECHECK owns the toolchain binding: the manifest and the native before read
+        # already determine which tool would write, so that question is settled here --
+        # before STAGE_APPLY starts a writer -- and not in the effect check afterwards.
+        binding_reasons = _verify_toolchain_binding(toolchain, native_before, result["tool"])
+        if binding_reasons:
+            result.update(status="TOOL_ERROR", reasons=binding_reasons)
+            return result
         receipt, status, reasons = _execute_route(route, toolchain, stage_target,
                                                   oplist_path, on_disk, artifact_root)
         result["tool"].update(receipt)
@@ -1332,30 +1339,50 @@ def _op_results_of(payload):
     return results
 
 
+def _verify_toolchain_binding(toolchain, native_before, tool):
+    """Settle the toolchain identity in PRECHECK, before any writer is started.
+
+    Contract section 7 fixes the phases as PRECHECK -> SNAPSHOT -> STAGE_APPLY: PRECHECK
+    validates the toolchain and performs the full native before read, while the native
+    write belongs to STAGE_APPLY and happens exactly once.  Everything that those two
+    already determine therefore has to be decided here.  Checking it afterwards would
+    mean asking a tool whose identity is already known to be wrong to modify the
+    design first and only then reporting the mismatch.
+
+    Only the stability of the installed distribution across the two reads is left to
+    the effect check, because that alone cannot be observed before the write.
+    """
+    reasons = []
+    probe = (native_before or {}).get("tool") or {}
+    if tool["version"] != AKCLI_VERSION:
+        reasons.append(_reason("REPAIR_TOOL_UNAVAILABLE",
+                               "the bound toolchain does not declare akcli %s" % AKCLI_VERSION))
+    if probe.get("version") != AKCLI_VERSION:
+        reasons.append(_reason("REPAIR_TOOL_UNAVAILABLE",
+                               "the running akcli reports version %r" % (probe.get("version"),)))
+    if probe.get("artifact_sha256") != toolchain["akcli_artifact_sha256"]:
+        reasons.append(_reason("REPAIR_TOOL_UNAVAILABLE",
+                               "the installed akcli distribution digest does not match the manifest"))
+    if probe.get("symbol_digest") != toolchain["symbol_digest"]:
+        reasons.append(_reason("REPAIR_TOOL_UNAVAILABLE",
+                               "the bound symbol digest does not match the manifest"))
+    return reasons
+
+
 def _verify_effect(route, result, native_before, native_after, toolchain, op_count):
     """All conjunctive conditions of contract section 8 have to hold."""
     reasons = []
     tool = result["tool"]
-    # The write resolved against the environment measured by the before read; the
-    # after read may legitimately carry a different embedded library once the
-    # write added a symbol, so only the installed distribution must be stable.
+    # The toolchain identity is settled in PRECHECK (_verify_toolchain_binding above),
+    # so a mismatched tool never reaches the writer.  What can only be observed across
+    # both reads is that the installed distribution did not change underneath this
+    # transaction: the after read may legitimately carry a different embedded library
+    # once the write added a symbol, but not a different akcli build.
     before_probe = (native_before or {}).get("tool") or {}
     after_probe = (native_after or {}).get("tool") or {}
-    if tool["version"] != AKCLI_VERSION:
-        reasons.append(_reason("REPAIR_TOOL_UNAVAILABLE",
-                               "the bound toolchain does not declare akcli %s" % AKCLI_VERSION))
-    if before_probe.get("version") != AKCLI_VERSION:
-        reasons.append(_reason("REPAIR_TOOL_UNAVAILABLE",
-                               "the running akcli reports version %r" % (before_probe.get("version"),)))
     if after_probe.get("artifact_sha256") != before_probe.get("artifact_sha256"):
         reasons.append(_reason("REPAIR_TOOL_UNAVAILABLE",
                                "the installed akcli changed between the two native reads"))
-    if before_probe.get("artifact_sha256") != toolchain["akcli_artifact_sha256"]:
-        reasons.append(_reason("REPAIR_TOOL_UNAVAILABLE",
-                               "the installed akcli distribution digest does not match the manifest"))
-    if before_probe.get("symbol_digest") != toolchain["symbol_digest"]:
-        reasons.append(_reason("REPAIR_TOOL_UNAVAILABLE",
-                               "the bound symbol digest does not match the manifest"))
     if reasons:
         return "TOOL_ERROR", reasons
     # The created-UUID correspondence is only evidence when the observations it is

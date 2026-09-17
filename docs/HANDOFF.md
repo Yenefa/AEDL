@@ -304,3 +304,15 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
 - 验证（本轮实测原文）：tests.test_akcli_adapter **75 OK（skipped=5）**；全量 discover **700 OK（skipped=5）**；真原生 opt-in（akcli 0.21.0 + 3.11.15）**4 OK**——P1 假成功仍 BLOCKED、DC-04/DC-05 仍 `APPLIED_TO_STAGE` 且上报集合 == 新增集合、新增平价用例通过。
 - **反向对照（证明新测试非空转）**：把 `tools/akcli_adapter.py` 临时还原到 HEAD 后，本轮 5 条新增/改判测试全部 FAIL（`Ran 6, FAILED (failures=5)`）；平价用例在修前修后都通过 —— 它是防漂移回归，不是新缺陷证据。随后已还原修复版并复跑全绿。
 - 状态：PENDING_HUMAN_REVIEW。
+
+## 2026-09-17 C4 toolchain binding 前移到 PRECHECK（新卡 PR1-C4-PRECHECK，分支 fix-pr1-c4-precheck-binding）
+
+- 触发：Owner 对 PR #78 裁定 **REQUEST_CHANGES / HOLD** ——「这次 qualification 真正发现了一个 C4 adapter 合同缺陷：P6 symbol digest mismatch 发生在写后才拦截」，并指定先开本 fix、修完 merge、再 rebase #78。本卡 base = master `0626375`。
+- **缺陷**：`symbol_digest`、运行中 akcli 版本、实际安装分布 digest 都在 `_verify_effect()`（**writer 执行之后**）比较，而同实现的 manifest 版本却在写前拒绝 —— 安全等级不一致。后果：digest 不符时真 writer 仍被启动并成功改写 stage（`tool.exit_code = 0`），之后才报 `TOOL_ERROR`。合同 L355/L369 把「校验 toolchain + native before 全量读取」钉在 PRECHECK、把 native write 钉在 STAGE_APPLY（只调用一次），所以能由 (manifest + native before) 定案的属性必须在写前定案。
+- **修法**：新增 `_verify_toolchain_binding()`，在 `native_before` PASS 之后、`_execute_route()` 之前调用；不匹配 → `TOOL_ERROR / REPAIR_TOOL_UNAVAILABLE` 并直接返回。`_verify_effect()` 只保留「分布 digest 在两次读之间变化」这一条（本质上只能在写后观测）。**失败类别与 reason code 相对修前完全不变**，只有时点前移；未改判据、未改 `gates/**`、未改契约语义。
+- **测试**：3 条既存桩用例补断言 `call_log() == []` + stage 字节不变；新增桩用例守护被保留的跨读检查；新增**原生**用例（真 akcli 0.21.0 + 扰动 `symbol_digest`，mock 记录每次 subprocess）断言 `draw` 调用 0 次且字节逐字节不变。
+- 验证：tests.test_akcli_adapter **77 OK（skipped=6）**；全量 discover **702 OK（skipped=6）**；真原生 opt-in **5 OK**（DC-04/DC-05 仍 `APPLIED_TO_STAGE` 且逐字节一致，正常路径不回归）。
+- **反向对照**：把 adapter 临时还原到 HEAD 后，3 条桩用例 `Ran 4, FAILED (failures=3)`；原生写前用例 `FAILED (failures=1)`，断言显示 `draw` 的 argv 列表**非空** —— 未修版确实把真 writer 启动了，正是缺陷本身；被保留的跨读用例在未修版同样通过（行为守护，非缺陷证据）。随后还原修复版并复跑全绿。
+- **同会话的 #78 取证（不属本卡目标）**：按 Owner 指示另做一次 P8 `delete_object` bounded probe（对象身份取自 adapter 自己的 pinned parser，非正则）。12 次探针：DC-03 的 2 根 wire、DC-04 的 4 个 label、DC-01 的两个冻结 `delete_object` uuid **全部被 strict 合法拒绝**（exit 6，未写入）；DC-04 的 4 个 `no_connect` 删除成功且字节改变、但 fresh read 新增 finding = **0**。按严格筛选（PRECHECK 过 + writer 真跑 + exit 0 + 字节变 + 之后才出新 finding）候选为 **0** → **P8 native = `NOT_REACHABLE_WITH_CURRENT_V1+FIXTURES`**（据此不改词表、不扩 Operation v1）。原始回执见 PR #78 评论。
+- 后续（按 Owner 排序）：本卡 merge → PR #78 rebase 到新 master，并把其 P6 native 断言的 `exit_code == 0` 改成「写调用 0 次 + 字节不变」并更新 grading matrix → P3 acceptance erratum（draft-5，复用 DC-01/02/03 接 E1/E2/E3，**不新造 schematic fixture**）→ C4-P7 round-level 交 C5/pipeline。
+- 状态：PENDING_HUMAN_REVIEW。
