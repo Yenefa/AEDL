@@ -273,3 +273,12 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
 - 口径承认：C4 把 `bound_policy` 当作 host-bound opaque payload，不宣称自行重验完整 BoundPolicy。
 - 验证：C4 63 OK（skipped=3）；全量 688 OK（skipped=3）；真原生资格 2 OK（DC-04/05 逐字节不变）。
 - 状态：PENDING_HUMAN_REVIEW；未 merge。
+
+## 2026-09-17 C4-P1 原生扰动资格（新卡 PR1-C4-PQ，分支 feat-pr1-c4-perturbation-qualification）
+
+- 分支基线：暂以 PR #75 head `cda3155` 为 base（#75 尚未合入 master，AI 不 merge）；#75 合入后立即 rebase 到 master 再开 PR。
+- P1 取证（真 akcli 0.21.0）：`add_net_label name=+5V at=C1.1`（C1.1 本就在 +5V）→ writer 返回 exit=0 / applied=true / status=applied / op ok / created_uuids=[2b641f80-…] / connectivity=[]，**但文件字节零变化**。
+- 已固化为回归：`NativePerturbationTests.test_p1_an_applied_receipt_with_an_unchanged_artifact_is_blocked`（opt-in，真工具链）→ 断言 writer 确实报成功且 adapter 判 BLOCKED / REPAIR_EFFECT_MISMATCH；另有常驻用例把同端点 `add_wire` 钉在词表边界（BLOCKED / REPAIR_INPUT_DRIFT，0 次写调用）。
+- 验证：tests.test_akcli_adapter 65 OK（skipped=4）；discover 690 OK（skipped=4）；真原生资格 3 OK（DC-04/DC-05 逐字节不变）。
+- 待办：C4-P2..P8；`created_uuids` 与实际新增顶层对象的对应关系未校验（合同 §8 要求），已上报待裁定。
+- 状态：PENDING_HUMAN_REVIEW。

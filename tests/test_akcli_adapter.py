@@ -884,6 +884,14 @@ class RouteAndBindingTests(AdapterCase):
         self.assertEqual(result["status"], "BLOCKED")
         self.assertIn("REPAIR_TOOL_PROTOCOL_ERROR", self.codes(result))
 
+    def test_p1_an_operation_outside_operation_v1_never_reaches_the_writer(self):
+        """The real collapsed-wire shape: exit 0, applied, ok op, no byte change."""
+        ops = [{"op": "add_wire", "vertices": [[1000, 1000], [1000, 1000]]}]
+        result = adapter.apply_stage(self.stage_request(self.host_patch(ops=ops)))
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("REPAIR_INPUT_DRIFT", self.codes(result))
+        self.assertEqual(self.call_log(), [])
+
     def test_malformed_stage_requests_are_blocked_without_raising(self):
         mutations = [{"txn_id": []}, {"txn_id": "bad id!"}, {"oplist_path": 5},
                      {"native_artifact_root": None}, {"stage_root": "relative/path"},
@@ -1067,16 +1075,10 @@ class NormalizationTests(unittest.TestCase):
                                     "--apply", "--strict-nets", "--no-erc", "--json"])
 
 
-class NativeQualificationTests(unittest.TestCase):
-    """Real pinned toolchain. Opt-in: AEDL_PR1_NATIVE=1 and AEDL_AKCLI_PYTHON."""
+class _NativeToolchainMixin(object):
+    """Shared opt-in harness for the real pinned toolchain."""
 
     FIXTURES = os.path.join(REPO, "tests", "fixtures", "repair_pr1", "native")
-    # Independently recorded by the 2026-09-16 cross-machine reproduction of the
-    # same pinned toolchain; a mismatch means this adapter changed the bytes.
-    RECORDED = {"DC-04": ("655F585DF2E913A8AAADE3D8A0A291591EC1E7E275920006A54AEC8F75DDE7A0",
-                          "2F660180AB180009656DA7D47E7B686A75CE42CE9084B610904E2B6D28DB99C6"),
-                "DC-05": ("08393EE96D2D5F2AB15B721FC962A2C6E731330B855A26845D6F530DBA4EBF16",
-                          "033E4EFA94BC800FA60D8CB66182BA35478C6EFBD85213DB0A6C87A3C828F83B")}
 
     def setUp(self):
         if os.environ.get("AEDL_PR1_NATIVE") != "1":
@@ -1093,30 +1095,6 @@ class NativeQualificationTests(unittest.TestCase):
                 "akcli_upstream_commit": adapter.AKCLI_UPSTREAM_COMMIT,
                 "worker_python": self.python, "symbol_digest": "0" * 64,
                 "launcher_argv": [], "timeout_seconds": 60, "environment": {}}
-
-    def test_the_pinned_reader_produces_a_normalized_observation_for_every_case(self):
-        import shutil as _shutil
-        cli = _shutil.which("akcli") or os.path.join(
-            os.path.dirname(self.python), "akcli.exe")
-        if not os.path.isfile(cli):
-            self.fail("the pinned akcli executable was not found next to the interpreter")
-        for case in ("DC-01", "DC-02", "DC-03", "DC-04", "DC-05"):
-            stage = os.path.join(self.root, case)
-            os.makedirs(stage)
-            source = os.path.join(self.FIXTURES, case, "fault.kicad_sch")
-            _shutil.copy2(source, os.path.join(stage, "fault.kicad_sch"))
-            toolchain = self.toolchain(cli)
-            binding = {"run_id": "RUN-1", "candidate_id": "CAND-1", "txn_id": "TXN-1",
-                       "toolchain_manifest": toolchain,
-                       "toolchain_sha256": adapter._toolchain_digest(toolchain),
-                       "read_authorization": {"context_digest": canonical_sha256("context", case),
-                                              "resolved_authorization_refs": ["host:ledger:1"],
-                                              "decisions": []}}
-            result = adapter.read_native({"host_binding": binding, "absolute_read_root": stage,
-                                          "relative_target": "fault.kicad_sch"},
-                                         artifact_root=os.path.join(self.root, "artifacts"))
-            self.assertEqual(result["status"], "PASS",
-                             "%s: %s" % (case, result["reasons"]))
 
     def _akcli(self):
         import shutil as _shutil
@@ -1151,6 +1129,74 @@ class NativeQualificationTests(unittest.TestCase):
         toolchain["symbol_digest"] = probe["symbol_digest"]
         return toolchain
 
+    def _patch(self, toolchain, ops, rule, stage, ctx="CTX-1"):
+        """Build a contract-shaped HostPatch over a prepared stage."""
+        with open(os.path.join(stage, "fault.kicad_sch"), "rb") as handle:
+            base_source_sha256 = hash_bytes(handle.read())
+        proposal = {"schema_version": 1, "context_id": ctx, "target": "design/fault.kicad_sch",
+                    "base_source_sha256": base_source_sha256, "decision": "PATCH",
+                    "oplist": {"protocol_version": 2, "target_format": "kicad", "ops": ops},
+                    "diagnosis": []}
+        body = {"schema_version": 1, "run_id": "RUN-1", "candidate_id": "CAND-1",
+                "round_id": "ROUND-1", "patch_id": "PATCH-" + rule, "context_id": ctx,
+                "proposal": proposal,
+                "proposal_sha256": canonical_sha256("proposal", proposal),
+                "target": "design/fault.kicad_sch",
+                "base": {"files": {}, "topology_sha256": canonical_sha256("topology", "T")},
+                "policy": {"id": "POLICY-1", "file_sha256": canonical_sha256("manifest", "F"),
+                           "bound_rule_id": rule,
+                           "bound_policy_sha256": canonical_sha256("policy-bound", "B")},
+                "authority": {"context_digest": canonical_sha256("context", "C"),
+                              "resolved_authorization_refs": ["host:ledger:1"],
+                              "decisions": [{"capability": "TOOL_EXECUTE", "effect": "ALLOW"},
+                                            {"capability": "FILE_WRITE", "effect": "ALLOW"}]},
+                "toolchain_manifest": toolchain,
+                "toolchain_sha256": adapter._toolchain_digest(toolchain),
+                "route": "STRICT", "bound_policy": {"version": 1}}
+        body["patch_sha256"] = canonical_sha256("patch", body)
+        return body
+
+    def _stage_request(self, body, stage, artifact_root):
+        return {"host_patch": body, "txn_id": "TXN-1", "stage_root": stage,
+                "stage_target": "fault.kicad_sch",
+                "oplist_path": os.path.join(stage, "oplist.json"),
+                "native_artifact_root": artifact_root}
+
+
+class NativeQualificationTests(_NativeToolchainMixin, unittest.TestCase):
+    """Real pinned toolchain. Opt-in: AEDL_PR1_NATIVE=1 and AEDL_AKCLI_PYTHON."""
+
+    # Independently recorded by the 2026-09-16 cross-machine reproduction of the
+    # same pinned toolchain; a mismatch means this adapter changed the bytes.
+    RECORDED = {"DC-04": ("655F585DF2E913A8AAADE3D8A0A291591EC1E7E275920006A54AEC8F75DDE7A0",
+                          "2F660180AB180009656DA7D47E7B686A75CE42CE9084B610904E2B6D28DB99C6"),
+                "DC-05": ("08393EE96D2D5F2AB15B721FC962A2C6E731330B855A26845D6F530DBA4EBF16",
+                          "033E4EFA94BC800FA60D8CB66182BA35478C6EFBD85213DB0A6C87A3C828F83B")}
+
+    def test_the_pinned_reader_produces_a_normalized_observation_for_every_case(self):
+        import shutil as _shutil
+        cli = _shutil.which("akcli") or os.path.join(
+            os.path.dirname(self.python), "akcli.exe")
+        if not os.path.isfile(cli):
+            self.fail("the pinned akcli executable was not found next to the interpreter")
+        for case in ("DC-01", "DC-02", "DC-03", "DC-04", "DC-05"):
+            stage = os.path.join(self.root, case)
+            os.makedirs(stage)
+            source = os.path.join(self.FIXTURES, case, "fault.kicad_sch")
+            _shutil.copy2(source, os.path.join(stage, "fault.kicad_sch"))
+            toolchain = self.toolchain(cli)
+            binding = {"run_id": "RUN-1", "candidate_id": "CAND-1", "txn_id": "TXN-1",
+                       "toolchain_manifest": toolchain,
+                       "toolchain_sha256": adapter._toolchain_digest(toolchain),
+                       "read_authorization": {"context_digest": canonical_sha256("context", case),
+                                              "resolved_authorization_refs": ["host:ledger:1"],
+                                              "decisions": []}}
+            result = adapter.read_native({"host_binding": binding, "absolute_read_root": stage,
+                                          "relative_target": "fault.kicad_sch"},
+                                         artifact_root=os.path.join(self.root, "artifacts"))
+            self.assertEqual(result["status"], "PASS",
+                             "%s: %s" % (case, result["reasons"]))
+
     def test_the_real_strict_route_applies_dc04_and_dc05_byte_identically(self):
         import shutil as _shutil
         cli = self._akcli()
@@ -1164,36 +1210,9 @@ class NativeQualificationTests(unittest.TestCase):
                           os.path.join(stage, "oplist.json"))
             with open(os.path.join(stage, "oplist.json"), encoding="utf-8") as handle:
                 ops = json.load(handle)["ops"]
-            with open(os.path.join(stage, "fault.kicad_sch"), "rb") as handle:
-                base_source_sha256 = hash_bytes(handle.read())
-            proposal = {"schema_version": 1, "context_id": "CTX-1",
-                        "target": "design/fault.kicad_sch",
-                        "base_source_sha256": base_source_sha256,
-                        "decision": "PATCH",
-                        "oplist": {"protocol_version": 2, "target_format": "kicad", "ops": ops},
-                        "diagnosis": []}
-            body = {"schema_version": 1, "run_id": "RUN-1", "candidate_id": "CAND-1",
-                    "round_id": "ROUND-1", "patch_id": "PATCH-" + case, "context_id": "CTX-1",
-                    "proposal": proposal,
-                    "proposal_sha256": canonical_sha256("proposal", proposal),
-                    "target": "design/fault.kicad_sch",
-                    "base": {"files": {}, "topology_sha256": canonical_sha256("topology", "T")},
-                    "policy": {"id": "POLICY-1", "file_sha256": canonical_sha256("manifest", "F"),
-                               "bound_rule_id": case,
-                               "bound_policy_sha256": canonical_sha256("policy-bound", "B")},
-                    "authority": {"context_digest": canonical_sha256("context", "C"),
-                                  "resolved_authorization_refs": ["host:ledger:1"],
-                                  "decisions": [{"capability": "TOOL_EXECUTE", "effect": "ALLOW"},
-                                                {"capability": "FILE_WRITE", "effect": "ALLOW"}]},
-                    "toolchain_manifest": toolchain,
-                    "toolchain_sha256": adapter._toolchain_digest(toolchain),
-                    "route": "STRICT", "bound_policy": {"version": 1}}
-            body["patch_sha256"] = canonical_sha256("patch", body)
-            result = adapter.apply_stage(
-                {"host_patch": body, "txn_id": "TXN-1", "stage_root": stage,
-                 "stage_target": "fault.kicad_sch",
-                 "oplist_path": os.path.join(stage, "oplist.json"),
-                 "native_artifact_root": os.path.join(self.root, "artifacts-" + case)})
+            body = self._patch(toolchain, ops, case, stage)
+            result = adapter.apply_stage(self._stage_request(
+                body, stage, os.path.join(self.root, "artifacts-" + case)))
             self.assertEqual(result["status"], "APPLIED_TO_STAGE",
                              "%s: %s" % (case, result["reasons"]))
             recorded_before, recorded_after = self.RECORDED[case]
@@ -1201,6 +1220,46 @@ class NativeQualificationTests(unittest.TestCase):
             self.assertEqual(result["after_source_sha256"].upper(), recorded_after)
             self.assertEqual([row["status"] for row in result["tool"]["op_results"]],
                              ["ok"] * len(ops))
+
+
+class NativePerturbationTests(_NativeToolchainMixin, unittest.TestCase):
+    """C4-P1..P8 native perturbation qualification (B5 criteria sheet, section C4).
+
+    Same opt-in gates as NativeQualificationTests: these drive the real pinned
+    toolchain, so they must never run by accident in the ordinary suite, and with
+    AEDL_PR1_NATIVE=1 a missing or wrong toolchain fails instead of skipping.
+    """
+
+    # Captured 2026-09-17 with the pinned, unpatched akcli 0.21.0: C1.1 is already
+    # on +5V, so the writer reports status/applied "applied" with a created UUID,
+    # an ok op and zero connectivity findings -- while the artefact never changes.
+    P1_REPEAT_LABEL = [{"op": "add_net_label", "name": "+5V", "at": "C1.1"}]
+
+    def test_p1_an_applied_receipt_with_an_unchanged_artifact_is_blocked(self):
+        import shutil as _shutil
+        cli = self._akcli()
+        toolchain = self._measure(cli, "DC-04")
+        stage = os.path.join(self.root, "p1")
+        os.makedirs(stage)
+        _shutil.copy2(os.path.join(self.FIXTURES, "DC-04", "fault.kicad_sch"),
+                      os.path.join(stage, "fault.kicad_sch"))
+        with open(os.path.join(stage, "oplist.json"), "w", encoding="utf-8",
+                  newline="\n") as handle:
+            json.dump({"protocol_version": 2, "target_format": "kicad",
+                       "ops": self.P1_REPEAT_LABEL}, handle)
+        body = self._patch(toolchain, self.P1_REPEAT_LABEL, "DC-04", stage)
+        result = adapter.apply_stage(self._stage_request(
+            body, stage, os.path.join(self.root, "artifacts-p1")))
+        # the pinned writer really does claim success ...
+        self.assertIs(result["tool"]["tool_applied"], True)
+        self.assertEqual([row["status"] for row in result["tool"]["op_results"]], ["ok"])
+        self.assertEqual(result["tool"]["connectivity_findings"], [])
+        # ... on an artefact that never changed ...
+        self.assertFalse(result["changed"])
+        # ... and the adapter refuses to call that an applied stage
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("REPAIR_EFFECT_MISMATCH",
+                      [row["code"] for row in result["reasons"]])
 
 
 if __name__ == "__main__":

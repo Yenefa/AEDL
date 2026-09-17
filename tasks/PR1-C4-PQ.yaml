@@ -1,0 +1,97 @@
+# Task Envelope — PR1-C4-PQ  C4 Native Perturbation Qualification (P1..P8)
+# 手写自 notes/b5-acceptance/C3-C6_PERTURBATION_CRITERIA_DRAFT.md（draft-4，冻结全文 sha256 0db60076…）
+# §C4 + tasks/PR1-C4.yaml 先例。Human review + admission required before execution.
+#
+# 依赖：本卡验收对象是 tools/akcli_adapter.py，已由 PR #75 合入 master。
+# PR #75 于 2026-09-17 合入（merge commit f1c85fe）；本卡分支已从 PR #75 head
+# cda3155 rebase 到 master，现 base = f1c85fe（Owner 指示「b: rebase 然后继续」）。
+
+task: PR1-C4-PQ
+
+base:
+  branch: feat-pr1-c4-perturbation-qualification
+  sha: f1c85fec913fd87aa2dc21c952eebab633394abf
+
+goal: |
+  把 B5 判据 §C4 的八条扰动（C4-P1..P8）从「软件语义/未跑」推进到**可复现的
+  qualification**：优先用**真 akcli 0.21.0 + 真 KiCad 10.0.5** 复现真实实现行为，
+  把真实撞出来的 writer false-positive 冻成固定回归；无法用真工具在 C4 暴露的
+  条目，用它自己的词表/回执边界在桩层固定，并如实标注为 stub-level。
+  判据来源唯一：notes/b5-acceptance/C3-C6_PERTURBATION_CRITERIA_DRAFT.md §C4
+  （冻结，不改写、不反向照着实现改判据）。
+
+  已完成的 P1 前置取证（2026-09-17，真工具链，scratch）：
+  - 授权 op 形态：akcli 0.21.0 对 add_net_label name=+5V at=C1.1（C1.1 本就在 +5V）
+    返回 exit=0 / applied=true / status="applied" / op status="ok" /
+    created_uuids=["2b641f80-…"] / connectivity=[] / net_diff lines=[]，
+    但**文件字节零变化**；当前 adapter → BLOCKED / REPAIR_EFFECT_MISMATCH。
+  - 词表边界形态：add_wire 同端点（vertices 两点重合）返回 exit=0 / applied=true /
+    status="applied" / op status="ok" / created_uuids=[] / connectivity=[]，
+    **字节同样不变**；Operation v1 不含 add_wire，故 C4 在词表层即拒（0 次写调用）。
+
+scope: |
+  Writable paths are whitelisted in allowed_paths; everything else is FOREIGN.
+  只新增/扩展 tests/test_akcli_adapter.py 内的 qualification 测试类与必要的最小
+  测试夹具；不改 gates/**、src/**、tools/**（含 akcli_adapter.py 本体）、
+  sandbox_runtime/**、notes/b5-acceptance/**、docs/competition/**。
+  若 qualification 发现 adapter 语义缺陷：STOP → 记 BLOCKED → 升级 Owner，
+  不在本卡静默改验收对象。
+
+  Impact Analysis
+
+  Direct modifications:   tests/test_akcli_adapter.py（新增 opt-in qualification 类）、
+                          tasks/PR1-C4-PQ.yaml、docs/HANDOFF.md、
+                          docs/compliance/ai-usage/<ID>.md、AI_USAGE_LOG.md
+  Potentially affected:   C6 的原生资格入口；PR #75 的 review 结论（若发现缺陷）
+  Explicitly not touched: tools/akcli_adapter.py、gates/**、src/**、
+                          sandbox_runtime/**、notes/**、docs/evidence/**
+  Risk: MEDIUM（原生写入路径 + 真工具行为；只读仓库、写在 scratch 副本）
+
+  change_budget:
+    expected_files: 5
+    expected_modules: [tests, tasks, docs]
+    cross_module: false
+    contract_change: false
+    evidence_semantics_change: false
+
+dependencies: []
+
+allowed_paths:
+  - tests/test_akcli_adapter.py
+  - tasks/PR1-C4-PQ.yaml
+  - docs/HANDOFF.md
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/compliance/ai-usage/**
+
+forbidden_paths:
+  - tools/**
+  - gates/**
+  - src/**
+  - sandbox_runtime/**
+  - notes/b5-acceptance/**
+  - docs/competition/**
+  - docs/evidence/**
+  - tests/fixtures/repair_pr1/**
+
+acceptance: |
+  - C4-P1 固定为真工具链回归：真 akcli 回执 applied=true 而 stage 字节未变 →
+    BLOCKED / REPAIR_EFFECT_MISMATCH；且断言回执确实报了 applied=true（证明确实是
+    writer 撒谎，不是输入被提前拒掉）
+  - C4-P1 词表边界形态：add_wire 等 Operation v1 之外的 op → BLOCKED /
+    REPAIR_INPUT_DRIFT，writer 调用数 = 0
+  - C4-P2..P8：能用真工具暴露的走真工具；不能的走桩层并用测试名/文档明确标注
+    stub-level，绝不把 stub 结果写成原生资格
+  - 未 opt-in 时原生类 SKIP 并如实标注；opt-in 后缺工具/坏版本必须 FAIL 不得 SKIP
+  - tests.test_akcli_adapter 全绿；全量 discover 不回归；dev_gate 带本 envelope 通过
+  - 台账 + HANDOFF 如实追加；状态 PENDING_HUMAN_REVIEW
+
+exceptions:
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "用户 2026-09-17 本会话「...你 rebase 然后就继续」；envelope 本体必须在工作树，同 W1-C2/PR1-C3/PR1-C4 先例"
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "同上；分支起点为 master f1c85fe（PR #75 rebase 后），提交后按先例重锚"
+
+escalation:
+  owner: Yenefa
