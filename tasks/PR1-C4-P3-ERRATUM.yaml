@@ -5,16 +5,18 @@
 # （`tool_applied = null` 是设计使然），该路径仍可在独立条件全部成立时成功。
 # 冻结判据 §C4 现写「走 API 路径且 tool.tool_applied=null → 不得当成成功」，与合同直接矛盾。
 #
-# 本卡 base 暂以 PR #79 head 为 base（#79 尚未合入 master），同 tasks/PR1-C4-PQ.yaml 先例；
-# #79 合入后立即 rebase 到 master 再复评。
-# 注意：base.sha `4ccafca` 是 **PR #79 的分支 head**，当前尚未出现在 master 上；
+# 本卡原以 PR #79 head `4ccafca` 为 stacked base（同 tasks/PR1-C4-PQ.yaml 先例）。
+# #79 已于 2026-09-17 合入 master（merge `46f0612`），本卡已按 Owner 指示
+# **rebase 到 master 并重锚 base.sha 至此** —— 不再依赖任何未合入分支。
 # base.branch 声明为本卡自身分支（admission 要求 base.branch == 当前分支）。
+# 注：rebase 只改提交身份，不改文件字节 —— 冻结判据的 draft-5 sha256 仍为
+# `aa6df32b…`（可复现证据：rebase 前后 `git cat-file blob` 的 sha256 逐位相同）。
 
 task: PR1-C4-P3-ERRATUM
 
 base:
   branch: docs-pr1-c4-p3-erratum
-  sha: 4ccafcadf4eb92bc38dbe771386f8df913861cbc
+  sha: 46f06129f3ba0a8346ac466bd4e57d56e633fa26
 
 goal: |
   发布 **draft-5 acceptance erratum**，消除 C4-P3 判据与既有实现合同之间的直接矛盾。
@@ -131,7 +133,7 @@ exceptions:
     decision_ref: "用户 2026-09-17 本会话「确认。下一张 P3 acceptance erratum 卡可以、也应该把这个文件明确加入 allowed_paths」——Owner 明确扩 Scope；envelope 本体必须在工作树，同前几张卡先例"
   allow_drift:
     granted_by: Yenefa
-    decision_ref: "同上；本卡暂以 PR #79 head 4ccafca 为 base（#79 未合入 master），合入后立即 rebase 到 master 再复评"
+    decision_ref: "同上；本卡原以 PR #79 head 4ccafca 为 stacked base，Owner 确认 #79 已合入（merge 46f0612）后指示 retarget/rebase 到 master 并重锚；重锚后 base.sha = 46f0612，不再需要 drift 容忍（仅在 rebase 后再改 envelope 自身时才用）"
 
 escalation:
   owner: Yenefa
