@@ -55,7 +55,16 @@ import tempfile
 import uuid
 
 from gates.repair_verification import (canonical_json_bytes, canonical_sha256,
-                                      hash_bytes, normalize_observation)
+                                      hash_bytes, normalize_observation,
+                                      ObservationError,
+                                      _source_ast, _source_children, _source_value)
+# The native observation must describe the same source objects as the C2
+# observation - same identities, same AST encoding - or the two are not
+# comparable and the created-UUID binding has nothing to compare against.  The
+# verifier's pure source helpers are the single definition of that encoding, so
+# they are reused rather than reimplemented here.  They are private to
+# gates.repair_verification today; formalising that coupling needs public names
+# in the contract, which is raised for review rather than changed in this card.
 
 
 AKCLI_VERSION = "0.21.0"
@@ -584,63 +593,25 @@ def _worker_read(request):
             "connectivity": _native_connectivity(target)}
 
 
-def parse_sexpr(text):
-    """Minimal S-expression reader for complete source objects (adapter-local)."""
-    tokens = []
-    index, length = 0, len(text)
-    while index < length:
-        char = text[index]
-        if char in "()":
-            tokens.append(char)
-            index += 1
-        elif char.isspace():
-            index += 1
-        elif char == '"':
-            end = index + 1
-            while end < length and text[end] != '"':
-                end += 2 if text[end] == "\\" else 1
-            tokens.append(text[index:end + 1])
-            index = end + 1
-        else:
-            end = index
-            while end < length and not text[end].isspace() and text[end] not in "()":
-                end += 1
-            tokens.append(text[index:end])
-            index = end
-    stack, root = [], []
-    for token in tokens:
-        if token == "(":
-            node = []
-            if stack:
-                stack[-1].append(node)
-            else:
-                root.append(node)
-            stack.append(node)
-        elif token == ")":
-            if not stack:
-                raise AdapterInputError("unbalanced S-expression")
-            stack.pop()
-        else:
-            if not stack:
-                raise AdapterInputError("stray S-expression atom")
-            stack[-1].append(token)
-    if stack:
-        raise AdapterInputError("unterminated S-expression")
-    return root
-
-
 def source_objects(raw):
-    """Complete top-level source objects with a stable identity and AST hash."""
+    """Complete top-level source objects, in the verifier's own AST encoding.
+
+    The document's children - not the document node itself - are the top-level
+    objects, and a quoted UUID atom decodes to a string rather than an unquoted
+    token.  Getting either wrong leaves the native observation describing nothing,
+    which is exactly what the created-UUID binding has to compare against.
+    """
+    try:
+        root = _source_ast(raw)          # the verifier's parser takes raw bytes
+    except ObservationError as exc:
+        raise AdapterInputError("unreadable schematic source: %s" % exc) from exc
     objects = []
-    for node in parse_sexpr(raw.decode("utf-8")):
-        if not node or not isinstance(node[0], str):
-            raise AdapterInputError("a top-level object carries no kind")
-        identity = None
-        for child in node[1:]:
-            if isinstance(child, list) and child and child[0] == "uuid" and len(child) > 1:
-                identity = str(child[1])
-                break
-        if identity is None:
+    for node in root[1:]:
+        if not isinstance(node, list) or not node or not isinstance(node[0], str):
+            continue
+        if _source_children(node, "uuid"):
+            identity = _source_value(node, "uuid")
+        else:
             identity = "root:" + node[0]
         objects.append({"identity": identity, "kind": node[0],
                         "semantic_ast_sha256": canonical_sha256("protected", node),
@@ -871,6 +842,18 @@ def read_native(read_request, artifact_root=None):
         result["source_sha256"] = payload["source_sha256"]
         result["connectivity_findings"] = findings
         raw = _read_bytes(target)
+        # The observation mixes the worker's inventories with source objects parsed
+        # here, from the host's own re-read.  Those are only one observation if both
+        # describe the same bytes; otherwise the caller would compute deltas across
+        # two revisions.
+        if hash_bytes(raw) != payload["source_sha256"]:
+            result.update(status="BLOCKED",
+                          reasons=[_reason("REPAIR_SOURCE_UNBOUND",
+                                           "the native observation describes source %s, but the host "
+                                           "re-read %s: the two are not the same revision"
+                                           % (payload["source_sha256"], hash_bytes(raw)),
+                                           stage="PRECHECK")])
+            return result
         result["observation"] = normalize_observation(
             _assemble_observation(payload["source_sha256"], raw, payload))
         result["raw_artifact_hashes"] = {"source": payload["source_sha256"]}
@@ -928,6 +911,7 @@ _OPERATION_FIELDS = {"delete_object": {"op", "uuid"},
                                          "value", "footprint", "rotation", "mirror", "unit"}}
 _AUTHORITY_EFFECTS = ("ALLOW", "DENY")
 _REFERENCE_PIN = re.compile(r"^[A-Za-z0-9_+\-]{1,64}\.[A-Za-z0-9_+\-]{1,16}\Z")
+_CANONICAL_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
 _MAX_DIAGNOSIS = 16
 
 # The frozen contract has no host-bound "background warning" channel, so nothing
@@ -1016,6 +1000,16 @@ def stage_result_template(txn_id=None):
             "before_source_sha256": None, "after_source_sha256": None,
             "changed": None, "native_before": None, "native_after": None,
             "raw_artifacts": {}, "reasons": []}
+
+
+def _native_failure_status(status):
+    """A failed native read keeps its own failure class.
+
+    read_native distinguishes a refused input (BLOCKED) from a broken tool
+    (TOOL_ERROR); collapsing either into UNKNOWN would hide the reason code the
+    caller has to act on.
+    """
+    return status if status in ("TOOL_ERROR", "BLOCKED") else "UNKNOWN"
 
 
 def apply_stage(stage_request):
@@ -1145,7 +1139,7 @@ def apply_stage(stage_request):
         native_before = _native_read(toolchain, stage_root, stage_request["stage_target"],
                                      artifact_root)
         if native_before["status"] != "PASS":
-            result.update(status="TOOL_ERROR" if native_before["status"] == "TOOL_ERROR" else "UNKNOWN",
+            result.update(status=_native_failure_status(native_before["status"]),
                           reasons=native_before["reasons"])
             return result
         result["native_before"] = {"source_sha256": native_before["source_sha256"],
@@ -1169,7 +1163,7 @@ def apply_stage(stage_request):
         native_after = _native_read(toolchain, stage_root, stage_request["stage_target"],
                                     artifact_root)
         if native_after["status"] != "PASS":
-            result.update(status="TOOL_ERROR" if native_after["status"] == "TOOL_ERROR" else "UNKNOWN",
+            result.update(status=_native_failure_status(native_after["status"]),
                           reasons=native_after["reasons"])
             return result
         result["native_after"] = {"source_sha256": native_after["source_sha256"],
@@ -1364,6 +1358,20 @@ def _verify_effect(route, result, native_before, native_after, toolchain, op_cou
                                "the bound symbol digest does not match the manifest"))
     if reasons:
         return "TOOL_ERROR", reasons
+    # The created-UUID correspondence is only evidence when the observations it is
+    # computed from describe the very bytes this transaction read and wrote.  An
+    # unbound observation would let the delta be established against a different
+    # revision, so it is refused before any delta is derived.
+    unbound = []
+    for label, native, expected in (("before", native_before, result.get("before_source_sha256")),
+                                    ("after", native_after, result.get("after_source_sha256"))):
+        observed = (native or {}).get("source_sha256")
+        if observed != expected:
+            unbound.append(_reason("REPAIR_SOURCE_UNBOUND",
+                                   "the %s native observation describes source %r, not the "
+                                   "transaction's %s bytes %r" % (label, observed, label, expected)))
+    if unbound:
+        return "BLOCKED", unbound
     if not result["changed"]:
         reasons.append(_reason("REPAIR_EFFECT_MISMATCH",
                                "the receipt claims a write but the stage bytes are unchanged"))
@@ -1377,6 +1385,45 @@ def _verify_effect(route, result, native_before, native_after, toolchain, op_cou
     elif any(row.get("status") != "ok" for row in results):
         reasons.append(_reason("REPAIR_EFFECT_MISMATCH",
                                "at least one operation did not report ok"))
+    # Contract section 8: the reported created UUIDs must be exactly the objects
+    # the write actually added.  This is the correspondence a receipt alone cannot
+    # prove, and it is what catches a writer that reports a plausible UUID for an
+    # object it never wrote while touching something else.
+    reported = []
+    malformed = False
+    uuid_protocol_error = False
+    for row in results:
+        for item in (row.get("created_uuids") or []):
+            text = str(item)
+            if not _CANONICAL_UUID.match(text):
+                malformed = True
+                break
+            reported.append(text)
+        if malformed:
+            break
+    if malformed:
+        uuid_protocol_error = True
+        reasons.append(_reason("REPAIR_TOOL_PROTOCOL_ERROR",
+                               "an operation reported a non-canonical created UUID"))
+    elif len(reported) != len(set(reported)):
+        uuid_protocol_error = True
+        reasons.append(_reason("REPAIR_TOOL_PROTOCOL_ERROR",
+                               "the same created UUID is reported for more than one operation"))
+    else:
+        before_objects = {row["identity"]
+                          for row in ((native_before or {}).get("observation") or {}).get("source_objects", [])}
+        after_objects = {row["identity"]
+                         for row in ((native_after or {}).get("observation") or {}).get("source_objects", [])}
+        actual_new = after_objects - before_objects
+        if set(reported) != actual_new:
+            reasons.append(_reason("REPAIR_DELTA_MISMATCH",
+                                   "the reported created UUIDs do not match the top-level objects the "
+                                   "write actually added"))
+    if uuid_protocol_error:
+        # A receipt whose created-UUID set is not even well formed is a tool
+        # protocol failure rather than a refused write; the task envelope pins that
+        # classification, and no delta is derived from a malformed set.
+        return "TOOL_ERROR", reasons
     if route == "CONSTRAINED_EXCEPTION" and tool["tool_applied"] is not None:
         reasons.append(_reason("REPAIR_TOOL_PROTOCOL_ERROR",
                                "the constrained writer API has no applied field, so tool_applied must be null"))
