@@ -27,6 +27,14 @@ goal: |
   - DC-05：114 -> 117，同样严格相等。
   故本卡按 §8 的严格相等实现，不引入容差。
 
+  PR #77 评审（2026-09-17，head 838acee）裁定 REQUEST_CHANGES，两项 blocker + 一项 gap，
+  本轮闭合（不改判据，只改实现与测试）：
+  1. 封套与 PR 正文写定的 TOOL_ERROR 被实现成 BLOCKED（测试在保护错误行为）；
+  2. 新增的 UUID 对应关系未绑定到同一份 source bytes（worker 读与 host 重读可跨 revision，
+     `_verify_effect` 也未要求 native 观察 hash == 事务 before/after hash）；
+  3. C2<->C4 source_objects 平价缺显式回归。
+  私有 helper 耦合（`_source_ast` 等）评审明确不挡 merge，留作 follow-up，不在本轮处理。
+
 scope: |
   Writable paths are whitelisted in allowed_paths; everything else is FOREIGN.
   不改 gates/**（含 repair_verification 的公共语义）、tools/repair_pipeline.py、
@@ -79,6 +87,17 @@ acceptance: |
   - created UUID 绑定：op_results[].created_uuids 并集 != 实际新增顶层对象集合 ->
     BLOCKED / REPAIR_DELTA_MISMATCH；非 canonical UUID -> TOOL_ERROR /
     REPAIR_TOOL_PROTOCOL_ERROR
+  - （PR #77 评审 blocker 1）非 canonical 与「同一 created UUID 被多个 op 上报」
+    都必须以 TOOL_ERROR 收口，不得落成 BLOCKED；测试必须红在 TOOL_ERROR 上，
+    不得为迁就实现改判据。重复 op_index / op 缺项仍按 C4-P4 保持 BLOCKED
+  - （PR #77 评审 blocker 2）created UUID 对应关系必须绑定到同一份 source bytes：
+    native 观察的 source_sha256 必须等于本事务读写的 before/after 源哈希；worker
+    上报的 source 哈希必须等于 host 重读哈希。任一不一致 ->
+    BLOCKED / REPAIR_SOURCE_UNBOUND（合同 §7 固定 reason code），且不得据此推导
+    UUID delta；read_native 的 BLOCKED 必须原样向 apply_stage 传播，不得折叠成 UNKNOWN
+  - （PR #77 评审 gap 3）C2<->C4 source_objects 平价回归：identity / kind /
+    semantic_ast_sha256 三者逐一相等（普通套件一例 + opt-in 真工具一例），
+    防止 _source_* 或 adapter 遍历再次漂移
   - 桩测试双向覆盖：上报 X 而实际新增 Y -> BLOCKED；上报 X 且实际新增 X -> APPLIED_TO_STAGE
   - 真原生：DC-04/DC-05 仍 APPLIED_TO_STAGE 且 before/after 字节与独立复现一致；
     并用真工具断言 reported == actual new

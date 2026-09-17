@@ -842,6 +842,18 @@ def read_native(read_request, artifact_root=None):
         result["source_sha256"] = payload["source_sha256"]
         result["connectivity_findings"] = findings
         raw = _read_bytes(target)
+        # The observation mixes the worker's inventories with source objects parsed
+        # here, from the host's own re-read.  Those are only one observation if both
+        # describe the same bytes; otherwise the caller would compute deltas across
+        # two revisions.
+        if hash_bytes(raw) != payload["source_sha256"]:
+            result.update(status="BLOCKED",
+                          reasons=[_reason("REPAIR_SOURCE_UNBOUND",
+                                           "the native observation describes source %s, but the host "
+                                           "re-read %s: the two are not the same revision"
+                                           % (payload["source_sha256"], hash_bytes(raw)),
+                                           stage="PRECHECK")])
+            return result
         result["observation"] = normalize_observation(
             _assemble_observation(payload["source_sha256"], raw, payload))
         result["raw_artifact_hashes"] = {"source": payload["source_sha256"]}
@@ -990,6 +1002,16 @@ def stage_result_template(txn_id=None):
             "raw_artifacts": {}, "reasons": []}
 
 
+def _native_failure_status(status):
+    """A failed native read keeps its own failure class.
+
+    read_native distinguishes a refused input (BLOCKED) from a broken tool
+    (TOOL_ERROR); collapsing either into UNKNOWN would hide the reason code the
+    caller has to act on.
+    """
+    return status if status in ("TOOL_ERROR", "BLOCKED") else "UNKNOWN"
+
+
 def apply_stage(stage_request):
     """Execute exactly one frozen-route write and report the real receipt."""
     result = stage_result_template()
@@ -1117,7 +1139,7 @@ def apply_stage(stage_request):
         native_before = _native_read(toolchain, stage_root, stage_request["stage_target"],
                                      artifact_root)
         if native_before["status"] != "PASS":
-            result.update(status="TOOL_ERROR" if native_before["status"] == "TOOL_ERROR" else "UNKNOWN",
+            result.update(status=_native_failure_status(native_before["status"]),
                           reasons=native_before["reasons"])
             return result
         result["native_before"] = {"source_sha256": native_before["source_sha256"],
@@ -1141,7 +1163,7 @@ def apply_stage(stage_request):
         native_after = _native_read(toolchain, stage_root, stage_request["stage_target"],
                                     artifact_root)
         if native_after["status"] != "PASS":
-            result.update(status="TOOL_ERROR" if native_after["status"] == "TOOL_ERROR" else "UNKNOWN",
+            result.update(status=_native_failure_status(native_after["status"]),
                           reasons=native_after["reasons"])
             return result
         result["native_after"] = {"source_sha256": native_after["source_sha256"],
@@ -1336,6 +1358,20 @@ def _verify_effect(route, result, native_before, native_after, toolchain, op_cou
                                "the bound symbol digest does not match the manifest"))
     if reasons:
         return "TOOL_ERROR", reasons
+    # The created-UUID correspondence is only evidence when the observations it is
+    # computed from describe the very bytes this transaction read and wrote.  An
+    # unbound observation would let the delta be established against a different
+    # revision, so it is refused before any delta is derived.
+    unbound = []
+    for label, native, expected in (("before", native_before, result.get("before_source_sha256")),
+                                    ("after", native_after, result.get("after_source_sha256"))):
+        observed = (native or {}).get("source_sha256")
+        if observed != expected:
+            unbound.append(_reason("REPAIR_SOURCE_UNBOUND",
+                                   "the %s native observation describes source %r, not the "
+                                   "transaction's %s bytes %r" % (label, observed, label, expected)))
+    if unbound:
+        return "BLOCKED", unbound
     if not result["changed"]:
         reasons.append(_reason("REPAIR_EFFECT_MISMATCH",
                                "the receipt claims a write but the stage bytes are unchanged"))
@@ -1355,6 +1391,7 @@ def _verify_effect(route, result, native_before, native_after, toolchain, op_cou
     # object it never wrote while touching something else.
     reported = []
     malformed = False
+    uuid_protocol_error = False
     for row in results:
         for item in (row.get("created_uuids") or []):
             text = str(item)
@@ -1365,9 +1402,11 @@ def _verify_effect(route, result, native_before, native_after, toolchain, op_cou
         if malformed:
             break
     if malformed:
+        uuid_protocol_error = True
         reasons.append(_reason("REPAIR_TOOL_PROTOCOL_ERROR",
                                "an operation reported a non-canonical created UUID"))
     elif len(reported) != len(set(reported)):
+        uuid_protocol_error = True
         reasons.append(_reason("REPAIR_TOOL_PROTOCOL_ERROR",
                                "the same created UUID is reported for more than one operation"))
     else:
@@ -1380,6 +1419,11 @@ def _verify_effect(route, result, native_before, native_after, toolchain, op_cou
             reasons.append(_reason("REPAIR_DELTA_MISMATCH",
                                    "the reported created UUIDs do not match the top-level objects the "
                                    "write actually added"))
+    if uuid_protocol_error:
+        # A receipt whose created-UUID set is not even well formed is a tool
+        # protocol failure rather than a refused write; the task envelope pins that
+        # classification, and no delta is derived from a malformed set.
+        return "TOOL_ERROR", reasons
     if route == "CONSTRAINED_EXCEPTION" and tool["tool_applied"] is not None:
         reasons.append(_reason("REPAIR_TOOL_PROTOCOL_ERROR",
                                "the constrained writer API has no applied field, so tool_applied must be null"))

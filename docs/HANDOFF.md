@@ -293,3 +293,14 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
 - 验证：tests.test_akcli_adapter 69 OK（skipped=4）；discover 694 OK（skipped=4）；真原生 3 OK（DC-04/DC-05 逐字节不变且上报集合 == 新增集合）。
 - 上报：adapter 现依赖 `gates.repair_verification` 的三个私有 source helper（如需正式化应在合同层给公共名）；`root:<kind>` 身份按严格一致口径会阻断（fail-closed，已文档化）；本卡只闭合回执 vs artifact，独立 delta 仍归 verifier。
 - 状态：PENDING_HUMAN_REVIEW。
+
+## 2026-09-17 C4 UUID 绑定 —— PR #77 评审整改（同卡 PR1-C4-UUIDS，分支 fix-pr1-c4-created-uuid-binding）
+
+- 触发：Owner 对 PR #77（head `838acee`）裁定 **REQUEST_CHANGES** —— 方向认可，2 个 blocker + 1 个 gap。本段为同一 PR 的整改轮，不新开卡、不改判据（先改实现与测试）。
+- **blocker 1（状态分类）**：封套 acceptance 与 PR 正文都写定「非 canonical UUID → `TOOL_ERROR / REPAIR_TOOL_PROTOCOL_ERROR`」，但实现把所有 `reasons` 统一落成 `BLOCKED`，测试也断言 `BLOCKED` —— **测试在保护错误行为**。已改为：非 canonical 与「同一 created UUID 被多个 op 上报」一律以 `TOOL_ERROR` 收口并即时返回（不再据畸形集合推导 delta）；按 C4-P4，重复 `op_index` / op 缺项仍保持 `BLOCKED`。桩 CLI 的 `duplicate-op` 形态同步隔离扰动（原来同一次扰动同时制造了重复 index 与重复 UUID，会让两条判据互相污染）。
+- **blocker 2（事实源未绑定）**：`read_native` 用 worker 上报的 `source_sha256` 给 host 自己重读的字节盖章；`_assemble_observation` 因此可产出「components 属 revision A、source_objects 属 revision B」的混合观察，而新的 UUID 差集正建立在这份观察上。已改为：`hash_bytes(host_raw) != payload.source_sha256` → `BLOCKED / REPAIR_SOURCE_UNBOUND`（合同 §7 固定 reason code，非新造），不交出不绑定的观察；`_verify_effect` 另要求 `native_before/after.source_sha256` 等于本事务的 before/after 源哈希，否则 `BLOCKED / REPAIR_SOURCE_UNBOUND`，且在任何 delta 推导之前返回。附带修正：`read_native` 的 `BLOCKED` 原被 `apply_stage` 折叠成 `UNKNOWN`，现按原类传播（新增 `_native_failure_status`）。
+- **gap 3（平价回归）**：新增 C2↔C4 `source_objects` 平价断言（identity / kind / semantic_ast_sha256 逐一致）两例 —— 普通套件一例直接比对 `adapter.source_objects` 与 `gates.repair_verification.observe_source`；opt-in 真工具一例比对 `read_native` 的观察与 `observe_source`。注意 `normalize_observation` 会对 `source_objects` 排序，故普通套件按 identity 建映射比较，原生一例两边都已归一化、可直接比序列。
+- 评审明确不挡 merge 的项：adapter 对 `_source_ast/_source_children/_source_value` 的私有名耦合留作 follow-up（合同层给公共名），本轮未改 `gates/**`。
+- 验证（本轮实测原文）：tests.test_akcli_adapter **75 OK（skipped=5）**；全量 discover **700 OK（skipped=5）**；真原生 opt-in（akcli 0.21.0 + 3.11.15）**4 OK**——P1 假成功仍 BLOCKED、DC-04/DC-05 仍 `APPLIED_TO_STAGE` 且上报集合 == 新增集合、新增平价用例通过。
+- **反向对照（证明新测试非空转）**：把 `tools/akcli_adapter.py` 临时还原到 HEAD 后，本轮 5 条新增/改判测试全部 FAIL（`Ran 6, FAILED (failures=5)`）；平价用例在修前修后都通过 —— 它是防漂移回归，不是新缺陷证据。随后已还原修复版并复跑全绿。
+- 状态：PENDING_HUMAN_REVIEW。

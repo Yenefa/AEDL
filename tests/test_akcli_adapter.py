@@ -19,7 +19,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO not in sys.path:
     sys.path.insert(0, REPO)
 
-from gates.repair_verification import canonical_sha256, hash_bytes
+from gates.repair_verification import canonical_sha256, hash_bytes, observe_source
 from tools import akcli_adapter as adapter
 
 
@@ -361,6 +361,10 @@ def main():
         written = written + ["00000000-0000-4000-8000-0000000000ff"]
     elif mode == "bad-uuid":
         reported = ["NOT-A-UUID"] * count
+    elif mode == "duplicate-uuid":
+        # two operations name the same created object while the write really did
+        # create distinct ones
+        reported = [_uuid(0)] * count
     if mode != "forged-applied":
         _insert_into_document(target, written)
     ops = _ops(count)
@@ -374,8 +378,10 @@ def main():
         payload["applied"] = True
         payload["ops"] = _ops(count)[:max(1, count - 1)]
     elif mode == "duplicate-op":
+        # a mis-numbered index, but three distinct objects really were created: the
+        # index violation must be the only one this perturbation introduces
         payload["applied"] = True
-        payload["ops"] = [_ops(count)[0]] * count
+        payload["ops"] = [dict(row, op_index=0) for row in _ops(count)]
     elif mode == "op-error":
         payload["applied"] = True
         payload["ops"] = _ops(count, "error")
@@ -945,11 +951,54 @@ class RouteAndBindingTests(AdapterCase):
         self.assertEqual(result["status"], "BLOCKED")
         self.assertIn("REPAIR_DELTA_MISMATCH", self.codes(result))
 
-    def test_a_non_canonical_created_uuid_is_a_protocol_error(self):
+    def test_a_non_canonical_created_uuid_is_a_tool_error(self):
         self.mode = "bad-uuid"
         result = adapter.apply_stage(self.stage_request())
-        self.assertEqual(result["status"], "BLOCKED")
+        self.assertEqual(result["status"], "TOOL_ERROR")
         self.assertIn("REPAIR_TOOL_PROTOCOL_ERROR", self.codes(result))
+        self.assertNotEqual(result["status"], "APPLIED_TO_STAGE")
+
+    def test_a_created_uuid_reported_twice_is_a_tool_error(self):
+        self.mode = "duplicate-uuid"
+        result = adapter.apply_stage(self.stage_request())
+        self.assertEqual(result["status"], "TOOL_ERROR")
+        self.assertIn("REPAIR_TOOL_PROTOCOL_ERROR", self.codes(result))
+        self.assertNotEqual(result["status"], "APPLIED_TO_STAGE")
+        # the write did add real, distinct objects: the refusal is the malformed
+        # reported set, not a missing delta
+        self.assertNotIn("REPAIR_DELTA_MISMATCH", self.codes(result))
+
+    def test_a_native_read_from_another_revision_never_supplies_the_uuid_delta(self):
+        real = adapter._native_read
+
+        def drifted(toolchain, root, relative, artifact_root):
+            result = real(toolchain, root, relative, artifact_root)
+            if result["status"] == "PASS":
+                result = dict(result, source_sha256="0" * 64)
+            return result
+
+        with mock.patch.object(adapter, "_native_read", side_effect=drifted):
+            result = adapter.apply_stage(self.stage_request())
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("REPAIR_SOURCE_UNBOUND", self.codes(result))
+        self.assertNotEqual(result["status"], "APPLIED_TO_STAGE")
+
+    def test_only_the_after_read_drifting_is_also_unbound(self):
+        real = adapter._native_read
+        calls = []
+
+        def drifted(toolchain, root, relative, artifact_root):
+            result = real(toolchain, root, relative, artifact_root)
+            calls.append(result.get("source_sha256"))
+            if result["status"] == "PASS" and len(calls) == 2:
+                result = dict(result, source_sha256="1" * 64)
+            return result
+
+        with mock.patch.object(adapter, "_native_read", side_effect=drifted):
+            result = adapter.apply_stage(self.stage_request())
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("REPAIR_SOURCE_UNBOUND", self.codes(result))
+        self.assertNotEqual(result["status"], "APPLIED_TO_STAGE")
 
     def test_the_report_and_the_artifact_agree_on_a_healthy_write(self):
         result = adapter.apply_stage(self.stage_request())
@@ -1057,6 +1106,23 @@ class ReadNativeTests(AdapterCase):
         with open(self.target, "rb") as handle:
             self.assertEqual(observation["source_sha256"], hash_bytes(handle.read()))
 
+    def test_a_source_that_changed_after_the_worker_read_is_not_bound(self):
+        """The worker's inventories and the host's parse must describe one revision."""
+        real = adapter._read_bytes
+
+        def changed(path):
+            return real(path) + b"\n"
+
+        with mock.patch.object(adapter, "_read_bytes", side_effect=changed):
+            result = adapter.read_native({"host_binding": self.binding(),
+                                          "absolute_read_root": self.stage,
+                                          "relative_target": "fault.kicad_sch"},
+                                         artifact_root=self.artifacts)
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("REPAIR_SOURCE_UNBOUND", [row["code"] for row in result["reasons"]])
+        # no observation is handed out from an unbound revision
+        self.assertIsNone(result["observation"])
+
     def test_a_read_without_host_authorization_is_blocked(self):
         binding = self.binding()
         binding["read_authorization"]["resolved_authorization_refs"] = []
@@ -1105,6 +1171,32 @@ class ReadNativeTests(AdapterCase):
         self.assertEqual(result["status"], "PASS", result["reasons"])
         self.assertEqual([row["code"] for row in result["connectivity_findings"]],
                          ["DANGLING_ENDPOINT"])
+
+
+class SourceObjectParityTests(unittest.TestCase):
+    """The native reader's top-level objects use C2's own source encoding.
+
+    This card exists because source_objects() once described a single document root
+    where observe_source() saw 114 objects.  Pinning both readers to one encoding is
+    what stops the traversal or the AST helper drifting apart again.
+    """
+
+    FIXTURE = os.path.join(REPO, "tests", "fixtures", "repair_pr1", "native",
+                           "DC-04", "fault.kicad_sch")
+
+    def test_the_native_reader_reuses_the_c2_source_object_encoding(self):
+        with open(self.FIXTURE, "rb") as handle:
+            raw = handle.read()
+        native = adapter.source_objects(raw)
+        source = observe_source(raw)["source_objects"]
+        self.assertGreater(len(native), 1)
+        self.assertEqual(len(native), len(source))
+        # normalize_observation sorts source_objects, so the two readers are compared
+        # keyed by identity; each object's encoding has to match exactly.
+        self.assertEqual({row["identity"]: (row["kind"], row["semantic_ast_sha256"])
+                          for row in native},
+                         {row["identity"]: (row["kind"], row["semantic_ast_sha256"])
+                          for row in source})
 
 
 class NormalizationTests(unittest.TestCase):
@@ -1321,6 +1413,37 @@ class NativePerturbationTests(_NativeToolchainMixin, unittest.TestCase):
     # on +5V, so the writer reports status/applied "applied" with a created UUID,
     # an ok op and zero connectivity findings -- while the artefact never changes.
     P1_REPEAT_LABEL = [{"op": "add_net_label", "name": "+5V", "at": "C1.1"}]
+
+    def test_the_native_read_matches_the_c2_source_objects(self):
+        """C4's own observation must describe the same objects C2's reader sees."""
+        cli = self._akcli()
+        toolchain = self._measure(cli, "DC-04")
+        stage = os.path.join(self.root, "parity")
+        os.makedirs(stage)
+        shutil.copy2(os.path.join(self.FIXTURES, "DC-04", "fault.kicad_sch"),
+                     os.path.join(stage, "fault.kicad_sch"))
+        binding = {"run_id": "RUN-PARITY", "candidate_id": "CAND-1", "txn_id": "TXN-1",
+                   "toolchain_manifest": toolchain,
+                   "toolchain_sha256": adapter._toolchain_digest(toolchain),
+                   "read_authorization": {"context_digest": canonical_sha256("context", "parity"),
+                                          "resolved_authorization_refs": ["host:ledger:1"],
+                                          "decisions": []}}
+        read = adapter.read_native({"host_binding": binding, "absolute_read_root": stage,
+                                    "relative_target": "fault.kicad_sch"},
+                                   artifact_root=os.path.join(self.root, "artifacts-parity"))
+        self.assertEqual(read["status"], "PASS", read["reasons"])
+        with open(os.path.join(stage, "fault.kicad_sch"), "rb") as handle:
+            raw = handle.read()
+        self.assertEqual(read["observation"]["source_sha256"], hash_bytes(raw))
+        native = read["observation"]["source_objects"]
+        source = observe_source(raw)["source_objects"]
+        self.assertGreater(len(native), 1)
+        self.assertEqual([row["identity"] for row in native],
+                         [row["identity"] for row in source])
+        self.assertEqual([row["kind"] for row in native],
+                         [row["kind"] for row in source])
+        self.assertEqual([row["semantic_ast_sha256"] for row in native],
+                         [row["semantic_ast_sha256"] for row in source])
 
     def test_p1_an_applied_receipt_with_an_unchanged_artifact_is_blocked(self):
         import shutil as _shutil
