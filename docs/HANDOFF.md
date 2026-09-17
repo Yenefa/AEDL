@@ -316,3 +316,17 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
 - **同会话的 #78 取证（不属本卡目标）**：按 Owner 指示另做一次 P8 `delete_object` bounded probe（对象身份取自 adapter 自己的 pinned parser，非正则）。12 次探针：DC-03 的 2 根 wire、DC-04 的 4 个 label、DC-01 的两个冻结 `delete_object` uuid **全部被 strict 合法拒绝**（exit 6，未写入）；DC-04 的 4 个 `no_connect` 删除成功且字节改变、但 fresh read 新增 finding = **0**。按严格筛选（PRECHECK 过 + writer 真跑 + exit 0 + 字节变 + 之后才出新 finding）候选为 **0** → **P8 native = `NOT_REACHABLE_WITH_CURRENT_V1+FIXTURES`**（据此不改词表、不扩 Operation v1）。原始回执见 PR #78 评论。
 - 后续（按 Owner 排序）：本卡 merge → PR #78 rebase 到新 master，并把其 P6 native 断言的 `exit_code == 0` 改成「写调用 0 次 + 字节不变」并更新 grading matrix → P3 acceptance erratum（draft-5，复用 DC-01/02/03 接 E1/E2/E3，**不新造 schematic fixture**）→ C4-P7 round-level 交 C5/pipeline。
 - 状态：PENDING_HUMAN_REVIEW。
+
+## 2026-09-17 C4-P3 acceptance erratum（draft-5，新卡 PR1-C4-P3-ERRATUM，分支 docs-pr1-c4-p3-erratum）
+
+- 触发：Owner 2026-09-17 裁定 P3 判据与 PR-1 合同存在**语义冲突**，并**明确扩 Scope** 授权把 `notes/b5-acceptance/C3-C6_PERTURBATION_CRITERIA_DRAFT.md` 加入 `allowed_paths`，同时逐条限定 draft-5 只允许做四件事。本卡 base 暂为 PR #79 head `4ccafca`（同 PR1-C4-PQ 先例），#79 合入后 rebase 到 master。
+- **冲突本体**：C4-P3 原文「走 API 路径且 `tool.tool_applied=null` → 不得当成成功」，把「API 路径没有 `applied` 字段」这一**设计事实**当成失败依据。合同 §8 L253 规定该路径**原生没有** `applied` 字段（`null` 是设计使然），L255 规定 exception「同样要求每个 op ok、真实字节改变及重读成功；不能用 API list 非空作为成功条件」——`applied=true` 只是 **STRICT** 路径的合取项。实现亦如此（adapter：API 路径 `tool_applied is not None` → 拒；STRICT 路径 `is not True` → 拒）。
+- **反向证据检索（刻意敌意核对）**：合同中「不得当成成功 / 不能当成成功」**零命中**；无任何条文规定 API 路径的 `null` 本身必须失败。两处易被断章取义者均不支持反读（L425 是测试用例清单而非谓词；L371 的「applied 矛盾」指矛盾，而 L253 已确立 `null` 为非矛盾设计值）。结论：矛盾干净。
+- **改动（19 insertions / 2 deletions，仅四处）**：① C4-P3 行改为「`null` 不得当作 affirmative applied evidence；须 `op_results` 完整 + 真实字节改变 + fresh reread 成功 + connectivity 成立才可 `APPLIED_TO_STAGE`；红 = 缺任一独立条件却判成功」；② 文件头 `DRAFT — NOT FROZEN` 理顺为「draft-4 已按 §7 第 2 步冻结登记 + draft-5 是 Owner 授权的 post-freeze erratum」，并说明旧字样为历史口径、不改判据效力；③ 版本表新增 draft-5 行（只改一处、条数仍 28 条）；④ §7 新增第 6 条 erratum 登记（触发/范围/新旧 sha256/哈希方法/作废哈希警示/修正时点/依据）。C4-P1/P2/P4–P8 与 C3/C5/C6、§1/§3/§4/§5/§6 **零改动**，评审可按 diff 逐行核对。
+- **冻结哈希（按 §7 第 2 步登记）**：draft-4 `0db600762b06056f0da0479f23d5ee702311732f932fc8581ea17edfe1070a7c`（21105 B，blob `c36a14b`）→ **draft-5 `29483b9b8645c4aef5c2e9422642790d3a4a9293d27b05cb9261cce29adfdbb1`**（25982 B，blob `885c67c`）。
+- **哈希方法（本卡最重要的可复现细节）**：冻结值取 **git blob（LF）字节**的 sha256（`git cat-file blob <ref>:<path> | sha256`）。**不要**直接哈希 Windows 工作树文件：`core.autocrlf=true` 且该文件在 `.gitattributes` 中无规则，检出为 CRLF —— 实测同一份 draft-4 工作树为 21312 B / `D97DBF54…`，与冻结值不同；**工作树字节不符不构成篡改证据**。已写进判据 §7 第 6 条。另警示一个**已作废**的 draft-4 中间哈希 `96f2596f…`（`5f1ea53` 登记，11 分钟后被 `158f450` 作废重登），该值不在 worktree/master 上，勿引用。
+- 修正时点：**任何观测之前**（C4-P3 至今 `NOT_RUN`，无任何 native P3 qualification 记录），不触发 §5 / §7 第 3 条。冻结时序独立复核：登记 `158f450` 2026-09-13 14:38Z → PR #71 合入 `0d31a8b` 2026-09-14 03:01Z → C3 落地 `1888b5e` 09:42Z，登记早于实现，「判据先于实现」仍成立。
+- 过程记录：admit 首次 **BLOCKED**（envelope `base.branch` 写错：`fix-pr1-c4-precheck-binding != docs-pr1-c4-p3-erratum`），按事实修正自己的元数据后 **ADMIT**；未放宽任何检查项。
+- 未纳入、另报：§0.2 的「C3–C6 未落地」实测表已过期（C3 09-14、C4 09-17 落地）；C4-P2 的表述同样只对 STRICT 路径成立 —— 均在授权边界外，未顺手改。另建议按 GH-20 给该文件加 `text eol=lf`（消除工作树/冻结值不一致的审计陷阱），`.gitattributes` 不在本卡 allowed_paths 内。
+- 后续（按 Owner 排序）：本卡 merge → 用 **DC-01/DC-02/DC-03** 接 E1/E2/E3 跑 native P3（**不新造 schematic fixture**）→ rebase 并更新 #78 grading → 最终复审 #78；C4-P7 round-level 交 C5/pipeline。
+- 状态：PENDING_HUMAN_REVIEW。
