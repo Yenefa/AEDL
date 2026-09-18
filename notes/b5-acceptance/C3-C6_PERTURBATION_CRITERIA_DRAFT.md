@@ -1,6 +1,8 @@
 # B5 前置：C3–C6 独立验收扰动判据（草案）
 
-> 状态：`DRAFT — NOT FROZEN`（draft-4）。起草：Claude Code（Percy 会话），2026-09-12；draft-4 修正 2026-09-13。
+> 状态：**draft-4 已按 §7 完成冻结登记（全文 sha256 `0db60076…`，2026-09-14 由 PR #71 登记）；当前生效版本为 draft-5 —— Owner 授权的 post-freeze erratum，仅修 C4-P3 一处（见 §7 第 6 条）。**
+> 起草：Claude Code（Percy 会话），2026-09-12；draft-4 修正 2026-09-13；**draft-5 erratum 2026-09-17（Yenefa 裁定，仅 C4-P3）**。
+> 历史口径说明：draft-4 登记时本行仍写着 `DRAFT — NOT FROZEN`，与 §7 第 2 步已完成的冻结登记不一致；draft-5 予以理顺，不改判据效力。
 > 任务：W2 r3 卡 **B5｜C3–C6 独立验收，Owner: Percy，6h**。
 > **纪律：判据必须先于实现冻结。** C3–C6 在 master 上一行未落地（§0.2 实测），所以此刻写判据天然没有实现曝光——这与 A3 rubric 是同一条纪律。
 > **红线：Percy 不实现 C3–C6**（W2 r3「永久隔离纪律」）。本文件只定义验收怎么判，不给实现方案。
@@ -85,7 +87,7 @@
 |---|---|---|
 | **C4-P1** | 工具回执写 `applied=true`，但 stage 源 bytes **未改变** | `StageApplyResult.status = BLOCKED`；`changed=false` 与 `applied` 矛盾必须被抓 |
 | **C4-P2** | `applied` 字段缺失 / `false` / JSON 层面伪造的 `true`（含伪造 `authorized=true`） | BLOCKED，绝不 `APPLIED_TO_STAGE` |
-| **C4-P3** | 走 API 路径且 `tool.tool_applied=null` | 不得当成成功 |
+| **C4-P3** | 走 `CONSTRAINED_EXCEPTION` API 路径，`tool_applied=null`。**本条 = 一个正对照 + 一个真扰动，合计仍只算 P3 一条**。**正对照**：`null` 且独立条件全部成立（`op_results` 完整且全 `ok`、源 bytes 确实改变、fresh reread 成功、connectivity gate 成立）→ **允许** `APPLIED_TO_STAGE`，用以证明 `null` 本身不是失败。**负扰动（计入本组「八条都红」的就是这一条）**：保持 `tool_applied=null`、`op_results` 非空且全 `ok`，但**移除一个预先写死的独立成功条件 —— 固定取「源 bytes 不改变」** | 负扰动必须**非** `APPLIED_TO_STAGE`，且 `reasons` 含 `REPAIR_EFFECT_MISMATCH`。**两个方向都判失败**：正对照被判红 = 把 `null` 误当失败；负扰动被判成功 = 只凭 API list 非空就认 applied。`tool_applied=null` **本身不构成红**（合同 §8 L253：API 原生没有 `applied` 字段；L255：「不能用 API list 非空作为成功条件」）。注：`tool_applied` 在 STRICT 路径上必须为 `true`、在本路径上必须为 `null`，两者不得互相套用。**本条的 verdict 只按负扰动判定**，正对照是控制组；**正对照必须先通过** —— 正对照失败则本条记 `NOT_RUN` / qualification invalid，**不得**因负扰动是红的就算 PASS |
 | **C4-P4** | `op_results` 缺项 / 重复 index / 任一 `status=error` | BLOCKED（必须逐一覆盖 `0..n-1` 且全 `ok`） |
 | **C4-P5** | strict 被拒后**自动改走 exception** | 必须拒绝：route 在 PRECHECK 冻结，不得先试 strict 再升级 |
 | **C4-P6** | akcli 版本 ≠ `0.21.0`，或符号库 digest 不符 | 拒绝，不得静默继续 |
@@ -194,6 +196,26 @@ notes:             <含「假红」判断说明>
 3. 冻结后不改。若发现判据本身写错，发布新版本并声明修正发生在**观测之前还是之后**；观测之后的修正**不得**用于重判已判条目（同 §5）。
 4. 扰动载荷在执行时生成，其 sha256 记入 §3 的执行记录，载荷本体留在 host 侧。
 5. C3–C6 逐组落地后即可执行对应组，不必等四组齐备（§4）。
+6. **post-freeze erratum 登记（draft-5，2026-09-17）** —— 本文件第一次按第 3 条发布新版本。Owner（Yenefa）2026-09-17 裁定 C4-P3 的期望红与 PR-1 实现合同 §8 **直接矛盾**，明确扩 Scope 授权发布 draft-5，**仅限修正该一处**（不是重新开放整份判据）。
+
+   | 项 | 值 |
+   |---|---|
+   | 触发 | C4-P3 原把「API 路径没有 `applied` 字段」这一**设计事实**当成失败依据；合同 §8 L253 规定该字段在本路径**本就为 `null`**，L255 规定本路径的成功由独立条件判定 |
+   | 修正范围 | **仅 C4-P3 一行**。C4-P1/P2/P4–P8、C3/C5/C6、§1/§3/§4/§5/§6 正文均未改；条数不变（仍 28 条：C3 7 / C4 8 / C5 7 / C6 6）。C4-P3 写成一个**正对照 + 一个真扰动**：只有负扰动计入本组「八条都红」，正对照是控制组且**必须先通过**（正对照失败 → 本条 `NOT_RUN` / qualification invalid） |
+   | 旧（draft-4）全文 sha256 | `0db600762b06056f0da0479f23d5ee702311732f932fc8581ea17edfe1070a7c`（21105 B，git blob oid `c36a14b4b6277f015eceee34dca6f12e8767140f`；2026-09-13 由 `158f450` 登记，经 PR #71 于 2026-09-14T03:01Z 合入 master `0d31a8b`） |
+   | 新（draft-5）全文 sha256 | 见同提交的 AI 台账条目 `AI-20260917-DSH-…`（按第 2 步登记）；本文件**不自带**自身哈希，以免自指 |
+   | **哈希方法（重要）** | 取 **git blob（LF）字节**的 sha256：`git cat-file blob <ref>:notes/b5-acceptance/C3-C6_PERTURBATION_CRITERIA_DRAFT.md`，对输出字节做 sha256。**不要**直接哈希 Windows 工作树文件：`core.autocrlf=true` 且本文件在 `.gitattributes` 中无规则，检出为 CRLF，实测同一文件为 21312 B / `D97DBF5488F1859CF045BA94009991EE9F3A142EA92C09A4C251C17AD8B3A32B`。工作树字节与冻结值不符**不构成**篡改证据 |
+   | 勿引用 | draft-4 存在过一个**已作废**的中间哈希 `96f2596f893f51be6e2f3d7c2bbde613f428c50632b18b560570428be6083df9`（`5f1ea53` 登记，11 分钟后被 `158f450` 重新登记并明确作废）。draft-4 的冻结值**只有** `0db60076…` |
+   | 修正时点 | **发生在任何正式 C4-P3 qualification / verdict 之前**。实现层**已有**既存 stub-level 行为测试（见下），因此**不宜**声称「任何观测之前」；但这些测试**从未按 C4-P3 判据形成验收 verdict**（C4-P3 至今 `NOT_RUN`），故本次 erratum **不用于重判任何既有 P3 结果**，不触发第 3 条 |
+   | 依据 | 合同 §8（`docs/competition/internal/AEDL_PR1_实现合同_20260907.md` L236 / L253 / L255 / L257 / L263 / L371）；`docs/HANDOFF.md` L249–L250；`tasks/PR1-C4.yaml` L91；实现实测（`tools/akcli_adapter.py`：CONSTRAINED_EXCEPTION 路径 `tool_applied is not None` → 拒；STRICT 路径 `is not True` → 拒） |
+
+   **合入前评审修订（本轮）**：只把 C4-P3 从「`null` 不是失败」补成**完整的扰动结构** —— 否则该条在正常 DC-01 上会**合法成功**，与本组「八条都红在 adapter 层」的通过判据自相矛盾。现定义为一个**正对照**（`null` + 独立条件全成立 → 允许 `APPLIED_TO_STAGE`，证明 `null` 本身不是失败）加一个**真扰动**（移除预先写死的独立成功条件：**源 bytes 不改变** → 必须非 `APPLIED_TO_STAGE`），**verdict 只按负扰动判定**，正对照是控制组且**必须先通过**（正对照失败 → 本条记 `NOT_RUN` / qualification invalid，**不得**因负扰动是红的就算 PASS）。
+
+   **draft-5 的哈希生效口径**：draft-5 **只有一个最终生效 / 冻结 hash**（见同提交的 AI 台账条目）。PR 内先后出现过**两个 candidate** —— `29483b9b8645c4aef5c2e9422642790d3a4a9293d27b05cb9261cce29adfdbb1`（提交 `cd48153`）与 `3c4f9167799901e87550cf74db443db97c5a0149e8fca978e888518a39883335`（提交 `f5492cf`）：两者**确实 push 过、在 PR 上可见**，但**从未合入、从未生效**，因此**均不得**作为冻结版本引用 —— 与 draft-4 那个已作废的 `96f2596f…` 处理同理，区别在于这次属正常的 pre-merge review 修订，而非历史误登记。故「未发布过中间版本」的说法不准确，以本口径为准。
+
+   **不会新设 §1 规则 3 的第二个例外**：该规则约束的是 `COMMITTED`，而 `COMMITTED` 属 pipeline 层的 `TransactionStatus`；adapter 层根本不产生该状态（实测 `tools/akcli_adapter.py` 全文零命中），故本条正对照不触碰「不得再设第二个例外」。
+
+   **未纳入本次 erratum、另报的两项**（保持授权边界，不顺手改）：§0.2 的「C3–C6 未落地」实测表已过期（C3 于 2026-09-14、C4 于 2026-09-17 落地）；C4-P2 的表述同样只对 STRICT 路径成立，未在本卡授权范围内。**C4-P2 与 P3 不同：P2 已经有过观测**，将来若要改文字，**不得**宣称「观测前 erratum」。
 
 ---
 
@@ -205,3 +227,4 @@ notes:             <含「假红」判断说明>
 | draft-2 | 2026-09-12 | `DRAFT — NOT FROZEN` | Percy 裁定 Q-B5-1/2/3，三项均采纳建议：判据公开、扰动载荷 host-side 保留；位置不变；冻结点定在 C3 合入之前。据此改写抬头状态块、§5 新增载荷保留条、§6 改为已决、新增 §7 冻结程序 |
 | draft-3 | 2026-09-13 | `DRAFT — NOT FROZEN` | 按 PR #66 复核意见修订：六态词表注明出自 Y4 方案 §5（不在 PR-1 合同内）并说明 `NOT_APPLICABLE` 的用法，§3 记录格式的 `verdict` 与之对齐；`C3-P5` 补字段锚点与 reason code；`C6-P6` 定义「保留旁路」负例并补锚点 |
 | draft-4 | 2026-09-13 | `DRAFT — NOT FROZEN` | 按交付侧复核意见（PR #66 两条，Owner 裁定一次改完）并入验收侧自查，共修订**五处**，**条数不变：仍 28 条（C3 7 / C4 8 / C5 7 / C6 6）**。① §C6 通过判据——P6 含正例（必须 `COMMITTED`），原「P3–P6 均不得提交」与之冲突，改为 P3–P5 不得提交 + P6 正/负例分开判；② `C5-P7` 期望红点名 `rollback.byte_equal=true` 并要求独立字节比对，不再只凭 `rollback.status` 自报（合同 §10 恢复规则 1/2 与最终回执 L405 已定义 VERIFIED 含字节相等，本条只把验收锚点钉到该字段）；③ C5 通过判据注明「提交前重核」由 `C3-P4` 覆盖；④ **验收侧自查补**：§1 规则 3「扰动之后若出现 `COMMITTED`，该条直接判失败」是**全局**规则，同样禁止 P6 正例——①只改组内判据不足以消除矛盾，故补写唯一例外并锁死「不得再设第二个例外」；⑤ **验收侧自查补**：`C5-P7` 扰动点原写「commit 前后」，其中「terminal record 写成之后」的子情形按恢复规则 4 应**重用 `COMMITTED`**，与本组「七条都红」互斥——扰动点收窄至 terminal record 之前，并声明该子情形不在 28 条之内。另把版本表按序号排正（原为 draft-1 / draft-3 / draft-2）。**本次修正发生在任何观测之前**（C3–C6 未落地、28 条均 `NOT_RUN`，见 §0.2），不触发 §5 / §7 第 3 条「观测后修正不得重判」 |
+| **draft-5** | 2026-09-17 | **`FROZEN`（draft-4）+ Owner 授权的 post-freeze erratum** | Owner（Yenefa）2026-09-17 裁定 **P3 acceptance erratum**：C4-P3 原写「走 API 路径且 `tool.tool_applied=null` → 不得当成成功」，与 PR-1 实现合同 §8 **直接矛盾**（合同 L253：API 原生没有 `applied` 字段，`tool_applied=null` 是设计使然；L255：exception「同样要求每个 op ok、真实字节改变及重读成功；不能用 API list 非空作为成功条件」）。**只改 C4-P3 一行**，条数不变（仍 28 条：C3 7 / C4 8 / C5 7 / C6 6）；C4-P1/P2/P4–P8 与 C3/C5/C6、§1/§3/§4/§5/§6 正文一字未动。新旧全文 sha256 与哈希方法见 §7 第 6 条。**本次修正发生在任何正式 C4-P3 qualification / verdict 之前**（C4-P3 至今 `NOT_RUN`；实现层既存的 stub-level 行为测试从未按本判据形成 P3 验收 verdict，故本次修正**不用于重判任何既有 P3 结果**），不触发 §5 / §7 第 3 条「观测后修正不得重判」 |

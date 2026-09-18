@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 102 条。完整正文在各自条目文件中；本索引只做导航。
+共 103 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -143,5 +143,6 @@
 
 - [`AI-20260917-DSH-2092334BD95F0C786A89A5C8FE714728`](ai-usage/AI-20260917-DSH-2092334BD95F0C786A89A5C8FE714728.md) — C4-P1 native perturbation qualification — 真实 writer false positive 固化为回归
 - [`AI-20260917-DSH-525A0E8BBDFDEFA274AA1A6CA95F43EE`](ai-usage/AI-20260917-DSH-525A0E8BBDFDEFA274AA1A6CA95F43EE.md) — PR-1 C4 pinned strict and constrained writer adapter
+- [`AI-20260917-DSH-5B37F838885B77C8AF0E92D10B9DF711`](ai-usage/AI-20260917-DSH-5B37F838885B77C8AF0E92D10B9DF711.md) — C4-P3 acceptance erratum（draft-5）—— API 路径 `tool_applied=null` 不是失败证据
 - [`AI-20260917-DSH-9450B0C0B2E65A1CCBD601116752CE94`](ai-usage/AI-20260917-DSH-9450B0C0B2E65A1CCBD601116752CE94.md) — C4 toolchain binding moved into PRECHECK（P6 ordering defect）
 - [`AI-20260917-DSH-DA121C583BB562DB7EC4485403A44000`](ai-usage/AI-20260917-DSH-DA121C583BB562DB7EC4485403A44000.md) — C4 created UUID ↔ 实际新增顶层对象绑定（合同 §8）+ native source 对象口径对齐
