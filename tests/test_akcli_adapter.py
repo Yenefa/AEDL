@@ -1066,6 +1066,46 @@ class RouteAndBindingTests(AdapterCase):
         self.assertEqual(result["status"], "BLOCKED")
 
 
+class StubPerturbationTests(AdapterCase):
+    """C4-P2/P7 perturbations the live writer cannot be made to produce.
+
+    A pinned akcli 0.21.0 always answers with a complete, well-formed receipt on the
+    success path, so "a forged flag" and "two batches in one op-list" exist only at
+    the software boundary.  These are labelled stub-level deliberately: they qualify
+    the adapter's own refusal, not the pinned tool's behaviour.  The receipt-level
+    C4-P2/P4 cases (applied missing/false, op_results incomplete, op status=error)
+    and the C4-P8 connectivity cases live in StrictReceiptTests.
+    """
+
+    def test_p2_a_json_forged_authorized_flag_is_refused(self):
+        """Authority enters through authority.decisions, never a bare forgeable flag."""
+        patch = self.host_patch()
+        patch["authorized"] = True
+        patch["patch_sha256"] = canonical_sha256(
+            "patch", {key: value for key, value in patch.items() if key != "patch_sha256"})
+        result = adapter.apply_stage(self.stage_request(patch))
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("REPAIR_INPUT_DRIFT", self.codes(result))
+        self.assertNotEqual(result["status"], "APPLIED_TO_STAGE")
+        self.assertEqual(self.call_log(), [])
+
+    def test_p7_an_op_list_carrying_two_batches_is_refused(self):
+        """The contract is single-batch, so a two-batch container never reaches a writer."""
+        ops = self.oplist_ops
+        proposal = self.proposal()
+        proposal["oplist"] = {"protocol_version": 2, "target_format": "kicad",
+                              "batches": [ops[:1], ops[1:]]}
+        patch = self.host_patch()
+        patch["proposal"] = proposal
+        patch["proposal_sha256"] = canonical_sha256("proposal", proposal)
+        patch["patch_sha256"] = canonical_sha256(
+            "patch", {key: value for key, value in patch.items() if key != "patch_sha256"})
+        result = adapter.apply_stage(self.stage_request(patch))
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("REPAIR_INPUT_DRIFT", self.codes(result))
+        self.assertEqual(self.call_log(), [])
+
+
 class ExceptionWriterTests(AdapterCase):
     """the constrained writer has no applied field and is never trusted blindly."""
 
@@ -1365,6 +1405,56 @@ class _NativeToolchainMixin(object):
                 "oplist_path": os.path.join(stage, "oplist.json"),
                 "native_artifact_root": artifact_root}
 
+    def _fixture_ops(self, case):
+        with open(os.path.join(self.FIXTURES, case, "repair_ops.json"), encoding="utf-8") as handle:
+            return json.load(handle)["ops"]
+
+    def _stage(self, case, name, ops=None):
+        """A scratch copy of a frozen fixture, optionally with its own op-list.
+
+        Perturbations only ever act on copies, so the frozen fixtures stay read-only.
+        """
+        stage = os.path.join(self.root, name)
+        os.makedirs(stage, exist_ok=True)
+        shutil.copy2(os.path.join(self.FIXTURES, case, "fault.kicad_sch"),
+                     os.path.join(stage, "fault.kicad_sch"))
+        if ops is None:
+            shutil.copy2(os.path.join(self.FIXTURES, case, "repair_ops.json"),
+                         os.path.join(stage, "oplist.json"))
+        else:
+            with open(os.path.join(stage, "oplist.json"), "w", encoding="utf-8",
+                      newline="\n") as handle:
+                json.dump({"protocol_version": 2, "target_format": "kicad", "ops": ops}, handle)
+        return stage
+
+    def _runs(self):
+        """Record every subprocess the adapter starts, so write calls can be counted.
+
+        The contract allows exactly one write call per round; that is an observable
+        property, so the qualification measures it rather than assuming it.
+        """
+        calls = []
+        real = adapter.subprocess.run
+
+        def record(argv, *args, **kwargs):
+            calls.append(list(argv))
+            return real(argv, *args, **kwargs)
+
+        return calls, mock.patch.object(adapter.subprocess, "run", side_effect=record)
+
+    @staticmethod
+    def _draws(calls):
+        return [row for row in calls if "draw" in row]
+
+    @staticmethod
+    def _exception_writes(calls):
+        return [row for row in calls if "APPLY_EXCEPTION" in row]
+
+    @staticmethod
+    def _source_sha256(path):
+        with open(path, "rb") as handle:
+            return hash_bytes(handle.read())
+
 
 class NativeQualificationTests(_NativeToolchainMixin, unittest.TestCase):
     """Real pinned toolchain. Opt-in: AEDL_PR1_NATIVE=1 and AEDL_AKCLI_PYTHON."""
@@ -1551,6 +1641,131 @@ class NativePerturbationTests(_NativeToolchainMixin, unittest.TestCase):
         self.assertEqual(result["status"], "BLOCKED")
         self.assertIn("REPAIR_EFFECT_MISMATCH",
                       [row["code"] for row in result["reasons"]])
+    # Captured 2026-09-17 with the pinned akcli 0.21.0 on the frozen DC-04 fixture:
+    # U1.6 carries a no_connect marker and sits on an unnamed net, so naming it GND
+    # merges a named net and the strict route refuses before writing anything.
+    P5_REFUSED_LABEL = [{"op": "add_net_label", "name": "GND", "at": "U1.6"}]
+
+    def test_p5_a_refused_strict_write_is_never_retried_through_the_exception_writer(self):
+        cli = self._akcli()
+        toolchain = self._measure(cli, "DC-04")
+        stage = self._stage("DC-04", "p5", ops=self.P5_REFUSED_LABEL)
+        body = self._patch(toolchain, self.P5_REFUSED_LABEL, "DC-04", stage)
+        before = self._source_sha256(os.path.join(stage, "fault.kicad_sch"))
+        calls, recorder = self._runs()
+        with recorder:
+            result = adapter.apply_stage(self._stage_request(
+                body, stage, os.path.join(self.root, "artifacts-p5")))
+        # the pinned writer really did refuse, before touching the artefact -- the red
+        # is at the writer/refusal boundary, not an unrelated pre-write rejection
+        self.assertEqual(result["status"], "BLOCKED", result["reasons"])
+        self.assertEqual(result["tool"]["exit_code"], 6)
+        self.assertIn("REPAIR_STRICT_REFUSED", [row["code"] for row in result["reasons"]])
+        self.assertFalse(result["changed"])
+        self.assertEqual(self._source_sha256(os.path.join(stage, "fault.kicad_sch")), before)
+        # ... and the refusal is terminal: exactly one write call, no fallback route
+        self.assertEqual(len(self._draws(calls)), 1, calls)
+        self.assertEqual(self._exception_writes(calls), [])
+
+    def test_p6_a_perturbed_symbol_digest_is_refused_before_the_writer_runs(self):
+        """C4-P6's digest binding is settled in PRECHECK, so nothing is written first.
+
+        History matters here: when this case was first written the adapter compared the
+        digest **after** the write, so the correct expectation was "the writer ran
+        (exit 0) and the refusal came afterwards".  PR #79 moved the whole toolchain
+        binding into PRECHECK, which makes that old assertion describe a defect rather
+        than the contract.  The assertions below are the contract: the running tool's
+        identity is checked once the native before read is in hand and before
+        STAGE_APPLY starts a writer.
+        """
+        cli = self._akcli()
+        toolchain = self._measure(cli, "DC-04")
+        # the real toolchain still runs; only the host binding is perturbed
+        toolchain["symbol_digest"] = "1" * 64
+        ops = self._fixture_ops("DC-04")
+        stage = self._stage("DC-04", "p6-digest")
+        body = self._patch(toolchain, ops, "DC-04", stage)
+        before = self._source_sha256(os.path.join(stage, "fault.kicad_sch"))
+        calls, recorder = self._runs()
+        with recorder:
+            result = adapter.apply_stage(self._stage_request(
+                body, stage, os.path.join(self.root, "artifacts-p6-digest")))
+        self.assertEqual(result["status"], "TOOL_ERROR", result["reasons"])
+        self.assertIn("REPAIR_TOOL_UNAVAILABLE", [row["code"] for row in result["reasons"]])
+        self.assertNotEqual(result["status"], "APPLIED_TO_STAGE")
+        # the writer never started, and the stage is byte-identical
+        self.assertEqual(self._draws(calls), [])
+        self.assertIsNone(result["tool"]["exit_code"])
+        self.assertEqual(self._source_sha256(os.path.join(stage, "fault.kicad_sch")), before)
+
+    def test_p6_a_perturbed_toolchain_version_is_refused_before_any_write(self):
+        cli = self._akcli()
+        toolchain = self._measure(cli, "DC-04")
+        toolchain["akcli_version"] = "0.19.0"
+        ops = self._fixture_ops("DC-04")
+        stage = self._stage("DC-04", "p6-version")
+        body = self._patch(toolchain, ops, "DC-04", stage)
+        calls, recorder = self._runs()
+        with recorder:
+            result = adapter.apply_stage(self._stage_request(
+                body, stage, os.path.join(self.root, "artifacts-p6-version")))
+        self.assertEqual(result["status"], "BLOCKED", result["reasons"])
+        self.assertIn("REPAIR_INPUT_DRIFT", [row["code"] for row in result["reasons"]])
+        self.assertEqual(self._draws(calls), [])
+
+    def test_p7_the_frozen_route_issues_exactly_one_write_call_per_round(self):
+        cli = self._akcli()
+        toolchain = self._measure(cli, "DC-04")
+        ops = self._fixture_ops("DC-04")
+        stage = self._stage("DC-04", "p7-single")
+        body = self._patch(toolchain, ops, "DC-04", stage)
+        calls, recorder = self._runs()
+        with recorder:
+            result = adapter.apply_stage(self._stage_request(
+                body, stage, os.path.join(self.root, "artifacts-p7-single")))
+        self.assertEqual(result["status"], "APPLIED_TO_STAGE", result["reasons"])
+        self.assertEqual(len(self._draws(calls)), 1, calls)
+        self.assertEqual(self._exception_writes(calls), [])
+
+    def test_p7_splitting_the_batch_is_refused_and_is_not_equivalent(self):
+        """One batch of three ops applies; the same ops sent as two batches do not."""
+        cli = self._akcli()
+        toolchain = self._measure(cli, "DC-04")
+        ops = self._fixture_ops("DC-04")
+        first, second = ops[:1], ops[1:]
+
+        single = self._stage("DC-04", "p7-one-batch")
+        applied = adapter.apply_stage(self._stage_request(
+            self._patch(toolchain, ops, "DC-04", single), single,
+            os.path.join(self.root, "artifacts-p7-one")))
+        self.assertEqual(applied["status"], "APPLIED_TO_STAGE", applied["reasons"])
+
+        # the split: batch 1 leaves the artefact in a state the single batch never
+        # reaches (the placed part has dangling unnamed nets), and batch 2 is
+        # refused by the pinned writer
+        split = self._stage("DC-04", "p7-two-batches", ops=first)
+        part_one = adapter.apply_stage(self._stage_request(
+            self._patch(toolchain, first, "DC-04", split), split,
+            os.path.join(self.root, "artifacts-p7-two-a")))
+        self.assertEqual(part_one["status"], "APPLIED_TO_STAGE", part_one["reasons"])
+        # batch 1 really did land: the artefact moved away from its base bytes, so a
+        # rejected later batch leaves a half-applied design rather than nothing
+        self.assertTrue(part_one["changed"])
+
+        # batch 2 is a second write call on the same artefact, with its own op-list
+        with open(os.path.join(split, "oplist.json"), "w", encoding="utf-8",
+                  newline="\n") as handle:
+            json.dump({"protocol_version": 2, "target_format": "kicad", "ops": second}, handle)
+        part_two = adapter.apply_stage(self._stage_request(
+            self._patch(toolchain, second, "DC-04", split), split,
+            os.path.join(self.root, "artifacts-p7-two-b")))
+        self.assertEqual(part_two["status"], "BLOCKED", part_two["reasons"])
+        self.assertIn("REPAIR_STRICT_REFUSED", [row["code"] for row in part_two["reasons"]])
+
+        # therefore the split round does not reproduce the qualified outcome
+        self.assertNotEqual(
+            self._source_sha256(os.path.join(split, "fault.kicad_sch")),
+            self._source_sha256(os.path.join(single, "fault.kicad_sch")))
 
 
 class NativeP3QualificationTests(_NativeToolchainMixin, unittest.TestCase):

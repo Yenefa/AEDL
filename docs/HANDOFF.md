@@ -362,4 +362,26 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
 - 2026-09-18 第二轮评审整改（同卡 PR #82）：新增 `ToolchainBinding` 消除「读不到 = 没观察到变化」；整轮只绑定一个 KiCad binary（native / ERC / reference 三处调用前后各 verify，末尾再 verify，失败则不发布任何 manifest）；report 增加 `toolchain_binding` / `toolchain_error`；测试 21 → 26 例并做变异对照；真实 smoke 复跑两例 binding 均 PASS；RES-011 去掉「本 PR 未调用」的过期表述。
 - 2026-09-18 第三轮评审整改（同卡 PR #82）：`--version` 探针纳入同一 `ToolchainBinding` bracket（binding → verify → probe → verify），并要求 `exit_code == 0`（非零退出即使打印 8.0.9 也拒绝）；`--kicad-cli` 必须指向真实文件、无 PATH 回退；report 记录已解析路径。测试 26 → 29 例 + 变异对照；smoke 复跑两例 binding 仍 PASS。
 - 2026-09-18 第四轮评审整改（同卡 PR #82）：版本探针收敛为 `ToolchainBinding.probe_version()`（verify → probe → verify + `exit_code == 0`），整轮恰好 1 次；有 binding 时 `export_netlist`/`export_erc` 不再 `find_kicad_cli`/`tool_version`，只用 `binding.path`/`binding.version`，参数不一致即 FAIL 且不执行 subprocess；standalone 路径同样先绑定后探测。测试 29 → 31 例 + 变异对照；smoke 复跑两例 binding 仍 PASS。
+
+## 2026-09-17 C4-P2..P8 原生扰动资格（新卡 PR1-C4-P2P8，分支 feat-pr1-c4-p2-p8）
+
+- 前置：PR #77 已由人合入，master = `0626375`（Merge PR #77）；本卡从新 master 起分支（Owner 原排序：卡 2 等 #77 合入后再开）。判据唯一来源 `notes/b5-acceptance/C3-C6_PERTURBATION_CRITERIA_DRAFT.md` §C4（只读，未改）。
+- 本卡是**验收侧**卡片：`tools/**`、`gates/**` 为 forbidden，adapter 是被验对象，本轮**未改一行实现**。
+- 开工探针（真 akcli 0.21.0，只作用在 DC-04 副本）逐条定级，四条硬结论：
+  1. **P5 可原生** —— `add_net_label name=GND at=U1.6`（U1.6 是 DC-04 的 `no_connect` 脚且在未命名网络上）触发真 writer **写前**合法拒绝：exit=6 / `error.code=OPLIST` / "net split/merge touches a named net; nothing written" / 字节零变化。
+  2. **P6 可原生** —— 真工具照跑，只扰动宿主 binding：`symbol_digest` 不符 → `TOOL_ERROR`（真写入 exit=0 已发生，拒绝来自绑定）；`akcli_version` 不符 → **写前** `BLOCKED`，写调用 0 次。
+  3. **P7 可原生** —— 单批 3 op = 恰好 1 次写调用且 `APPLIED_TO_STAGE`；拆两批时第 1 批单独可落地、第 2 批被真 writer 拒绝，最终字节 ≠ 单批结果（拆批与单批不等价）。
+  4. **P8 无合法原生路径** —— 能产生连通性 finding 的形态（悬空 wire / 真正 wire 起 no_connect 脚）都需要 **Operation v1 之外**的 op，adapter 在**词表**处即拒（0 次写调用）＝判据 §1 规则 2 明令的**假红**；且实测 v1 的 `add_net_label` 打在被 `no_connect` 的脚上（`U1.5`/`J1.A8`），回执与 fresh read 的 connectivity **均为 0 条 finding**。故 P8 停在 stub-level，native `NOT_RUN`。
+- 新增（全部在 `tests/test_akcli_adapter.py`）：`_NativeToolchainMixin` 的原生 qualification 工具（`_stage` 只扰动副本、`_runs` 用 mock 记录 adapter 启动的每一次 subprocess，使「一次写调用」可**实测**）；`NativePerturbationTests` 新增 5 例原生（P5 / P6×2 / P7×2）；新增 `StubPerturbationTests`（P2 伪造 `authorized=true`、P7 两批容器），类 docstring 明确标注 stub-level。P5 与 P6-digest 两例额外断言 `tool.exit_code`（6 / 0），自证红发生在 writer/绑定边界而非无关前置拒绝。
+- **C4 组整体判据「八条齐备」：本卡结论是「尚未齐备」**，不宣称 PASS。P8 stub 层 6 个形态（new-warning / silent-warning / moved-warning / no-connect / error-severity / receipt-only-nc）全部阻断。
+- 验证：tests.test_akcli_adapter **82 OK（skipped=10）**；全量 discover **707 OK（skipped=10）**；真原生 opt-in **9 OK**（含 P1 与 C2↔C4 平价仍绿）。opt-in 语义核对：未 opt-in → 原生类 skipped=7；opt-in 但解释器路径不存在 → **FAILED (failures=7)**，即 FAIL 而非 SKIP。
+- 未闭合并升级 Owner（**原始记录，部分已被后续裁定关闭 —— 见下方 rebase 更新**）：① **C4-P3 `NOT_RUN`**（缺 E1/E2/E3 原生夹具，卡内禁止自造夹具）；② **C4-P7 的「同一轮两次写调用」超出 adapter 单次调用的可观测范围**，需 round/transaction 层（C5 侧，未实现），本卡如实记为 adapter 边界之外、不冒充已验；③ C4-P6 的 digest 绑定是**写后**检查（version 是写前），供验收侧判断是否需写前绑定；④ 若要求 P8 有原生资格，需新夹具或词表/契约决定，本卡未自行扩范围。
+- **rebase 更新（2026-09-18，Owner 复审后按序执行）**：本卡 rebase 到 master `f16b427`（原 base `0626375`，落后 9 个提交；冲突仅 `docs/HANDOFF.md` 的追加段落与生成的 `AI_USAGE_LOG.md`，前者按时间顺序保留双方、后者取 master 侧后**重新 build**）。
+  - **P6 用例按 #79 改写**：rebase 后 `test_p6_a_perturbed_symbol_digest_...` **立即失败** —— 它断言 `result["tool"]["exit_code"] == 0`，而 #79 把 toolchain 绑定前移到 PRECHECK 后 writer 根本没启动、该值为 `None`。这正是 Owner 预言的「测试在保护旧 bug」。已更名 `test_p6_a_perturbed_symbol_digest_is_refused_before_the_writer_runs` 并改为断言 **写调用 0 次 + `exit_code is None` + stage 字节不变**，docstring 写明这段历史。它与 #79 引入的 `test_the_writer_is_never_started_when_the_symbol_digest_does_not_match` 存在**有意重叠**（后者守修复、前者映射判据 C4-P6），两者都保留。
+  - **P3 结论作废**：原记「缺夹具 → NOT_RUN」已被 Owner 推翻（合同本就规定 E1/DC-01、E2/DC-02、E3/DC-03 走受限写入器，**无需新造 fixture**）。**PR #81** 已用现有 DC-01/02/03 完成 C4-P3 的 **native 正对照 + 固定负扰动** → P3 由 `NOT_RUN` 变为 **native PASS**。
+  - **P7 / P8 定稿**：P7 = **adapter-local PASS**（一次 apply_stage → 恰好一次写调用；两批容器被拒）/ **round-level `NOT_RUN`，归 C5**，且裁定**不给 adapter 加跨调用状态**；P8 native = **`NOT_REACHABLE_WITH_CURRENT_V1+FIXTURES`**（Owner 已接受，**无需再探、不得扩词表**），stub = PASS。
+  - **C4 组仍未齐备**：P3 补齐后唯一缺口是 P8 native（夹具/词表边界，非缺陷）。**不宣称 PASS**。
+  - 验证（rebase 后）：tests.test_akcli_adapter **84 OK（skipped=11）**；真原生 opt-in（`NativePerturbationTests` + `NativeQualificationTests`）**10 OK**。
+  - **第二轮 rebase（2026-09-18，Owner 指示「PR 债务清零、WIP=1」）**：#69（PBF handoff）与 #82（SchGen ingest 重切）合入后 rebase 到 master **`f486e013`**。冲突同样仅在 `docs/HANDOFF.md` 的追加段落（master 侧 `#82` 段落 vs 本卡段落，保留双方）与生成的 `AI_USAGE_LOG.md`（取 master 侧后 `tools.build_ai_usage_index build` 重建，107 条）。envelope `base.sha` 由 `0626375…` 重锚为 `f486e013…`，`allow_drift` 的 decision_ref 同步。**本卡未加任何功能**（C5/C6、C4-P7 round-level 均未触碰）。
+  - 本轮实测（head `5d43ecc`，真 akcli 0.21.0 + CPython 3.11.15）：tests.test_akcli_adapter 未 opt-in **86 OK（skipped=13）**；opt-in 真工具 **86 OK（skipped=1）**；opt-in 但 `AEDL_AKCLI_PYTHON` 指向不存在路径 **FAILED (failures=12, skipped=1)**（FAIL 而非 SKIP）；全量 `discover -s tests` opt-in **742 OK（skipped=1）**；`dev_gate --envelope tasks/PR1-C4-P2P8.yaml --admit-receipt` → **status pass / exit 0，8/8，excluded=[]**。
 - 状态：PENDING_HUMAN_REVIEW。
