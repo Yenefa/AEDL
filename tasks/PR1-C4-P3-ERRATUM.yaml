@@ -37,7 +37,8 @@ goal: |
 scope: |
   Writable paths are whitelisted in allowed_paths; everything else is FOREIGN.
   本次是 Owner 授权的**窄域**冻结物修改：只动 C4-P3 判据、版本表、文件头状态口径，
-  以及新登记 draft-5 全文 sha256 与「修正发生在任何观测之前」的声明。
+  以及新登记 draft-5 全文 sha256 与「修正发生在任何**正式 C4-P3 qualification / verdict**
+  之前」的声明（**不是**「任何观测之前」—— 实现层既存 stub-level 行为测试从未形成 P3 验收 verdict）。
 
   明确**不动**：C4-P1 / C4-P2 / C4-P4..P8 任何一行、C3 / C5 / C6 任何一行、
   §1 通用规则、§3 记录格式、§4 执行前置、§5 红线、§6 已决、§7 冻结程序正文、
@@ -55,7 +56,9 @@ scope: |
                           （须引用本卡合入后的正式判据，而不是待合版本）
   Explicitly not touched: tools/**、gates/**、tests/**、tests/fixtures/**、其余 notes/**、
                           docs/competition/**、docs/evidence/**、.gitattributes
-  Risk: MEDIUM（改冻结判据 —— 但属判据自身写错的正式 erratum 程序，且发生在任何观测之前）
+  Risk: MEDIUM（改冻结判据 —— 但属判据自身写错的正式 erratum 程序，且发生在任何**正式
+  C4-P3 qualification / verdict** 之前；实现层既存 stub-level 行为测试从未形成 P3 验收 verdict，
+  故不用于重判任何既有 P3 结果）
 
   change_budget:
     expected_files: 5
@@ -114,8 +117,9 @@ acceptance: |
         组判据「八条都红」中 P3 的一票由**负扰动**决定，正对照是控制组
   - 登记 draft-4 全文 sha256 = `0db600762b06056f0da0479f23d5ee702311732f932fc8581ea17edfe1070a7c`
     → draft-5 **最终生效 / 冻结** sha256，并写明**计算方法**（git blob / LF 字节，
-    非 Windows 工作树字节）；PR 内出现过的 candidate（`29483b9b…` / 提交 `cd48153`）
-    **从未合入、从未生效**，**不得**作为冻结版本引用
+    非 Windows 工作树字节）；PR 内先后出现过的**两个** candidate —— `29483b9b…`（提交 `cd48153`）
+    与 `3c4f9167…`（提交 `f5492cf`）—— **均从未合入、从未生效**，**均不得**作为冻结版本引用
+    （与判据 §7 第 6 条、本卡台账口径一致）
   - 明确记录：**本 erratum 发生在任何正式 C4-P3 qualification / verdict 之前**。实现层**已有**
     既存 stub-level 行为测试，故**不得**声称「任何观测之前」；但这些测试**从未按 C4-P3 判据
     形成验收 verdict**（C4-P3 至今 `NOT_RUN`），故本次修正**不用于重判任何既有 P3 结果**，
