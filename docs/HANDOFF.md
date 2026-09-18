@@ -350,3 +350,16 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
 - 仍未齐备：**C4 组「八条都红」不宣称成立** —— C4-P8 native 已由 #78 论证为 `NOT_REACHABLE_WITH_CURRENT_V1+FIXTURES`（词表假红），缺口属夹具/词表边界而非缺陷。C5/C6 仍 `NOT_RUN`。
 - 后续：本卡 merge 后，rebase #78 并把其 grading matrix 的 P3 一行由 `CRITERION ERRATUM REQUIRED` 更新为 **native PASS**。
 - 状态：PENDING_HUMAN_REVIEW。
+
+## 2026-09-18 SchGen exposed DEV 格式导入（ingest-only 重切，分支 feat/schgen-dev-native-ingest）
+
+- 触发：Owner 2026-09-18 既定顺序「#74 close and re-cut as a fresh BENCH/DEV PR without the old adapter」，并在本次会话的裁定中选择「先落 adapter 无关部分」。
+- 事实：PR #74（head `052750c`）携带的旧草稿 `tools/akcli_adapter.py`（1103 行）与 master 上 PR-1 C4 的 fail-closed adapter **占据同一路径且 API 完全不同**，其 4 个依赖模块无法原样保留（`apply_and_verify` / `object_graph` / `parse_sexpr` / `export_netlist` / `check_expectation` 在 C4 adapter 中均不存在）。
+- 本 PR：新增**自包含**的 `tools/schgen_native_ingest.py`（不导入任何 `tools.*`，有 AST 断言守护）+ `tests/test_schgen_native_ingest.py`（31 例）；记录见 `notes/schgen-dev-chain/TASK.md`（作用域横幅 + 历史正文保留）、EVID-20260918-001、RES-011。
+- held 半（**未进本 PR**，仍在已关闭的 PR #74 及其分支上）：`tools/schgen_dev_chain.py`、`tools/schgen_dev_score.py`、`tests/test_schgen_dev_chain.py`、旧 `tools/akcli_adapter.py`，以及 writer 诊断、DEV-04/05/06 合同、writer 补丁资格与配对评分记录。须在 C4 adapter 上重新落地后另卡。
+- 验证：见 PR 回执（`tests.test_schgen_native_ingest` / `discover -s tests` / `tools.dev_gate`）。首轮真实 KiCad 回放 `NOT_RUN`，已在评审整改轮补跑。
+- 2026-09-18 评审整改（同卡 PR #82）：Owner REQUEST_CHANGES 后闭环 —— (a) raw/request/manifest 绑定改为读一次，消除 TOCTOU；(b) reference 导出改为读字节 + 只读结构 sanity，空/无签名内容的 reference 不再可能进 `evaluation-references.json`；(c) `cross_module: true`；(d) `export_netlist` 记录 kicad-cli 二进制 sha256；(e) 补真实 KiCad 8.0.9 双例 ingest smoke。测试 14 → 21 例，并以变异测试证明新回归有咬合力。未动 C4 adapter，chain/scorer 仍未塞回。
+- 2026-09-18 第二轮评审整改（同卡 PR #82）：新增 `ToolchainBinding` 消除「读不到 = 没观察到变化」；整轮只绑定一个 KiCad binary（native / ERC / reference 三处调用前后各 verify，末尾再 verify，失败则不发布任何 manifest）；report 增加 `toolchain_binding` / `toolchain_error`；测试 21 → 26 例并做变异对照；真实 smoke 复跑两例 binding 均 PASS；RES-011 去掉「本 PR 未调用」的过期表述。
+- 2026-09-18 第三轮评审整改（同卡 PR #82）：`--version` 探针纳入同一 `ToolchainBinding` bracket（binding → verify → probe → verify），并要求 `exit_code == 0`（非零退出即使打印 8.0.9 也拒绝）；`--kicad-cli` 必须指向真实文件、无 PATH 回退；report 记录已解析路径。测试 26 → 29 例 + 变异对照；smoke 复跑两例 binding 仍 PASS。
+- 2026-09-18 第四轮评审整改（同卡 PR #82）：版本探针收敛为 `ToolchainBinding.probe_version()`（verify → probe → verify + `exit_code == 0`），整轮恰好 1 次；有 binding 时 `export_netlist`/`export_erc` 不再 `find_kicad_cli`/`tool_version`，只用 `binding.path`/`binding.version`，参数不一致即 FAIL 且不执行 subprocess；standalone 路径同样先绑定后探测。测试 29 → 31 例 + 变异对照；smoke 复跑两例 binding 仍 PASS。
+- 状态：PENDING_HUMAN_REVIEW。
