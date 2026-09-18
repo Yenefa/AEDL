@@ -1593,9 +1593,13 @@ def verify_stage(request):
         result["txn_id"] = _identifier(request["txn_id"], "transaction id")
         result["run_id"] = _text(request["run_id"], "run id")
         result["candidate_id"] = _text(request["candidate_id"], "candidate id")
-        result["patch_sha256"] = _sha(request["patch_sha256"], "patch digest")
-        result["bound_policy_sha256"] = _sha(request["bound_policy_sha256"],
-                                             "bound policy digest")
+        # _sha validates and returns nothing: the validated value has to be carried
+        # explicitly, otherwise the receipt would report the binding as null and
+        # section 9's toolchain/policy anchors could not be read off it.
+        _sha(request["patch_sha256"], "patch digest")
+        result["patch_sha256"] = request["patch_sha256"]
+        _sha(request["bound_policy_sha256"], "bound policy digest")
+        result["bound_policy_sha256"] = request["bound_policy_sha256"]
         relative_target = _text(request["relative_target"], "target path")
         report_root = _absolute(request["report_root"], "report root")
         if _has_linked_component(report_root):
@@ -1794,5 +1798,53 @@ def write_thin_verification(result, report_root):
     with open(path, "wb") as handle:
         handle.write(payload)
     return path, hash_bytes(payload)
+
+
+def recheck_reports(result, report_root):
+    """Re-read a frozen ThinVerificationResult's report files (contract section 9).
+
+    Section 9's commit predicate is: after the verifier returns, recompute the
+    stage source and report hashes and require them to match the receipt.  This
+    is the report half of that predicate -- the stage half is `bind_inputs`.
+    A replaced, resized, missing or linked report is refused, so a receipt can
+    never be carried into a commit it did not verify.  It executes no tool and
+    publishes nothing.
+    """
+    outcome = {"status": "FAIL", "checked": 0, "reasons": []}
+    try:
+        if not isinstance(result, dict):
+            raise ObservationError("the receipt is not a result object")
+        root = _absolute(report_root, "report root")
+        if _has_linked_component(root):
+            raise ObservationError("the report root must not contain a link or reparse point")
+        reports = result["reports"]
+        if not isinstance(reports, dict):
+            raise ObservationError("the receipt carries no reports manifest")
+        _closed(reports, _FILE_MANIFEST_FIELDS, "reports manifest")
+        if type(reports["version"]) is not int or reports["version"] != 1:
+            raise ObservationError("invalid reports manifest version")
+        rows = reports["files"]
+        if not isinstance(rows, list) or not rows:
+            raise ObservationError("the receipt names no report files")
+        for row in rows:
+            if not isinstance(row, dict):
+                raise ObservationError("a report row is not a mapping")
+            _closed(row, {"path", "sha256", "size_bytes", "role"}, "report row")
+            relative = _text(row["path"], "report path")
+            _sha(row["sha256"], "report digest")
+            _integer(row["size_bytes"], "report size", 0)
+            absolute = _resolve_within(root, relative)
+            if not os.path.isfile(absolute) or _is_link(absolute):
+                raise ObservationError("report %s is missing or a link" % relative)
+            raw = _read_bytes(absolute)
+            if len(raw) != row["size_bytes"] or hash_bytes(raw) != row["sha256"]:
+                raise ObservationError("report %s no longer matches the receipt" % relative)
+            outcome["checked"] += 1
+        outcome["status"] = "PASS"
+    except (ObservationError, KeyError, TypeError) as exc:
+        outcome["reasons"] = [_reason_code(
+            "REPAIR_EXPORT_STALE", "the reports no longer match the receipt: %s" % exc)]
+    return outcome
+
 
 

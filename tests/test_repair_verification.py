@@ -1521,6 +1521,258 @@ class NativeKiCadExportTests(unittest.TestCase):
                                  coverage["observed_component_keys_sha256"])
 
 
+def plan_without_one_pin(observation):
+    """TEST_ONLY: the same netlist with one pin node removed (a coverage gap)."""
+    text = plan_from_observation(observation).decode("utf-8")
+    member = observation["partitions"][-1]["members"][-1]
+    node = '<node ref="%s" pin="%s"/>' % (member["reference"], member["number"])
+    if node not in text:
+        raise AssertionError("the helper could not find %s to remove" % node)
+    return text.replace(node, "", 1).encode("utf-8")
+
+
+class C3PerturbationTests(unittest.TestCase):
+    """B5 criteria sheet section C3 -- the seven C3-P1..C3-P7 perturbations.
+
+    Each test applies one perturbation from the frozen criteria sheet to the
+    real `verify_stage\u0060 boundary and asserts that the red lands **where the
+    sheet names it**, and that no perturbation produces a PASS.  The C3 layer has
+    no \u0060COMMITTED\u0060 status (that is the pipeline's TransactionStatus, C5), so
+    "no COMMITTED" is recorded here as "no PASS result was produced" -- stated,
+    not implied.
+
+    The executable is the same host-supplied stub the FreshExportTests use, so
+    these establish the software contract; the real KiCad 10.0.5 run is the
+    separate opt-in NativeKiCadExportTests qualification.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.stub = self.root / "fake_kicad_cli.py"
+        self.stub.write_text(STUB_CLI, encoding="utf-8")
+        self.stub_sha = hashlib.sha256(self.stub.read_bytes()).hexdigest()
+        self._scenarios = 0
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def toolchain(self, **overrides):
+        manifest = {"version": 1, "kicad_cli": str(self.stub),
+                    "kicad_version": "10.0.5", "kicad_cli_sha256": self.stub_sha,
+                    "launcher_argv": [sys.executable],
+                    "arguments": list(verification.EXPORT_ARGUMENTS),
+                    "timeout_seconds": 60, "environment": {}}
+        manifest.update(overrides)
+        return manifest
+
+    def design_tree(self, name, raw, plan, marker=None):
+        root = self.root / name
+        root.mkdir(parents=True, exist_ok=True)
+        (root / "design.kicad_sch").write_bytes(raw)
+        (root / "export_plan.xml").write_bytes(plan)
+        if marker:
+            (root / marker).write_bytes(b"1")
+        return root
+
+    def design_manifest(self, root, name="design.kicad_sch"):
+        raw = (root / name).read_bytes()
+        return {"version": 1, "files": [{"path": name,
+                                         "sha256": hashlib.sha256(raw).hexdigest(),
+                                         "size_bytes": len(raw), "role": "TARGET"}]}
+
+    def scenario(self, stage_raw=None, stage_plan=None, stage_marker=None,
+                 native_after=None, **tool_overrides):
+        raw = mini()
+        observation = verification.observe_source(raw)
+        stage_raw = raw if stage_raw is None else stage_raw
+        stage_observation = verification.observe_source(stage_raw)
+        snapshot = self.design_tree("snapshot_candidate", raw,
+                                    plan_from_observation(observation))
+        stage = self.design_tree("stage_candidate", stage_raw,
+                                 plan_from_observation(stage_observation)
+                                 if stage_plan is None else stage_plan,
+                                 marker=stage_marker)
+        bound = policy(observation, copy.deepcopy(observation))
+        self._scenarios += 1
+        reports = self.root / ("reports_%d" % self._scenarios)
+        reports.mkdir(parents=True)
+        request = {"txn_id": "txn-c3", "run_id": "run-1", "candidate_id": "cand-1",
+                   "patch_sha256": "a" * 64,
+                   "bound_policy_sha256": verification.canonical_sha256("policy-bound", bound),
+                   "snapshot_root": str(snapshot), "stage_root": str(stage),
+                   "relative_target": "design.kicad_sch",
+                   "before_manifest": self.design_manifest(snapshot),
+                   "staged_manifest": self.design_manifest(stage),
+                   "bound_policy": bound,
+                   "toolchain_manifest": self.toolchain(**tool_overrides),
+                   "native_before": observation,
+                   "native_after": stage_observation if native_after is None else native_after,
+                   "report_root": str(reports)}
+        return request, observation
+
+    def assertNotPass(self, result, perturbation="C3"):
+        self.assertNotEqual(result["status"], "PASS",
+                            "%s produced a PASS: %r" % (perturbation, result["reasons"]))
+
+    # -- C3-P1: the export fails, and a stale netlist must not be reused --------
+    def test_p1_a_failed_export_never_falls_back_to_a_stale_netlist(self):
+        request, observation = self.scenario()
+        stale = Path(request["report_root"]) / "exports" / request["txn_id"] / "before"
+        stale.mkdir(parents=True)
+        (stale / "before.net.xml").write_bytes(plan_from_observation(observation))
+        request["toolchain_manifest"] = self.toolchain(
+            kicad_cli=str(self.root / "not-executable.exe"))
+        result = verification.verify_stage(request)
+        self.assertNotPass(result, "C3-P1")
+        self.assertEqual(result["checks"]["fresh_export"]["status"], "FAIL")
+        self.assertIn("REPAIR_EXPORT_STALE", result["checks"]["fresh_export"]["reason_codes"])
+        self.assertEqual(result["exports"], [])
+        self.assertEqual(result["coverage"], {"before": None, "after": None})
+
+    def test_p1_a_missing_binary_is_a_tool_error_not_a_result(self):
+        request, _ = self.scenario()
+        request["toolchain_manifest"] = self.toolchain(kicad_cli=str(self.root / "gone.exe"))
+        result = verification.verify_stage(request)
+        self.assertNotPass(result, "C3-P1")
+        self.assertEqual(result["checks"]["fresh_export"]["status"], "FAIL")
+        self.assertIn("REPAIR_TOOL_UNAVAILABLE",
+                      result["checks"]["fresh_export"]["reason_codes"])
+
+    # -- C3-P2: exit 0 with an empty or unparseable export is not a result -----
+    def test_p2_exit_zero_with_an_empty_or_broken_export_is_not_a_result(self):
+        for plan in (b"", b"<netlist"):
+            request, _ = self.scenario(stage_plan=plan)
+            result = verification.verify_stage(request)
+            self.assertNotPass(result, "C3-P2")
+            self.assertEqual(result["checks"]["fresh_export"]["status"], "FAIL", plan)
+            self.assertIn("REPAIR_TOOL_PROTOCOL_ERROR",
+                          result["checks"]["fresh_export"]["reason_codes"], plan)
+            self.assertIn(result["status"], ("FAIL", "TOOL_ERROR"), plan)
+
+    # -- C3-P3: the stage changes between export and parse ---------------------
+    def test_p3_a_stage_changed_between_export_and_parse_is_not_bound(self):
+        request, _ = self.scenario(stage_marker="drift_after_export")
+        result = verification.verify_stage(request)
+        self.assertNotPass(result, "C3-P3")
+        self.assertEqual(result["checks"]["source_hash_binding"]["status"], "FAIL")
+        self.assertIn("REPAIR_SOURCE_UNBOUND",
+                      result["checks"]["source_hash_binding"]["reason_codes"])
+        self.assertEqual(result["status"], "BLOCKED")
+
+    # -- C3-P4: the commit predicate, re-read after the verifier returned ------
+    def test_p4_a_report_replaced_after_the_verifier_returns_is_refused(self):
+        request, _ = self.scenario()
+        result = verification.verify_stage(request)
+        self.assertEqual(result["status"], "PASS", result["reasons"])
+        clean = verification.recheck_reports(result, request["report_root"])
+        self.assertEqual(clean["status"], "PASS", clean["reasons"])
+        self.assertEqual(clean["checked"], 2)
+        target = Path(request["report_root"]) / result["reports"]["files"][0]["path"]
+        target.write_bytes(b'<export version="E"/>')
+        after = verification.recheck_reports(result, request["report_root"])
+        self.assertEqual(after["status"], "FAIL")
+        self.assertIn("REPAIR_EXPORT_STALE", [r["code"] for r in after["reasons"]])
+
+    def test_p4_a_staged_source_replaced_after_the_verifier_returns_is_refused(self):
+        request, _ = self.scenario()
+        result = verification.verify_stage(request)
+        self.assertEqual(result["status"], "PASS", result["reasons"])
+        (Path(request["stage_root"]) / "design.kicad_sch").write_bytes(b"(kicad_sch)")
+        binding = verification.bind_inputs({key: request[key] for key in (
+            "txn_id", "run_id", "candidate_id", "relative_target", "snapshot_root",
+            "stage_root", "before_manifest", "staged_manifest", "bound_policy",
+            "bound_policy_sha256")} | {"toolchain": request["toolchain_manifest"]})
+        self.assertEqual(binding["status"], "BLOCKED")
+        self.assertIn("REPAIR_INPUT_DRIFT", [r["code"] for r in binding["reasons"]])
+
+    # -- C3-P5: a toolchain/policy/txn binding that does not match the request --
+    def test_p5_a_toolchain_that_is_not_the_pinned_kicad_is_refused(self):
+        request, _ = self.scenario()
+        request["toolchain_manifest"] = self.toolchain(kicad_version="10.1.0")
+        result = verification.verify_stage(request)
+        self.assertNotPass(result, "C3-P5")
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("REPAIR_INPUT_DRIFT", [r["code"] for r in result["reasons"]])
+        self.assertIsNone(result["toolchain_sha256"])
+
+    def test_p5_a_policy_binding_that_drifted_is_refused(self):
+        request, _ = self.scenario()
+        request["bound_policy_sha256"] = "b" * 64
+        result = verification.verify_stage(request)
+        self.assertNotPass(result, "C3-P5")
+        self.assertIn("REPAIR_INPUT_DRIFT", [r["code"] for r in result["reasons"]])
+        # the mismatch has to be readable off the receipt itself
+        self.assertEqual(result["bound_policy_sha256"], "b" * 64)
+
+    def test_p5_the_receipt_carries_the_patch_and_policy_bindings(self):
+        """Section 9's anchors are only useful if the receipt actually carries them.
+
+        Regression: _sha() validates and returns nothing, so an earlier revision
+        wrote null into both fields and no mismatch could ever be read off them.
+        """
+        request, _ = self.scenario()
+        result = verification.verify_stage(request)
+        self.assertEqual(result["status"], "PASS", result["reasons"])
+        self.assertEqual(result["patch_sha256"], request["patch_sha256"])
+        self.assertEqual(result["bound_policy_sha256"], request["bound_policy_sha256"])
+        self.assertIsNotNone(result["toolchain_sha256"])
+
+    def test_p5_a_toolchain_digest_that_does_not_match_the_binary_is_refused(self):
+        request, _ = self.scenario()
+        request["toolchain_manifest"] = self.toolchain(kicad_cli_sha256="0" * 64)
+        result = verification.verify_stage(request)
+        self.assertNotPass(result, "C3-P5")
+        self.assertEqual(result["checks"]["fresh_export"]["status"], "FAIL")
+        self.assertIn("REPAIR_TOOL_UNAVAILABLE",
+                      result["checks"]["fresh_export"]["reason_codes"])
+
+    # -- C3-P6: incomplete coverage, or native/export disagreement -------------
+    def test_p6_an_export_that_misses_a_pin_is_incomplete_coverage(self):
+        request, _ = self.scenario()
+        stage_observation = verification.observe_source(mini())
+        request, _ = self.scenario(
+            stage_plan=plan_without_one_pin(stage_observation))
+        result = verification.verify_stage(request)
+        self.assertNotPass(result, "C3-P6")
+        self.assertEqual(result["status"], "UNKNOWN")
+        self.assertFalse(result["coverage"]["after"]["complete"])
+        self.assertEqual(result["parser_agreement"]["after"]["status"], "FAIL")
+        self.assertIn("REPAIR_COVERAGE_INCOMPLETE",
+                      result["parser_agreement"]["after"]["reason_codes"])
+        self.assertEqual(result["checks"]["fresh_export"]["status"], "PASS")
+
+    def test_p6_a_native_read_that_disagrees_with_the_export_is_rejected(self):
+        request, observation = self.scenario()
+        misread = copy.deepcopy(observation)
+        misread["components"][0]["value"] = "33R"
+        request["native_after"] = misread
+        result = verification.verify_stage(request)
+        self.assertNotPass(result, "C3-P6")
+        self.assertEqual(result["parser_agreement"]["after"]["status"], "FAIL")
+        self.assertIn("REPAIR_PARSER_DISAGREEMENT",
+                      result["parser_agreement"]["after"]["reason_codes"])
+
+    # -- C3-P7: a required check left NOT_RUN, and honest deferred statuses -----
+    def test_p7_a_required_check_left_not_run_is_never_pass(self):
+        request, _ = self.scenario(stage_marker="drift_after_export")
+        result = verification.verify_stage(request)
+        self.assertNotPass(result, "C3-P7")
+        self.assertEqual(result["checks"]["exact_topology_delta"]["status"], "NOT_RUN")
+        self.assertEqual(result["checks"]["protected_diff"]["status"], "NOT_RUN")
+
+    def test_p7_the_deferred_checks_are_always_not_run(self):
+        request, _ = self.scenario()
+        passed = verification.verify_stage(request)
+        self.assertEqual(passed["status"], "PASS", passed["reasons"])
+        self.assertEqual(passed["deferred"],
+                         {"erc": "NOT_RUN", "semantic_runner": "NOT_RUN",
+                          "formal_evidence": "NOT_RUN"})
+        stalled = verification.verify_stage(self.scenario(stage_plan=b"")[0])
+        self.assertNotPass(stalled, "C3-P7")
+        self.assertEqual(stalled["deferred"]["erc"], "NOT_RUN")
+
+
 if __name__ == "__main__":
     unittest.main()
 

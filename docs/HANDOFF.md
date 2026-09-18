@@ -417,6 +417,17 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
 - **边界上报**：`docs/competition/SCOPE_BOUNDARY_W1.md` §2.3 的「`gates/repair_verification.py` 零文件 I/O，故结构上不可能读到 private 答案」论证，因 C3 按合同 §9 在该模块内执行导出而不再成立；需在 C3 合入时由 Owner 与验收侧改写为「宿主绝对路径绑定 + 只读声明根 + 扰动测试证明不读 private」。
 - **状态**：`PENDING_HUMAN_REVIEW`；未 merge、未 approve。下一步为 C3 小项 3–4。
 
+## 2026-09-18 C3 扰动资格 + 第二次 rebase（同卡 PR1-C3，分支 feat-pr1-c3-fresh-export，PR #72）
+
+- 触发：Owner 2026-09-18 指示 —— #78 merge 后以最新 master 为唯一基线，对 #72 执行「rebase → 清旧治理差异 → 路径安全 → toolchain binding → 真 KiCad 10.0.5 → **C3 perturbation qualification** → final review → merge」。
+- **rebase**：#69 / #82 / #78 合入后 rebase 到 master **`069aaf82`**。冲突仅 `docs/HANDOFF.md` 追加段（保留双方）与生成的 `AI_USAGE_LOG.md`（取 master 侧后 `tools.build_ai_usage_index build` 重建，108 条）。envelope `base.sha` 重锚 `f16b427…` → `069aaf82…`；「旧治理差异」（`docs/ID_MAP.md` / `tools/build_ai_usage_index.py`）在上一轮 rebase 已归零，本轮 diff 仍为 6 文件。
+- **路径安全 / toolchain binding / 真 KiCad 10.0.5**：均为上一轮已落地项，本轮 rebase 后**复跑验证仍绿**（`NativeKiCadExportTests` opt-in 通过）。
+- **C3-P1..C3-P7 扰动资格（本轮新增，判据 §2 C3 组）**：新增 `C3PerturbationTests`（14 例），逐条施加扰动并断言红落在判据指定的字段/状态；七条**均不得产生 PASS**（C3 层不产生 `COMMITTED`，那是 pipeline 的 `TransactionStatus`，属 C5 —— 以「无 PASS」如实记录，不冒充 C5 语义）。逐条落点表见 AI 台账条目 `AI-20260914-DSH-6654…`。
+- **资格发现并修复的真实缺陷（如实记录）**：`_sha()` 是纯校验器（校验后无返回值），而 `verify_stage` 写成 `result["patch_sha256"] = _sha(...)` / `result["bound_policy_sha256"] = _sha(...)` → 回执这两个字段**恒为 null**，判据 C3-P5 指定的绑定锚点在回执上读不到（P5 回归正是因此先红才暴露）。已改为「先校验、再显式携带该值」，并补回归 `test_p5_the_receipt_carries_the_patch_and_policy_bindings`。就地修复。
+- **新增只读复核 `recheck_reports(result, report_root)`**：§9 commit 谓词的**报告半边**（stage 半边是 `bind_inputs`）—— 重读回执点名的报告文件，被替换 / 改大小 / 缺失 / 链接一律拒绝；不执行工具、不发布任何东西。
+- 验证：`tests.test_repair_verification` 未 opt-in **89 OK（skipped=1）** / opt-in 真 KiCad 10.0.5 **89 OK** / opt-in 坏路径 **FAILED (failures=1)**（FAIL 而非 SKIP）；全量 `discover -s tests` 双 opt-in **775 OK（skipped=1）**、无 opt-in **775 OK（skipped=14）**。
+- **未做**：C5 / C6；未新增夹具、未改判据；`notes/b5-acceptance/**` 一字未动；正式 Evidence 未登记（`docs/evidence/**` 仍 forbidden）。
+- 状态：PENDING_HUMAN_REVIEW。
 
 ## 2026-09-18 C3 复审整改（同卡 PR1-C3，分支 feat-pr1-c3-fresh-export，PR #72）
 

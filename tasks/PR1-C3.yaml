@@ -6,7 +6,7 @@ task: PR1-C3
 
 base:
   branch: feat-pr1-c3-fresh-export
-  sha: f16b427963c180b2af5aa397752aa5cd52c0aa84
+  sha: 069aaf82ada270dd072284f8dd8536332ac15f5f
 
 # rebase 记录（2026-09-18，Owner 复审后按序执行）：本卡原 base 为 0d31a8b（PR #71 合入点），
 # 落后 master 18 个提交且 mergeable=CONFLICTING。已 rebase 到 master f16b427（干净重放 6 个提交，
@@ -14,6 +14,13 @@ base:
 # 附带效果：原「登记 DSH actor」对 docs/ID_MAP.md 与 tools/build_ai_usage_index.py 的改动
 # 已被 master 吸收，diff 归零 —— 故二者从 allowed_paths 移除，本卡不再写这两个文件。
 # rebase 后 Owner 复审给出 2 个 merge blocker + 1 个 P1，均已列入本卡 acceptance。
+#
+# 第二次 rebase（2026-09-18，Owner 指示「PR 债务清零、WIP=1」，且 #78 合入后）：
+#   → master 069aaf82。冲突同样仅 docs/HANDOFF.md 追加段（保留双方）与生成的
+#   AI_USAGE_LOG.md（取 master 侧后重新 build，108 条）。base.sha 同步重锚。
+# Owner 同次指示本卡补做 **C3-P1..C3-P7 扰动资格**（判据 §2 C3 组；原 acceptance
+# 只要求「必须红在指定位置」，此前未执行）。本轮执行并在资格过程中发现并修复 1 个
+# 真实实现缺陷（见 acceptance 末条），如实记录，未扩大其它范围。
 
 goal: |
   PR-1 Commit 3（合同 §11 C3）：gates/repair_verification.py 的 fresh KiCad 导出绑定，
@@ -85,6 +92,26 @@ acceptance: |
   - **修复 P1（Owner 标 should-fix）**：kicad-cli digest 只在**执行前**核一次，
     subprocess 之后**未**复核。修法：`binary digest before == after == manifest digest`，
     与 C4 的 toolchain binding 哲学一致；不一致 → `TOOL_ERROR`/`REPAIR_TOOL_UNAVAILABLE`
+  - **C3-P1..C3-P7 扰动资格（Owner 2026-09-18 指示，本轮执行）**：
+    `C3PerturbationTests` 逐条施加判据 §2 C3 组的扰动，断言红落在判据指定的字段/状态，
+    且七条**均不得产生 PASS**（C3 层不产生 COMMITTED —— 那是 pipeline 的
+    TransactionStatus，属 C5，故以「无 PASS」如实记录）。
+    - P1 导出失败 + 输出目录残留上一轮旧 XML → `checks.fresh_export` FAIL /
+      `REPAIR_EXPORT_STALE`，旧 XML 未被消费；缺 binary → `REPAIR_TOOL_UNAVAILABLE`
+    - P2 exit=0 但空/坏 XML → `checks.fresh_export` FAIL / `REPAIR_TOOL_PROTOCOL_ERROR`
+    - P3 导出与解析之间改 stage 源 → `checks.source_hash_binding` FAIL / `REPAIR_SOURCE_UNBOUND`
+    - P4 verifier 返回后替换报告文件或 stage 源 → 新增只读复核 `recheck_reports()` 与
+      `bind_inputs()` 双双拒绝（commit 谓词落空）
+    - P5 非 10.0.5 / policy 绑定漂移 / toolchain digest 不符 → 非 PASS，reason 落
+      `REPAIR_INPUT_DRIFT`（版本、policy）或 `REPAIR_TOOL_UNAVAILABLE`（digest）
+    - P6 漏一个 pin 的导出 → `coverage.after.complete=false` + `REPAIR_COVERAGE_INCOMPLETE`；
+      native 与导出分歧 → `parser_agreement.after` FAIL / `REPAIR_PARSER_DISAGREEMENT`
+    - P7 必需检查停在 `NOT_RUN` → 整体非 PASS；`deferred.erc` 恒为 `NOT_RUN`（PASS 亦然）
+  - **资格过程中发现并修复的真实缺陷（如实记录）**：`_sha()` 是纯校验器（无返回值），
+    而 `verify_stage` 写成 `result["patch_sha256"] = _sha(...)` /
+    `result["bound_policy_sha256"] = _sha(...)` —— 于是回执里这两个字段**恒为 null**，
+    判据 C3-P5 指定的绑定锚点在回执上根本读不到。已改为先校验再显式携带该值，
+    并补回归 `test_p5_the_receipt_carries_the_patch_and_policy_bindings`。
   - 台账 + HANDOFF 如实追加
 
 change_budget:
