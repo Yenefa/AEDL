@@ -28,9 +28,13 @@ goal: |
     exit=6 / `error.code=OPLIST` / "REFUSED: --strict-nets: net split/merge touches a named
     net; nothing written" / 字节零变化。这是 pre-write 拒绝，可直接验证「strict 被拒后不得
     自动改走 exception」以及「一次写调用」。
-  - **C4-P6 native 可行**：真工具运行 + 宿主 manifest 的 `symbol_digest` 被扰动 →
-    `TOOL_ERROR / REPAIR_TOOL_UNAVAILABLE`；`akcli_version` 被扰动 → `toolchain_manifest`
-    在**任何写调用之前**拒绝（BLOCKED，写调用数 0）。
+  - **C4-P6 native 可行**（**已按 PR #79 更新**）：真工具运行 + 宿主 manifest 的
+    `symbol_digest` 被扰动 → `TOOL_ERROR / REPAIR_TOOL_UNAVAILABLE`；`akcli_version` 被扰动 →
+    `toolchain_manifest` 在**任何写调用之前**拒绝（BLOCKED，写调用数 0）。
+    **rebase 说明**：本卡最初测得 digest 失配是**写后**才拦（真写入 `exit=0` 已发生）。
+    Owner 裁定那是**真实 C4 缺陷**，已由 **PR #79** 把整个 toolchain 绑定前移到 PRECHECK。
+    故本卡 P6 native 用例在 rebase 后断言的是**写前**拒绝：写调用 0 次、`exit_code is None`、
+    stage 字节不变。
   - **C4-P7 native 可行**：单批 3 op = 1 次写调用且 `APPLIED_TO_STAGE`；把 DC-04 拆成
     [place_component] + [两个 add_net_label] 两批时，第 1 批单独作废（字节已变且 net_diff 报
     `+ NEW <unnamed@R9.1/R9.2>`），第 2 批被真 writer 拒绝 —— 拆批与单批**不等价**。
@@ -40,9 +44,13 @@ goal: |
     **词表**处即拒（0 次写调用）—— 按判据 §1 规则 2 与 §C4「假红示例」，这是**假红**，
     不能算 P8 的资格。且实测 v1 的 `add_net_label` 打在被 no_connect 的脚上
     （J1.A8 / U1.5）后，**fresh read 与回执的 connectivity 均为 0 条 finding**。
-    故 P8 只能停在 stub-level，native 记 `NOT_RUN` 并升级 Owner（属夹具/词表边界，不是缺陷）。
-  - **C4-P3 不可行**：走 API 路径需要 E1/E2/E3 原生夹具，仓库只有 DC-01..DC-05
-    （op-list 形态）。按卡内约束**不自行造夹具** → `NOT_RUN` + 升级 Owner。
+    故 P8 停在 stub-level；native 记 **`NOT_REACHABLE_WITH_CURRENT_V1+FIXTURES`** ——
+    Owner 已**接受**该结论，明确**无需再探、不得为凑齐而扩 Operation v1**（属夹具/词表边界，
+    不是缺陷）。
+  - ~~**C4-P3 不可行**~~ —— **该结论已被 Owner 裁定推翻（保留为历史记录）**：当时判断
+    「走 API 路径需要 E1/E2/E3 原生夹具」。合同本就规定 E1/DC-01、E2/DC-02、E3/DC-03 走受限
+    写入器，**不需要新造 schematic fixture**；**PR #81** 已用现有 DC-01/02/03 完成 C4-P3 的
+    **native 正对照 + 固定负扰动**。故 C4-P3 不再是本卡的 `NOT_RUN`，其资格归 #81。
   - **C4-P2 / C4-P4**：真 writer 在成功路径恒返回 `applied=true` 且 op_results 完整，
     无法从真工具观测到「字段缺失 / 伪造 true / op 缺项 / 重复 index」→ 桩层固定，
     测试名与文档明确标注 stub-level，绝不写成原生资格。
@@ -95,8 +103,10 @@ acceptance: |
   - C4-P5 native：真 writer 对 `add_net_label name=GND at=U1.6` 返回合法拒绝（exit 6 /
     error.code=OPLIST）→ adapter `BLOCKED` / `REPAIR_STRICT_REFUSED`；且**写调用恰好 1 次、
     exception writer 调用 0 次**（strict 被拒不得 fallback 到 exception）
-  - C4-P6 native：真工具 + 被扰动的 symbol_digest → `TOOL_ERROR / REPAIR_TOOL_UNAVAILABLE`；
-    被扰动的 akcli_version → 在写调用之前即拒（BLOCKED，写调用 0 次），不得静默继续
+  - C4-P6 native（**rebase 后按 #79 的新语义**）：真工具 + 被扰动的 symbol_digest →
+    `TOOL_ERROR / REPAIR_TOOL_UNAVAILABLE`，且**写调用 0 次、`exit_code is None`、stage 字节不变**
+    （PR #79 把 toolchain 绑定前移到 PRECHECK；本卡原断言「真写入 exit=0 之后才拒」已作废）；
+    被扰动的 akcli_version → 同样在写调用之前即拒（BLOCKED，写调用 0 次），不得静默继续
   - C4-P7 native：单批 3 op → `APPLIED_TO_STAGE` 且写调用恰好 1 次；拆成两批时真 writer
     对第 2 批合法拒绝、且拆批后的中间态与单批结果**不等价**（net_diff 出现新的未命名网络）
   - C4-P7 桩层：一次携带两批的 op-list 容器被拒（input drift，写调用 0 次）
@@ -106,7 +116,9 @@ acceptance: |
     且必须逐一覆盖 0..n-1 且全 ok 才可能通过
   - C4-P8 桩层：新增 WARNING / 任何 NO_CONNECT_CONFLICT / 回执与 fresh read 分项矛盾 → 阻断；
     并如实记录「P8 无合法原生路径（词表假红）」的探针证据
-  - C4-P3：`NOT_RUN`（缺 E1/E2/E3 原生夹具，不自行造）并升级 Owner
+  - C4-P8 native：`NOT_REACHABLE_WITH_CURRENT_V1+FIXTURES`（Owner 已接受，无需再探）
+  - C4-P3：**本卡不做**（原记 `NOT_RUN`，理由「缺夹具」已被 Owner 推翻）；C4-P3 的 native
+    正对照 + 固定负扰动由 **PR #81** 用现有 DC-01/02/03（E1/E2/E3）完成，本卡只引用其结论
   - 每条 qualification 给出判据 §3 的 verdict 字段；native 与 stub-level 严格区分，
     绝不把 stub 结果写成原生资格；不得为通过而放宽断言或改判据
   - 未 opt-in 时原生类 SKIP 并如实标注；opt-in 后缺工具/坏版本必须 FAIL 不得 SKIP

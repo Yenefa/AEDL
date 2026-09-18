@@ -1667,7 +1667,17 @@ class NativePerturbationTests(_NativeToolchainMixin, unittest.TestCase):
         self.assertEqual(len(self._draws(calls)), 1, calls)
         self.assertEqual(self._exception_writes(calls), [])
 
-    def test_p6_a_perturbed_symbol_digest_is_refused_not_silently_continued(self):
+    def test_p6_a_perturbed_symbol_digest_is_refused_before_the_writer_runs(self):
+        """C4-P6's digest binding is settled in PRECHECK, so nothing is written first.
+
+        History matters here: when this case was first written the adapter compared the
+        digest **after** the write, so the correct expectation was "the writer ran
+        (exit 0) and the refusal came afterwards".  PR #79 moved the whole toolchain
+        binding into PRECHECK, which makes that old assertion describe a defect rather
+        than the contract.  The assertions below are the contract: the running tool's
+        identity is checked once the native before read is in hand and before
+        STAGE_APPLY starts a writer.
+        """
         cli = self._akcli()
         toolchain = self._measure(cli, "DC-04")
         # the real toolchain still runs; only the host binding is perturbed
@@ -1675,14 +1685,18 @@ class NativePerturbationTests(_NativeToolchainMixin, unittest.TestCase):
         ops = self._fixture_ops("DC-04")
         stage = self._stage("DC-04", "p6-digest")
         body = self._patch(toolchain, ops, "DC-04", stage)
-        result = adapter.apply_stage(self._stage_request(
-            body, stage, os.path.join(self.root, "artifacts-p6-digest")))
+        before = self._source_sha256(os.path.join(stage, "fault.kicad_sch"))
+        calls, recorder = self._runs()
+        with recorder:
+            result = adapter.apply_stage(self._stage_request(
+                body, stage, os.path.join(self.root, "artifacts-p6-digest")))
         self.assertEqual(result["status"], "TOOL_ERROR", result["reasons"])
         self.assertIn("REPAIR_TOOL_UNAVAILABLE", [row["code"] for row in result["reasons"]])
         self.assertNotEqual(result["status"], "APPLIED_TO_STAGE")
-        # the real write itself succeeded (exit 0), so the refusal comes from the
-        # perturbed binding and not from an unrelated early rejection
-        self.assertEqual(result["tool"]["exit_code"], 0)
+        # the writer never started, and the stage is byte-identical
+        self.assertEqual(self._draws(calls), [])
+        self.assertIsNone(result["tool"]["exit_code"])
+        self.assertEqual(self._source_sha256(os.path.join(stage, "fault.kicad_sch")), before)
 
     def test_p6_a_perturbed_toolchain_version_is_refused_before_any_write(self):
         cli = self._akcli()
