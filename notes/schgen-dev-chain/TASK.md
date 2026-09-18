@@ -1,0 +1,365 @@
+# SchGen exposed DEV native chain
+
+> **2026-09-18 作用域横幅 —— ingest-only 重切**：本文件现在服务于一个**新的** BENCH/DEV PR，
+> 它只承载 **adapter 无关的格式导入层**。下方「历史正文」逐字来自已关闭的 PR #74
+> （分支 `fix/schgen-dev-native-chain`，head `052750c`）；其中的 repair chain / scorer /
+> 旧草稿 adapter / writer 诊断 / DEV-04..06 合同 / 配对评分记录**不在本 PR 中**，
+> 仅作为背景历史保留。引用下方历史数字时必须标明「held 半，未进本 PR」。
+
+---
+
+## 历史正文（来自已关闭的 PR #74；held 半，未进本 PR）
+
+2026-09-16 DEV-05/06 continuation: independent writer review is retained as an
+agent review, without promotion authorization. No production or writer code
+changed this round; diagnostics and contract drafts are under the Codex output
+dev05-dev06-contracts-v1. Six fresh KiCad 8 exports isolate two causes: DEV-05
+duplicates the entire U1 pin definition, and removing the pins-only duplicate
+changes U1.4 occurrences 2->1 without changing any other native partition.
+IRLML6402 physical pins are G/S/D, unlike the candidate's G/D/S symbol; preserve
+numeric pin-to-net identity before considering functional changes. Gate source
+selection, full part identity and operating limits remain contract decisions.
+
+DEV-06 correction: removing connector wire B alone separates supply and return
+and removes C1/C2/C4 bypasses. Suspected wire A is not an independent native
+short; deleting it disconnects VDDD pin 50. This supersedes earlier multi-bridge
+geometry attribution. Real power pins 10/11 remain open in all controls. J1
+power pinout and hardware-SCB versus software-I2C intent require adjudication.
+Removing B alone is not a complete repair. Source documents, exact diagnostic
+objects, requests and native partitions are hash-bound; reference exposure is
+disclosed. The drafts contain no executable writer op-list.
+
+Current checkpoint: DEV_CONTRACT_CAUSES_ISOLATED / PENDING_HUMAN_REVIEW. Bound
+toolchain, DEV originals, frozen protocol, scorer and paired results remain
+unchanged. DEV-04 retains WRITER_QUALIFIED_DEV_ONLY / STRICT_NETS_BLOCKED;
+DEV-06's named-net split also remains outside strict-nets. No apply, install,
+new after/score, formal experiment, Primary switch, commit, push or PR. Current
+verification is dev05-dev06-contracts-v1/VERIFICATION.md and
+dev-gate-dev05-dev06-contracts.json; review-dev05-dev06-contracts binds this
+10-file worktree state. Next: adjudicate the concrete component/interface/state
+contracts before authoring exact edit plans; no authorization is inferred.
+
+2026-09-16 writer-fix qualification: user resolved D1 to the exact table, D2 to
+retain strict-nets and fix the writer first (NO exception), and D3 to retain the
+requested five-pin contract with component replacement handled separately.
+These answers supersede the pending decision text in the historical section below.
+
+The isolated akcli 0.21.0 patch is in the current Codex task's
+_src_akcli_dev04/akcli-68c2df5e43db2f822ab8dbfea36f777396897d8d; the older Desktop
+_src_akcli_dev04 tree is an earlier RED tree, not the patched implementation.
+Four writer files changed; per-sheet pre-edit junction requirements suppress
+unrequested normalization, and collapsed wire/bus vertices now fail explicitly.
+Separate synthetic regressions and authoring documentation accompany the patch.
+No installed toolchain, AEDL production code, strict-nets gate or reader changed.
+
+Fresh qualification (dev04-writer-fix-v1/qualification-20260916) binds all 220
+installed Python files to the upstream archive and identifies exactly those four
+patched source files. Three new KiCad 8.0.9 exports verify empty-op identity and
+corrected-preview P1/P2/P3; the latter changes exactly two deleted wires and one
+added wire, preserving all eleven junction forms and every other complete root
+form. Writer/native pin partitions agree on this sample after excluding power
+symbol tokens. Original plan/input/request/reference and protocol hashes match.
+
+Corrected synthetic test vocabulary: delete_object, not the old delete typo.
+Explicitly bound pristine source gives 9 failed / 2 passed; patched full suite
+includes all 11 passing regressions. UTF-8 and installed test dependencies remove
+the prior broad host failures: 3533 passed, 111 skipped, 2 failed. Both remaining
+failures reproduce on pristine 0.21.0; ruff passes and mypy passes 68 source files.
+This is not a fully green release gate, nor calibration of the general reader.
+
+DEV-04 is still STRICT_NETS_BLOCKED / PENDING_HUMAN_REVIEW. The +5V split remains
+prohibited by D2. No target apply, paired after, new score, component replacement,
+formal run, install into bound toolchain, commit, push or PR. Last paired DEV run
+remains run-audited / scores-audited, N=B=P=10, 10 ABSTAINED, mean delta J=0.
+Review artifacts and reproducible native audit are under dev04-writer-fix-v1.
+
+2026-09-15 DEV-04 writer diagnosis continuation (user-supplied failed plan):
+inspect scratch/schgen-eval/dev04-plan read-only; reproduce the three reported
+dry runs and isolate coordinate units versus whole-document auto-junctions.
+Own new diagnostic outputs only under Codex outputs/schgen-dev-mainline/
+dev04-writer-diagnosis-v1, plus existing task/compliance/evidence records in this
+10-file budget. Installed akcli and its policies are read-only. Dry-run preview
+files are explicitly diagnostic, not applied DEV outputs, after scores or
+protocol amendments. Keep D1/D2/D3 unanswered and no apply to DEV-04; do not
+relax strict-nets to force a result. Root-cause evidence precedes any new plan.
+
+Writer diagnosis result: original v1/v2/v3 reproduce. Their raw coordinate
+arrays use mm numbers where akcli requires mil; all endpoints snap to one
+50-mil point, so add_wire creates zero segments while returning ok. Correct
+3750/2050 -> 3750/2000 mil coordinates restore VDD in independent KiCad 8
+preview. Empty ops also add five global auto-junctions and reproduce the
+unnamed STAT/PROG merge prediction. KiCad 8 does not observe that merge until
+the original long STAT wire is explicitly segmented; two segmentation controls
+confirm this with and without the new junctions. Corrected preview passes
+P1/P2/P3 but retains five undeclared junction additions, a model disagreement
+and strict named-net refusal on apply. No target apply or scorer run occurred.
+Final reproducible diagnosis: dev04-writer-diagnosis-v1/run-03; 5 stock dry runs,
+13 fresh native exports and all diagnostic assertions pass. Failed initial
+hypotheses are retained. D1/D2/D3 requested from user; PENDING until answered.
+
+Status: DEV_PREFLIGHT_ROUTING_VALIDATED / PENDING_HUMAN_REVIEW. This is engineering qualification,
+not the formal SchGen experiment or a Primary promotion.
+
+LATEST (request/native attribution continuation): run-audited / scores-audited
+retains N=B=P=10, 10 byte-identical ABSTAINED terminals, mean delta J=0. The
+request/native-only preflight routes DEV-04, DEV-05 and DEV-06 to review before
+planner/writer dispatch. DEV-04 violates its explicit pin partition (and the
+manual review finds a wrong embedded charger symbol); DEV-06 supply/return pins
+coalesce. DEV-05 exports U1.4 on two different NC nets, a native identity
+ambiguity; the manual PMOS load-sharing concern requires independent review.
+DEV-08 and DEV-09 have no demonstrated request violation in this bounded review.
+For DEV-09 only, swapping the symmetric jumper's pin tokens in a diagnostic
+copy makes all four scorer sets equal. Official J remains 1/3; no schematic,
+scorer or endpoint was changed. Diagnostic attribution is not repair efficacy.
+
+Focused verification: 27/27 passed (including three actual native writer
+controls). Full gate output is dev-gate-audited.json; the previously reproduced
+sandbox junction failure remains a separate existing issue. Reports/bindings:
+attribution-v1/ATTRIBUTION.md, adjudication.json and input-bindings.json under the
+Codex task output root. Human adjudication is still PENDING_HUMAN_REVIEW for
+every row. No supported automatic repair was established and no H1/Primary
+gate is passed by this exposed retrospective review.
+
+PREVIOUS INGESTION RESULT (supersedes the phase-one raw-export interpretation below):
+the empty legacy symbol_instances root block caused KiCad 8 to omit later
+labels/junctions. Nine of ten exposed DEV inputs had this ordering hazard.
+An explicit ingestion stage now removes ONLY the empty block, preserves all
+other full AST forms and the object graph, keeps source bytes/hashes, and
+rejects nonempty/ambiguous metadata. Removing the block also keeps subsequent
+writer appends importable. Moving it last was a diagnostic, not the final fix.
+
+Both candidate inputs and native reference artifacts passed fresh KiCad 8
+ingestion, 10/10 each. Reference inputs use a separate tagged manifest and are
+never published as repair inputs. The evaluator now requires a hash-bound native
+reference and exports it freshly after ALL repair terminals exist.
+
+Current run-ingested / scores-ingested: N=B=P=10, all 10 ABSTAINED, delta J=0.
+Corrected baseline mean J=0.55454717696097; 5 designs at J<=0.95, not the legacy
+record's 8. This is baseline reconstruction, not AEDL electrical uplift and not
+confirmation that those five have repairable electrical defects.
+
+Native KiCad 8 synthetic writer controls on disposable DEV copies: legacy input
+blocked before apply; ingested input's new test-net connection independently
+observed (2/2 expected outcomes). Focused suite: 19/19 pass, including three
+KiCad 10 synthetic controls. Main suite: 644 OK (3 opt-in controls skipped there
+and separately run). Full dev_gate remains FAIL on the unchanged Windows
+sandbox junction test, reproduced on the clean baseline.
+
+Goal: replay all 10 already exposed stage1 DEV artifacts through a request-only
+native repair boundary and independent fresh before/after observation. Score
+only after every repair terminal is persisted, in a separate evaluator process.
+No generation/API calls, new sample selection, or HELD_OUT reads are needed.
+
+Impact Analysis
+
+- Direct modifications: tools/akcli_adapter.py (snapshot of the existing local
+  draft from ../_wt_c3, then narrowly fix missing-pin checks);
+  tools/schgen_dev_chain.py; tools/schgen_dev_score.py;
+  tools/schgen_native_ingest.py;
+  tests/test_schgen_dev_chain.py; this task record; AI usage entry/index;
+  third-party and evidence indexes if triggered.
+- Potentially affected: new DEV commands only. Existing core gates and scratch
+  formal scripts retain their current behavior.
+- Explicitly not touched: main checkout, other worktrees, SchGen generator,
+  raw DEV inputs, reference scorer, frozen protocol and HELD_OUT.
+- Risk: MEDIUM. Native writer changes candidate copies only. Refused/failed or
+  over-broad mutations are retained as candidate evidence and rolled back to a
+  separate byte-verified terminal file with fresh exports.
+
+Change budget: at most 10 tracked files, modules tools/tests/docs/notes;
+cross_module=true for the tool/test boundary; contract_change=false for existing
+public contracts; evidence_semantics_change=false. New DEV record formats do not
+implement or alter preregistered formal inference. Existing untracked adapter is
+reused with provenance, not represented as a newly authored 1,000-line module.
+
+Acceptance: meaningful negative tests fail before fixes; real KiCad/akcli DEV
+replay has an assigned denominator of 10, one terminal record per assignment,
+fresh after artifacts for abstentions/rollbacks, and a separate scorer report.
+No success claim based solely on receipt, hash change, or ERC warning count.
+Formal safety qualification and human electrical adjudication remain separate.
+
+Route: qualify the native DEV chain first; reconcile split/protocol exposure and
+bind F0/T0 before any formal generation. A previous scratch decision or older
+split cannot retroactively satisfy the current UNBOUND protocol.
+
+AIC score target: NONE (internal development). No release/merge requested.
+
+## Phase-one observations (superseded as electrical benchmark evidence)
+
+The native writer integration is now executable from the branch. It is not yet
+qualified for formal SchGen repair. The final DEV report retains 10 assignments,
+10 evaluable baselines and 10 actual after pairs. Nine abstentions and one
+verified rollback produce mean delta J = 0; no positive efficacy claim follows.
+
+- Existing draft adapter incorrectly accepted disappearing pins as a short or
+  split. Two failing tests reproduced this before the identity checks were fixed.
+- Existing draft adapter accepted empty native exports. A failing test and a
+  KiCad 10 export of this SchGen DEV input reproduced the empty-view issue;
+  empty component/connectivity views now fail closed.
+- First integration attempt lacked the required akcli protocol header. The
+  refusal and complete run-01 records remain. protocol_version=2, target_format
+  and target_file are now explicit and tested.
+- run-02: request-only parsing selected three explicit pin/net declarations for
+  DEV-01. akcli reported applied=true and added three local labels, but KiCad
+  8.0.9's fresh XML kept all three pins on unconnected nets. The adapter returned
+  FAILED_UNOBSERVED_CHANGE and the runner retained the candidate and independently
+  verified a separate raw-byte rollback terminal. This is a writer/native export
+  disagreement; its underlying geometry/import cause is still unresolved.
+- Existing DC-04 control fixture did not export under KiCad 8. The KiCad 10
+  controls cover positive pin-anchor wire, negative coordinate-only wire and
+  positive local label on an unconnected pin (local names are sheet-qualified).
+  Those controls do not qualify the SchGen/KiCad 8 path.
+- Cross-version diagnostic: KiCad 10 exported the DEV-01 raw and candidate with
+  empty connection views. The pre-fix diagnostic records preserve that finding;
+  it cannot be used as an alternative baseline, after score or working fix.
+- Legacy request digests were over UTF-8 text after Python universal newline
+  decoding, not raw Windows file bytes. Bound request copies exactly reproduce
+  the recorded generator-input digests; source-byte digests and normalization
+  are separately retained in request-provenance.json.
+
+Supported DEV repair grammar is narrow, case-preserving single-line explicit
+pin-to-named-net declarations on singleton unconnected pins. No alias inference,
+multi-pin/conditional prose, or reference-based repair planning. Unsupported
+cases abstain and remain in N. Scoring is descriptive and rejects empty sets.
+The separate evaluator imports the pinned upstream scorer by hash. It has no
+model calls and cannot feed outcomes back into the repair process.
+
+Full protected forms, exact pin/net mappings, label additions and fresh ERC
+flags constrain the label-only candidate. New ERC flags trigger conservative
+rollback, never automatic classification as a confirmed electrical defect.
+Modified-output electrical adjudication would remain UNKNOWN pending review;
+this run's final outputs are byte-identical to their baselines.
+
+## Next mainline checkpoint
+
+2026-09-15 second continuation: audit the five remaining low-J exposed designs.
+Within the same 10-file budget, extend tools/schgen_dev_chain.py and its existing
+tests with request/native-only preflight diagnostics. Recognize a strict explicit
+net-partition section, detect contradictory partitions and supply/return pin
+coalescence, and stop unsupported mutations before writer dispatch. Findings
+route to review; absence of a supported finding is not electrical acceptance.
+No new repair primitive, scorer normalization, automatic package substitution,
+or baseline geometry change is authorized by this policy extension. Record
+manual score-attribution separately, with reference access disclosed. Risk is
+MEDIUM; acceptance requires negative/control tests and all 10 terminal records.
+
+2026-09-15 continuation: the user explicitly requested continuing the native
+chain investigation. A single-variable DEV intervention located KiCad 8's
+legacy symbol_instances ordering hazard: moving the empty block last restores
+the raw design's already present global labels. Nine of ten raw DEV files have
+objects after that block. Prior raw-export headroom/paired metrics are retained
+as superseded diagnostics, not qualified electrical evidence. Add an importer
+guard plus a separate, deterministic DEV format-ingestion tool (one additional
+tools file, total tracked-file budget remains 10). The tool must preserve every
+AST form and source bytes in an audit trail; format ingestion is never scored
+as an AEDL electrical repair. Frozen formal rules and upstream files stay intact.
+
+1. Native import and writer observability are now resolved for this bounded
+   KiCad 8 recipe. Keep the separate ingestion stage and both raw/prepared hashes.
+   Old raw-export headroom records cannot be reused as electrical evidence.
+2. Independently adjudicate genuine defects in the five remaining low-J DEV
+   designs; broaden request parsing only as a separately reviewed DEV policy
+   change. Freeze the adapter/planner/environment and complete safety regression.
+3. Reconcile the existing exposed DEV IDs with the current protocol's split
+   construction. Bind an uncontaminated manifest, tool/scorer hashes and named
+   adjudicators, and complete T0/F0 prerequisites before formal generation.
+
+The current preregistration files remain unchanged and UNBOUND. No HELD_OUT
+content or results were opened by these new commands. No PCBSchemaGen campaign,
+new model request, formal experiment, Primary promotion or main-branch merge ran.
+
+## Reproduction
+
+From this worktree, with absolute paths for INPUTS, RUN, REFS, SCORER and OUT:
+
+    py -3.9 -m tools.schgen_native_ingest --manifest RAW_INPUTS --out INGESTED --kicad-cli KICAD8
+    py -3.9 -m tools.schgen_dev_chain --manifest INGESTED/repair-inputs.json --out RUN --akcli AKCLI --kicad-cli KICAD8
+    py -3.9 -m tools.schgen_native_ingest --reference-sources REF_NATIVE_INPUTS --out REF_INGESTED --kicad-cli KICAD8
+    py -3.9 -m tools.schgen_dev_score --run RUN --references REFS --scorer SCORER --kicad-cli KICAD8 --out OUT
+    py -3.9 -m unittest tests.test_schgen_dev_chain -v
+
+RUN/OUT must not exist; all inputs are digest-bound. Real fixture controls are
+opt-in through AEDL_DEV_AKCLI, AEDL_DEV_KICAD and AEDL_DEV_CONTROL_OUT, using
+KiCad 10.0.5 and a new control directory. Standard unit discovery skips those
+three controls when tool variables are absent and reports the skips.
+
+Local raw development artifacts: Codex task outputs/schgen-dev-mainline/.
+They are not formal gates/run_gates.py Evidence or benchmark preregistration.
+
+## Phase-one verification history (current checks are above)
+
+- Final focused command: 15/15 passed, including three real akcli/KiCad 10
+  fixture controls; receipts in controls-current and focused-tests.txt.
+- Final KiCad 8 replay: run-final + scores-final, N=B=P=10, 1 rollback /
+  9 abstain, all delta J/F1 = 0. Raw input and tool-source hashes recorded.
+- Development gate: main suite 640 tests OK (3 opt-in native controls skipped
+  there and run separately above); syntax, secret scan and AI ledger pass.
+- Gate remains FAIL: sandbox suite (283 tests) has WinError 183 in
+  test_containment_through_a_junction_does_not_false_escape at root.mkdir.
+  Same error reproduced on clean 0d31a8b in ../_wt_schgen; plain-path companion
+  passed. No sandbox source changed.
+- Existing gate --interpreter handling raised TypeError. Using the supported
+  AEDL_PYTHON='py -3.9' resolver and PYTHONIOENCODING=utf-8 avoids the CLI type/
+  GBK output problems without suppressing tests. Full receipt remains FAIL.
+- No Task Envelope was assigned for this standalone continuation. Existing
+  envelope scope/binding checks are explicitly excluded by the dev gate.
+- Git: fix/schgen-dev-native-chain, uncommitted, not pushed, no PR created;
+  PENDING_HUMAN_REVIEW. Formal launch remains blocked on native repair
+  qualification and protocol bindings, independently of the sandbox test.
+
+
+---
+
+## 2026-09-18 重切（本 PR 的实际内容）
+
+**触发**：Owner 既定顺序「#74 close and re-cut as a fresh BENCH/DEV PR without the old
+adapter」，并在本次会话的裁定中选择「先落 adapter 无关部分」。
+
+**为什么不能只删文件**：PR #74 的 4 个模块全部 `from tools import akcli_adapter`，而
+master 上 `tools/akcli_adapter.py` 已是 PR-1 C4 的 fail-closed adapter（API 不同：
+`apply_stage` / `read_native` / `source_objects` / `toolchain_manifest`，没有
+`apply_and_verify` / `object_graph` / `parse_sexpr` / `export_netlist` /
+`check_expectation` / `native_import_issues`）。删除旧 adapter 后这些模块无法原样运行。
+
+**本 PR 落地（全部基于 master `9d048332`）**：
+
+- 新增 `tools/schgen_native_ingest.py`：**自包含**格式导入工具。只删空的 legacy
+  `(symbol_instances)` 根块；保留源字节、其余全部根形式与对象图；产出 fresh KiCad 8.0.9
+  网表与 ERC 观察、新清单与新绑定。模块**不导入任何 `tools.*`**（有 AST 断言守护）。
+- 新增 `tests/test_schgen_native_ingest.py`：14 例边界测试。
+
+**代码来源**：只读辅助提取自 PR #74 携带的旧草稿 adapter 与 DEV chain（同项目 AI 生成
+资产，非第三方源码）。语义差异两处，均已文档化：报告不再写 `adapter_sha256`；
+`kicad-cli --version` 读不到时以文档化的 recipe 错误失败而非 AttributeError。
+
+**Impact Analysis**（AGENTS.md §2.2）
+
+```text
+Direct modifications:   tools/schgen_native_ingest.py (new),
+                        tests/test_schgen_native_ingest.py (new),
+                        notes/schgen-dev-chain/TASK.md, docs/evidence/EVIDENCE_INDEX.md,
+                        docs/compliance/THIRD_PARTY_RESOURCES.md，docs/HANDOFF.md,
+                        docs/compliance/ai-usage/AI-20260918-DSH-C7396AEC9D7DC7BCD22C6337E56A806E.md,
+                        docs/compliance/AI_USAGE_LOG.md (generated)
+Potentially affected:   none of the existing gates, adapters, fixtures or src/**
+Explicitly not touched: tools/akcli_adapter.py (C4)、gates/**、src/**、sandbox_runtime/**、
+                        tests/fixtures/**、notes/b5-acceptance/**、HELD_OUT 相关任何内容
+Risk:                   LOW（新增独立模块与测试，无现有调用方）
+```
+
+```text
+change_budget:
+  expected_files: 8
+  expected_modules: [tools, tests, notes, docs]
+  cross_module: false
+  contract_change: false
+  evidence_semantics_change: false
+```
+
+**Acceptance**：模块可独立导入且不引用任何 AEDL 模块；14 例边界测试全绿；`dev_gate` 全绿。
+
+**未完成 / 不在本 PR**（held）：chain / scorer / 旧 adapter 及其全部 writer、合同与配对
+评分记录。它们必须在 C4 adapter 上重新落地后才可再提；本 PR 不产生任何修复或 ΔJ 结论。
+
+**本轮未运行**：真实 KiCad/akcli 端到端回放、正式实验、模型调用、HELD_OUT 读取。均为
+`NOT_RUN`，不是通过。

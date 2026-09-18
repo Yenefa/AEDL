@@ -249,3 +249,18 @@ AP63205/5V 值）：经冻结 PDF 原文重新核对，DS41326 Rev. 3-2 Table 2 
 不受影响）；EV 板 corroboration 同步收窄至 power-entry 段（VBUS → SS34 → protected
 rail），buck 段证据责任归 datasheet + 冻结拓扑。本条目为更正记录，不替代原
 Evidence（其元数据冻结结论不受影响）。
+
+## EVID-20260918-001 — SchGen exposed DEV 格式导入（ingest-only 重切）
+
+- 分类：**DEV_ONLY**；本项是开发记录，不是 `gates/run_gates.py` 正式 Evidence，也不是 preregistered SchGen 实验或制造放行。
+- 对应主张：`tools/schgen_native_ingest.py` 能在**不导入任何 AEDL 修复模块**的前提下完成已曝光 DEV 输入的格式导入 —— 只删空的 legacy `(symbol_instances)` 根块，保持源字节与其他全部根形式，对象图（wire/junction/label/symbol/no_connect 清点）不变，并产出可独立复验的 fresh 观察与新清单。
+- 模块：`tools/schgen_native_ingest.py`；测试 `tests/test_schgen_native_ingest.py`。
+- 环境：Python 3.9.13（本机 `py -3.9`）。本轮**未**调用 KiCad 或 akcli：工具链调用是 `--kicad-cli` 的运行期要求，本 PR 只做单元边界验证。
+- 命令 / 方法 / 实数：
+  - `py -3.9 -m unittest tests.test_schgen_native_ingest` → **Ran 14, OK**。覆盖：legacy tail 判定与非 8.x 读取器、空导出视图拒绝、library-nested symbol 不计入 placement、删块前后 `graph_sha256` 相等、幂等、非空 instance 元数据拒绝、清单 split/重复/引用拒绝，以及模块 AST 级「不导入任何 `tools.*`」。
+  - `py -3.9 -m unittest discover -s tests` 与 `py -3.9 -m tools.dev_gate` → 见 PR 正文回执。
+- 原始证据路径：本 PR 的测试文件与其输出。历史 DEV 回放产物仍在 Codex 输出 `outputs/schgen-dev-mainline/`，属 **held 半，未进本 PR**。
+- 可复现状态：可复现（纯 Python，无外部工具依赖）。
+- 已知限制：真实 KiCad 8.0.9 端到端导入回放 **NOT_RUN**（本轮）。导入变化**不是**电气修复；本 PR 未重新测量任何 ΔJ。chain/score 半未移植，故本 PR 不产生任何修复或配对结论。`--kicad-cli` 的 8.0.9 门禁在真实回放前未经验证。
+- 关联：AI-20260918-DSH-C7396AEC9D7DC7BCD22C6337E56A806E；RES-011；`notes/schgen-dev-chain/TASK.md`；已关闭的 PR #74（held 半）。
+- 人工核验：PENDING_HUMAN_REVIEW。

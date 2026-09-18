@@ -350,3 +350,12 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
 - 仍未齐备：**C4 组「八条都红」不宣称成立** —— C4-P8 native 已由 #78 论证为 `NOT_REACHABLE_WITH_CURRENT_V1+FIXTURES`（词表假红），缺口属夹具/词表边界而非缺陷。C5/C6 仍 `NOT_RUN`。
 - 后续：本卡 merge 后，rebase #78 并把其 grading matrix 的 P3 一行由 `CRITERION ERRATUM REQUIRED` 更新为 **native PASS**。
 - 状态：PENDING_HUMAN_REVIEW。
+
+## 2026-09-18 SchGen exposed DEV 格式导入（ingest-only 重切，分支 feat/schgen-dev-native-ingest）
+
+- 触发：Owner 2026-09-18 既定顺序「#74 close and re-cut as a fresh BENCH/DEV PR without the old adapter」，并在本次会话的裁定中选择「先落 adapter 无关部分」。
+- 事实：PR #74（head `052750c`）携带的旧草稿 `tools/akcli_adapter.py`（1103 行）与 master 上 PR-1 C4 的 fail-closed adapter **占据同一路径且 API 完全不同**，其 4 个依赖模块无法原样保留（`apply_and_verify` / `object_graph` / `parse_sexpr` / `export_netlist` / `check_expectation` 在 C4 adapter 中均不存在）。
+- 本 PR：新增**自包含**的 `tools/schgen_native_ingest.py`（不导入任何 `tools.*`，有 AST 断言守护）+ `tests/test_schgen_native_ingest.py`（14 例）；记录见 `notes/schgen-dev-chain/TASK.md`（作用域横幅 + 历史正文保留）、EVID-20260918-001、RES-011。
+- held 半（**未进本 PR**，仍在已关闭的 PR #74 及其分支上）：`tools/schgen_dev_chain.py`、`tools/schgen_dev_score.py`、`tests/test_schgen_dev_chain.py`、旧 `tools/akcli_adapter.py`，以及 writer 诊断、DEV-04/05/06 合同、writer 补丁资格与配对评分记录。须在 C4 adapter 上重新落地后另卡。
+- 验证：见 PR 回执（`tests.test_schgen_native_ingest` / `discover -s tests` / `tools.dev_gate`）。真实 KiCad/akcli 端到端回放、正式实验与模型调用均 `NOT_RUN`。
+- 状态：PENDING_HUMAN_REVIEW。
