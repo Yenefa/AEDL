@@ -263,4 +263,14 @@ Evidence（其元数据冻结结论不受影响）。
 - 可复现状态：可复现（纯 Python，无外部工具依赖）。
 - 已知限制：真实 KiCad 8.0.9 端到端导入回放 **NOT_RUN**（本轮）。导入变化**不是**电气修复；本 PR 未重新测量任何 ΔJ。chain/score 半未移植，故本 PR 不产生任何修复或配对结论。`--kicad-cli` 的 8.0.9 门禁在真实回放前未经验证。
 - 关联：AI-20260918-DSH-C7396AEC9D7DC7BCD22C6337E56A806E；RES-011；`notes/schgen-dev-chain/TASK.md`；已关闭的 PR #74（held 半）。
+- **2026-09-18 评审整改轮（同一条目，不新开）**：Owner REQUEST_CHANGES 后闭环两项 P1 绑定缺陷 + 治理字段 + 交付证据。
+  - **修复**：raw/request/manifest 全部改为「读一次 → 哈希这些字节 → 用这些字节 parse/写盘」（原实现先 `sha(path)` 再 `shutil.copyfile(path)`，存在 TOCTOU 窗口）；reference 导出不再只看 `net.is_file()`，改为重新读字节 + 只读结构 sanity（单一 `(export ...)` 根、`(nets ...)` 下至少一个 `(node ...)`），未通过不得写入 `evaluation-references.json`；`cross_module` 改 `true`；`export_netlist` 记录 `kicad_cli_sha256` 并在运行后复算。
+  - **反向对照（变异测试）**：把绑定处还原为「`sha(path)` + `copyfile`」→ 新增扰动回归 **FAILED (failures=1)**；把 reference 处还原为「只看文件存在」→ 两条 reference 发布回归 **FAILED (failures=1)**。还原修复版后复跑全绿。
+  - **真实 KiCad 8.0.9 ingest smoke（已跑）**：二进制 sha256 `8b7f4a889dc8cfb8c3eae1337d64ade2fe0cf1ec5daa87878cc709904378fb26`。
+    - Case A（真实已曝光 DEV 生成件 stage1 `Qwiic_Power_Switch_Schematic_v10`，raw sha256 `1d39e5ebbe995d37323c1ae36e22a343f18a77cfee75f3e7602c9e541395b350`）：legacy `LEGACY_INSTANCE_TAIL`（empty=True，5 个后续根形式）→ `READY_FOR_DEV` / `FORMAT_ADAPTER_TRANSLATION` / 对象图不变；fresh netlist **PASS** exit=0 components=3 nets=5 pins=7；ERC **PASS**（6 flags）；prepared sha256 `693cd67b2465ae766f23c8c6134b731f58c7290a56e3276b14e15627ebdf3f5f`。
+    - Case B（同一真实产物导入后的字节，无需 translation）：`READY_FOR_DEV` / `UNCHANGED_FORMAT` / prepared 与 original **逐字节相同**；fresh netlist **PASS** exit=0 components=3 nets=5 pins=7；ERC **PASS**。
+  - 两次 fresh export 的 XML sha256 不同属**预期**（kicad-cli 导出含 `(date ...)` 时间戳，该哈希只作 provenance、不作比较键；连接性两次一致）。
+  - 测试：`tests.test_schgen_native_ingest` → **Ran 21, OK**（首轮 14 + 整改轮 7）。全量 `discover -s tests` 与 `dev_gate` 见 PR 回执。
+  - 原始产出：`scratch\schgen-recut\smoke\`（`SMOKE-RESULT.json` + `out-A` / `out-B` 完整 ingestion 记录）。
+  - **仍未运行**：scorer、任何 repair、held half、ΔJ、模型调用、正式实验、HELD_OUT 读取。
 - 人工核验：PENDING_HUMAN_REVIEW。

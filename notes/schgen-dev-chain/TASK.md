@@ -326,7 +326,7 @@ master 上 `tools/akcli_adapter.py` 已是 PR-1 C4 的 fail-closed adapter（API
 - 新增 `tools/schgen_native_ingest.py`：**自包含**格式导入工具。只删空的 legacy
   `(symbol_instances)` 根块；保留源字节、其余全部根形式与对象图；产出 fresh KiCad 8.0.9
   网表与 ERC 观察、新清单与新绑定。模块**不导入任何 `tools.*`**（有 AST 断言守护）。
-- 新增 `tests/test_schgen_native_ingest.py`：14 例边界测试。
+- 新增 `tests/test_schgen_native_ingest.py`：21 例边界/扰动测试（首轮 14 例 + 评审整改轮 7 例）。
 
 **代码来源**：只读辅助提取自 PR #74 携带的旧草稿 adapter 与 DEV chain（同项目 AI 生成
 资产，非第三方源码）。语义差异两处，均已文档化：报告不再写 `adapter_sha256`；
@@ -351,15 +351,96 @@ Risk:                   LOW（新增独立模块与测试，无现有调用方�
 change_budget:
   expected_files: 8
   expected_modules: [tools, tests, notes, docs]
-  cross_module: false
+  cross_module: true               # 实际跨 tools/tests/notes/docs 四个模块；治理记录如实，
+                                   # 不扩大既有 8-file scope（Owner 2026-09-18 评审明确）
   contract_change: false
   evidence_semantics_change: false
 ```
 
-**Acceptance**：模块可独立导入且不引用任何 AEDL 模块；14 例边界测试全绿；`dev_gate` 全绿。
+**Acceptance**：模块可独立导入且不引用任何 AEDL 模块；21 例边界/扰动测试全绿；`dev_gate` 全绿；真实 KiCad 8.0.9 双例 ingest smoke 全通过（见下方 2026-09-18 评审整改节）。
 
 **未完成 / 不在本 PR**（held）：chain / scorer / 旧 adapter 及其全部 writer、合同与配对
 评分记录。它们必须在 C4 adapter 上重新落地后才可再提；本 PR 不产生任何修复或 ΔJ 结论。
 
-**本轮未运行**：真实 KiCad/akcli 端到端回放、正式实验、模型调用、HELD_OUT 读取。均为
+**首轮未运行、已补**：真实 KiCad 8.0.9 端到端 ingest 回放已在评审整改轮补跑
+（见下）。**仍未运行**：正式实验、模型调用、HELD_OUT 读取、任何 scorer 或 repair —— 均为
 `NOT_RUN`，不是通过。
+
+
+---
+
+## 2026-09-18 评审整改（Owner REQUEST_CHANGES @ head `61736f6`）
+
+Owner 裁定方向认可（旧 adapter 已彻底拿掉），但列出 2 个 P1 code blocker + 2 个交付/治理 blocker。
+本轮逐条闭环，**未动 C4 adapter，也未把 chain/scorer 塞回来**。
+
+### P1-1 输入绑定 TOCTOU —— 已修
+
+原文在 `sha(path)` 校验之后另起一次 `shutil.copyfile(path, ...)`，即两次独立读路径；
+manifest 也是先 parse、最后再按路径重算哈希。改为**读一次**：
+
+```text
+read_bytes(path) -> sha256_bytes(这些字节) -> 用这些字节 parse / 写盘
+```
+
+- raw / request：绑定、读取、写盘使用**同一份 bytes**；该路径上不再有第二次读取
+  （`shutil.copyfile` 已从这条路径移除）。
+- manifest：`original_manifest_sha256` 改为报告**被 parse 的那份字节**的哈希。
+
+**反向对照（变异测试）**：把该处还原为「先 `sha(path)` 再 `copyfile`」→
+新增扰动回归 `BindingTests.test_a_source_swapped_after_binding_is_not_copied_from_the_path`
+**FAILED (failures=1)**；还原修复版后复跑全绿。该回归同时在 `ingest.shutil.copyfile`
+上挂 AssertionError，任何「按路径复制」的实现都会当场失败。
+
+### P1-2 空 / 未验证的 reference.net 可被发布 —— 已修
+
+原文只查 `net.is_file()`。现改为：重新读取 reference 字节，**空文件直接失败**；
+再过一个只读结构 sanity reader `validate_reference_netlist()` —— 必须是单一
+`(export ...)` 根，且 `(nets ...)` 下至少有一个 `(node ...)`（signature-bearing）。
+未通过则**不得**写入 `evaluation-references.json`。
+
+**反向对照**：还原为「只看文件存在」→ `ReferencePublicationTests` 两条
+（空文件 / 结构为空）**均 FAILED (failures=1)**。
+
+### 治理：`cross_module` —— 已改
+
+`false` → `true`。实际跨 tools / tests / notes / docs 四个模块；不扩大既有 8-file scope。
+
+### 非 blocker：记录 kicad-cli 二进制摘要 —— 已加
+
+`export_netlist()` 在启动工具**前**记录 `kicad_cli_sha256`，运行后复算
+`kicad_cli_sha256_after`，不一致即失败；ingestion report 同时带
+`kicad_cli` / `kicad_cli_version` / `kicad_cli_sha256`。
+
+### 交付证据：真实 KiCad 8.0.9 ingest smoke —— 已跑
+
+```
+KICAD_CLI        C:\Users\Ryan Gosling\AppData\Local\Programs\KiCad\8.0\bin\kicad-cli.exe
+kicad-cli 版本   8.0.9
+kicad-cli sha256 8b7f4a889dc8cfb8c3eae1337d64ade2fe0cf1ec5daa87878cc709904378fb26
+
+Case A  真实已曝光 DEV 生成件（stage1 Qwiic_Power_Switch_Schematic_v10）
+  raw sha256        1d39e5ebbe995d37323c1ae36e22a343f18a77cfee75f3e7602c9e541395b350
+  legacy            LEGACY_INSTANCE_TAIL, empty=True, 5 个被忽略的后续根形式
+  结果              READY_FOR_DEV / FORMAT_ADAPTER_TRANSLATION / 对象图不变
+  fresh netlist     PASS exit=0  components=3 nets=5 pins=7（非空连接）
+  ERC               PASS（6 条 violation flags）
+  prepared sha256   693cd67b2465ae766f23c8c6134b731f58c7290a56e3276b14e15627ebdf3f5f
+
+Case B  同一真实 DEV 产物经格式导入后的字节（无需 translation）
+  结果              READY_FOR_DEV / UNCHANGED_FORMAT / prepared 与 original 逐字节相同
+  fresh netlist     PASS exit=0  components=3 nets=5 pins=7
+  ERC               PASS（6 条 violation flags）
+```
+
+Case B 之所以取「Case A 的导入产物」而非原始 DEV 件：10 个已曝光 DEV 生成件**全部**带
+`symbol_instances`（9 个有 tail、1 个块在末尾），没有任何原始 DEV 件是真正的
+no-translation 输入；用同一真实产物已绑定的字节验证幂等路径，比另造一个假输入诚实。
+
+两次 fresh export 的 XML sha256 不同是**预期**：kicad-cli 导出带 `(date ...)` 时间戳，
+该哈希只作 provenance、不作比较键；两次的 components/nets/pins 完全一致。
+
+**仍未运行**：scorer、任何 repair、held half、ΔJ、模型调用、正式实验、HELD_OUT 读取 —— 全部
+`NOT_RUN`，不是通过。原始产出：`scratch\schgen-recut\smoke\`（`SMOKE-RESULT.json` +
+`out-A` / `out-B` 完整 ingestion 记录）。
+

@@ -321,6 +321,42 @@ def parse_netlist(raw):
             "pin_count": sum(len(item) for item in pins_on_net.values())}
 
 
+def validate_reference_netlist(raw, label="reference netlist"):
+    """Read-only structural sanity for a kicadsexpr export.
+
+    `exit 0` plus a file on disk is not an observation.  An empty, undecodable,
+    structurally broken or signature-free export must never be published as a
+    reference, so the bytes are re-read here instead of trusting the receipt.
+    """
+    if not raw:
+        return dict(status="FAIL", reason="EMPTY_FILE", bytes=0, nets=0, nodes=0)
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        return dict(status="FAIL", reason="UNDECODABLE: %s" % exc, bytes=len(raw),
+                    nets=0, nodes=0)
+    try:
+        roots = parse_sexpr(text)
+    except ValueError as exc:
+        return dict(status="FAIL", reason="UNPARSEABLE: %s" % exc, bytes=len(raw),
+                    nets=0, nodes=0)
+    if len(roots) != 1 or not isinstance(roots[0], list) or not roots[0]:
+        return dict(status="FAIL", reason="NOT_ONE_ROOT", bytes=len(raw),
+                    roots=len(roots), nets=0, nodes=0)
+    head = _unquote(roots[0][0])
+    if head != "export":
+        return dict(status="FAIL", reason="UNEXPECTED_ROOT:%s" % head, bytes=len(raw),
+                    roots=1, nets=0, nodes=0)
+    nets_section = _child(roots[0], "nets")
+    nets = _children(nets_section, "net") if nets_section is not None else []
+    nodes = sum(len(_children(net, "node")) for net in nets)
+    if not nets or nodes == 0:
+        return dict(status="FAIL", reason="NO_SIGNATURE_BEARING_CONTENT", bytes=len(raw),
+                    roots=1, nets=len(nets), nodes=nodes)
+    return dict(status="PASS", reason=None, bytes=len(raw), roots=1,
+                nets=len(nets), nodes=nodes)
+
+
 def native_import_issues(source, version):
     """KiCad 8 stops consuming root objects after legacy symbol_instances.
 
@@ -357,13 +393,19 @@ def export_netlist(source, output_dir, kicad_cli=None, timeout=EXPORT_TIMEOUT_SE
     result = {"status": "FAIL", "reason": None, "argv": None, "exit_code": None,
               "xml_path": None, "xml_sha256": None, "connectivity": None,
               "source_before_sha256": None, "source_after_sha256": None,
-              "source_parse_end_sha256": None, "kicad_cli": None, "version": None}
+              "source_parse_end_sha256": None, "kicad_cli": None, "version": None,
+              "kicad_cli_sha256": None, "kicad_cli_sha256_after": None}
     executable = find_kicad_cli(kicad_cli)
     if executable is None:
         result["reason"] = "kicad-cli is unavailable: no independent netlist can be exported"
         return result
     result["kicad_cli"] = executable
     result["version"] = tool_version(executable)["version"]
+    try:
+        result["kicad_cli_sha256"] = sha256_file(executable)
+    except OSError as exc:
+        result["reason"] = "unreadable kicad-cli binary: %s" % exc
+        return result
     try:
         result['source_before_sha256'] = sha256_file(source)
         result['native_import_issues'] = native_import_issues(source, result['version'])
@@ -394,6 +436,14 @@ def export_netlist(source, output_dir, kicad_cli=None, timeout=EXPORT_TIMEOUT_SE
     after = sha256_file(source)
     result["source_before_sha256"] = before
     result["exit_code"] = exit_code
+    try:
+        result["kicad_cli_sha256_after"] = sha256_file(executable)
+    except OSError:
+        result["kicad_cli_sha256_after"] = None
+    if (result["kicad_cli_sha256_after"] is not None
+            and result["kicad_cli_sha256_after"] != result["kicad_cli_sha256"]):
+        result["reason"] = "the toolchain binary changed while the export ran"
+        return result
     if before != after:
         result["source_after_sha256"] = after
         result["reason"] = "the artifact changed while it was exported"
@@ -450,6 +500,13 @@ def export_erc(source, directory, kicad_cli):
 # ---------------------------------------------------------------------------
 # input manifest / format ingestion
 # ---------------------------------------------------------------------------
+
+def _file_digest(path):
+    try:
+        return sha256_file(path)
+    except OSError:
+        return None
+
 
 def validate_manifest(manifest):
     if set(manifest) != {'split', 'assignments'} or manifest['split'] != 'EXPOSED_DEV':
@@ -535,7 +592,10 @@ def main(argv=None):
     args = parser.parse_args(argv)
     reference_mode = args.reference_sources is not None
     input_path = args.reference_sources if reference_mode else args.manifest
-    manifest = json.loads(Path(input_path).read_text(encoding='utf-8-sig'))
+    # Read once.  The parsed document, the recorded digest and the written
+    # artifacts all derive from these exact bytes; the path is never read twice.
+    manifest_raw = read_bytes(input_path)
+    manifest = json.loads(manifest_raw.decode('utf-8-sig'))
     if reference_mode:
         if set(manifest) != {'split', 'assignments'} or manifest['split'] != 'EXPOSED_DEV_REFERENCE':
             raise ValueError('reference ingestion requires explicitly tagged reference inputs')
@@ -563,17 +623,23 @@ def main(argv=None):
         record = dict(id=item['id'], status='FAIL', formal_authorized=False,
                       electrical_repair=False, source_raw_sha256=item['raw_sha256'])
         try:
-            if sha(item['raw']) != item['raw_sha256']:
+            # Bind, read and write the SAME bytes.  A separate hash pass over the
+            # path followed by a copy pass could be fooled by a source path that
+            # changes in between (TOCTOU): the record would then claim a digest the
+            # copied artifact does not have.  There is no second read of the path.
+            raw_bytes = read_bytes(item['raw'])
+            if sha256_bytes(raw_bytes) != item['raw_sha256']:
                 raise ValueError('input binding drift')
-            if not reference_mode and sha(item['request']) != item['request_sha256']:
-                raise ValueError('request binding drift')
             original = directory/'original.kicad_sch'
-            prepared = directory/'input.kicad_sch'
-            shutil.copyfile(item['raw'], original)
+            original.write_bytes(raw_bytes)
             if not reference_mode:
-                shutil.copyfile(item['request'], directory/'request.txt')
+                request_bytes = read_bytes(item['request'])
+                if sha256_bytes(request_bytes) != item['request_sha256']:
+                    raise ValueError('request binding drift')
+                (directory/'request.txt').write_bytes(request_bytes)
+            prepared = directory/'input.kicad_sch'
             record['original_import_issues'] = native_import_issues(str(original), version)
-            text = original.read_bytes().decode('utf-8')
+            text = raw_bytes.decode('utf-8')
             prepared.write_bytes(normalize_legacy_order(text).encode('utf-8'))
             record['prepared_sha256'] = sha(prepared)
             record['classification'] = ('FORMAT_ADAPTER_TRANSLATION' if sha(original) != sha(prepared)
@@ -594,9 +660,19 @@ def main(argv=None):
                 process = subprocess.run(argv_export, capture_output=True, timeout=180)
                 (directory/'score-export-stdout.txt').write_bytes(process.stdout)
                 (directory/'score-export-stderr.txt').write_bytes(process.stderr)
-                if process.returncode != 0 or sha(prepared) != record['prepared_sha256'] or not net.is_file():
+                net_raw = read_bytes(net) if net.is_file() else b''
+                if (process.returncode != 0
+                        or sha(prepared) != record['prepared_sha256']
+                        or not net_raw):
                     raise ValueError('reference scoring export failed')
-                references[item['id']] = dict(path=str(net), sha256=sha(net),
+                # exit 0 plus a file on disk is not an observation: an empty or
+                # structureless reference must never reach the references manifest.
+                sanity = validate_reference_netlist(net_raw)
+                if sanity['status'] != 'PASS':
+                    raise ValueError('reference scoring export is not evaluable: %s'
+                                     % sanity['reason'])
+                references[item['id']] = dict(path=str(net), sha256=sha256_bytes(net_raw),
+                    bytes=len(net_raw), sanity=sanity,
                     native_source=str(prepared), native_source_sha256=sha(prepared))
                 ready.append(item['id'])
             else:
@@ -609,9 +685,11 @@ def main(argv=None):
         records.append(record)
         print(item['id'], record['status'], record.get('classification'), flush=True)
     report = dict(schema='aedl-schgen-dev-ingestion/1', N_assigned=len(assignments),
-                  N_ready=len(ready), original_manifest_sha256=sha(input_path),
+                  N_ready=len(ready), original_manifest_sha256=sha256_bytes(manifest_raw),
                   role='REFERENCE' if reference_mode else 'REPAIR_INPUT',
                   source_sha256=sha(__file__),
+                  kicad_cli=args.kicad_cli, kicad_cli_version=version,
+                  kicad_cli_sha256=_file_digest(args.kicad_cli),
                   formal_authorized=False, records=records)
     write_json(root/'ingestion-report.json', report)
     # Do not silently drop failed assignments and publish a survivors cohort.

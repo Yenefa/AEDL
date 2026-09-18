@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from tools import schgen_native_ingest as ingest
 
@@ -139,6 +140,179 @@ class ManifestTests(unittest.TestCase):
                 ingest.main(['--manifest', str(manifest), '--out', str(root/'out'),
                              '--kicad-cli', 'MUST_NOT_RUN'])
             self.assertFalse((root/'out').exists())
+
+
+class BindingTests(unittest.TestCase):
+    """The record must bind the bytes that were actually written."""
+
+    def _run(self, root, manifest, reference=False, patches=()):
+        flag = '--reference-sources' if reference else '--manifest'
+        stack = [mock.patch.object(ingest, 'tool_version',
+                                   return_value={'version': '8.0.9'})]
+        stack += list(patches)
+        for item in stack:
+            item.start()
+        try:
+            return ingest.main([flag, str(manifest), '--out', str(root/'out'),
+                                '--kicad-cli', 'FAKE'])
+        finally:
+            for item in reversed(stack):
+                item.stop()
+
+    def test_a_source_swapped_after_binding_is_not_copied_from_the_path(self):
+        # Perturbation: replace the source path in the window between binding the
+        # digest and writing the artifact.  A path-copy implementation records the
+        # bound digest while writing the swapped bytes; this one has no second read.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            raw, request = root/'raw.kicad_sch', root/'request.txt'
+            bound = b'(kicad_sch (label "A" (at 0 0 0)))'
+            swapped = b'(kicad_sch (label "B" (at 0 0 0)))'
+            raw.write_bytes(bound)
+            request.write_bytes(b'Connect A.')
+            manifest = root/'manifest.json'
+            manifest.write_text(json.dumps(dict(split='EXPOSED_DEV', assignments=[
+                dict(id='one', raw=str(raw), raw_sha256=ingest.sha(raw),
+                     request=str(request), request_sha256=ingest.sha(request))])))
+            real_read = ingest.read_bytes
+            state = {'swapped': False}
+
+            def racing_read(path):
+                data = real_read(path)
+                if str(path) == str(raw) and not state['swapped']:
+                    state['swapped'] = True
+                    raw.write_bytes(swapped)
+                return data
+
+            with mock.patch.object(ingest, 'read_bytes', side_effect=racing_read), \
+                 mock.patch.object(ingest.shutil, 'copyfile',
+                                   side_effect=AssertionError('a path copy is a TOCTOU window')), \
+                 mock.patch.object(ingest, 'export_netlist', return_value={'status': 'PASS'}), \
+                 mock.patch.object(ingest, 'export_erc', return_value={'status': 'PASS'}):
+                rc = self._run(root, manifest)
+            self.assertEqual(rc, 0)
+            written = (root/'out/one/original.kicad_sch').read_bytes()
+            record = json.loads((root/'out/one/ingestion.json').read_text())
+            self.assertEqual(written, bound)
+            self.assertEqual(record['status'], 'READY_FOR_DEV')
+            self.assertEqual(ingest.sha(root/'out/one/original.kicad_sch'),
+                             record['source_raw_sha256'])
+
+    def test_a_source_that_no_longer_matches_the_manifest_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            raw, request = root/'raw.kicad_sch', root/'request.txt'
+            raw.write_bytes(b'(kicad_sch (label "A" (at 0 0 0)))')
+            request.write_bytes(b'Connect A.')
+            manifest = root/'manifest.json'
+            manifest.write_text(json.dumps(dict(split='EXPOSED_DEV', assignments=[
+                dict(id='one', raw=str(raw), raw_sha256=ingest.sha(raw),
+                     request=str(request), request_sha256=ingest.sha(request))])))
+            raw.write_bytes(b'(kicad_sch (label "SWAPPED" (at 1 1 0)))')
+            rc = self._run(root, manifest)
+            self.assertEqual(rc, 1)
+            self.assertFalse((root/'out/repair-inputs.json').exists())
+            record = json.loads((root/'out/one/ingestion.json').read_text())
+            self.assertEqual(record['status'], 'FAIL')
+            self.assertEqual(record['error'], 'input binding drift')
+
+    def test_the_manifest_digest_binds_the_bytes_that_were_parsed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            raw, request = root/'raw.kicad_sch', root/'request.txt'
+            raw.write_bytes(b'(kicad_sch (label "A" (at 0 0 0)))')
+            request.write_bytes(b'Connect A.')
+            manifest = root/'manifest.json'
+            first = json.dumps(dict(split='EXPOSED_DEV', assignments=[
+                dict(id='one', raw=str(raw), raw_sha256=ingest.sha(raw),
+                     request=str(request), request_sha256=ingest.sha(request))])).encode()
+            manifest.write_bytes(first)
+            real_read = ingest.read_bytes
+
+            def racing_read(path):
+                data = real_read(path)
+                if str(path) == str(manifest):
+                    manifest.write_bytes(b'{"split": "EXPOSED_DEV", "assignments": []}')
+                return data
+
+            with mock.patch.object(ingest, 'read_bytes', side_effect=racing_read), \
+                 mock.patch.object(ingest, 'export_netlist', return_value={'status': 'PASS'}), \
+                 mock.patch.object(ingest, 'export_erc', return_value={'status': 'PASS'}):
+                rc = self._run(root, manifest)
+            report = json.loads((root/'out/ingestion-report.json').read_text())
+            self.assertEqual(rc, 0)
+            self.assertEqual(report['original_manifest_sha256'], ingest.sha256_bytes(first))
+
+
+class ReferenceNetlistTests(unittest.TestCase):
+    VALID = (b'(export (version "E")\n'
+             b'  (components (comp (ref "R1") (value "10k")))\n'
+             b'  (nets (net (code "1") (name "GND") (node (ref "R1") (pin "1")))))\n')
+
+    def test_a_real_shaped_reference_export_passes(self):
+        result = ingest.validate_reference_netlist(self.VALID)
+        self.assertEqual(result['status'], 'PASS', result)
+        self.assertEqual((result['nets'], result['nodes']), (1, 1))
+
+    def test_empty_and_structureless_exports_are_rejected(self):
+        cases = [
+            (b'', 'EMPTY_FILE'),
+            (b'(export (version "E") (components) (nets))', 'NO_SIGNATURE_BEARING_CONTENT'),
+            (b'(kicad_sch)', 'UNEXPECTED_ROOT:kicad_sch'),
+            (b'(export (version "E")', 'UNPARSEABLE'),
+        ]
+        for raw, reason in cases:
+            result = ingest.validate_reference_netlist(raw)
+            self.assertEqual(result['status'], 'FAIL', raw)
+            self.assertTrue(result['reason'].startswith(reason), (raw, result['reason']))
+
+
+class ReferencePublicationTests(unittest.TestCase):
+    """exit 0 plus a file on disk is not an observation."""
+
+    def _run_reference(self, root, net_bytes):
+        raw = root/'raw.kicad_sch'
+        raw.write_bytes(b'(kicad_sch (label "A" (at 0 0 0)))')
+        manifest = root/'refs.json'
+        manifest.write_text(json.dumps(dict(split='EXPOSED_DEV_REFERENCE', assignments=[
+            dict(id='one', raw=str(raw), raw_sha256=ingest.sha(raw))])))
+
+        class Proc:
+            returncode = 0
+            stdout = b''
+            stderr = b''
+
+        def fake_run(argv, **kwargs):
+            if 'netlist' in argv:
+                Path(argv[argv.index('--output') + 1]).write_bytes(net_bytes)
+            return Proc()
+
+        with mock.patch.object(ingest, 'tool_version', return_value={'version': '8.0.9'}), \
+             mock.patch.object(ingest, 'export_netlist', return_value={'status': 'PASS'}), \
+             mock.patch.object(ingest, 'export_erc', return_value={'status': 'PASS'}), \
+             mock.patch.object(ingest.subprocess, 'run', side_effect=fake_run):
+            rc = ingest.main(['--reference-sources', str(manifest), '--out', str(root/'out'),
+                              '--kicad-cli', 'FAKE'])
+        record = json.loads((root/'out/one/ingestion.json').read_text())
+        return rc, record
+
+    def test_an_empty_reference_export_is_not_ready(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            rc, record = self._run_reference(root, b'')
+            self.assertEqual(rc, 1)
+            self.assertFalse((root/'out/evaluation-references.json').exists())
+            self.assertEqual(record['status'], 'FAIL')
+            self.assertIn('reference scoring export', record['error'])
+
+    def test_a_structureless_reference_export_is_not_ready(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            rc, record = self._run_reference(root, b'(export (version "E") (components) (nets))')
+            self.assertEqual(rc, 1)
+            self.assertFalse((root/'out/evaluation-references.json').exists())
+            self.assertEqual(record['status'], 'FAIL')
+            self.assertIn('not evaluable', record['error'])
 
 
 if __name__ == '__main__':

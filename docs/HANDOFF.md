@@ -357,5 +357,6 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
 - 事实：PR #74（head `052750c`）携带的旧草稿 `tools/akcli_adapter.py`（1103 行）与 master 上 PR-1 C4 的 fail-closed adapter **占据同一路径且 API 完全不同**，其 4 个依赖模块无法原样保留（`apply_and_verify` / `object_graph` / `parse_sexpr` / `export_netlist` / `check_expectation` 在 C4 adapter 中均不存在）。
 - 本 PR：新增**自包含**的 `tools/schgen_native_ingest.py`（不导入任何 `tools.*`，有 AST 断言守护）+ `tests/test_schgen_native_ingest.py`（14 例）；记录见 `notes/schgen-dev-chain/TASK.md`（作用域横幅 + 历史正文保留）、EVID-20260918-001、RES-011。
 - held 半（**未进本 PR**，仍在已关闭的 PR #74 及其分支上）：`tools/schgen_dev_chain.py`、`tools/schgen_dev_score.py`、`tests/test_schgen_dev_chain.py`、旧 `tools/akcli_adapter.py`，以及 writer 诊断、DEV-04/05/06 合同、writer 补丁资格与配对评分记录。须在 C4 adapter 上重新落地后另卡。
-- 验证：见 PR 回执（`tests.test_schgen_native_ingest` / `discover -s tests` / `tools.dev_gate`）。真实 KiCad/akcli 端到端回放、正式实验与模型调用均 `NOT_RUN`。
+- 验证：见 PR 回执（`tests.test_schgen_native_ingest` / `discover -s tests` / `tools.dev_gate`）。首轮真实 KiCad 回放 `NOT_RUN`，已在评审整改轮补跑。
+- 2026-09-18 评审整改（同卡 PR #82）：Owner REQUEST_CHANGES 后闭环 —— (a) raw/request/manifest 绑定改为读一次，消除 TOCTOU；(b) reference 导出改为读字节 + 只读结构 sanity，空/无签名内容的 reference 不再可能进 `evaluation-references.json`；(c) `cross_module: true`；(d) `export_netlist` 记录 kicad-cli 二进制 sha256；(e) 补真实 KiCad 8.0.9 双例 ingest smoke。测试 14 → 21 例，并以变异测试证明新回归有咬合力。未动 C4 adapter，chain/scorer 仍未塞回。
 - 状态：PENDING_HUMAN_REVIEW。
