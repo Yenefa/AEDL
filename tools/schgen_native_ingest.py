@@ -653,14 +653,27 @@ def main(argv=None):
             raise ValueError('duplicate reference assignment')
     else:
         assignments = validate_manifest(manifest)
-    version = (tool_version(args.kicad_cli)['version'] or '').strip()
+    # --kicad-cli is a required flag, so the explicit path is authoritative:
+    # there is no PATH or installed-toolchain fallback for an ingestion run.
+    executable = os.path.abspath(args.kicad_cli)
+    if not os.path.isfile(executable):
+        raise ValueError('the kicad-cli binary does not exist: %s' % args.kicad_cli)
+    # One ingestion run binds exactly one toolchain binary.  Every subprocess --
+    # including the version probe itself -- is bracketed by a digest re-read, so
+    # a binary swapped in right after `--version` reported 8.0.9 can never become
+    # the binary this run actually drives.  The same digest lands in every record
+    # and in the run report, and a binary that cannot be re-read is a failure
+    # rather than an unobserved change.
+    binding = ToolchainBinding(executable)
+    binding.verify('before the version probe')
+    probe = tool_version(executable)
+    binding.verify('after the version probe')
+    if probe['exit_code'] != 0:
+        raise ValueError('the kicad-cli version probe exited %s: %s'
+                         % (probe['exit_code'], executable))
+    version = (probe['version'] or '').strip()
     if version != '8.0.9':
         raise ValueError('this qualified ingestion recipe requires KiCad 8.0.9')
-    # One ingestion run binds exactly one toolchain binary.  Every subprocess
-    # below is bracketed by a digest re-read against this binding, the same
-    # digest lands in every record and in the run report, and a binary that
-    # cannot be re-read is a failure rather than an unobserved change.
-    binding = ToolchainBinding(args.kicad_cli)
     root = Path(args.out).resolve()
     root.mkdir()
     records, ready, references = [], [], {}
@@ -696,14 +709,14 @@ def main(argv=None):
                 raise ValueError('object graph changed during format ingestion')
             record['object_graph_unchanged'] = True
             record['native_export'] = export_netlist(str(prepared), str(directory/'native'),
-                                                     args.kicad_cli, binding=binding)
-            record['erc'] = export_erc(prepared, directory/'erc', args.kicad_cli, binding=binding)
+                                                     executable, binding=binding)
+            record['erc'] = export_erc(prepared, directory/'erc', executable, binding=binding)
             if record['native_export']['status'] != 'PASS' or record['erc']['status'] != 'PASS':
                 raise ValueError('prepared native observation failed')
             record['status'] = 'READY_FOR_DEV'
             if reference_mode:
                 net = directory/'reference.net'
-                argv_export = [args.kicad_cli, 'sch', 'export', 'netlist', '--format',
+                argv_export = [executable, 'sch', 'export', 'netlist', '--format',
                                'kicadsexpr', '--output', str(net), str(prepared)]
                 binding.verify('before the reference scoring export')
                 process = subprocess.run(argv_export, capture_output=True, timeout=180)
@@ -746,7 +759,7 @@ def main(argv=None):
                   N_ready=len(ready), original_manifest_sha256=sha256_bytes(manifest_raw),
                   role='REFERENCE' if reference_mode else 'REPAIR_INPUT',
                   source_sha256=sha(__file__),
-                  kicad_cli=args.kicad_cli, kicad_cli_version=version,
+                  kicad_cli=executable, kicad_cli_version=version,
                   kicad_cli_sha256=binding.sha256,
                   toolchain_binding='FAILED' if toolchain_error else 'PASS',
                   toolchain_error=toolchain_error,

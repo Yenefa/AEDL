@@ -326,7 +326,7 @@ master 上 `tools/akcli_adapter.py` 已是 PR-1 C4 的 fail-closed adapter（API
 - 新增 `tools/schgen_native_ingest.py`：**自包含**格式导入工具。只删空的 legacy
   `(symbol_instances)` 根块；保留源字节、其余全部根形式与对象图；产出 fresh KiCad 8.0.9
   网表与 ERC 观察、新清单与新绑定。模块**不导入任何 `tools.*`**（有 AST 断言守护）。
-- 新增 `tests/test_schgen_native_ingest.py`：21 例边界/扰动测试（首轮 14 例 + 评审整改轮 7 例）。
+- 新增 `tests/test_schgen_native_ingest.py`：**29 例**边界/扰动测试（首轮 14 + 第二轮 7 + 第三轮 5 + 第四轮 3）。
 
 **代码来源**：只读辅助提取自 PR #74 携带的旧草稿 adapter 与 DEV chain（同项目 AI 生成
 资产，非第三方源码）。语义差异两处，均已文档化：报告不再写 `adapter_sha256`；
@@ -357,7 +357,7 @@ change_budget:
   evidence_semantics_change: false
 ```
 
-**Acceptance**：模块可独立导入且不引用任何 AEDL 模块；21 例边界/扰动测试全绿；`dev_gate` 全绿；真实 KiCad 8.0.9 双例 ingest smoke 全通过（见下方 2026-09-18 评审整改节）。
+**Acceptance**：模块可独立导入且不引用任何 AEDL 模块；29 例边界/扰动测试全绿；`dev_gate` 全绿；真实 KiCad 8.0.9 双例 ingest smoke 全通过（见下方 2026-09-18 评审整改节）。
 
 **未完成 / 不在本 PR**（held）：chain / scorer / 旧 adapter 及其全部 writer、合同与配对
 评分记录。它们必须在 C4 adapter 上重新落地后才可再提；本 PR 不产生任何修复或 ΔJ 结论。
@@ -499,6 +499,54 @@ Case B  693cd67b… == 693cd67b…  UNCHANGED_FORMAT            3 comps / 5 nets
 与已跑的真实 smoke 冲突。已改为如实记录：**已在本 PR 的 DEV-only ingest smoke 中实际调用**，
 附二进制 sha256，并说明不涉及 repair / scorer / 正式实验。
 
+
+---
+
+## 2026-09-18 第三轮评审整改（Owner REQUEST_CHANGES @ head `5af7cb3`）
+
+唯一剩余 blocker：**version probe 没有被 binding 包住**。原顺序是
+`tool_version(...) → 版本检查 → ToolchainBinding(...)`，留下一个窄窗口：
+
+```text
+binary A → --version 返回 8.0.9 → A 被换成 B → binding 哈希 B
+→ 后续 verify 对 B 全 PASS → report 仍声称 kicad_cli_version = 8.0.9
+```
+
+即「被绑定并实际执行的 B，从未被证明是 KiCad 8.0.9」。另一个同面细节：`tool_version()`
+记录了 `returncode`，但 `main()` 只取 version 字符串，`--version` 非零退出而 stdout 恰好是
+`8.0.9` 时仍会被接受。
+
+### 修法（顺序反转 + exit_code 门禁）
+
+```text
+executable = abspath(--kicad-cli)；不是文件即 ValueError（本命令必填，无 PATH 回退）
+binding = ToolchainBinding(executable)
+binding.verify('before the version probe')
+probe = tool_version(executable)
+binding.verify('after the version probe')
+probe['exit_code'] != 0 -> ValueError（即使输出含 8.0.9）
+version != '8.0.9'      -> ValueError
+后续 native / ERC / reference 全部使用同一个 executable + binding
+```
+
+report 的 `kicad_cli` 也改为**已解析的绝对路径**（此前记录的是原始参数）。
+
+### 回归（新增 3 例，共 29 例）
+
+- `test_a_binary_swapped_after_the_version_probe_is_refused`：probe 返回 8.0.9 后立刻替换
+  binary → **整体拒绝**（`changed after the version probe`），`out` 目录不创建。
+- `test_a_nonzero_version_probe_is_refused_even_when_it_prints_8_0_9`。
+- `test_a_missing_binary_is_refused_before_anything_is_created`。
+
+**变异对照**：把顺序还原为「先 probe 后 binding」→ 前两条回归 **FAILED (failures=1)**；
+还原修复版后复跑全绿。
+
+### smoke 复跑
+
+A / B 两例 `toolchain_binding = PASS`、`toolchain_error = None`、exit 0；连接性与 ERC 与上一轮
+一致（3 comps / 5 nets / 7 pins，ERC PASS）。
+
 **仍未运行**：scorer、任何 repair、held half、ΔJ、模型调用、正式实验、HELD_OUT 读取。
+
 
 

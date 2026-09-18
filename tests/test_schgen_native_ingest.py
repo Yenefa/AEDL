@@ -154,7 +154,7 @@ class BindingTests(unittest.TestCase):
     def _run(self, root, manifest, reference=False, patches=()):
         flag = '--reference-sources' if reference else '--manifest'
         stack = [mock.patch.object(ingest, 'tool_version',
-                                   return_value={'version': '8.0.9'})]
+                                   return_value={'version': '8.0.9', 'exit_code': 0})]
         stack += list(patches)
         for item in stack:
             item.start()
@@ -295,7 +295,7 @@ class ReferencePublicationTests(unittest.TestCase):
                 Path(argv[argv.index('--output') + 1]).write_bytes(net_bytes)
             return Proc()
 
-        with mock.patch.object(ingest, 'tool_version', return_value={'version': '8.0.9'}), \
+        with mock.patch.object(ingest, 'tool_version', return_value={'version': '8.0.9', 'exit_code': 0}), \
              mock.patch.object(ingest, 'export_netlist', return_value={'status': 'PASS'}), \
              mock.patch.object(ingest, 'export_erc', return_value={'status': 'PASS'}), \
              mock.patch.object(ingest.subprocess, 'run', side_effect=fake_run):
@@ -377,7 +377,7 @@ class RunToolchainBindingTests(unittest.TestCase):
                 binary.unlink()          # the toolchain disappears mid-export
                 return Proc()
 
-            with mock.patch.object(ingest, 'tool_version', return_value={'version': '8.0.9'}), \
+            with mock.patch.object(ingest, 'tool_version', return_value={'version': '8.0.9', 'exit_code': 0}), \
                  mock.patch.object(ingest.subprocess, 'run', side_effect=fake_run):
                 rc = ingest.main(['--manifest', str(manifest), '--out', str(root/'out'),
                                   '--kicad-cli', str(binary)])
@@ -396,7 +396,7 @@ class RunToolchainBindingTests(unittest.TestCase):
             binary = root/'kicad-cli.exe'
             binary.write_bytes(b'fake kicad-cli')
             manifest = self._manifest(root)
-            with mock.patch.object(ingest, 'tool_version', return_value={'version': '8.0.9'}), \
+            with mock.patch.object(ingest, 'tool_version', return_value={'version': '8.0.9', 'exit_code': 0}), \
                  mock.patch.object(ingest, 'export_netlist', return_value={'status': 'PASS'}), \
                  mock.patch.object(ingest, 'export_erc', return_value={'status': 'PASS'}):
                 rc = ingest.main(['--manifest', str(manifest), '--out', str(root/'out'),
@@ -406,6 +406,62 @@ class RunToolchainBindingTests(unittest.TestCase):
             self.assertEqual(report['toolchain_binding'], 'PASS')
             self.assertEqual(report['toolchain_error'], None)
             self.assertEqual(report['kicad_cli_sha256'], ingest.sha(binary))
+
+
+class VersionProbeBindingTests(unittest.TestCase):
+    """The version probe is part of the same bracket as every other call."""
+
+    def _setup(self, root):
+        binary = root/'kicad-cli.exe'
+        binary.write_bytes(b'fake kicad-cli')
+        raw, request = root/'raw.kicad_sch', root/'request.txt'
+        raw.write_bytes(b'(kicad_sch (label "A" (at 0 0 0)))')
+        request.write_bytes(b'Connect A.')
+        manifest = root/'manifest.json'
+        manifest.write_text(json.dumps(dict(split='EXPOSED_DEV', assignments=[
+            dict(id='one', raw=str(raw), raw_sha256=ingest.sha(raw),
+                 request=str(request), request_sha256=ingest.sha(request))])))
+        return binary, manifest
+
+    def test_a_binary_swapped_after_the_version_probe_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            binary, manifest = self._setup(root)
+
+            def swapping_probe(path):
+                binary.write_bytes(b'a different kicad-cli')
+                return {'argv': [path, '--version'], 'exit_code': 0,
+                        'version': '8.0.9', 'error': None}
+
+            with mock.patch.object(ingest, 'tool_version', side_effect=swapping_probe):
+                with self.assertRaises(ValueError) as caught:
+                    ingest.main(['--manifest', str(manifest), '--out', str(root/'out'),
+                                 '--kicad-cli', str(binary)])
+            self.assertIn('changed after the version probe', str(caught.exception))
+            self.assertFalse((root/'out').exists())
+
+    def test_a_nonzero_version_probe_is_refused_even_when_it_prints_8_0_9(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            binary, manifest = self._setup(root)
+            probe = {'argv': [str(binary), '--version'], 'exit_code': 1,
+                     'version': '8.0.9', 'error': None}
+            with mock.patch.object(ingest, 'tool_version', return_value=probe):
+                with self.assertRaises(ValueError) as caught:
+                    ingest.main(['--manifest', str(manifest), '--out', str(root/'out'),
+                                 '--kicad-cli', str(binary)])
+            self.assertIn('version probe exited 1', str(caught.exception))
+            self.assertFalse((root/'out').exists())
+
+    def test_a_missing_binary_is_refused_before_anything_is_created(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, manifest = self._setup(root)
+            with self.assertRaises(ValueError) as caught:
+                ingest.main(['--manifest', str(manifest), '--out', str(root/'out'),
+                             '--kicad-cli', str(root/'not-here.exe')])
+            self.assertIn('does not exist', str(caught.exception))
+            self.assertFalse((root/'out').exists())
 
 
 if __name__ == '__main__':
