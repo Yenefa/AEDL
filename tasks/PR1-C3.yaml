@@ -6,7 +6,14 @@ task: PR1-C3
 
 base:
   branch: feat-pr1-c3-fresh-export
-  sha: 0d31a8bc9c61b7616dd440926fc7fff23f9b4135
+  sha: f16b427963c180b2af5aa397752aa5cd52c0aa84
+
+# rebase 记录（2026-09-18，Owner 复审后按序执行）：本卡原 base 为 0d31a8b（PR #71 合入点），
+# 落后 master 18 个提交且 mergeable=CONFLICTING。已 rebase 到 master f16b427（干净重放 6 个提交，
+# 冲突仅 docs/HANDOFF.md 追加段与生成的 AI_USAGE_LOG.md）。
+# 附带效果：原「登记 DSH actor」对 docs/ID_MAP.md 与 tools/build_ai_usage_index.py 的改动
+# 已被 master 吸收，diff 归零 —— 故二者从 allowed_paths 移除，本卡不再写这两个文件。
+# rebase 后 Owner 复审给出 2 个 merge blocker + 1 个 P1，均已列入本卡 acceptance。
 
 goal: |
   PR-1 Commit 3（合同 §11 C3）：gates/repair_verification.py 的 fresh KiCad 导出绑定，
@@ -39,15 +46,13 @@ allowed_paths:
   - docs/compliance/AI_USAGE_LOG.md
   - docs/compliance/ai-usage/**
   - tasks/PR1-C3.yaml
-  # 人类裁定 2026-09-14（本会话）：登记本会话 Agent 代号 DSH + J1 工具链决定入档。
-  # 依据 AGENTS.md 2.2「越界需对应 Owner 确认」；Owner = Yenefa，已明示批准。
-  - tools/build_ai_usage_index.py
-  - docs/ID_MAP.md
+  # rebase 后 docs/ID_MAP.md 与 tools/build_ai_usage_index.py 的改动已被 master 吸收（diff 归零），
+  # 故不再列入 allowed_paths —— 本卡不写这两个文件。
 
 forbidden_paths:
-  - notes/b5-acceptance/**        # 判据冻结后不改（B5 §5/§7）
-  - tools/repair_pipeline.py      # C5
-  - tools/akcli_adapter.py        # C4
+  - notes/b5-acceptance/** # 判据冻结后不改（B5 §5/§7）
+  - tools/repair_pipeline.py # C5
+  - tools/akcli_adapter.py # C4
   - gates/run_gates.py
   - gates/schematic_semantics.py
   - gates/contracts/**
@@ -63,8 +68,23 @@ acceptance: |
   - 小项 1–2 软件行为：旧 XML 残留而导出失败不得通过；exit=0 但空/坏 XML 不得通过；
     导出与解析之间源字节改变必须体现在 source_hash_binding；错 txn/policy/tool 绑定
     必须以 REPAIR_INPUT_DRIFT 拒绝；导出目录非本次新建即 fail-closed
-  - 真 KiCad 10.0.5 原生运行：NOT_RUN（本机无 kicad-cli，见 PR #70 J1 readiness gap）
-  - C3-P1..C3-P7 独立扰动执行：NOT_RUN（属 Percy/B5，不在本卡）
+  - 真 KiCad 10.0.5 原生运行（**Owner 复审要求，2026-09-18**）：本机**已有**钉版
+    `kicad-cli` 10.0.5（C4 线已验证过 SHA256 `FC142E3B…D0C3`），故原先「本机无 kicad-cli」
+    的 `NOT_RUN` 理由**不再成立**。必须用真 kicad-cli 跑一次导出 sanity，并据此验证
+    `_kicad_partition()` / `_projected_coverage()` —— PR 自述此前只用**人工构造 XML** 验证过，
+    这是最大的未知面
+  - **修复 2 个 merge blocker（Owner 复审，均已按代码逐行确认）**：
+    - `txn_id` 可逃出 `report_root`：`_text()` 不禁止 `/` `\` `..`，而 `verify_stage` 把它
+      直接 join 进 `report_root/exports/<txn_id>/<role>`，`write_thin_verification` 亦把它
+      嵌进输出文件名。修法：`txn_id` 必须是 **canonical identifier**；回归
+      `txn_id = ../../escape` → 拒绝（`BLOCKED`/`REPAIR_INPUT_DRIFT`）且
+      **report_root 之外不产生任何目录/文件**
+    - `report_root` 的父级 link / reparse point 未封：原只有 `_absolute()`，随后
+      `fresh_export()` 会 `os.makedirs()`。修法：逐组件 no-link 检查（与 C4 同规则），
+      并补 Windows junction 回归
+  - **修复 P1（Owner 标 should-fix）**：kicad-cli digest 只在**执行前**核一次，
+    subprocess 之后**未**复核。修法：`binary digest before == after == manifest digest`，
+    与 C4 的 toolchain binding 哲学一致；不一致 → `TOOL_ERROR`/`REPAIR_TOOL_UNAVAILABLE`
   - 台账 + HANDOFF 如实追加
 
 change_budget:

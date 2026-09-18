@@ -95,6 +95,23 @@ def _text(value, label, empty=False):
     return value
 
 
+_IDENTIFIER = re.compile(r"[A-Za-z0-9_-]{1,64}\Z")
+
+
+def _identifier(value, label):
+    """A canonical identifier: no separators, no traversal, no drive letter.
+
+    Identifiers reach the filesystem as path segments (the export directory and the
+    thin-verification file name are built from the transaction id), so "it is a
+    non-empty string" is not a strong enough check: `../../outside` is a perfectly
+    good string and a perfectly bad path segment.
+    """
+    text = _text(value, label)
+    if not _IDENTIFIER.match(text):
+        raise ObservationError("invalid %s" % label)
+    return text
+
+
 def _integer(value, label, minimum=None):
     if type(value) is not int or (minimum is not None and value < minimum):
         raise ObservationError("invalid integer %s" % label)
@@ -1102,6 +1119,31 @@ def _absolute(path, label):
     return os.path.normpath(text)
 
 
+def _has_linked_component(path):
+    """True when the path itself or any existing component is a link/reparse point.
+
+    C3 writes into a declared report root, so containment has to be checked on the
+    path that actually gets created, not only on the leaf: a junction at any level
+    above it redirects the whole write (same rule the C4 adapter applies to its
+    native artifact root).
+    """
+    text = os.path.normpath(path)
+    parts = text.replace("\\", "/").split("/")
+    if parts and re.match(r"^[A-Za-z]:$", parts[0]):
+        cursor = parts[0] + os.sep
+        parts = parts[1:]
+    else:
+        cursor = os.sep
+        parts = text.split(os.sep)
+    for part in parts:
+        if not part:
+            continue
+        cursor = os.path.join(cursor, part)
+        if os.path.exists(cursor) and _is_link(cursor):
+            return True
+    return False
+
+
 def _resolve_within(root, relative):
     """Resolve a candidate-relative path strictly inside its declared root."""
     root_path = _absolute(root, "declared root")
@@ -1180,7 +1222,7 @@ def fresh_export(request):
         if role not in ("BEFORE", "AFTER"):
             raise ObservationError("the export role must be BEFORE or AFTER")
         result["role"] = role
-        txn_id = _text(request["txn_id"], "transaction id")
+        txn_id = _identifier(request["txn_id"], "transaction id")
         toolchain = toolchain_manifest(request["toolchain"])
         digest = canonical_sha256("toolchain", toolchain)
         source = _resolve_within(request["source_root"], request["relative_source"])
@@ -1221,6 +1263,14 @@ def fresh_export(request):
             raise _ExportHalt("TOOL_ERROR", "REPAIR_TOOL_UNAVAILABLE",
                               "the export process could not start: %s" % exc) from exc
         after = hash_bytes(_read_bytes(source))
+        # The binary was digested before the run; a fresh proof also has to show that
+        # the tool that actually ran is still the pinned one.  This is the same rule
+        # the C4 adapter applies to its toolchain binding.
+        executable_after = (hash_bytes(_read_bytes(executable))
+                            if os.path.isfile(executable) and not _is_link(executable) else None)
+        if executable_after != toolchain["kicad_cli_sha256"]:
+            raise _ExportHalt("TOOL_ERROR", "REPAIR_TOOL_UNAVAILABLE",
+                              "the kicad-cli binary changed while the export was running")
         xml_bytes = None
         if os.path.isfile(xml_path) and not _is_link(xml_path):
             xml_bytes = _read_bytes(xml_path)
@@ -1296,7 +1346,7 @@ def bind_inputs(request):
               "toolchain_sha256": None, "reasons": []}
     try:
         _closed(request, _BINDING_REQUEST_FIELDS, "stage binding request")
-        result["txn_id"] = _text(request["txn_id"], "transaction id")
+        result["txn_id"] = _identifier(request["txn_id"], "transaction id")
         _text(request["run_id"], "run id")
         _text(request["candidate_id"], "candidate id")
         relative_target = _text(request["relative_target"], "target path")
@@ -1540,7 +1590,7 @@ def verify_stage(request):
     }
     try:
         _closed(request, _VERIFICATION_REQUEST_FIELDS, "verification request")
-        result["txn_id"] = _text(request["txn_id"], "transaction id")
+        result["txn_id"] = _identifier(request["txn_id"], "transaction id")
         result["run_id"] = _text(request["run_id"], "run id")
         result["candidate_id"] = _text(request["candidate_id"], "candidate id")
         result["patch_sha256"] = _sha(request["patch_sha256"], "patch digest")
@@ -1548,6 +1598,8 @@ def verify_stage(request):
                                              "bound policy digest")
         relative_target = _text(request["relative_target"], "target path")
         report_root = _absolute(request["report_root"], "report root")
+        if _has_linked_component(report_root):
+            raise ObservationError("the report root must not contain a link or reparse point")
         toolchain = toolchain_manifest(request["toolchain_manifest"])
         result["toolchain_sha256"] = canonical_sha256("toolchain", toolchain)
         binding = bind_inputs({"txn_id": request["txn_id"], "run_id": request["run_id"],
@@ -1580,12 +1632,22 @@ def verify_stage(request):
                                               "profile: %s" % exc)]
             return result
         exports, halt = [], None
+        export_root = os.path.join(report_root, "exports")
+        # Containment has to cover the path this run will actually create, not just the
+        # declared root: a junction at report_root/exports redirects every export while
+        # report_root itself stays perfectly ordinary.
+        if _has_linked_component(export_root):
+            raise ObservationError("the export directory must not traverse a link or "
+                                   "reparse point")
         for role, root in (("BEFORE", request["snapshot_root"]), ("AFTER", request["stage_root"])):
+            output_dir = os.path.join(export_root, request["txn_id"], role.lower())
+            if _has_linked_component(output_dir):
+                raise ObservationError("the export directory must not traverse a link or "
+                                       "reparse point")
             outcome = fresh_export({"txn_id": request["txn_id"], "role": role,
                                     "source_root": root,
                                     "relative_source": relative_target,
-                                    "output_dir": os.path.join(report_root, "exports",
-                                                               request["txn_id"], role.lower()),
+                                    "output_dir": output_dir,
                                     "toolchain": toolchain})
             if outcome["proof"] is not None:
                 exports.append(outcome["proof"])
@@ -1724,7 +1786,10 @@ def write_thin_verification(result, report_root):
     root = _absolute(report_root, "report root")
     if not os.path.isdir(root) or _is_link(root):
         raise ObservationError("the report root must exist and not be a link")
-    path = os.path.join(root, "thin_verification_%s.json" % result["txn_id"])
+    if _has_linked_component(root):
+        raise ObservationError("the report root must not contain a link or reparse point")
+    path = os.path.join(root, "thin_verification_%s.json" % _identifier(result["txn_id"],
+                                                                      "transaction id"))
     payload = json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2).encode("utf-8")
     with open(path, "wb") as handle:
         handle.write(payload)

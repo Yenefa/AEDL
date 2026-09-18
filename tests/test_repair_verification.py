@@ -7,13 +7,19 @@ or permission to execute a repair. The production module cannot read fixtures.
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 import uuid
 
 from gates import repair_verification as verification
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def digest(kind, value):
@@ -978,6 +984,19 @@ def plan_from_observation(observation):
     return "".join(parts).encode("utf-8")
 
 
+def _make_directory_link(target, link):
+    """Create a directory junction/symlink, or return None when unavailable."""
+    if sys.platform == "win32":
+        completed = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)],
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return str(link) if completed.returncode == 0 else None
+    try:
+        os.symlink(str(target), str(link), target_is_directory=True)
+    except OSError:
+        return None
+    return str(link)
+
+
 class FreshExportTests(unittest.TestCase):
     """C3 sub-items 1-2: fresh export proofs and stage/source binding.
 
@@ -1118,6 +1137,57 @@ class FreshExportTests(unittest.TestCase):
                      "toolchain": self.toolchain()})
                 self.assertEqual(result["status"], "BLOCKED")
                 self.assertEqual(result["reasons"][0]["code"], "REPAIR_INPUT_DRIFT")
+
+    def test_a_transaction_id_cannot_escape_the_report_root(self):
+        """The report path is built from the transaction id, so the id is a path segment.
+
+        `_text()` accepts `../../escape` quite happily, and this id used to be joined
+        straight into `report_root/exports/<txn_id>/<role>` and into the thin-verification
+        file name. A non-empty string is not a safe path segment.
+        """
+        for txn_id in ("../../escape", "..\\..\\escape", "sub/escape", "C:/escape", ".."):
+            with self.subTest(txn_id=txn_id):
+                request, _ = self.scenario()
+                request["txn_id"] = txn_id
+                result = verification.verify_stage(request)
+                self.assertEqual(result["status"], "BLOCKED", result["reasons"])
+                self.assertEqual(result["reasons"][0]["code"], "REPAIR_INPUT_DRIFT")
+                # nothing was created, least of all outside the declared root
+                self.assertFalse((Path(request["report_root"]) / "exports").exists())
+                self.assertFalse((self.root / "escape").exists())
+                self.assertFalse((self.root / "escape.json").exists())
+
+    def test_the_report_root_must_not_traverse_a_link(self):
+        """A junction above the export directory redirects the whole write."""
+        request, _ = self.scenario()
+        reports = Path(request["report_root"])
+        outside = self.root / "outside_reports"
+        outside.mkdir()
+        if _make_directory_link(outside, reports / "exports") is None:
+            self.skipTest("directory links are not available on this platform")
+        result = verification.verify_stage(request)
+        self.assertEqual(result["status"], "BLOCKED", result["reasons"])
+        self.assertEqual(result["reasons"][0]["code"], "REPAIR_INPUT_DRIFT")
+        self.assertEqual(list(outside.iterdir()), [])
+
+    def test_a_kicad_cli_that_changes_during_the_export_is_a_tool_error(self):
+        """The binary is digested before the run and re-checked after it."""
+        real_read = verification._read_bytes
+        seen = []
+
+        def drifting(path):
+            raw = real_read(path)
+            if str(path) == str(self.stub):
+                seen.append(path)
+                if len(seen) > 1:
+                    return raw + b"\n"
+            return raw
+
+        with mock.patch.object(verification, "_read_bytes", side_effect=drifting):
+            result = self.export()
+        self.assertGreater(len(seen), 1, "the post-run digest check never read the binary")
+        self.assertEqual(result["status"], "TOOL_ERROR", result["reasons"])
+        self.assertEqual(result["reasons"][0]["code"], "REPAIR_TOOL_UNAVAILABLE")
 
     def bound_policy(self):
         bound = {"version": 1, "rule_id": "E1", "route": "STRICT",
@@ -1375,6 +1445,80 @@ class FreshExportTests(unittest.TestCase):
         self.assertFalse(agree)
         self.assertNotEqual(coverage["expected_pin_keys_sha256"],
                             coverage["observed_pin_keys_sha256"])
+
+
+class NativeKiCadExportTests(unittest.TestCase):
+    """C3 native qualification against the real pinned kicad-cli 10.0.5.
+
+    Opt-in, exactly like the C4 native lane: `AEDL_PR1_NATIVE=1` plus
+    `AEDL_KICAD_CLI=<absolute kicad-cli>` (the variable the frozen criteria sheet names
+    in §4).  With opt-in and a missing or wrong toolchain this FAILS rather than
+    skipping, so the native lane can never go green through absence.
+
+    This class exists because the card's own limitation used to be "本机没有 kicad-cli
+    10.0.5，所以真原生未跑", and it admitted that `_kicad_partition()` /
+    `_projected_coverage()` had only ever been exercised against hand-built XML.
+    """
+
+    FIXTURE = os.path.join(REPO, "tests", "fixtures", "repair_pr1", "native", "DC-04",
+                           "fault.kicad_sch")
+    # The same binary digest the C4 native lane pins.
+    PINNED_KICAD_SHA256 = "FC142E3B4C13AF868501FCBC9312DD94AD62D3C05882F97A23B6FD9F8118D0C3"
+
+    def setUp(self):
+        if os.environ.get("AEDL_PR1_NATIVE") != "1":
+            self.skipTest("native qualification is not opted in (AEDL_PR1_NATIVE=1)")
+        self.kicad = os.environ.get("AEDL_KICAD_CLI")
+        if not self.kicad or not os.path.isfile(self.kicad):
+            self.fail("AEDL_PR1_NATIVE=1 requires AEDL_KICAD_CLI to point at kicad-cli 10.0.5")
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_the_real_export_is_fresh_parseable_and_projects_onto_the_native_read(self):
+        binary = Path(self.kicad).read_bytes()
+        toolchain = {"version": 1, "kicad_cli": self.kicad, "kicad_version": "10.0.5",
+                     "kicad_cli_sha256": hashlib.sha256(binary).hexdigest(),
+                     "launcher_argv": [], "arguments": list(verification.EXPORT_ARGUMENTS),
+                     "timeout_seconds": 60, "environment": {}}
+        self.assertEqual(toolchain["kicad_cli_sha256"].upper(), self.PINNED_KICAD_SHA256,
+                         "the available kicad-cli is not the pinned 10.0.5 binary")
+        source_root = self.root / "src"
+        source_root.mkdir()
+        source = source_root / "design.kicad_sch"
+        shutil.copy2(self.FIXTURE, source)
+        observation = verification.observe_source(source.read_bytes())
+
+        for role in ("BEFORE", "AFTER"):
+            with self.subTest(role=role):
+                result = verification.fresh_export(
+                    {"txn_id": "txn-native", "role": role, "source_root": str(source_root),
+                     "relative_source": "design.kicad_sch",
+                     "output_dir": str(self.root / "exports" / "txn-native" / role.lower()),
+                     "toolchain": toolchain})
+                self.assertEqual(result["status"], "PASS", result["reasons"])
+                proof = result["proof"]
+                self.assertEqual(proof["exit_code"], 0)
+                self.assertTrue(proof["completed"])
+                # three source hashes: before the export, after it, and after parsing
+                self.assertEqual(proof["source_before_sha256"], proof["source_after_sha256"])
+                self.assertEqual(proof["source_after_sha256"],
+                                 proof["source_parse_end_sha256"])
+                self.assertTrue(result["xml_bytes"])
+                components, nets = verification._kicad_partition(result["xml_bytes"])
+                self.assertTrue(components)
+                self.assertTrue(nets)
+                coverage, agree = verification._projected_coverage(observation,
+                                                                   components, nets)
+                self.assertTrue(agree, coverage)
+                self.assertEqual(coverage["expected_pin_count"],
+                                 coverage["observed_pin_count"])
+                self.assertEqual(coverage["expected_pin_keys_sha256"],
+                                 coverage["observed_pin_keys_sha256"])
+                self.assertEqual(coverage["expected_component_keys_sha256"],
+                                 coverage["observed_component_keys_sha256"])
 
 
 if __name__ == "__main__":

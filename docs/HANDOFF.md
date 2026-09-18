@@ -416,3 +416,17 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
 - **下一步**：C4 `tools/akcli_adapter.py`（把手工 strict 路径收进合同 §8 双路由与回执语义），随后 C5；本 Benchmark 桥接待任务冻结后正式入库。
 - **边界上报**：`docs/competition/SCOPE_BOUNDARY_W1.md` §2.3 的「`gates/repair_verification.py` 零文件 I/O，故结构上不可能读到 private 答案」论证，因 C3 按合同 §9 在该模块内执行导出而不再成立；需在 C3 合入时由 Owner 与验收侧改写为「宿主绝对路径绑定 + 只读声明根 + 扰动测试证明不读 private」。
 - **状态**：`PENDING_HUMAN_REVIEW`；未 merge、未 approve。下一步为 C3 小项 3–4。
+
+
+## 2026-09-18 C3 复审整改（同卡 PR1-C3，分支 feat-pr1-c3-fresh-export，PR #72）
+
+- 触发：Owner 复审裁定 **「有价值但当前不可合」** —— 2 个 merge blocker + 1 个 P1；并明确「不要关；rebase 后修路径安全，再做真 KiCad qualification」。**Owner 明确扩 Scope**：本卡 `allowed_paths` 可含 `gates/repair_verification.py` 与 `tests/test_repair_verification.py`（此前 C4 线每张卡都把 `gates/**` 列为 forbidden —— 它是「验我的东西」的验证器）。
+- **rebase**：原 base `0d31a8b`，落后 master 18 个提交且 `CONFLICTING` → 已 rebase 到 master `f16b427`，干净重放 6 个提交；冲突仅 `docs/HANDOFF.md` 追加段与生成的 `AI_USAGE_LOG.md`（前者按时间顺序保留双方，后者取 master 侧后重新 build）。附带：原「登记 DSH actor」对 `docs/ID_MAP.md` 与 `tools/build_ai_usage_index.py` 的改动已被 master 吸收、**diff 归零**，故从 `allowed_paths` 移除。
+- **Blocker 1（`txn_id` 逃出 `report_root`）**：`_text()` 放行 `/` `\` `..`，而该 id 被 join 成 `report_root/exports/<txn_id>/<role>`，并嵌入 `write_thin_verification` 的输出文件名（后者同样可逃）。新增 `_identifier()`（`[A-Za-z0-9_-]{1,64}`），在 `fresh_export` / `bind_inputs` / `verify_stage` / `write_thin_verification` 四处统一校验。回归 5 种形态全部 `BLOCKED`/`REPAIR_INPUT_DRIFT`，且 report_root 之外无任何目录/文件产生。
+- **Blocker 2（`report_root` 父级 link/reparse 未封）**：原只有 `_absolute()`，随后 `os.makedirs()`。新增 `_has_linked_component()`（逐组件 no-link，与 C4 同规则），在 `verify_stage` 与 `write_thin_verification` 调用。**过程诚实记录**：第一版只检查了 `report_root` **自身**组件，而 junction 在 `report_root/exports` **内部** —— 回归 `test_the_report_root_must_not_traverse_a_link` 立刻以 `'PASS' != 'BLOCKED'` 失败，**是测试先抓到我的修复不完整**；把检查扩展到运行期真正创建的 `export_root` 与 `output_dir` 两级后才通过。
+- **P1（kicad-cli digest 只核一次）**：已在 subprocess 之后复核 `digest after == manifest digest`，不一致 → `TOOL_ERROR`/`REPAIR_TOOL_UNAVAILABLE`，与 C4 的 toolchain binding 哲学一致；回归用 mock 让执行后那次读取返回不同字节，并断言「执行后确实读了二进制」以防对照空转。
+- **真 KiCad 10.0.5 qualification（原 `NOT_RUN` 理由已不成立）**：本机钉版 `kicad-cli` SHA256 = `FC142E3B…D0C3`**与 C4 线一致**。新增 opt-in 用例 `NativeKiCadExportTests`（`AEDL_PR1_NATIVE=1` + `AEDL_KICAD_CLI`，变量名取自判据 §4）。实测 BEFORE/AFTER 各一次真导出 → `PASS`、`exit=0`、`completed=True`、XML 35839 B 可解析、**三个 source 哈希相等**；`_kicad_partition()` 在真导出上 → **20 components / 29 nets**；`_projected_coverage()` → **pin 82==82、component keyset 哈希相等、agree=True**。这正面回答了本 PR 自述的最大未知面（此前二者**只用人工构造 XML 验证过**）。
+- opt-in 语义：未 opt-in → `OK (skipped=1)`；opt-in + 钉版二进制 → `OK`；opt-in + 路径不存在 → **`FAILED (failures=1)`**（FAIL 而非 SKIP）。
+- 验证：`tests.test_repair_verification` **75 OK（skipped=1）**；三条新回归单独复跑均 `ok`（非 skip）。
+- **未做并如实声明**：**C3-P1..C3-P7 独立扰动执行 = `NOT_RUN`**（B5 验收侧、7 条扰动，属另一张卡的量级）；未新增夹具、未改判据、未动 `run_gates.py` / `schematic_semantics.py` / `tools/repair_pipeline.py` / `tools/akcli_adapter.py`。
+- 状态：`PENDING_HUMAN_REVIEW`。
