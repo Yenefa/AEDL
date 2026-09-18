@@ -4,13 +4,16 @@
 # 先例：tasks/PR1-C4-PQ.yaml（C4-P1）、tasks/PR1-C4-UUIDS.yaml。
 #
 # 依赖：验收对象 tools/akcli_adapter.py 由 PR #75 合入；created UUID 绑定由 PR #77 合入。
-# 本卡 base = master 0626375（Merge PR #77）。
+# 本卡 base = master 0626375（Merge PR #77）；2026-09-18 按先例两次重锚：
+#   → 9d04833（#79/#80/#81 合入后，见本卡 rebase 更新记录）
+#   → f486e013（#69/#82 合入后，Owner 指示「PR 债务清零、WIP=1」）
+# base.sha 以本文件下方 base.sha 字段为准。
 
 task: PR1-C4-P2P8
 
 base:
   branch: feat-pr1-c4-p2-p8
-  sha: 0626375cb5a0893a6b940ed6c8d41d5784882dac
+  sha: f486e013b373338db7e3bfb56285d4895e24a75f
 
 goal: |
   把 B5 判据 §C4 的 C4-P2..P8 从「桩层语义相近 / 未跑」推进到**逐条可复现的 qualification**，
@@ -132,7 +135,7 @@ exceptions:
     decision_ref: "用户 2026-09-17 本会话：PR #77 已 merge（master 0626375）后指示继续推进 C4 线、开卡 2；envelope 本体必须在工作树，同 PR1-C4/PR1-C4-PQ/PR1-C4-UUIDS 先例"
   allow_drift:
     granted_by: Yenefa
-    decision_ref: "同上；分支起点 master 0626375（PR #77 合入后），提交后按先例重锚"
+    decision_ref: "同上；分支起点 master 0626375（PR #77 合入后），提交后按先例重锚。2026-09-18 Owner 指示进入 PR 债务清零（WIP=1）、先关 #78：在 #81/#69/#82 陆续合入后 rebase 到 master f486e013 并重锚 base.sha；冲突仅在 docs/HANDOFF.md 的追加段落（保留双方）与生成的 docs/compliance/AI_USAGE_LOG.md（取 master 侧后重新 build）。本卡未加任何功能。"
 
 escalation:
   owner: Yenefa

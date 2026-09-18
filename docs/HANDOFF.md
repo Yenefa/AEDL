@@ -382,4 +382,6 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
   - **P7 / P8 定稿**：P7 = **adapter-local PASS**（一次 apply_stage → 恰好一次写调用；两批容器被拒）/ **round-level `NOT_RUN`，归 C5**，且裁定**不给 adapter 加跨调用状态**；P8 native = **`NOT_REACHABLE_WITH_CURRENT_V1+FIXTURES`**（Owner 已接受，**无需再探、不得扩词表**），stub = PASS。
   - **C4 组仍未齐备**：P3 补齐后唯一缺口是 P8 native（夹具/词表边界，非缺陷）。**不宣称 PASS**。
   - 验证（rebase 后）：tests.test_akcli_adapter **84 OK（skipped=11）**；真原生 opt-in（`NativePerturbationTests` + `NativeQualificationTests`）**10 OK**。
+  - **第二轮 rebase（2026-09-18，Owner 指示「PR 债务清零、WIP=1」）**：#69（PBF handoff）与 #82（SchGen ingest 重切）合入后 rebase 到 master **`f486e013`**。冲突同样仅在 `docs/HANDOFF.md` 的追加段落（master 侧 `#82` 段落 vs 本卡段落，保留双方）与生成的 `AI_USAGE_LOG.md`（取 master 侧后 `tools.build_ai_usage_index build` 重建，107 条）。envelope `base.sha` 由 `0626375…` 重锚为 `f486e013…`，`allow_drift` 的 decision_ref 同步。**本卡未加任何功能**（C5/C6、C4-P7 round-level 均未触碰）。
+  - 本轮实测（head `5d43ecc`，真 akcli 0.21.0 + CPython 3.11.15）：tests.test_akcli_adapter 未 opt-in **86 OK（skipped=13）**；opt-in 真工具 **86 OK（skipped=1）**；opt-in 但 `AEDL_AKCLI_PYTHON` 指向不存在路径 **FAILED (failures=12, skipped=1)**（FAIL 而非 SKIP）；全量 `discover -s tests` opt-in **742 OK（skipped=1）**；`dev_gate --envelope tasks/PR1-C4-P2P8.yaml --admit-receipt` → **status pass / exit 0，8/8，excluded=[]**。
 - 状态：PENDING_HUMAN_REVIEW。

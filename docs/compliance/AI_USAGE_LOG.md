@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 105 条。完整正文在各自条目文件中；本索引只做导航。
+共 107 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
