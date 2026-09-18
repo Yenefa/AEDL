@@ -6,6 +6,7 @@ all.  That absence is asserted explicitly, not assumed.
 """
 import ast
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -452,6 +453,59 @@ class VersionProbeBindingTests(unittest.TestCase):
                                  '--kicad-cli', str(binary)])
             self.assertIn('version probe exited 1', str(caught.exception))
             self.assertFalse((root/'out').exists())
+
+
+    KICADXML = (b'<export><components><comp ref="R1"><pins><pin num="1"/></pins>'
+                b'</comp></components><nets><net name="GND">'
+                b'<node ref="R1" pin="1"/></net></nets></export>')
+
+    def test_the_netlist_export_does_not_probe_the_toolchain_a_second_time(self):
+        # The helper used to re-discover the toolchain and run its own
+        # unbracketed `--version` before the binding verify: an untrusted binary
+        # got executed even though the run had already bound another one.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            binary, manifest = self._setup(root)
+            probed = []
+
+            def counting_probe(path):
+                probed.append(str(path))
+                return {'argv': [path, '--version'], 'exit_code': 0,
+                        'version': '8.0.9', 'error': None}
+
+            class Proc:
+                returncode = 0
+                stdout = b''
+                stderr = b''
+
+            def fake_run(argv, **kwargs):
+                if 'netlist' in argv:
+                    Path(argv[argv.index('--output') + 1]).write_bytes(self.KICADXML)
+                return Proc()
+
+            with mock.patch.object(ingest, 'tool_version', side_effect=counting_probe), \
+                 mock.patch.object(ingest, 'export_erc', return_value={'status': 'PASS'}), \
+                 mock.patch.object(ingest.subprocess, 'run', side_effect=fake_run):
+                rc = ingest.main(['--manifest', str(manifest), '--out', str(root/'out'),
+                                  '--kicad-cli', str(binary)])
+            self.assertEqual(rc, 0)
+            self.assertEqual(len(probed), 1, probed)
+            self.assertEqual(os.path.abspath(probed[0]), os.path.abspath(str(binary)))
+
+    def test_the_helper_refuses_a_toolchain_that_is_not_the_bound_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bound = root/'kicad-cli.exe'
+            bound.write_bytes(b'bound')
+            other = root/'other.exe'
+            other.write_bytes(b'other')
+            binding = ingest.ToolchainBinding(bound)
+            with mock.patch.object(ingest, 'tool_version',
+                                   side_effect=AssertionError('no second probe allowed')):
+                result = ingest.export_netlist(str(bound), str(root/'out'), str(other),
+                                               binding=binding)
+            self.assertEqual(result['status'], 'FAIL')
+            self.assertIn('not the bound toolchain', result['reason'])
 
     def test_a_missing_binary_is_refused_before_anything_is_created(self):
         with tempfile.TemporaryDirectory() as tmp:

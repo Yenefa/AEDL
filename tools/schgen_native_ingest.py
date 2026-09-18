@@ -396,18 +396,30 @@ def export_netlist(source, output_dir, kicad_cli=None, timeout=EXPORT_TIMEOUT_SE
               "source_before_sha256": None, "source_after_sha256": None,
               "source_parse_end_sha256": None, "kicad_cli": None, "version": None,
               "kicad_cli_sha256": None, "kicad_cli_sha256_after": None}
-    executable = find_kicad_cli(kicad_cli)
-    if executable is None:
-        result["reason"] = "kicad-cli is unavailable: no independent netlist can be exported"
-        return result
-    result["kicad_cli"] = executable
-    result["version"] = tool_version(executable)["version"]
     if binding is None:
+        # Standalone call: discover and bind here, and probe only inside the
+        # bracket -- never "probe first, bind later".
+        executable = find_kicad_cli(kicad_cli)
+        if executable is None:
+            result["reason"] = "kicad-cli is unavailable: no independent netlist can be exported"
+            return result
         try:
             binding = ToolchainBinding(executable)
+            binding.probe_version()
         except IngestionInputError as exc:
             result["reason"] = str(exc)
             return result
+    else:
+        # A run-level binding is authoritative: re-discovering the toolchain or
+        # running a second, unbracketed version probe would execute a binary
+        # this run never bound.
+        executable = os.path.abspath(kicad_cli) if kicad_cli else binding.path
+        if executable != binding.path:
+            result["reason"] = ("the requested toolchain %s is not the bound toolchain %s"
+                                % (executable, binding.path))
+            return result
+    result["kicad_cli"] = executable
+    result["version"] = binding.version
     result["kicad_cli_sha256"] = binding.sha256
     try:
         result['source_before_sha256'] = sha256_file(source)
@@ -481,14 +493,21 @@ def export_erc(source, directory, kicad_cli, binding=None):
     directory.mkdir()
     output = directory / 'erc.json'
     digest = sha(source)
-    argv = [kicad_cli, 'sch', 'erc', '--format', 'json', '--output', str(output), str(source)]
-    result = dict(status='FAIL', source_sha256=digest, argv=argv)
+    result = dict(status='FAIL', source_sha256=digest, argv=None)
     if binding is None:
         try:
             binding = ToolchainBinding(kicad_cli)
         except IngestionInputError as exc:
             result['error'] = str(exc)
             return result
+    else:
+        resolved = os.path.abspath(kicad_cli) if kicad_cli else binding.path
+        if resolved != binding.path:
+            result['error'] = ("the requested toolchain %s is not the bound toolchain %s"
+                               % (resolved, binding.path))
+            return result
+    argv = [binding.path, 'sch', 'erc', '--format', 'json', '--output', str(output), str(source)]
+    result['argv'] = argv
     result['kicad_cli_sha256'] = binding.sha256
     try:
         binding.verify('before the ERC export')
@@ -538,6 +557,26 @@ class ToolchainBinding(object):
         self.sha256 = _file_digest(self.path)
         if self.sha256 is None:
             raise IngestionInputError("the toolchain binary cannot be read: %s" % self.path)
+        self.version = None
+
+    def probe_version(self, expect=None):
+        """Run the version probe inside this binding's bracket.
+
+        The probe is a toolchain subprocess like any other: it is bracketed, it
+        must exit 0, and the version it reports becomes the bound version every
+        later call uses.  No other code path probes the toolchain, so a binary
+        cannot be identified as 8.0.9 and then replaced by the one that runs.
+        """
+        self.verify('before the version probe')
+        probe = tool_version(self.path)
+        self.verify('after the version probe')
+        if probe['exit_code'] != 0:
+            raise IngestionInputError('the toolchain version probe exited %s: %s'
+                                      % (probe['exit_code'], self.path))
+        self.version = (probe['version'] or '').strip()
+        if expect is not None and self.version != expect:
+            raise IngestionInputError('this qualified ingestion recipe requires %s' % expect)
+        return self.version
 
     def verify(self, when):
         current = _file_digest(self.path)
@@ -665,15 +704,7 @@ def main(argv=None):
     # and in the run report, and a binary that cannot be re-read is a failure
     # rather than an unobserved change.
     binding = ToolchainBinding(executable)
-    binding.verify('before the version probe')
-    probe = tool_version(executable)
-    binding.verify('after the version probe')
-    if probe['exit_code'] != 0:
-        raise ValueError('the kicad-cli version probe exited %s: %s'
-                         % (probe['exit_code'], executable))
-    version = (probe['version'] or '').strip()
-    if version != '8.0.9':
-        raise ValueError('this qualified ingestion recipe requires KiCad 8.0.9')
+    version = binding.probe_version(expect='8.0.9')
     root = Path(args.out).resolve()
     root.mkdir()
     records, ready, references = [], [], {}

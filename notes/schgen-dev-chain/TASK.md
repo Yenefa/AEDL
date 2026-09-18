@@ -326,7 +326,7 @@ master 上 `tools/akcli_adapter.py` 已是 PR-1 C4 的 fail-closed adapter（API
 - 新增 `tools/schgen_native_ingest.py`：**自包含**格式导入工具。只删空的 legacy
   `(symbol_instances)` 根块；保留源字节、其余全部根形式与对象图；产出 fresh KiCad 8.0.9
   网表与 ERC 观察、新清单与新绑定。模块**不导入任何 `tools.*`**（有 AST 断言守护）。
-- 新增 `tests/test_schgen_native_ingest.py`：**29 例**边界/扰动测试（首轮 14 + 第二轮 7 + 第三轮 5 + 第四轮 3）。
+- 新增 `tests/test_schgen_native_ingest.py`：**31 例**边界/扰动测试（14 + 7 + 5 + 3 + 2）。
 
 **代码来源**：只读辅助提取自 PR #74 携带的旧草稿 adapter 与 DEV chain（同项目 AI 生成
 资产，非第三方源码）。语义差异两处，均已文档化：报告不再写 `adapter_sha256`；
@@ -357,7 +357,7 @@ change_budget:
   evidence_semantics_change: false
 ```
 
-**Acceptance**：模块可独立导入且不引用任何 AEDL 模块；29 例边界/扰动测试全绿；`dev_gate` 全绿；真实 KiCad 8.0.9 双例 ingest smoke 全通过（见下方 2026-09-18 评审整改节）。
+**Acceptance**：模块可独立导入且不引用任何 AEDL 模块；31 例边界/扰动测试全绿；`dev_gate` 全绿；真实 KiCad 8.0.9 双例 ingest smoke 全通过（见下方 2026-09-18 评审整改节）。
 
 **未完成 / 不在本 PR**（held）：chain / scorer / 旧 adapter 及其全部 writer、合同与配对
 评分记录。它们必须在 C4 adapter 上重新落地后才可再提；本 PR 不产生任何修复或 ΔJ 结论。
@@ -546,7 +546,44 @@ report 的 `kicad_cli` 也改为**已解析的绝对路径**（此前记录的�
 A / B 两例 `toolchain_binding = PASS`、`toolchain_error = None`、exit 0；连接性与 ERC 与上一轮
 一致（3 comps / 5 nets / 7 pins，ERC PASS）。
 
+
+---
+
+## 2026-09-18 第四轮评审整改（Owner REQUEST_CHANGES @ head `65de069`）
+
+最后一个 blocker 在 helper 里：`export_netlist()` 在 binding verify **之前**又做了一次
+`find_kicad_cli()` + `tool_version()`。main 已证明 binary A = 8.0.9；此后 A 若被换成 B，
+helper 会对 **B** 先跑一次未绑定的 `--version`，随后才由 verify 发现 A→B。结果不会错误发布，
+但不可信 binary 已被执行一次；而 `binding=None` 的 standalone 路径本质仍是「先 probe 后 bind」。
+
+### 修法
+
+- **版本探针只有一处**：`ToolchainBinding.probe_version(expect=...)` —— `verify` →
+  `tool_version` → `verify` → 要求 `exit_code == 0`；版本写入 `binding.version`。
+  `main()` 只调用它一次。
+- **有 binding 时 helper 不再发现/探测工具链**：`export_netlist` 直接用 `binding.path` 与
+  `binding.version`；显式传入的 `kicad_cli` 解析后若不等于 `binding.path`，直接 FAIL
+  （`the requested toolchain … is not the bound toolchain …`），**不执行任何 subprocess**。
+- **standalone 路径同样先绑定后探测**：先 `ToolchainBinding(executable)`，再 `probe_version()`。
+- `export_erc` 同样只在 `binding.path` 上运行，并对不一致的显式参数 fail-closed。
+
+### 回归（+2，共 31 例）
+
+- `test_the_netlist_export_does_not_probe_the_toolchain_a_second_time`：计数 `tool_version`
+  调用 —— 整轮必须**恰好 1 次**（main 的那次）。
+- `test_the_helper_refuses_a_toolchain_that_is_not_the_bound_one`：把与 binding 不一致的路径
+  传给 helper → FAIL；同时把 `tool_version` mock 成 AssertionError，证明**没有**第二次探测。
+
+**变异对照**：把 `export_netlist` 还原为「重新 find + 重新 probe」→ 第一条回归
+**FAILED (failures=1)**；还原修复版后复跑全绿。
+
+### smoke 复跑
+
+A / B 两例 `toolchain_binding = PASS`、`toolchain_error = None`、exit 0；对象图不变、
+连接性与 ERC 与上一轮一致（3 comps / 5 nets / 7 pins，ERC PASS）。
+
 **仍未运行**：scorer、任何 repair、held half、ΔJ、模型调用、正式实验、HELD_OUT 读取。
+
 
 
 

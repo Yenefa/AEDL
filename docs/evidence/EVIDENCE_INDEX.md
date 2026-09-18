@@ -280,6 +280,8 @@ Evidence（其元数据冻结结论不受影响）。
   - **smoke 复跑（绑定后）**：Case A / Case B `toolchain_binding` 均 **PASS**、`toolchain_error` 均 `None`；连接性与 ERC 与首轮一致（A: `1d39e5eb…` → `693cd67b…`，FORMAT_ADAPTER_TRANSLATION，3 comps / 5 nets / 7 pins，ERC PASS；B: prepared == original，UNCHANGED_FORMAT，同连接性，ERC PASS）。
   - 测试：`tests.test_schgen_native_ingest` → **Ran 26, OK**（21 + 5）。
   - 交付文本同步：RES-011 由「本 PR 未调用」改为「已在 DEV-only ingest smoke 中实际调用」，附二进制 sha256。
+
+  - **2026-09-18 第四轮评审整改**：消除 helper 里的第二次未绑定 `--version`。版本探针收敛为 `ToolchainBinding.probe_version()`（verify → probe → verify + `exit_code == 0`），`main()` 只调用一次；有 binding 时 `export_netlist` / `export_erc` 不再 `find_kicad_cli`、不再 `tool_version`，只用 `binding.path` / `binding.version`，显式参数与 binding 不一致即 FAIL（不执行 subprocess）；standalone 路径也改为先绑定后探测。回归 +2 例（整轮 `tool_version` 恰好 1 次；helper 拒绝非绑定工具链），**变异对照**证明其有咬合力。smoke 复跑两例 binding 仍 **PASS**。
   - **2026-09-18 第三轮评审整改**：version probe 纳入同一 binding bracket —— 先 `ToolchainBinding`，`verify('before the version probe')` → `tool_version` → `verify('after the version probe')`，并要求 `probe['exit_code'] == 0` 且 `version == '8.0.9'`；`--kicad-cli` 改为必须指向真实文件的绝对路径（无 PATH 回退），report 的 `kicad_cli` 记已解析路径。回归 +3 例（probe 后换 binary / 非零退出但打印 8.0.9 / binary 缺失），**变异对照**证明两条新回归有咬合力。smoke 复跑两例 `toolchain_binding` 仍 **PASS**。
 
 
