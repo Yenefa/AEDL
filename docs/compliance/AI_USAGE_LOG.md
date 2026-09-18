@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 103 条。完整正文在各自条目文件中；本索引只做导航。
+共 104 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -146,3 +146,6 @@
 - [`AI-20260917-DSH-5B37F838885B77C8AF0E92D10B9DF711`](ai-usage/AI-20260917-DSH-5B37F838885B77C8AF0E92D10B9DF711.md) — C4-P3 acceptance erratum（draft-5）—— API 路径 `tool_applied=null` 不是失败证据
 - [`AI-20260917-DSH-9450B0C0B2E65A1CCBD601116752CE94`](ai-usage/AI-20260917-DSH-9450B0C0B2E65A1CCBD601116752CE94.md) — C4 toolchain binding moved into PRECHECK（P6 ordering defect）
 - [`AI-20260917-DSH-DA121C583BB562DB7EC4485403A44000`](ai-usage/AI-20260917-DSH-DA121C583BB562DB7EC4485403A44000.md) — C4 created UUID ↔ 实际新增顶层对象绑定（合同 §8）+ native source 对象口径对齐
+## 2026-09-18
+
+- [`AI-20260918-DSH-F2475116AF034D8996D0B8CCF350455F`](ai-usage/AI-20260918-DSH-F2475116AF034D8996D0B8CCF350455F.md) — C4-P3 native qualification — 正对照 + 固定负扰动（两半均为原生）

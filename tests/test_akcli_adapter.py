@@ -1328,8 +1328,12 @@ class _NativeToolchainMixin(object):
         toolchain["symbol_digest"] = probe["symbol_digest"]
         return toolchain
 
-    def _patch(self, toolchain, ops, rule, stage, ctx="CTX-1"):
-        """Build a contract-shaped HostPatch over a prepared stage."""
+    def _patch(self, toolchain, ops, rule, stage, ctx="CTX-1", route="STRICT"):
+        """Build a contract-shaped HostPatch over a prepared stage.
+
+        route defaults to STRICT so every existing caller is unchanged; the E1/E2/E3
+        rules reach the constrained writer and need CONSTRAINED_EXCEPTION here.
+        """
         with open(os.path.join(stage, "fault.kicad_sch"), "rb") as handle:
             base_source_sha256 = hash_bytes(handle.read())
         proposal = {"schema_version": 1, "context_id": ctx, "target": "design/fault.kicad_sch",
@@ -1351,7 +1355,7 @@ class _NativeToolchainMixin(object):
                                             {"capability": "FILE_WRITE", "effect": "ALLOW"}]},
                 "toolchain_manifest": toolchain,
                 "toolchain_sha256": adapter._toolchain_digest(toolchain),
-                "route": "STRICT", "bound_policy": {"version": 1}}
+                "route": route, "bound_policy": {"version": 1}}
         body["patch_sha256"] = canonical_sha256("patch", body)
         return body
 
@@ -1547,6 +1551,104 @@ class NativePerturbationTests(_NativeToolchainMixin, unittest.TestCase):
         self.assertEqual(result["status"], "BLOCKED")
         self.assertIn("REPAIR_EFFECT_MISMATCH",
                       [row["code"] for row in result["reasons"]])
+
+
+class NativeP3QualificationTests(_NativeToolchainMixin, unittest.TestCase):
+    """C4-P3: the constrained-writer route, as a positive control plus a real perturbation.
+
+    Criteria sheet C4-P3 (draft-5) defines the item as both at once:
+
+      positive control : tool_applied=null AND every independent condition holds -- a
+                         complete all-ok op_results, a real byte delta, a successful fresh
+                         reread, the connectivity gate -> APPLIED_TO_STAGE is permitted
+      negative perturb : tool_applied=null, op_results non-empty and all ok, but the
+                         source bytes do NOT change -> must not be APPLIED_TO_STAGE, with
+                         REPAIR_EFFECT_MISMATCH
+
+    The item's verdict is carried by the negative perturbation; the control is the control
+    group.  The sheet also fixes the validity rule: if the control fails the item is
+    NOT_RUN / qualification invalid, so a red perturbation on its own may never be scored
+    as PASS.  That is enforced here by re-running the control on the same fixture inside
+    the negative case, so a broken control fails the negative case too.
+    """
+
+    # DC-01/02/03 are the E1/E2/E3 cases, i.e. they reach the constrained writer.
+    RULE_FOR_CASE = {"DC-01": "E1", "DC-02": "E2", "DC-03": "E3"}
+
+    # Captured 2026-09-18 with the pinned akcli 0.21.0: C2.1 is already on +3V3, so the
+    # constrained writer reports the operation ok and even a created UUID while the file
+    # never changes -- the false success the effect check exists to catch.  Two
+    # independent runs agreed field for field, including the created UUID
+    # 1d801691-1263-56ad-b675-4a56a3e789b5.
+    P3_NO_OP_LABEL = [{"op": "add_net_label", "name": "+3V3", "at": "C2.1"}]
+
+    def _p3_ops(self, case):
+        with open(os.path.join(self.FIXTURES, case, "repair_ops.json"), encoding="utf-8") as handle:
+            return json.load(handle)["ops"]
+
+    def _p3_stage(self, case, ops, name):
+        """A scratch copy of a frozen fixture with its own op-list."""
+        stage = os.path.join(self.root, name)
+        os.makedirs(stage, exist_ok=True)
+        shutil.copy2(os.path.join(self.FIXTURES, case, "fault.kicad_sch"),
+                     os.path.join(stage, "fault.kicad_sch"))
+        with open(os.path.join(stage, "oplist.json"), "w", encoding="utf-8",
+                  newline="\n") as handle:
+            json.dump({"protocol_version": 2, "target_format": "kicad", "ops": ops}, handle)
+        return stage
+
+    def _p3_apply(self, toolchain, case, ops, name):
+        stage = self._p3_stage(case, ops, name)
+        body = self._patch(toolchain, ops, self.RULE_FOR_CASE[case], stage,
+                           route="CONSTRAINED_EXCEPTION")
+        return adapter.apply_stage(self._stage_request(
+            body, stage, os.path.join(self.root, "artifacts-" + name)))
+
+    def test_p3_positive_control_a_null_applied_field_still_permits_success(self):
+        cli = self._akcli()
+        for case in ("DC-01", "DC-02", "DC-03"):
+            ops = self._p3_ops(case)
+            toolchain = self._measure(cli, case)
+            result = self._p3_apply(toolchain, case, ops, "p3-positive-" + case)
+            self.assertEqual(result["status"], "APPLIED_TO_STAGE",
+                             "%s: %s" % (case, result["reasons"]))
+            # the API route has no applied field at all, by contract ...
+            self.assertIsNone(result["tool"]["tool_applied"])
+            self.assertEqual(result["tool"]["mode"], "PYTHON_WRITER")
+            # ... so success must come from the independent conditions
+            self.assertEqual(result["tool"]["exit_code"], 0)
+            self.assertTrue(result["changed"], case)
+            self.assertEqual([row["status"] for row in result["tool"]["op_results"]],
+                             ["ok"] * len(ops), case)
+            self.assertEqual([row["op_index"] for row in result["tool"]["op_results"]],
+                             list(range(len(ops))), case)
+
+    def test_p3_negative_perturbation_a_no_op_write_is_not_applied(self):
+        cli = self._akcli()
+        for case in ("DC-01", "DC-02", "DC-03"):
+            # Measured once and reused: the control and the perturbation must resolve
+            # against one and the same frozen toolchain binding.
+            toolchain = self._measure(cli, case)
+            # Validity first: the control has to hold on this very fixture.  Otherwise
+            # the item is invalid rather than red, and this case must fail with it.
+            control = self._p3_apply(toolchain, case, self._p3_ops(case),
+                                     "p3-control-" + case)
+            self.assertEqual(control["status"], "APPLIED_TO_STAGE",
+                             "%s control: %s" % (case, control["reasons"]))
+
+            result = self._p3_apply(toolchain, case, self.P3_NO_OP_LABEL,
+                                    "p3-negative-" + case)
+            self.assertNotEqual(result["status"], "APPLIED_TO_STAGE", case)
+            self.assertIn("REPAIR_EFFECT_MISMATCH",
+                          [row["code"] for row in result["reasons"]], case)
+            # the red has to land past the writer, not on an early rejection: the
+            # operation really ran, reported ok, and still changed nothing
+            self.assertEqual(result["tool"]["exit_code"], 0, case)
+            self.assertIsNone(result["tool"]["tool_applied"], case)
+            self.assertFalse(result["changed"], case)
+            self.assertTrue(result["tool"]["op_results"], case)
+            self.assertEqual([row["status"] for row in result["tool"]["op_results"]],
+                             ["ok"], case)
 
 
 if __name__ == "__main__":
