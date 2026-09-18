@@ -145,6 +145,12 @@ class ManifestTests(unittest.TestCase):
 class BindingTests(unittest.TestCase):
     """The record must bind the bytes that were actually written."""
 
+    def _binary(self, root):
+        # A run binds exactly one toolchain binary, so it has to exist on disk.
+        binary = root/'kicad-cli.exe'
+        binary.write_bytes(b'fake kicad-cli')
+        return binary
+
     def _run(self, root, manifest, reference=False, patches=()):
         flag = '--reference-sources' if reference else '--manifest'
         stack = [mock.patch.object(ingest, 'tool_version',
@@ -154,7 +160,7 @@ class BindingTests(unittest.TestCase):
             item.start()
         try:
             return ingest.main([flag, str(manifest), '--out', str(root/'out'),
-                                '--kicad-cli', 'FAKE'])
+                                '--kicad-cli', str(self._binary(root))])
         finally:
             for item in reversed(stack):
                 item.stop()
@@ -271,6 +277,8 @@ class ReferencePublicationTests(unittest.TestCase):
     """exit 0 plus a file on disk is not an observation."""
 
     def _run_reference(self, root, net_bytes):
+        binary = root/'kicad-cli.exe'
+        binary.write_bytes(b'fake kicad-cli')
         raw = root/'raw.kicad_sch'
         raw.write_bytes(b'(kicad_sch (label "A" (at 0 0 0)))')
         manifest = root/'refs.json'
@@ -292,7 +300,7 @@ class ReferencePublicationTests(unittest.TestCase):
              mock.patch.object(ingest, 'export_erc', return_value={'status': 'PASS'}), \
              mock.patch.object(ingest.subprocess, 'run', side_effect=fake_run):
             rc = ingest.main(['--reference-sources', str(manifest), '--out', str(root/'out'),
-                              '--kicad-cli', 'FAKE'])
+                              '--kicad-cli', str(binary)])
         record = json.loads((root/'out/one/ingestion.json').read_text())
         return rc, record
 
@@ -313,6 +321,91 @@ class ReferencePublicationTests(unittest.TestCase):
             self.assertFalse((root/'out/evaluation-references.json').exists())
             self.assertEqual(record['status'], 'FAIL')
             self.assertIn('not evaluable', record['error'])
+
+
+class ToolchainBindingTests(unittest.TestCase):
+    def test_an_unreadable_binary_cannot_be_bound(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ingest.IngestionInputError):
+                ingest.ToolchainBinding(Path(tmp)/'missing.exe')
+
+    def test_a_binary_that_disappears_is_not_an_unobserved_change(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)/'kicad-cli.exe'
+            path.write_bytes(b'binary')
+            binding = ingest.ToolchainBinding(path)
+            path.unlink()
+            with self.assertRaises(ingest.IngestionInputError) as caught:
+                binding.verify('after the export')
+            self.assertIn('could not be rebound', str(caught.exception))
+
+    def test_a_replaced_binary_is_reported_as_a_change(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)/'kicad-cli.exe'
+            path.write_bytes(b'binary')
+            binding = ingest.ToolchainBinding(path)
+            path.write_bytes(b'another binary')
+            with self.assertRaises(ingest.IngestionInputError) as caught:
+                binding.verify('after the export')
+            self.assertIn('changed after the export', str(caught.exception))
+
+
+class RunToolchainBindingTests(unittest.TestCase):
+    def _manifest(self, root):
+        raw, request = root/'raw.kicad_sch', root/'request.txt'
+        raw.write_bytes(b'(kicad_sch (label "A" (at 0 0 0)))')
+        request.write_bytes(b'Connect A.')
+        manifest = root/'manifest.json'
+        manifest.write_text(json.dumps(dict(split='EXPOSED_DEV', assignments=[
+            dict(id='one', raw=str(raw), raw_sha256=ingest.sha(raw),
+                 request=str(request), request_sha256=ingest.sha(request))])))
+        return manifest
+
+    def test_a_toolchain_that_vanishes_during_the_export_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            binary = root/'kicad-cli.exe'
+            binary.write_bytes(b'fake kicad-cli')
+            manifest = self._manifest(root)
+
+            class Proc:
+                returncode = 0
+                stdout = b''
+                stderr = b''
+
+            def fake_run(argv, **kwargs):
+                binary.unlink()          # the toolchain disappears mid-export
+                return Proc()
+
+            with mock.patch.object(ingest, 'tool_version', return_value={'version': '8.0.9'}), \
+                 mock.patch.object(ingest.subprocess, 'run', side_effect=fake_run):
+                rc = ingest.main(['--manifest', str(manifest), '--out', str(root/'out'),
+                                  '--kicad-cli', str(binary)])
+            self.assertEqual(rc, 1)
+            self.assertFalse((root/'out/repair-inputs.json').exists())
+            record = json.loads((root/'out/one/ingestion.json').read_text())
+            self.assertEqual(record['status'], 'FAIL')
+            self.assertIn('could not be rebound', record['native_export']['reason'])
+            report = json.loads((root/'out/ingestion-report.json').read_text())
+            self.assertEqual(report['toolchain_binding'], 'FAILED')
+            self.assertIn('could not be rebound', report['toolchain_error'])
+
+    def test_the_report_carries_the_bound_digest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            binary = root/'kicad-cli.exe'
+            binary.write_bytes(b'fake kicad-cli')
+            manifest = self._manifest(root)
+            with mock.patch.object(ingest, 'tool_version', return_value={'version': '8.0.9'}), \
+                 mock.patch.object(ingest, 'export_netlist', return_value={'status': 'PASS'}), \
+                 mock.patch.object(ingest, 'export_erc', return_value={'status': 'PASS'}):
+                rc = ingest.main(['--manifest', str(manifest), '--out', str(root/'out'),
+                                  '--kicad-cli', str(binary)])
+            report = json.loads((root/'out/ingestion-report.json').read_text())
+            self.assertEqual(rc, 0)
+            self.assertEqual(report['toolchain_binding'], 'PASS')
+            self.assertEqual(report['toolchain_error'], None)
+            self.assertEqual(report['kicad_cli_sha256'], ingest.sha(binary))
 
 
 if __name__ == '__main__':

@@ -444,3 +444,61 @@ no-translation 输入；用同一真实产物已绑定的字节验证幂等路�
 `NOT_RUN`，不是通过。原始产出：`scratch\schgen-recut\smoke\`（`SMOKE-RESULT.json` +
 `out-A` / `out-B` 完整 ingestion 记录）。
 
+---
+
+## 2026-09-18 第二轮评审整改（Owner REQUEST_CHANGES @ head `45fa912`）
+
+Owner 认可 P1-1 / P1-2 / smoke 已闭合，但指出 tool digest 仍**半绑定**，另有 2 处交付文本过期。
+
+### 1. 「读不到 = 没观察到变化」—— 已消除
+
+原实现是 `if after is not None and after != before: FAIL`。binary 在运行后消失/不可读时
+`after is None`，**不会**进入 mismatch 分支，仍可能 PASS。现改为 `ToolchainBinding`：
+
+```text
+ToolchainBinding(path)   -> 构造时若读不到 binary 直接 IngestionInputError
+verify(when)             -> 复算；读不到 => "could not be rebound"（失败，不是「无变化」）
+                            变了   => "changed ...: A -> B"
+```
+
+### 2. 整轮只绑定一个 KiCad binary —— 已闭合
+
+`main()` 在版本检查后建立 **一个** `binding`，并把同一个实例传给每一次工具调用：
+
+| 调用 | 绑定 |
+|---|---|
+| `export_netlist`（native 网表） | 调用前后各 `verify` |
+| `export_erc`（ERC） | 调用前后各 `verify`，记录 `kicad_cli_sha256_after` |
+| reference `kicadsexpr` 导出 | 调用前后各 `verify` |
+
+循环结束后再 `binding.verify('at the end of the ingestion run')`：失败则 **`ready = []`**，
+因此 `repair-inputs.json` / `evaluation-references.json` **都不会**被发布，rc=1。
+report 现在带 `kicad_cli_sha256`（= 本轮的绑定 digest，不再是「最后再读一次」）、
+`toolchain_binding`（`PASS` / `FAILED`）与 `toolchain_error`。
+
+### 3. 测试与反向对照
+
+测试 21 → **26** 例。新增：`ToolchainBinding` 三例（不可读、运行后消失、被替换）+
+两例 run-level（中途消失 → 整体 fail-closed；report 携带绑定 digest）。
+**变异对照**：把 netlist 导出处还原为「容忍读不到的旧实现」→
+`test_a_toolchain_that_vanishes_during_the_export_fails_closed` **FAILED (failures=1)**；
+还原修复版后复跑全绿。
+
+### 4. 真实 KiCad 8.0.9 smoke 复跑（绑定后）
+
+```
+toolchain_binding  A = PASS   B = PASS
+toolchain_error    A = None   B = None
+Case A  1d39e5eb… -> 693cd67b…  FORMAT_ADAPTER_TRANSLATION  3 comps / 5 nets / 7 pins  ERC PASS
+Case B  693cd67b… == 693cd67b…  UNCHANGED_FORMAT            3 comps / 5 nets / 7 pins  ERC PASS
+```
+
+### 5. 交付文本事实同步
+
+`docs/compliance/THIRD_PARTY_RESOURCES.md` 的 RES-011 原写「KiCad 8.0.9 …（本 PR 未调用）」，
+与已跑的真实 smoke 冲突。已改为如实记录：**已在本 PR 的 DEV-only ingest smoke 中实际调用**，
+附二进制 sha256，并说明不涉及 repair / scorer / 正式实验。
+
+**仍未运行**：scorer、任何 repair、held half、ΔJ、模型调用、正式实验、HELD_OUT 读取。
+
+

@@ -227,6 +227,6 @@
 - License / 授权 / 关键义务：`TO_VERIFY`；不因本地复核推断公开再分发权。
 - 是否修改上游源码：否；是否随本次源码差异再分发：否。
 - AEDL 自研边界：AEDL 侧新增的是格式导入层（输入绑定、对象图不变性、fresh 观察、新清单）。数据集与连接集合评分算法属第三方；导入变化不得表述为修复收益。
-- 支持工具：KiCad 8.0.9 是 DEV 回放环境的运行期要求（本 PR 未调用）。akcli 0.21.0 属 held 半，本 PR 不使用。
+- 支持工具：KiCad 8.0.9 已在本 PR 的 DEV-only ingest smoke 中**实际调用**（`kicad-cli` 8.0.9，二进制 sha256 `8b7f4a889dc8cfb8c3eae1337d64ade2fe0cf1ec5daa87878cc709904378fb26`；每次 subprocess 前后都对同一 digest 复算，整轮绑定同一个 binary）。不涉及 repair / scorer / 正式实验。akcli 0.21.0 属 held 半，本 PR 不使用。
 - 合规状态：`TO_VERIFY`。
 - 关联：`notes/schgen-dev-chain/TASK.md`、EVID-20260918-001、AI-20260918-DSH-C7396AEC9D7DC7BCD22C6337E56A806E。

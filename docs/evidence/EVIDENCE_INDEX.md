@@ -273,4 +273,12 @@ Evidence（其元数据冻结结论不受影响）。
   - 测试：`tests.test_schgen_native_ingest` → **Ran 21, OK**（首轮 14 + 整改轮 7）。全量 `discover -s tests` 与 `dev_gate` 见 PR 回执。
   - 原始产出：`scratch\schgen-recut\smoke\`（`SMOKE-RESULT.json` + `out-A` / `out-B` 完整 ingestion 记录）。
   - **仍未运行**：scorer、任何 repair、held half、ΔJ、模型调用、正式实验、HELD_OUT 读取。
+- **2026-09-18 第二轮评审整改（同一条目）**：
+  - `ToolchainBinding` 消除「读不到 = 没观察到变化」：构造时读不到 binary 即失败；每次调用前后 `verify`，读不到报 `could not be rebound`，变了报 `changed A -> B`。
+  - 整轮绑定一个 binary：`export_netlist` / `export_erc` / reference `kicadsexpr` 导出三处调用前后各 `verify`；循环结束后再 `verify('at the end of the ingestion run')`，失败则 `ready=[]`，`repair-inputs.json` / `evaluation-references.json` 均不发布，rc=1。report 增加 `toolchain_binding`（PASS/FAILED）与 `toolchain_error`，`kicad_cli_sha256` 改为本轮绑定值。
+  - **反向对照**：还原为「容忍读不到的旧实现」→ `RunToolchainBindingTests.test_a_toolchain_that_vanishes_during_the_export_fails_closed` **FAILED (failures=1)**；还原后复跑全绿。
+  - **smoke 复跑（绑定后）**：Case A / Case B `toolchain_binding` 均 **PASS**、`toolchain_error` 均 `None`；连接性与 ERC 与首轮一致（A: `1d39e5eb…` → `693cd67b…`，FORMAT_ADAPTER_TRANSLATION，3 comps / 5 nets / 7 pins，ERC PASS；B: prepared == original，UNCHANGED_FORMAT，同连接性，ERC PASS）。
+  - 测试：`tests.test_schgen_native_ingest` → **Ran 26, OK**（21 + 5）。
+  - 交付文本同步：RES-011 由「本 PR 未调用」改为「已在 DEV-only ingest smoke 中实际调用」，附二进制 sha256。
+
 - 人工核验：PENDING_HUMAN_REVIEW。

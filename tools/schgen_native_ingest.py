@@ -379,7 +379,8 @@ def native_import_issues(source, version):
     return issues
 
 
-def export_netlist(source, output_dir, kicad_cli=None, timeout=EXPORT_TIMEOUT_SECONDS):
+def export_netlist(source, output_dir, kicad_cli=None, timeout=EXPORT_TIMEOUT_SECONDS,
+                   binding=None):
     """One fresh export into a directory this run creates.
 
     A leftover directory or XML is never reused.  The source hash is taken
@@ -401,11 +402,13 @@ def export_netlist(source, output_dir, kicad_cli=None, timeout=EXPORT_TIMEOUT_SE
         return result
     result["kicad_cli"] = executable
     result["version"] = tool_version(executable)["version"]
-    try:
-        result["kicad_cli_sha256"] = sha256_file(executable)
-    except OSError as exc:
-        result["reason"] = "unreadable kicad-cli binary: %s" % exc
-        return result
+    if binding is None:
+        try:
+            binding = ToolchainBinding(executable)
+        except IngestionInputError as exc:
+            result["reason"] = str(exc)
+            return result
+    result["kicad_cli_sha256"] = binding.sha256
     try:
         result['source_before_sha256'] = sha256_file(source)
         result['native_import_issues'] = native_import_issues(source, result['version'])
@@ -414,6 +417,11 @@ def export_netlist(source, output_dir, kicad_cli=None, timeout=EXPORT_TIMEOUT_SE
         return result
     if result['native_import_issues']:
         result['reason'] = 'LEGACY_INSTANCE_TAIL: KiCad 8 would omit trailing root objects'
+        return result
+    try:
+        binding.verify('before the netlist export')
+    except IngestionInputError as exc:
+        result['reason'] = str(exc)
         return result
     os.makedirs(output_dir)
     xml_path = os.path.join(output_dir, "netlist.xml")
@@ -433,17 +441,15 @@ def export_netlist(source, output_dir, kicad_cli=None, timeout=EXPORT_TIMEOUT_SE
     except OSError as exc:
         result["reason"] = "the fresh export could not start: %s" % exc
         return result
+    try:
+        binding.verify('after the netlist export')
+    except IngestionInputError as exc:
+        result["reason"] = str(exc)
+        return result
+    result["kicad_cli_sha256_after"] = binding.sha256
     after = sha256_file(source)
     result["source_before_sha256"] = before
     result["exit_code"] = exit_code
-    try:
-        result["kicad_cli_sha256_after"] = sha256_file(executable)
-    except OSError:
-        result["kicad_cli_sha256_after"] = None
-    if (result["kicad_cli_sha256_after"] is not None
-            and result["kicad_cli_sha256_after"] != result["kicad_cli_sha256"]):
-        result["reason"] = "the toolchain binary changed while the export ran"
-        return result
     if before != after:
         result["source_after_sha256"] = after
         result["reason"] = "the artifact changed while it was exported"
@@ -470,15 +476,25 @@ def export_netlist(source, output_dir, kicad_cli=None, timeout=EXPORT_TIMEOUT_SE
     return result
 
 
-def export_erc(source, directory, kicad_cli):
+def export_erc(source, directory, kicad_cli, binding=None):
     """One fresh ERC export; violations live under sheets[], not at the top."""
     directory.mkdir()
     output = directory / 'erc.json'
     digest = sha(source)
     argv = [kicad_cli, 'sch', 'erc', '--format', 'json', '--output', str(output), str(source)]
     result = dict(status='FAIL', source_sha256=digest, argv=argv)
+    if binding is None:
+        try:
+            binding = ToolchainBinding(kicad_cli)
+        except IngestionInputError as exc:
+            result['error'] = str(exc)
+            return result
+    result['kicad_cli_sha256'] = binding.sha256
     try:
+        binding.verify('before the ERC export')
         proc = subprocess.run(argv, capture_output=True, timeout=180)
+        binding.verify('after the ERC export')
+        result['kicad_cli_sha256_after'] = binding.sha256
         (directory/'stdout.txt').write_bytes(proc.stdout)
         (directory/'stderr.txt').write_bytes(proc.stderr)
         result['returncode'] = proc.returncode
@@ -506,6 +522,32 @@ def _file_digest(path):
         return sha256_file(path)
     except OSError:
         return None
+
+
+class ToolchainBinding(object):
+    """One ingestion run, one bound toolchain binary.
+
+    Every subprocess that drives the toolchain is bracketed by a digest re-read.
+    A binary that changed, or that can no longer be read at all, fails the run:
+    "could not prove the toolchain is unchanged" is never reported as "no change
+    was observed".
+    """
+
+    def __init__(self, path):
+        self.path = str(path)
+        self.sha256 = _file_digest(self.path)
+        if self.sha256 is None:
+            raise IngestionInputError("the toolchain binary cannot be read: %s" % self.path)
+
+    def verify(self, when):
+        current = _file_digest(self.path)
+        if current is None:
+            raise IngestionInputError(
+                "the toolchain binary could not be rebound %s: %s" % (when, self.path))
+        if current != self.sha256:
+            raise IngestionInputError(
+                "the toolchain binary changed %s: %s -> %s" % (when, self.sha256, current))
+        return current
 
 
 def validate_manifest(manifest):
@@ -614,6 +656,11 @@ def main(argv=None):
     version = (tool_version(args.kicad_cli)['version'] or '').strip()
     if version != '8.0.9':
         raise ValueError('this qualified ingestion recipe requires KiCad 8.0.9')
+    # One ingestion run binds exactly one toolchain binary.  Every subprocess
+    # below is bracketed by a digest re-read against this binding, the same
+    # digest lands in every record and in the run report, and a binary that
+    # cannot be re-read is a failure rather than an unobserved change.
+    binding = ToolchainBinding(args.kicad_cli)
     root = Path(args.out).resolve()
     root.mkdir()
     records, ready, references = [], [], {}
@@ -648,8 +695,9 @@ def main(argv=None):
             if pre_graph['graph_sha256'] != post_graph['graph_sha256']:
                 raise ValueError('object graph changed during format ingestion')
             record['object_graph_unchanged'] = True
-            record['native_export'] = export_netlist(str(prepared), str(directory/'native'), args.kicad_cli)
-            record['erc'] = export_erc(prepared, directory/'erc', args.kicad_cli)
+            record['native_export'] = export_netlist(str(prepared), str(directory/'native'),
+                                                     args.kicad_cli, binding=binding)
+            record['erc'] = export_erc(prepared, directory/'erc', args.kicad_cli, binding=binding)
             if record['native_export']['status'] != 'PASS' or record['erc']['status'] != 'PASS':
                 raise ValueError('prepared native observation failed')
             record['status'] = 'READY_FOR_DEV'
@@ -657,7 +705,9 @@ def main(argv=None):
                 net = directory/'reference.net'
                 argv_export = [args.kicad_cli, 'sch', 'export', 'netlist', '--format',
                                'kicadsexpr', '--output', str(net), str(prepared)]
+                binding.verify('before the reference scoring export')
                 process = subprocess.run(argv_export, capture_output=True, timeout=180)
+                binding.verify('after the reference scoring export')
                 (directory/'score-export-stdout.txt').write_bytes(process.stdout)
                 (directory/'score-export-stderr.txt').write_bytes(process.stderr)
                 net_raw = read_bytes(net) if net.is_file() else b''
@@ -684,12 +734,22 @@ def main(argv=None):
         write_json(directory/'ingestion.json', record)
         records.append(record)
         print(item['id'], record['status'], record.get('classification'), flush=True)
+    # Close the bracket: the toolchain must still be the one this run bound.
+    # If it is not, no manifest may be published under an unbound toolchain.
+    toolchain_error = None
+    try:
+        binding.verify('at the end of the ingestion run')
+    except IngestionInputError as exc:
+        toolchain_error = str(exc)
+        ready = []
     report = dict(schema='aedl-schgen-dev-ingestion/1', N_assigned=len(assignments),
                   N_ready=len(ready), original_manifest_sha256=sha256_bytes(manifest_raw),
                   role='REFERENCE' if reference_mode else 'REPAIR_INPUT',
                   source_sha256=sha(__file__),
                   kicad_cli=args.kicad_cli, kicad_cli_version=version,
-                  kicad_cli_sha256=_file_digest(args.kicad_cli),
+                  kicad_cli_sha256=binding.sha256,
+                  toolchain_binding='FAILED' if toolchain_error else 'PASS',
+                  toolchain_error=toolchain_error,
                   formal_authorized=False, records=records)
     write_json(root/'ingestion-report.json', report)
     # Do not silently drop failed assignments and publish a survivors cohort.
