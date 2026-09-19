@@ -441,3 +441,15 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
 - 验证：`tests.test_repair_verification` **75 OK（skipped=1）**；三条新回归单独复跑均 `ok`（非 skip）。
 - **未做并如实声明**：**C3-P1..C3-P7 独立扰动执行 = `NOT_RUN`**（B5 验收侧、7 条扰动，属另一张卡的量级）；未新增夹具、未改判据、未动 `run_gates.py` / `schematic_semantics.py` / `tools/repair_pipeline.py` / `tools/akcli_adapter.py`。
 - 状态：`PENDING_HUMAN_REVIEW`。
+
+## 2026-09-19 C3 第三轮复审整改（同卡 PR1-C3，分支 feat-pr1-c3-fresh-export，PR #72，head b93104d）
+
+- 触发：Owner 对 head `b93104d` 复审裁定 **REQUEST_CHANGES / 不 merge** —— 3 个实质代码点 + 1 个治理项，并明确「三点都属 C3 自己的 frozen §9 / B5 边界，不是扩到 C5/C6」。
+- **Blocker 1（C3-P7 假红 + deferred 可伪写）**：原 P7 用例用 `stage_marker="drift_after_export"` 驱动 —— 那是 C3-P3 先失败，`exact_topology_delta` / `protected_diff` 只是**顺带**停在 NOT_RUN，属判据 §1 rule 2 的假红；且 `invariants` 从不检查 `deferred`，`_DEFERRED["erc"]="PASS"` 时整体仍会 PASS。修法：PASS 不变量改为对**冻结名字** `_DEFERRED_CHECKS` 逐个要求 `NOT_RUN`；P7 改为两条**直接扰动**（① 其它全 PASS、仅 `exact_topology_delta` = NOT_RUN；② 仅 `deferred.erc` 伪写成 PASS）。
+- **Blocker 2（dependencies_unchanged 不是真实结束态证明）**：原实现只比较 `before_manifest` / `staged_manifest` 两份**声明 JSON**，两次导出后从未重读真实 bytes。修法：新增 `_dependency_end_state()`，在最终 PASS 前重跑 `_tree_digest()` 并与 `bind_inputs()` 的初始 `before_files` / `staged_files` 全量比较；不一致 → `BLOCKED` / `REPAIR_INPUT_DRIFT`，`dependencies_unchanged=false`。
+- **Blocker 3（钉住 kicad-cli 却允许执行另一个 launcher）**：原 `argv = launcher_argv + [kicad_cli] + …`，认真 hash 的二进制可以只是某个 wrapper 的参数。修法：生产 C3 要求 `launcher_argv == []`，`argv = [kicad_cli] + …`；测试改用进程 seam（`mock.patch` `_spawn`）跑桩，不再把测试注入机制泄漏进生产 schema。**同处的第二半**：新增 `libraries` / `configs` 两个宿主只读 FileManifest（绝对路径 + sha256 + size_bytes + role=READONLY_DEPENDENCY），每次导出前后各复核一次 —— 冻结 §9 要求 toolchain manifest 绑定 library/config 摘要，而原实现只有任意 `environment` 字符串。
+- **治理项**：`tasks/PR1-C3.yaml` 的 `goal` 仍写「本卡只做小项 1–2」，与 PR 实际（四小项 + P1..P7 资格）自相矛盾 —— 已同步；`change_budget.contract_change` 由 `false` 改为 `true`（toolchain manifest 形状变更），理由写在卡内注释。
+- **回归先行的自证（本轮新增 7 例，全部先证伪）**：把每处修复临时还原成缺陷形态，确认对应回归**确实红** —— `deferred` 自证式不变量 → `test_p7_a_forged_deferred_status_is_never_pass` 报 `'PASS' == 'PASS'`；去掉 end re-check → 依赖回归报 `'PASS' != 'BLOCKED'`（正是 Owner 描述的 T4 场景）；还原旧 launcher schema → launcher 回归报 `'PASS' != 'BLOCKED'`。还原后全部复绿。
+- 验证：`py -3.9 -m py_compile` 两文件 exit 0；`tests.test_repair_verification` **94 OK（skipped=1）**（新增 7 例）；全量 `discover -s tests` 与 `dev_gate` 结果见台账条目。
+- **未做**：C4/C5/C6；未改判据、未新增夹具、未动 `run_gates.py` / `schematic_semantics.py` / `tools/repair_pipeline.py` / `tools/akcli_adapter.py`；`notes/b5-acceptance/**` 一字未动。
+- 状态：`PENDING_HUMAN_REVIEW`。

@@ -1067,7 +1067,8 @@ REQUIRED_KICAD_VERSION = "10.0.5"
 EXPORT_TIMEOUT_SECONDS = 60
 EXPORT_ARGUMENTS = ("sch", "export", "netlist", "--format", "kicadxml", "--output")
 _TOOLCHAIN_FIELDS = {"version", "kicad_cli", "kicad_version", "kicad_cli_sha256",
-                     "launcher_argv", "arguments", "timeout_seconds", "environment"}
+                     "launcher_argv", "arguments", "timeout_seconds", "environment",
+                     "libraries", "configs"}
 _EXPORT_REQUEST_FIELDS = {"txn_id", "role", "source_root", "relative_source",
                           "output_dir", "toolchain"}
 _BINDING_REQUEST_FIELDS = {"txn_id", "run_id", "candidate_id", "relative_target",
@@ -1167,11 +1168,90 @@ def _resolve_within(root, relative):
     return cursor
 
 
+def _host_file_manifest(manifest, label):
+    """Validate the shape of a host read-only file manifest.
+
+    These are the symbol-library and KiCad-config files the export actually
+    consumes.  They are host-absolute observation inputs, not candidate-relative
+    paths, so the candidate path rules do not apply; what has to hold is that the
+    host declares real bytes for every one of them.  Structure only:
+    _host_file_digest reads the bytes.
+    """
+    _closed(manifest, _FILE_MANIFEST_FIELDS, "%s manifest" % label)
+    if type(manifest["version"]) is not int or manifest["version"] != 1:
+        raise ObservationError("unsupported %s manifest version" % label)
+    rows = manifest["files"]
+    if not isinstance(rows, list):
+        raise ObservationError("the %s manifest files must be a list" % label)
+    seen = set()
+    for row in rows:
+        _closed(row, {"path", "sha256", "size_bytes", "role"}, "%s file" % label)
+        path = _text(row["path"], "%s path" % label)
+        if not os.path.isabs(path):
+            raise ObservationError("a %s path must be absolute" % label)
+        if row["role"] != "READONLY_DEPENDENCY":
+            raise ObservationError("a %s file must be a READONLY_DEPENDENCY" % label)
+        _sha(row["sha256"], "%s digest" % label)
+        _integer(row["size_bytes"], "%s size" % label, 0)
+        key = os.path.normcase(os.path.normpath(path))
+        if key in seen:
+            raise ObservationError("the %s manifest declares %s twice" % (label, path))
+        seen.add(key)
+    return rows
+
+
+def _host_file_digest(manifest, label):
+    """Read every file a host manifest declares and return its observed digest.
+
+    A declared library or config is only a binding when the bytes behind it are
+    read and re-read: a path string, or a digest that is never checked, proves
+    nothing.  Missing, linked or mismatched files are fatal.
+    """
+    observed = {}
+    for row in _host_file_manifest(manifest, label):
+        path = row["path"]
+        if not os.path.isfile(path) or _is_link(path):
+            raise ObservationError("the %s file is missing or a link: %s" % (label, path))
+        raw = _read_bytes(path)
+        if len(raw) != row["size_bytes"] or hash_bytes(raw) != row["sha256"]:
+            raise ObservationError("the %s file does not match its declared digest: %s"
+                                   % (label, path))
+        observed[os.path.normcase(os.path.normpath(path))] = {
+            "sha256": row["sha256"], "size_bytes": row["size_bytes"]}
+    return observed
+
+
+def _toolchain_input_digests(toolchain):
+    """Bind the declared symbol libraries and KiCad config for one export."""
+    digests = {}
+    for label, manifest in (("library", toolchain["libraries"]),
+                            ("config", toolchain["configs"])):
+        try:
+            digests[label] = _host_file_digest(manifest, label)
+        except ObservationError as exc:
+            raise _ExportHalt("TOOL_ERROR", "REPAIR_TOOL_UNAVAILABLE",
+                              "a declared toolchain %s is not bound: %s"
+                              % (label, exc)) from exc
+    return digests
+
+
+def _spawn(argv, **kwargs):
+    """The single place C3 starts an export process.
+
+    Production always runs the pinned kicad-cli binary itself: the frozen
+    section 9 command is kicad-cli sch export netlist ..., never an arbitrary
+    launcher with kicad-cli as one of its arguments.  The seam exists so tests
+    can substitute a stub without widening the production toolchain contract.
+    """
+    return subprocess.run(argv, **kwargs)
+
+
 def toolchain_manifest(manifest):
     """Validate the host toolchain binding, or raise ObservationError.
 
     The manifest carries the absolute kicad-cli path, its digest, the pinned
-    version, the frozen command arguments and the symbol/config environment.
+    version, the frozen command arguments, the digested symbol-library and
+    KiCad-config files the export consumes, and the symbol/config environment.
     A missing value or a different version never proceeds silently.
     """
     _closed(manifest, _TOOLCHAIN_FIELDS, "toolchain manifest")
@@ -1183,12 +1263,12 @@ def toolchain_manifest(manifest):
     if _text(manifest["kicad_version"], "kicad version") != REQUIRED_KICAD_VERSION:
         raise ObservationError("the toolchain does not pin KiCad %s" % REQUIRED_KICAD_VERSION)
     _sha(manifest["kicad_cli_sha256"], "kicad-cli digest")
-    launcher = manifest["launcher_argv"]
-    if not isinstance(launcher, list) or any(
-            not isinstance(item, str) or not item for item in launcher):
-        raise ObservationError("the launcher argv must be a list of non-empty strings")
-    if any(not os.path.isabs(item) for item in launcher):
-        raise ObservationError("launcher argv entries must be absolute paths")
+    # The frozen command is kicad-cli sch export netlist itself.  A non-empty
+    # launcher would make the digested binary merely an argument to some other
+    # program, so the program that actually ran need not be the pinned one.
+    if manifest["launcher_argv"] != []:
+        raise ObservationError(
+            "the frozen command runs kicad-cli directly; launcher_argv must be empty")
     arguments = manifest["arguments"]
     if not isinstance(arguments, list) or tuple(arguments) != EXPORT_ARGUMENTS:
         raise ObservationError("the export arguments are not the frozen command")
@@ -1196,6 +1276,8 @@ def toolchain_manifest(manifest):
     if manifest["timeout_seconds"] > EXPORT_TIMEOUT_SECONDS:
         raise ObservationError("the toolchain timeout exceeds the frozen %d seconds"
                                % EXPORT_TIMEOUT_SECONDS)
+    _host_file_manifest(manifest["libraries"], "library")
+    _host_file_manifest(manifest["configs"], "config")
     environment = manifest["environment"]
     if not isinstance(environment, dict):
         raise ObservationError("the toolchain environment must be a mapping")
@@ -1245,17 +1327,19 @@ def fresh_export(request):
         if hash_bytes(_read_bytes(executable)) != toolchain["kicad_cli_sha256"]:
             raise _ExportHalt("TOOL_ERROR", "REPAIR_TOOL_UNAVAILABLE",
                               "the kicad-cli binary no longer matches its pinned digest")
+        # The symbol libraries and KiCad config the export reads are bound by
+        # digest too: a path string in the environment is not a binding.
+        inputs_before = _toolchain_input_digests(toolchain)
         xml_path = os.path.join(output_dir, role.lower() + ".net.xml")
-        argv = (list(toolchain["launcher_argv"]) + [executable]
-                + list(toolchain["arguments"]) + [xml_path, source])
+        argv = ([executable] + list(toolchain["arguments"]) + [xml_path, source])
         before = hash_bytes(_read_bytes(source))
         environment = dict(os.environ)
         environment.update(toolchain["environment"])
         try:
-            completed = subprocess.run(argv, shell=False, cwd=output_dir,
-                                       timeout=toolchain["timeout_seconds"],
-                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                       env=environment)
+            completed = _spawn(argv, shell=False, cwd=output_dir,
+                               timeout=toolchain["timeout_seconds"],
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               env=environment)
         except subprocess.TimeoutExpired as exc:
             raise _ExportHalt("TOOL_ERROR", "REPAIR_TIMEOUT",
                               "the export exceeded the frozen timeout") from exc
@@ -1271,6 +1355,10 @@ def fresh_export(request):
         if executable_after != toolchain["kicad_cli_sha256"]:
             raise _ExportHalt("TOOL_ERROR", "REPAIR_TOOL_UNAVAILABLE",
                               "the kicad-cli binary changed while the export was running")
+        if _toolchain_input_digests(toolchain) != inputs_before:
+            raise _ExportHalt("TOOL_ERROR", "REPAIR_TOOL_UNAVAILABLE",
+                              "a declared toolchain library or config changed while "
+                              "the export was running")
         xml_bytes = None
         if os.path.isfile(xml_path) and not _is_link(xml_path):
             xml_bytes = _read_bytes(xml_path)
@@ -1374,6 +1462,29 @@ def bind_inputs(request):
                                           "unverifiable binding input: %s" % exc, "SNAPSHOT")]
     return result
 
+
+def _dependency_end_state(binding, snapshot_root, stage_root, before_manifest,
+                          staged_manifest):
+    """Re-read the real dependency bytes and require the start digests to hold.
+
+    Section 9 requires the dependency set and content to be identical at the
+    start and the end of the verification window.  bind_inputs() reads the real
+    bytes once, before the exports; comparing the two supplied manifests only
+    proves the declarations agree with each other, not that the files did.
+    """
+    for label, root, manifest, expected in (
+            ("snapshot", snapshot_root, before_manifest, binding["before_files"]),
+            ("stage", stage_root, staged_manifest, binding["staged_files"])):
+        try:
+            observed, _ = _tree_digest(root, manifest, label)
+        except (ObservationError, _BindingError) as exc:
+            return False, ("the %s dependencies changed during verification: %s"
+                           % (label, exc))
+        if observed != expected:
+            return False, ("the %s dependencies changed during verification" % label)
+    return True, None
+
+
 # ---------------------------------------------------------------------------
 # C3: thin verification of staged candidate bytes (contract section 9)
 # ---------------------------------------------------------------------------
@@ -1392,8 +1503,11 @@ _THIN_RESULT_FIELDS = {"schema_version", "scope", "status", "txn_id", "run_id",
                        "dependencies_unchanged", "exports", "reports", "deferred",
                        "reasons"}
 _THIN_SCOPE = "PR1_CANDIDATE_BYTES"
-_DEFERRED = {"erc": "NOT_RUN", "semantic_runner": "NOT_RUN",
-             "formal_evidence": "NOT_RUN"}
+# The deferred checks are the ones this commit does not run.  Their names are
+# frozen separately from the mutable report value, so a forged "deferred" entry
+# cannot make the PASS invariant agree with itself.
+_DEFERRED_CHECKS = ("erc", "semantic_runner", "formal_evidence")
+_DEFERRED = {name: "NOT_RUN" for name in _DEFERRED_CHECKS}
 
 
 def _check(status, codes=(), paths=()):
@@ -1762,6 +1876,19 @@ def verify_stage(request):
             and coverage[role]["expected_component_keys_sha256"]
             == coverage[role]["observed_component_keys_sha256"]
             and coverage[role]["complete"] for role in ("before", "after"))
+        # Section 9: the dependency set and content must be identical at the start
+        # and the end of the window, so the real bytes are re-read now that both
+        # exports have run.  A manifest comparison is not that proof.
+        dependencies_bound, drift_detail = _dependency_end_state(
+            binding, request["snapshot_root"], request["stage_root"],
+            request["before_manifest"], request["staged_manifest"])
+        result["dependencies_unchanged"] = (protected["dependencies_unchanged"]
+                                            and dependencies_bound)
+        if not dependencies_bound:
+            result["status"] = "BLOCKED"
+            result["reasons"] = [_reason_code("REPAIR_INPUT_DRIFT", drift_detail,
+                                              "SNAPSHOT")]
+            return result
         invariants = (len(exports) == 2
                       and {proof["role"] for proof in exports} == {"BEFORE", "AFTER"}
                       and all(proof["completed"] for proof in exports)
@@ -1769,9 +1896,12 @@ def verify_stage(request):
                       and delta["actual_delta_sha256"] == bound["authorized_delta_sha256"]
                       and not result["unexpected_delta"] and not result["missing_delta"]
                       and not result["protected_changes"]
-                      and protected["dependencies_unchanged"]
+                      and result["dependencies_unchanged"]
                       and len(result["checks"]) == 4
-                      and all(check["status"] == "PASS" for check in result["checks"].values()))
+                      and all(check["status"] == "PASS" for check in result["checks"].values())
+                      and set(result["deferred"]) == set(_DEFERRED_CHECKS)
+                      and all(result["deferred"][name] == "NOT_RUN"
+                              for name in _DEFERRED_CHECKS))
         result["status"] = "PASS" if invariants else "UNKNOWN"
         if not invariants:
             result["reasons"] = [_reason_code("REPAIR_DELTA_MISMATCH",

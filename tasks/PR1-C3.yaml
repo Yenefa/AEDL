@@ -21,6 +21,14 @@ base:
 # Owner 同次指示本卡补做 **C3-P1..C3-P7 扰动资格**（判据 §2 C3 组；原 acceptance
 # 只要求「必须红在指定位置」，此前未执行）。本轮执行并在资格过程中发现并修复 1 个
 # 真实实现缺陷（见 acceptance 末条），如实记录，未扩大其它范围。
+#
+# 第三轮复审整改（2026-09-19，Owner REQUEST_CHANGES）：3 个代码点 + 1 个治理项 ——
+#   ① C3-P7 改为直接扰动 + deferred 冻结不变量；
+#   ② 真实依赖 start/end 字节复核（不再只比两份声明 manifest）；
+#   ③ 生产 C3 禁止 launcher，并把 library/config 摘要纳入 toolchain binding
+#      （toolchain manifest 形状变更，故 change_budget.contract_change 由 false 改为 true）；
+#   ④ envelope goal 与 PR 实际范围同步（原文仍写「只做小项 1–2」）。
+#   改动仍限在 allowed_paths 内，未扩到 C4/C5/C6。
 
 goal: |
   PR-1 Commit 3（合同 §11 C3）：gates/repair_verification.py 的 fresh KiCad 导出绑定，
@@ -34,7 +42,8 @@ goal: |
   再四项 PASS 不变量。
   B5 判据（notes/b5-acceptance/C3-C6_PERTURBATION_CRITERIA_DRAFT.md，全文 sha256
   0db60076…，PR #71 合入，判据先于实现冻结）C3-P1..C3-P7 必须红在指定位置。
-  本卡只做小项 1–2（导出证明 + source/依赖绑定），小项 3–4 与 C4/C5 不在本卡。
+  本卡覆盖 §11 C3 的四个小项（导出证明、source/依赖绑定、coverage/native 一致性、四项
+  PASS 不变量）与 C3-P1..C3-P7 扰动资格；C4/C5/C6 不在本卡。
 
 scope: |
   Writable paths are whitelisted in allowed_paths; everything else is FOREIGN (read-only).
@@ -112,13 +121,32 @@ acceptance: |
     `result["bound_policy_sha256"] = _sha(...)` —— 于是回执里这两个字段**恒为 null**，
     判据 C3-P5 指定的绑定锚点在回执上根本读不到。已改为先校验再显式携带该值，
     并补回归 `test_p5_the_receipt_carries_the_patch_and_policy_bindings`。
+  - **第三轮复审整改（Owner 2026-09-19 REQUEST_CHANGES，3 个代码点 + 1 个治理项）**：
+    - C3-P7 改为**直接扰动**：其它条件全 PASS、仅 checks.exact_topology_delta = NOT_RUN
+      → 整体非 PASS；以及 deferred.erc 被伪写成 PASS → 整体非 PASS。PASS 不变量改为对
+      **冻结名字**逐个要求 NOT_RUN（不再读可变 _DEFERRED，避免伪值自证）。
+    - **真实依赖 start/end 绑定**：两次导出后重跑 _tree_digest()，与 bind_inputs() 的初始
+      before_files / staged_files 全量比较；READONLY_DEPENDENCY 在导出期间被改 → 非 PASS
+      （BLOCKED / REPAIR_INPUT_DRIFT）且 dependencies_unchanged = false。原实现只比较两份
+      **声明 manifest**，证明的是「声明一致」，不是「真实文件未变」。
+    - **执行体绑定**：生产 C3 要求 launcher_argv == []（冻结命令是 kicad-cli sch export
+      netlist … 本身，不是「任意 launcher + kicad-cli 当参数」）；测试改走进程 seam
+      （mock.patch _spawn），不再把测试注入机制泄漏进生产 toolchain contract。
+    - **toolchain library/config 摘要**：toolchain manifest 新增 libraries / configs 两个宿主
+      只读 FileManifest（绝对路径 + sha256 + size_bytes + role=READONLY_DEPENDENCY），每次导出
+      前后各复核一次；缺失 / 不符 / 运行中变化 → TOOL_ERROR / REPAIR_TOOL_UNAVAILABLE。
+    - envelope goal 同步为「四个小项 + P1..P7 资格」；change_budget.contract_change 由
+      false 改为 **true**（上述 toolchain manifest 形状变更），理由见本卡注释。
   - 台账 + HANDOFF 如实追加
 
 change_budget:
   expected_files: 6
   expected_modules: [gates, tests, tasks, docs]
   cross_module: true
-  contract_change: false
+  # 第三轮复审整改把 C3 toolchain manifest 从「任意 environment 字符串 + 任意 launcher」
+  # 改为「launcher_argv 必须为空 + libraries/configs 宿主只读 FileManifest 摘要绑定」，
+  # 这是宿主 toolchain 绑定的形状变更，故由 false 改为 true。
+  contract_change: true
   evidence_semantics_change: false
 
 exceptions:

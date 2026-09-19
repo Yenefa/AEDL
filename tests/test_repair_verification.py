@@ -1012,16 +1012,39 @@ class FreshExportTests(unittest.TestCase):
         self.stub = self.root / "fake_kicad_cli.py"
         self.stub.write_text(STUB_CLI, encoding="utf-8")
         self.stub_sha = hashlib.sha256(self.stub.read_bytes()).hexdigest()
+        # The frozen command runs the pinned binary itself, so the stub is
+        # substituted at the process seam instead of through the schema.
+        self.library = self.root / "symbols.kicad_sym"
+        self.library.write_bytes(b'(kicad_symbol_lib (version 20231120) (symbol "R"))')
+        self.config = self.root / "kicad_common.json"
+        self.config.write_bytes(b'{"environment": {}}')
+        self._seam = mock.patch.object(verification, "_spawn", self.fake_spawn)
+        self._seam.start()
+        self.addCleanup(self._seam.stop)
 
     def tearDown(self):
         self._tmp.cleanup()
 
+    def fake_spawn(self, argv, **kwargs):
+        """TEST_ONLY process seam: run the stub where the pinned binary would run."""
+        return subprocess.run([sys.executable, str(self.stub)] + list(argv[1:]), **kwargs)
+
+    def file_manifest(self, *paths):
+        rows = []
+        for path in paths:
+            raw = Path(path).read_bytes()
+            rows.append({"path": str(path), "sha256": hashlib.sha256(raw).hexdigest(),
+                         "size_bytes": len(raw), "role": "READONLY_DEPENDENCY"})
+        return {"version": 1, "files": rows}
+
     def toolchain(self, **overrides):
         manifest = {"version": 1, "kicad_cli": str(self.stub),
                     "kicad_version": "10.0.5", "kicad_cli_sha256": self.stub_sha,
-                    "launcher_argv": [sys.executable],
+                    "launcher_argv": [],
                     "arguments": list(verification.EXPORT_ARGUMENTS),
-                    "timeout_seconds": 60, "environment": {}}
+                    "timeout_seconds": 60, "environment": {},
+                    "libraries": self.file_manifest(self.library),
+                    "configs": self.file_manifest(self.config)}
         manifest.update(overrides)
         return manifest
 
@@ -1057,6 +1080,8 @@ class FreshExportTests(unittest.TestCase):
             self.assertEqual(proof["argv"][-1], str(self.root / "src_design_kicad_sch" / "design.kicad_sch"))
             self.assertEqual(proof["argv"][-2], proof["xml_path"])
             self.assertIn("netlist", proof["argv"])
+            # the program that ran is the pinned binary itself, not a wrapper
+            self.assertEqual(proof["argv"][0], str(self.stub))
             seen.append(proof["xml_path"])
         self.assertEqual(len(set(seen)), 2)
 
@@ -1262,14 +1287,18 @@ class FreshExportTests(unittest.TestCase):
             (root / marker).write_bytes(b"1")
         return root
 
-    def design_manifest(self, root, name="design.kicad_sch"):
-        raw = (root / name).read_bytes()
-        return {"version": 1, "files": [{"path": name,
-                                         "sha256": hashlib.sha256(raw).hexdigest(),
-                                         "size_bytes": len(raw), "role": "TARGET"}]}
+    def design_manifest(self, root, name="design.kicad_sch", dependencies=()):
+        rows = []
+        for path in (name,) + tuple(dependencies):
+            raw = (root / path).read_bytes()
+            rows.append({"path": path, "sha256": hashlib.sha256(raw).hexdigest(),
+                         "size_bytes": len(raw),
+                         "role": "TARGET" if path == name else "READONLY_DEPENDENCY"})
+        return {"version": 1, "files": rows}
 
     def scenario(self, stage_raw=None, stage_plan=None, stage_marker=None,
-                 native_before=None, native_after=None, **tool_overrides):
+                 native_before=None, native_after=None, dependency=None,
+                 **tool_overrides):
         raw = mini()
         observation = verification.observe_source(raw)
         stage_raw = raw if stage_raw is None else stage_raw
@@ -1280,6 +1309,10 @@ class FreshExportTests(unittest.TestCase):
                                  plan_from_observation(stage_observation)
                                  if stage_plan is None else stage_plan,
                                  marker=stage_marker)
+        dependencies = (dependency,) if dependency else ()
+        for root in (snapshot, stage):
+            for path in dependencies:
+                (root / path).write_bytes(b"(read-only dependency bytes)")
         bound = policy(observation, copy.deepcopy(observation))
         self._scenarios = getattr(self, "_scenarios", 0) + 1
         reports = self.root / ("reports_%d" % self._scenarios)
@@ -1289,8 +1322,8 @@ class FreshExportTests(unittest.TestCase):
                    "bound_policy_sha256": verification.canonical_sha256("policy-bound", bound),
                    "snapshot_root": str(snapshot), "stage_root": str(stage),
                    "relative_target": "design.kicad_sch",
-                   "before_manifest": self.design_manifest(snapshot),
-                   "staged_manifest": self.design_manifest(stage),
+                   "before_manifest": self.design_manifest(snapshot, dependencies=dependencies),
+                   "staged_manifest": self.design_manifest(stage, dependencies=dependencies),
                    "bound_policy": bound,
                    "toolchain_manifest": self.toolchain(**tool_overrides),
                    "native_before": observation if native_before is None else native_before,
@@ -1393,6 +1426,67 @@ class FreshExportTests(unittest.TestCase):
                       result["checks"]["source_hash_binding"]["reason_codes"])
         self.assertEqual(result["checks"]["exact_topology_delta"]["status"], "NOT_RUN")
 
+    def test_a_read_only_dependency_changed_during_the_exports_is_not_unchanged(self):
+        """Section 9: the dependency set and content must hold from start to end.
+
+        bind_inputs() reads the declared manifests once, before the exports.  A
+        manifest comparison only proves the two declarations agree with each
+        other; a read-only dependency rewritten while the exports ran used to
+        leave dependencies_unchanged=true.
+        """
+        request, _ = self.scenario(dependency="device.lib")
+        dependency = Path(request["snapshot_root"]) / "device.lib"
+        real_export = verification.fresh_export
+
+        def exporting(export_request):
+            outcome = real_export(export_request)
+            if export_request["role"] == "AFTER":
+                dependency.write_bytes(b"tampered dependency bytes")
+            return outcome
+
+        with mock.patch.object(verification, "fresh_export", exporting):
+            result = verification.verify_stage(request)
+        self.assertEqual(result["status"], "BLOCKED", result["reasons"])
+        self.assertIn("REPAIR_INPUT_DRIFT", [r["code"] for r in result["reasons"]])
+        self.assertFalse(result["dependencies_unchanged"])
+
+    def test_a_launcher_argv_is_not_part_of_the_frozen_command(self):
+        """The frozen command is kicad-cli sch export netlist ..., not a wrapper.
+
+        A non-empty launcher would make the digested kicad-cli only an argument
+        to some other program, so the program that actually ran need not be the
+        one that was pinned.
+        """
+        result = self.export(name="launcher.kicad_sch", launcher_argv=[sys.executable])
+        self.assertEqual(result["status"], "BLOCKED", result["reasons"])
+        self.assertEqual(result["reasons"][0]["code"], "REPAIR_INPUT_DRIFT")
+
+    def test_a_declared_library_that_changes_during_the_export_is_a_tool_error(self):
+        """A declared symbol library is bound by bytes, not by its path string."""
+        real_read = verification._read_bytes
+        seen = []
+
+        def drifting(path):
+            raw = real_read(path)
+            if str(path) == str(self.library):
+                seen.append(path)
+                if len(seen) > 1:
+                    return raw + b"\n"
+            return raw
+
+        with mock.patch.object(verification, "_read_bytes", side_effect=drifting):
+            result = self.export(name="lib_drift.kicad_sch")
+        self.assertGreater(len(seen), 1, "the post-run library digest check never ran")
+        self.assertEqual(result["status"], "TOOL_ERROR", result["reasons"])
+        self.assertEqual(result["reasons"][0]["code"], "REPAIR_TOOL_UNAVAILABLE")
+
+    def test_a_declared_library_that_is_missing_is_not_bound(self):
+        missing = {"version": 1, "files": [
+            {"path": str(self.root / "missing.kicad_sym"), "sha256": "0" * 64,
+             "size_bytes": 4, "role": "READONLY_DEPENDENCY"}]}
+        result = self.export(name="lib_missing.kicad_sch", libraries=missing)
+        self.assertEqual(result["status"], "TOOL_ERROR", result["reasons"])
+        self.assertEqual(result["reasons"][0]["code"], "REPAIR_TOOL_UNAVAILABLE")
 
     def test_the_export_format_of_kicad_10_0_5_is_modelled_exactly(self):
         """Pins come from net nodes; virtual power symbols stay out of both."""
@@ -1479,10 +1573,15 @@ class NativeKiCadExportTests(unittest.TestCase):
 
     def test_the_real_export_is_fresh_parseable_and_projects_onto_the_native_read(self):
         binary = Path(self.kicad).read_bytes()
+        # The DC-04 fixture carries its symbols embedded, so there is no external
+        # symbol library to bind; the empty manifests are the host's explicit
+        # statement of that, not a silent omission.
         toolchain = {"version": 1, "kicad_cli": self.kicad, "kicad_version": "10.0.5",
                      "kicad_cli_sha256": hashlib.sha256(binary).hexdigest(),
                      "launcher_argv": [], "arguments": list(verification.EXPORT_ARGUMENTS),
-                     "timeout_seconds": 60, "environment": {}}
+                     "timeout_seconds": 60, "environment": {},
+                     "libraries": {"version": 1, "files": []},
+                     "configs": {"version": 1, "files": []}}
         self.assertEqual(toolchain["kicad_cli_sha256"].upper(), self.PINNED_KICAD_SHA256,
                          "the available kicad-cli is not the pinned 10.0.5 binary")
         source_root = self.root / "src"
@@ -1552,17 +1651,38 @@ class C3PerturbationTests(unittest.TestCase):
         self.stub = self.root / "fake_kicad_cli.py"
         self.stub.write_text(STUB_CLI, encoding="utf-8")
         self.stub_sha = hashlib.sha256(self.stub.read_bytes()).hexdigest()
+        self.library = self.root / "symbols.kicad_sym"
+        self.library.write_bytes(b'(kicad_symbol_lib (version 20231120) (symbol "R"))')
+        self.config = self.root / "kicad_common.json"
+        self.config.write_bytes(b'{"environment": {}}')
+        self._seam = mock.patch.object(verification, "_spawn", self.fake_spawn)
+        self._seam.start()
+        self.addCleanup(self._seam.stop)
         self._scenarios = 0
 
     def tearDown(self):
         self._tmp.cleanup()
 
+    def fake_spawn(self, argv, **kwargs):
+        """TEST_ONLY process seam: run the stub where the pinned binary would run."""
+        return subprocess.run([sys.executable, str(self.stub)] + list(argv[1:]), **kwargs)
+
+    def file_manifest(self, *paths):
+        rows = []
+        for path in paths:
+            raw = Path(path).read_bytes()
+            rows.append({"path": str(path), "sha256": hashlib.sha256(raw).hexdigest(),
+                         "size_bytes": len(raw), "role": "READONLY_DEPENDENCY"})
+        return {"version": 1, "files": rows}
+
     def toolchain(self, **overrides):
         manifest = {"version": 1, "kicad_cli": str(self.stub),
                     "kicad_version": "10.0.5", "kicad_cli_sha256": self.stub_sha,
-                    "launcher_argv": [sys.executable],
+                    "launcher_argv": [],
                     "arguments": list(verification.EXPORT_ARGUMENTS),
-                    "timeout_seconds": 60, "environment": {}}
+                    "timeout_seconds": 60, "environment": {},
+                    "libraries": self.file_manifest(self.library),
+                    "configs": self.file_manifest(self.config)}
         manifest.update(overrides)
         return manifest
 
@@ -1755,11 +1875,40 @@ class C3PerturbationTests(unittest.TestCase):
 
     # -- C3-P7: a required check left NOT_RUN, and honest deferred statuses -----
     def test_p7_a_required_check_left_not_run_is_never_pass(self):
-        request, _ = self.scenario(stage_marker="drift_after_export")
-        result = verification.verify_stage(request)
+        """Direct perturbation: everything else passes and one check is NOT_RUN.
+
+        The earlier revision drove this through a stage-source drift, which fails
+        C3-P3 first and leaves the delta checks NOT_RUN for an unrelated reason --
+        a false red under criteria sheet section 1 rule 2.  Here the only
+        perturbation is the required check's own outcome.
+        """
+        request, _ = self.scenario()
+        not_run = {"status": "NOT_RUN", "actual_delta_sha256": None,
+                   "unexpected": [], "missing": [], "reasons": []}
+        with mock.patch.object(verification, "compare_delta", return_value=not_run):
+            result = verification.verify_stage(request)
         self.assertNotPass(result, "C3-P7")
         self.assertEqual(result["checks"]["exact_topology_delta"]["status"], "NOT_RUN")
-        self.assertEqual(result["checks"]["protected_diff"]["status"], "NOT_RUN")
+        # the other three required checks really did pass: the red is this check
+        self.assertEqual(result["checks"]["fresh_export"]["status"], "PASS")
+        self.assertEqual(result["checks"]["source_hash_binding"]["status"], "PASS")
+        self.assertEqual(result["checks"]["protected_diff"]["status"], "PASS")
+        self.assertEqual(result["status"], "FAIL")
+
+    def test_p7_a_forged_deferred_status_is_never_pass(self):
+        """Direct perturbation: deferred.erc is written PASS while all else passes.
+
+        The PASS invariant used to read the mutable _DEFERRED mapping, so a
+        forged entry agreed with itself and the receipt could carry status=PASS
+        together with deferred.erc=PASS.
+        """
+        request, _ = self.scenario()
+        with mock.patch.dict(verification._DEFERRED, {"erc": "PASS"}):
+            result = verification.verify_stage(request)
+        self.assertNotPass(result, "C3-P7")
+        self.assertEqual(result["deferred"]["erc"], "PASS")
+        self.assertEqual(result["checks"]["exact_topology_delta"]["status"], "PASS")
+        self.assertEqual(result["status"], "UNKNOWN")
 
     def test_p7_the_deferred_checks_are_always_not_run(self):
         request, _ = self.scenario()
