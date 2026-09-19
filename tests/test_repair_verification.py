@@ -936,7 +936,8 @@ class SourceParserTests(unittest.TestCase):
 
 
 
-STUB_CLI = '''import os
+STUB_CLI = '''import json
+import os
 import sys
 import time
 
@@ -960,6 +961,9 @@ else:
     payload = b'<export version="E"><components><comp ref="R1"><pins><pin num="1"/><pin num="2"/></pins></comp></components><nets><net code="1" name="A"><node ref="R1" pin="1"/></net><net code="2" name="B"><node ref="R1" pin="2"/></net></nets></export>'
 with open(output, "wb") as handle:
     handle.write(payload)
+if os.path.exists(os.path.join(folder, "dump_environment")):
+    with open(os.path.join(os.path.dirname(output), "env.json"), "w", encoding="utf-8") as handle:
+        json.dump(dict(os.environ), handle)
 if os.path.exists(os.path.join(folder, "drift_after_export")):
     with open(source, "ab") as handle:
         handle.write(b"drift")
@@ -995,6 +999,26 @@ def _make_directory_link(target, link):
     except OSError:
         return None
     return str(link)
+
+
+def declared_child_environment(extra=None):
+    """TEST_ONLY: the explicit child environment a host has to declare.
+
+    Production passes the declared manifest environment and nothing else, so a
+    test host must name the variables the OS loader needs (SYSTEMROOT, PATH, ...)
+    in the manifest -- which is the point: what the child receives is what gets
+    hashed.  A child started with an empty environment does not even run on
+    Windows (WinError 87).
+    """
+    declared = {}
+    for name in ("SYSTEMROOT", "windir", "PATH", "PATHEXT", "TEMP", "TMP", "COMSPEC",
+                 "HOME", "LANG", "LC_ALL", "TMPDIR", "PWD", "SHELL",
+                 "USERPROFILE", "APPDATA", "LOCALAPPDATA", "NUMBER_OF_PROCESSORS"):
+        if name in os.environ:
+            declared[name] = os.environ[name]
+    if extra:
+        declared.update(extra)
+    return declared
 
 
 class FreshExportTests(unittest.TestCase):
@@ -1042,7 +1066,8 @@ class FreshExportTests(unittest.TestCase):
                     "kicad_version": "10.0.5", "kicad_cli_sha256": self.stub_sha,
                     "launcher_argv": [],
                     "arguments": list(verification.EXPORT_ARGUMENTS),
-                    "timeout_seconds": 60, "environment": {},
+                    "timeout_seconds": 60,
+                    "environment": declared_child_environment(),
                     "libraries": self.file_manifest(self.library),
                     "configs": self.file_manifest(self.config)}
         manifest.update(overrides)
@@ -1450,6 +1475,26 @@ class FreshExportTests(unittest.TestCase):
         self.assertIn("REPAIR_INPUT_DRIFT", [r["code"] for r in result["reasons"]])
         self.assertFalse(result["dependencies_unchanged"])
 
+    def test_the_child_process_environment_is_exactly_the_bound_manifest(self):
+        """Section 9 fixes the host-configured symbol environment, so the child
+        must receive the declared map and nothing else.
+
+        The export used to start from dict(os.environ) and then override it, so
+        every ambient KICAD-*/HOME/APPDATA value reached kicad-cli while
+        toolchain_sha256 covered only the declared overlay -- the same class of
+        hole as a launcher, one layer down.  The stub dumps its own os.environ,
+        so this observes the real child, not the caller's intention.
+        """
+        declared = declared_child_environment({"AEDL_DECLARED_PROBE": "bound"})
+        with mock.patch.dict(os.environ, {"AEDL_UNBOUND_PROBE": "leaked"}):
+            result = self.export(name="env_probe.kicad_sch", marker="dump_environment",
+                                 environment=declared)
+        self.assertEqual(result["status"], "PASS", result["reasons"])
+        observed = json.loads((Path(result["proof"]["xml_path"]).parent
+                               / "env.json").read_text(encoding="utf-8"))
+        self.assertEqual(observed.get("AEDL_DECLARED_PROBE"), "bound")
+        self.assertNotIn("AEDL_UNBOUND_PROBE", observed)
+
     def test_a_launcher_argv_is_not_part_of_the_frozen_command(self):
         """The frozen command is kicad-cli sch export netlist ..., not a wrapper.
 
@@ -1579,7 +1624,8 @@ class NativeKiCadExportTests(unittest.TestCase):
         toolchain = {"version": 1, "kicad_cli": self.kicad, "kicad_version": "10.0.5",
                      "kicad_cli_sha256": hashlib.sha256(binary).hexdigest(),
                      "launcher_argv": [], "arguments": list(verification.EXPORT_ARGUMENTS),
-                     "timeout_seconds": 60, "environment": {},
+                     "timeout_seconds": 60,
+                     "environment": declared_child_environment(),
                      "libraries": {"version": 1, "files": []},
                      "configs": {"version": 1, "files": []}}
         self.assertEqual(toolchain["kicad_cli_sha256"].upper(), self.PINNED_KICAD_SHA256,
@@ -1680,7 +1726,8 @@ class C3PerturbationTests(unittest.TestCase):
                     "kicad_version": "10.0.5", "kicad_cli_sha256": self.stub_sha,
                     "launcher_argv": [],
                     "arguments": list(verification.EXPORT_ARGUMENTS),
-                    "timeout_seconds": 60, "environment": {},
+                    "timeout_seconds": 60,
+                    "environment": declared_child_environment(),
                     "libraries": self.file_manifest(self.library),
                     "configs": self.file_manifest(self.config)}
         manifest.update(overrides)

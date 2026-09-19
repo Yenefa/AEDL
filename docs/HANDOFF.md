@@ -453,3 +453,14 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
 - 验证：`py -3.9 -m py_compile` 两文件 exit 0；`tests.test_repair_verification` **94 OK（skipped=1）**（新增 7 例）；全量 `discover -s tests` 与 `dev_gate` 结果见台账条目。
 - **未做**：C4/C5/C6；未改判据、未新增夹具、未动 `run_gates.py` / `schematic_semantics.py` / `tools/repair_pipeline.py` / `tools/akcli_adapter.py`；`notes/b5-acceptance/**` 一字未动。
 - 状态：`PENDING_HUMAN_REVIEW`。
+
+## 2026-09-19 C3 第三轮整改复审收口（同卡 PR1-C3，分支 feat-pr1-c3-fresh-export，PR #72）
+
+- 触发：Owner 复核 head `354cf72` —— 三个原 blocker（C3-P7 直接扰动、dependency end-state rebinding、direct kicad-cli execution + library/config manifests）全部 **PASS**；仅剩 **1 个代码 blocker**：**实际子进程 environment 未被绑定**。
+- **唯一剩余 blocker（已闭）**：原实现 `environment = dict(os.environ) + toolchain["environment"]`，而 `toolchain_sha256` 只 hash 后者 —— 宿主的 `KICAD_*` / `HOME` / `APPDATA` 等变量可以在**不被绑定、也不出现在回执**的情况下影响 kicad-cli 的配置与查找路径。与刚修掉的 launcher 洞同属一类（「声明的被绑定了，实际执行的没有」）。修法：`fresh_export()` 只把**声明环境本身**交给 child；宿主若需要 `SYSTEMROOT` / `TEMP` / `PATH`，必须显式写进 manifest，从而进入 canonical hash。
+- **反向回归（真子进程观测）**：桩 CLI 新增 `dump_environment` 分支，把自己的 `os.environ` 落盘；新用例在宿主 `os.environ` 注入未声明的 `AEDL_UNBOUND_PROBE`，断言子进程**看不到**它、而声明过的 `AEDL_DECLARED_PROBE` 必须看到。**证伪**：还原 ambient merge 后该回归报 `'AEDL_UNBOUND_PROBE' unexpectedly found`，并把整份宿主环境（含 `DSH_*` / `WEBOTS_HOME` / 完整 `PATH`）打印出来 —— 这正是原先会一路传给 KiCad 的东西。
+- **测试宿主需显式声明环境**：新增 TEST_ONLY 助手 `declared_child_environment()`，把 `SYSTEMROOT` / `windir` / `PATH` / `PATHEXT` / `TEMP` / `TMP` / `COMSPEC` / `HOME` 等**按平台存在与否**显式放进 manifest。实测：空环境在 Windows 上子进程根本无法启动（`OSError [WinError 87]`），该 essential 集合可正常启动 —— 与 Owner 的说明一致。
+- **Owner 裁定的两个残余（已按裁定处理）**：① 完整 `{akcli, python, kicad, libraries, configs, execution}` 统一 schema **不要求**，留到 **C5 接线前**统一（已在 envelope 登记 follow-up：冻结 host-level canonical binding → 派生 C3/C4 slice → 定义跨层 equality）；② `libraries` / `configs` **允许显式为空**（表示该 qualification profile 无外部 library/config 依赖），不再为「列表必须非空」伪造文件。
+- 验证：`py -3.9 -m py_compile` exit 0；`tests.test_repair_verification` **95 OK（skipped=1）**，opt-in 真 KiCad 10.0.5 **95 OK（无 skip）**；全量 `discover -s tests`、`admit`、`dev_gate`、双平台 CI 见台账与本轮回执。
+- **未做**：C4/C5/C6；未改判据、未新增夹具、未动 `run_gates.py` / `schematic_semantics.py` / `tools/repair_pipeline.py` / `tools/akcli_adapter.py`；`notes/b5-acceptance/**` 一字未动。
+- 状态：`PENDING_HUMAN_REVIEW`。

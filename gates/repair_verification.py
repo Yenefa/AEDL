@@ -1251,7 +1251,7 @@ def toolchain_manifest(manifest):
 
     The manifest carries the absolute kicad-cli path, its digest, the pinned
     version, the frozen command arguments, the digested symbol-library and
-    KiCad-config files the export consumes, and the symbol/config environment.
+    KiCad-config files the export consumes, and the complete child environment.
     A missing value or a different version never proceeds silently.
     """
     _closed(manifest, _TOOLCHAIN_FIELDS, "toolchain manifest")
@@ -1278,6 +1278,8 @@ def toolchain_manifest(manifest):
                                % EXPORT_TIMEOUT_SECONDS)
     _host_file_manifest(manifest["libraries"], "library")
     _host_file_manifest(manifest["configs"], "config")
+    # This mapping is the child's complete environment, not an overlay applied
+    # on top of os.environ.
     environment = manifest["environment"]
     if not isinstance(environment, dict):
         raise ObservationError("the toolchain environment must be a mapping")
@@ -1333,8 +1335,12 @@ def fresh_export(request):
         xml_path = os.path.join(output_dir, role.lower() + ".net.xml")
         argv = ([executable] + list(toolchain["arguments"]) + [xml_path, source])
         before = hash_bytes(_read_bytes(source))
-        environment = dict(os.environ)
-        environment.update(toolchain["environment"])
+        # The child receives exactly the declared environment, never an ambient
+        # os.environ copy: toolchain_sha256 hashes the declared map, so anything
+        # inherited silently would reach kicad-cli without being bound -- the
+        # same class of hole as a launcher, one layer down.  A host that needs
+        # SYSTEMROOT/TEMP/PATH declares them in the manifest.
+        environment = dict(toolchain["environment"])
         try:
             completed = _spawn(argv, shell=False, cwd=output_dir,
                                timeout=toolchain["timeout_seconds"],

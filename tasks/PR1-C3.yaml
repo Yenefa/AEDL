@@ -29,6 +29,13 @@ base:
 #      （toolchain manifest 形状变更，故 change_budget.contract_change 由 false 改为 true）；
 #   ④ envelope goal 与 PR 实际范围同步（原文仍写「只做小项 1–2」）。
 #   改动仍限在 allowed_paths 内，未扩到 C4/C5/C6。
+#
+# 第三轮整改的复审判定（Owner，2026-09-19）：3 个代码点全部 PASS，仅剩 1 个代码
+# blocker —— **实际子进程 environment 未绑定**（原实现 dict(os.environ) + overlay，
+# 而 toolchain_sha256 只 hash 了 overlay）。本轮改为「child 只收到被 canonical hash
+# 绑定的声明环境」，并补反向回归（宿主未声明的变量不得出现在子进程里）。
+# Owner 同时裁定：完整 {akcli, python, kicad, libraries, configs, execution} 统一
+# toolchain schema 留到 **C5 接线前**处理，不挡本卡；libraries/configs 允许显式为空。
 
 goal: |
   PR-1 Commit 3（合同 §11 C3）：gates/repair_verification.py 的 fresh KiCad 导出绑定，
@@ -137,6 +144,16 @@ acceptance: |
       前后各复核一次；缺失 / 不符 / 运行中变化 → TOOL_ERROR / REPAIR_TOOL_UNAVAILABLE。
     - envelope goal 同步为「四个小项 + P1..P7 资格」；change_budget.contract_change 由
       false 改为 **true**（上述 toolchain manifest 形状变更），理由见本卡注释。
+    - **子进程 environment 全量绑定（Owner 复审后唯一剩余 blocker）**：原实现
+      environment = dict(os.environ) + toolchain["environment"]，而 toolchain_sha256 只覆盖
+      后者 —— 宿主环境变量可在不被绑定、不被回执记录的情况下影响 KiCad 的配置与查找路径。
+      已改为 child 只收到声明环境本身；宿主需要的 SYSTEMROOT / TEMP / PATH 必须显式写进
+      manifest。回归用桩 CLI dump 真实子进程 os.environ：未声明的宿主变量不得出现、
+      声明的探针必须出现。**证伪**：还原 ambient merge 后该回归报
+      「'AEDL_UNBOUND_PROBE' unexpectedly found」。
+  - **follow-up（Owner 裁定，不挡本卡）**：C5 接线前冻结 host-level canonical toolchain
+    binding → 派生 C3 的 KiCad slice 与 C4 的 akcli/Python slice → 定义跨层 toolchain
+    binding equality。本卡不做该重构。
   - 台账 + HANDOFF 如实追加
 
 change_budget:
