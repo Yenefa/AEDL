@@ -1,0 +1,111 @@
+# Task Envelope — PR1-C5 单轮事务闭环（repair_pipeline 的 bind_policy / run_round / recover_incomplete）
+# 手写自 PR-1 实现合同 §8（模块接口 L209-211）/ §10（状态机与回执 L360/L399）/ §11 C5 acceptance L426。
+# Human review + admission required before execution.
+
+task: PR1-C5
+
+base:
+  # 工作分支。tools/admit.py:205-209 要求 base.branch == 当前分支（同 PR1-C3 / PR1-C5-PRE 写法）。
+  branch: feat-pr1-c5-single-round-transaction
+  sha: 669aa1622385d598758c0376bc874ff7ca0842f8
+
+# 开卡方式（Owner 决定，见 exceptions.allow_drift.decision_ref）：envelope-first ——
+# 本卡首个 commit 只含本文件，随后在 clean tree 上执行 admit --allow-drift。
+# 原因：tools/admit.py:210-226 使「envelope 未提交 → 工作树 dirty」与
+# 「envelope 已提交 → HEAD != base.sha」二者必居其一，零例外在结构上不可达。
+
+# 边界（Owner 指定，防止 C5 接错；同时是 acceptance 的硬项）：
+# 1. C4 侧喂给 same_host_toolchain() 的 SHA 只能是 **HostPatch.toolchain_sha256**
+#    —— 即 apply_stage() 在 tools/akcli_adapter.py:1101 实际校验并执行的那一个。
+#    StageApplyResult 本身不携带 toolchain_sha256；**不得**事后从 StageApplyResult.tool
+#    拼一个新的 digest。C3 侧取 ThinVerificationResult.toolchain_sha256。
+# 2. candidate_symbol_digest 是 **before-candidate binding**，不是 transaction-after 属性：
+#    PRECHECK 由宿主提供 → derive_akcli_slice(...) → HostPatch.toolchain_sha256 →
+#    与 C4 native_before.tool.symbol_digest 实测核对 → 不一致即**写入前** BLOCKED。
+#    不得取 native-after：写入新增 symbol 时 after digest 可以合法变化。
+# 3. **不得夸大 same_host_toolchain() 的语义**：C4 的 _run_worker()
+#    （tools/akcli_adapter.py:710-711）仍为 dict(os.environ) + toolchain["environment"]，
+#    因此 HostToolchainBinding.environment.akcli 证明的是 **C4 declared overlay identity**，
+#    不是「整个实际 child environment 完全封闭」。C3 侧已在 PR #72 改为完整声明环境。
+#    若 C6 要做执行环境的完整 provenance qualification，再单独硬化；本卡不得把该性质
+#    写得比 C4 实际保证更强。
+
+goal: |
+  PR-1 Commit 5（合同 §11 C5）：在 tools/repair_pipeline.py 实现单轮事务闭环，把已经成熟的
+  C1 policy + C2 delta + C3 verifier + C4 adapter **串起来**，不造新能力。
+  状态机（§10）：PRECHECK → SNAPSHOT → STAGE_APPLY → DELTA_CHECK → KICAD_VERIFY → COMMIT，
+  任一失败 → ROLLBACK。三个入口按合同 §8 L209-211 冻结：
+    bind_policy(host_context, proposal, native_before) -> BoundPolicyResult
+    run_round(host_context, proposal_utf8: bytes)      -> TransactionReceipt
+    recover_incomplete(host_context)                   -> RecoveryResult
+  回执字段按 §10 L399：status / last_phase / cause_status / reasons，
+  且 deferred = {erc, semantic_runner, formal_evidence} 恒为 NOT_RUN。
+  跨层同源由 PR1-C5-PRE 交付的 tools/host_toolchain.same_host_toolchain() 证明，
+  SHA 来源与 symbol digest 时点按本文件顶部边界 1/2 固定。
+
+scope: |
+  Writable paths are whitelisted in allowed_paths; everything else is FOREIGN (read-only).
+  只改 tools/repair_pipeline.py 并新增其测试；C3 verifier / C4 adapter / 冻结 schema /
+  host_toolchain 全部**只读**——C5 是编排层，不得修改被编排层的语义。
+  不实现 C6 原生资格；不碰 SchGen scorer、GUI、更多 generator、C7、PR-2。
+  C5 不得新增任何 C1-C4 尚不具备的能力（例如新的 reason code、新的 op、新的路由）。
+
+dependencies: []
+
+allowed_paths:
+  - tools/repair_pipeline.py
+  - tests/test_repair_pipeline.py
+  - tests/test_repair_contract.py
+  - tasks/PR1-C5.yaml
+  - docs/HANDOFF.md
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/compliance/ai-usage/**
+
+forbidden_paths:
+  - notes/b5-acceptance/** # 判据冻结后不改
+  - gates/repair_verification.py # C3：只读，C5 只调用
+  - tools/akcli_adapter.py # C4：只读，C5 只调用
+  - tools/host_toolchain.py # PR1-C5-PRE 交付物：只读，C5 只调用
+  - src/** # 冻结 schema / policy 不改
+  - gates/run_gates.py
+  - gates/schematic_semantics.py
+  - sandbox_runtime/**
+  - docs/evidence/**
+  - delivery/**
+
+acceptance: |
+  - 合同 §11 C5 入口全绿：python -X utf8 -m unittest tests.test_repair_pipeline tests.test_repair_contract
+  - 三个入口实现且闭合；未知字段 / 缺字段 / 非 canonical JSON 一律 fail-closed
+  - 状态机与 §10 状态集一致：COMMITTED | NO_CHANGE | REFUSED | ROLLBACK | BLOCKED | TOOL_ERROR | UNKNOWN
+  - 回执携带 status / last_phase / cause_status / reasons，且 deferred 三项恒 NOT_RUN
+  - **COMMITTED 的必要条件**：C3 verify_stage 返回 PASS **且** recheck_reports() 与 bind_inputs()
+    双双通过；任一不成立即不得 COMMITTED
+  - **ROLLBACK 必须回到字节一致的 snapshot**（对恢复后的字节重新哈希并断言与开始时相等）；
+    恢复不完整或状态歧义 → REPAIR_ROLLBACK_FAILED / REPAIR_RECOVERY_AMBIGUOUS，不得静默
+  - **REFUSE 路径绝不触碰 stage**（断言 stage 根在整轮中字节未变）
+  - **跨层同源（边界 1）**：c3_sha 取 ThinVerificationResult.toolchain_sha256；
+    c4_sha 取 apply_stage 实际使用的 HostPatch.toolchain_sha256；禁止从 StageApplyResult.tool 重建
+  - **symbol digest 时点（边界 2）**：candidate_symbol_digest 在 PRECHECK 固定为 before-candidate
+    binding，并与 C4 native_before.tool.symbol_digest 实测核对；不一致在**写入前** BLOCKED。
+    回归：构造一个 after 合法变化而 before 不匹配的场景 → 必须在 apply 前拒绝
+  - **不得夸大（边界 3）**：C5 的文档/回执不得声称 akcli 执行环境已完全封闭；如实标注为
+    declared overlay identity，并把 C4 的 ambient 环境列为 limitation
+  - 台账 + HANDOFF 如实追加
+
+change_budget:
+  expected_files: 7
+  expected_modules: [tools, tests, tasks, docs]
+  cross_module: true
+  # 实现合同既有接口，不修改契约本身
+  contract_change: false
+  evidence_semantics_change: false
+
+exceptions:
+  # Agent cannot self-authorize. 授权来源见 decision_ref（人类操作者决定，agent 仅登记）。
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "https://github.com/Yenefa/AEDL/issues/83#issuecomment-5746094386"
+    reason: "Envelope-first governance: the task envelope is committed alone from base 669aa1622385d598758c0376bc874ff7ca0842f8 before admission, so HEAD necessarily differs from base.sha from that first commit onward, while the worktree stays clean at admission time. This exception authorizes --allow-drift on this branch for that drift, and nothing else: it does not include allow_dirty and does not authorize any functional code to enter the worktree before admission passes."
+
+escalation:
+  owner: Yenefa
