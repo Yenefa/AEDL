@@ -98,7 +98,7 @@ exceptions:
   allow_drift:
     granted_by: Yenefa
     decision_ref: "https://github.com/Yenefa/AEDL/issues/83#issuecomment-5742642366"
-    reason: "Envelope-first governance: the task envelope is committed alone from base 4e441ca58091bed64dd3926058f665a47c2a2ed7 before admission, so HEAD necessarily differs from base.sha while the worktree remains clean. This exception authorizes that envelope-only baseline drift and nothing else. It does not include allow_dirty and does not authorize any functional code to enter the worktree before admission passes."
+    reason: "Envelope-first governance: the task envelope is committed alone from base 4e441ca58091bed64dd3926058f665a47c2a2ed7 before admission, so HEAD necessarily differs from base.sha from that first commit onward, while the worktree stays clean at admission time. This exception authorizes --allow-drift on this branch for that drift, and nothing else: it does not include allow_dirty and does not authorize any functional code to enter the worktree before admission passes."
 
 escalation:
   owner: Yenefa
