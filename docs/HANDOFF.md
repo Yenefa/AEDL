@@ -385,3 +385,82 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
   - **第二轮 rebase（2026-09-18，Owner 指示「PR 债务清零、WIP=1」）**：#69（PBF handoff）与 #82（SchGen ingest 重切）合入后 rebase 到 master **`f486e013`**。冲突同样仅在 `docs/HANDOFF.md` 的追加段落（master 侧 `#82` 段落 vs 本卡段落，保留双方）与生成的 `AI_USAGE_LOG.md`（取 master 侧后 `tools.build_ai_usage_index build` 重建，107 条）。envelope `base.sha` 由 `0626375…` 重锚为 `f486e013…`，`allow_drift` 的 decision_ref 同步。**本卡未加任何功能**（C5/C6、C4-P7 round-level 均未触碰）。
   - 本轮实测（head `5d43ecc`，真 akcli 0.21.0 + CPython 3.11.15）：tests.test_akcli_adapter 未 opt-in **86 OK（skipped=13）**；opt-in 真工具 **86 OK（skipped=1）**；opt-in 但 `AEDL_AKCLI_PYTHON` 指向不存在路径 **FAILED (failures=12, skipped=1)**（FAIL 而非 SKIP）；全量 `discover -s tests` opt-in **742 OK（skipped=1）**；`dev_gate --envelope tasks/PR1-C4-P2P8.yaml --admit-receipt` → **status pass / exit 0，8/8，excluded=[]**。
 - 状态：PENDING_HUMAN_REVIEW。
+
+- 状态：PENDING_HUMAN_REVIEW。
+
+- 状态：PENDING_HUMAN_REVIEW。
+
+## 2026-09-14 J1 工具链决定 + PR-1 C3 小项 1–2 候选交接（AI-20260914-DSH-6654BD313BFA58B37EC55C323763F6A2）
+
+### J1 工具链决定（Yenefa 2026-09-14）
+
+- **决定**：钉版工具链由 Yenefa（项目负责人）在主线机安装并持有绝对路径；Lior 侧镜像同一套并做双机校验（`tools/check_environment.py`），该镜像属 S1a／关键路径。
+- **钉版**（均为仓库已冻结值，非本次新定）：
+  - KiCad **10.0.5**：`winget` 默认给 10.0.6，必须 `--version 10.0.5 --exact`（`docs/competition/OPEN_OUTPUTS.md`）；跨补丁版会改变导出与哈希。
+  - `akcli-kicad==0.21.0`、protocol 2、发行包 SHA256 `949ea4d51497ec5413ec19ad15454972d2c30b58f1447493b7b5d99031330df6`、upstream `68c2df5e43db2f822ab8dbfea36f777396897d8d`（PR-1 实现合同 §1）。
+  - 固定 CPython 3.11 解释器（akcli worker）。
+- **环境变量**（合同 §11）：`AEDL_PR1_NATIVE=1`、`AEDL_AKCLI_PYTHON=<固定 3.11 绝对路径>`、`AEDL_KICAD_CLI=<10.0.5 绝对路径>`；后者必须显式指向 10.0.5 的可执行文件，不得由 PATH 决定。
+- **并存风险（本次新记录）**：本机既有 Y4 六份 current-observation 候选由 KiCad **10.0.6** 导出（`notes/y4/README.md`）。10.0.6 产物已在用，10.0.5 才是 verifier 的验收版本；两者并存时不得混用导出证明。
+- **安装状态**：`NOT_RUN`（2026-09-14 本机复核：`kicad-cli`、`akcli` 均 MISSING；与 PR #70 的 J1 readiness 一致）。绝对路径 `TO_VERIFY`，安装完成后回填本节。
+- **第三方前置**：`RES-005 akcli-kicad` 仍为 `TO_VERIFY`（License／安装来源链）；因原生链路依赖它，实际是 C6 前置，须与 S1a 一起关闭。
+
+### C3 小项 1–2 候选（DSH 会话；分支 `feat-pr1-c3-fresh-export`，base `0d31a8b`）
+
+- **落地**：合同 §11 C3 的**四个小项全部**——`gates/repair_verification.py` 的 `toolchain_manifest()` / `fresh_export()` / `bind_inputs()` / `verify_stage()` / `write_thin_verification()`（两次独立新导出、导出前/后/解析结束三个 source SHA256、导出目录本次新建、不复用旧 XML、exit=0 不等于成功；kicadxml 组件清单与网络分组和 source AST、native 观察三方互校；四项 required checks 齐备才可能 PASS），与 `tests/test_repair_verification.py::FreshExportTests`（**14 例**，宿主桩 CLI，不读 fixture）。
+- **验证**：`py -3.9 -m unittest tests.test_repair_verification` → 70 OK；`py -3.9 -m unittest discover -s tests` → **Ran 639, OK**；`py -3.9 -m tools.dev_gate --envelope tasks/PR1-C3.yaml --admit-receipt …` → status pass（main_tests 639 OK、sandbox 283 OK）。
+- **NOT_RUN**：真 KiCad 10.0.5 原生导出；C3-P1..P7 独立扰动（属 Percy／B5）。`verify_stage` 已存在并只在四项 required checks 全 PASS、两份 coverage 完整且 keyset 相等、两份 parser agreement PASS、delta hash 相等且三个 diff 列表为空时返回 PASS；其余一律 `BLOCKED / TOOL_ERROR / FAIL / UNKNOWN`，未做项保持 `NOT_RUN`。
+- **最大未验证面已关闭（2026-09-14）**：真实 `kicad-cli 10.0.5` 已就位（`C:\Users\Ryan Gosling\AppData\Local\Programs\KiCad\10.0\bin\kicad-cli.exe`，sha256 `FC142E3B…`），真实 kicadxml 与 `_projected_coverage` 已对照：KiCad 10.0.5 的 `<comp>` 不含 `<pins>`，且 `#` 前缀虚拟符号（PWR_FLAG）既不在 `<components>` 也不在 `<node>`；据此修正后真实 DC-01 导出 `coverage.complete=true`、`agree=true`，并由新测试钉住格式。`akcli-kicad==0.21.0` 装在 `project_020_AEDL\toolchain\py311`（wheel sha256 `TO_VERIFY`）。
+- **第一个真实 native 修复（2026-09-14，scratch 副本，非 candidate）**：DC-04 `fault.kicad_sch` 经 strict 命令 `akcli draw … --apply --strict-nets --no-erc --json` → exit 0、`applied=true`、3/3 op ok、`connectivity=[]`、`net_diff` 显示 `+3V3: +R9.1`、`BOOT: +R9.2`；字节 `655F585D…` → `2F660180…`；修后 fresh 导出 exit 0，独立 read-back 恰 10 项预期差异，R9 实际连到 `/+3V3` 与 `/BOOT`。**未提交 candidate、未评 Benchmark 分**。
+- **外部审计交叉核对（2026-09-14）**：Codex 侧 `native-uplift-audit` 复核 master `0d31a8b` 与本 PR head `de30d25`；其 DC-04 native apply 记录与本条目补记②**逐字节一致**（before `655f585d…`、after `2f660180…`）→ 同钉版下可复现；strict DC-03 = exit 6 属预期（合同 §7 走 exception 路由）。
+- **公开 Benchmark 桥接已通（2026-09-14）**：`PCBSchemaGen_v2`（MIT @ `e07c545`，227 任务 + 确定性 5 层验证器）需要的 snapshot（`components[ref,part_id,pins]`＋`nets[name,endpoints]`）已由真实 KiCad 导出成功构造（DC-04 修复后：23 组件/29 net）；`run_phase2_checks(task_id=None)` 返回 0 error、reward 1.0（**无 task 时该分无语义**）。评分阶梯 `0.0/0.1/0.3/0.5/0.7/0.9/1.0` 由 `compute_reward_from_errors` 给出。**仍缺**：逐层任务评测协议、真实外部 AI 输入、主任务冻结（验收侧）。
+- **下一步**：C4 `tools/akcli_adapter.py`（把手工 strict 路径收进合同 §8 双路由与回执语义），随后 C5；本 Benchmark 桥接待任务冻结后正式入库。
+- **边界上报**：`docs/competition/SCOPE_BOUNDARY_W1.md` §2.3 的「`gates/repair_verification.py` 零文件 I/O，故结构上不可能读到 private 答案」论证，因 C3 按合同 §9 在该模块内执行导出而不再成立；需在 C3 合入时由 Owner 与验收侧改写为「宿主绝对路径绑定 + 只读声明根 + 扰动测试证明不读 private」。
+- **状态**：`PENDING_HUMAN_REVIEW`；未 merge、未 approve。下一步为 C3 小项 3–4。
+
+## 2026-09-18 C3 扰动资格 + 第二次 rebase（同卡 PR1-C3，分支 feat-pr1-c3-fresh-export，PR #72）
+
+- 触发：Owner 2026-09-18 指示 —— #78 merge 后以最新 master 为唯一基线，对 #72 执行「rebase → 清旧治理差异 → 路径安全 → toolchain binding → 真 KiCad 10.0.5 → **C3 perturbation qualification** → final review → merge」。
+- **rebase**：#69 / #82 / #78 合入后 rebase 到 master **`069aaf82`**。冲突仅 `docs/HANDOFF.md` 追加段（保留双方）与生成的 `AI_USAGE_LOG.md`（取 master 侧后 `tools.build_ai_usage_index build` 重建，108 条）。envelope `base.sha` 重锚 `f16b427…` → `069aaf82…`；「旧治理差异」（`docs/ID_MAP.md` / `tools/build_ai_usage_index.py`）在上一轮 rebase 已归零，本轮 diff 仍为 6 文件。
+- **路径安全 / toolchain binding / 真 KiCad 10.0.5**：均为上一轮已落地项，本轮 rebase 后**复跑验证仍绿**（`NativeKiCadExportTests` opt-in 通过）。
+- **C3-P1..C3-P7 扰动资格（本轮新增，判据 §2 C3 组）**：新增 `C3PerturbationTests`（14 例），逐条施加扰动并断言红落在判据指定的字段/状态；七条**均不得产生 PASS**（C3 层不产生 `COMMITTED`，那是 pipeline 的 `TransactionStatus`，属 C5 —— 以「无 PASS」如实记录，不冒充 C5 语义）。逐条落点表见 AI 台账条目 `AI-20260914-DSH-6654…`。
+- **资格发现并修复的真实缺陷（如实记录）**：`_sha()` 是纯校验器（校验后无返回值），而 `verify_stage` 写成 `result["patch_sha256"] = _sha(...)` / `result["bound_policy_sha256"] = _sha(...)` → 回执这两个字段**恒为 null**，判据 C3-P5 指定的绑定锚点在回执上读不到（P5 回归正是因此先红才暴露）。已改为「先校验、再显式携带该值」，并补回归 `test_p5_the_receipt_carries_the_patch_and_policy_bindings`。就地修复。
+- **新增只读复核 `recheck_reports(result, report_root)`**：§9 commit 谓词的**报告半边**（stage 半边是 `bind_inputs`）—— 重读回执点名的报告文件，被替换 / 改大小 / 缺失 / 链接一律拒绝；不执行工具、不发布任何东西。
+- 验证：`tests.test_repair_verification` 未 opt-in **89 OK（skipped=1）** / opt-in 真 KiCad 10.0.5 **89 OK** / opt-in 坏路径 **FAILED (failures=1)**（FAIL 而非 SKIP）；全量 `discover -s tests` 双 opt-in **775 OK（skipped=1）**、无 opt-in **775 OK（skipped=14）**。
+- **未做**：C5 / C6；未新增夹具、未改判据；`notes/b5-acceptance/**` 一字未动；正式 Evidence 未登记（`docs/evidence/**` 仍 forbidden）。
+- 状态：PENDING_HUMAN_REVIEW。
+
+## 2026-09-18 C3 复审整改（同卡 PR1-C3，分支 feat-pr1-c3-fresh-export，PR #72）
+
+- 触发：Owner 复审裁定 **「有价值但当前不可合」** —— 2 个 merge blocker + 1 个 P1；并明确「不要关；rebase 后修路径安全，再做真 KiCad qualification」。**Owner 明确扩 Scope**：本卡 `allowed_paths` 可含 `gates/repair_verification.py` 与 `tests/test_repair_verification.py`（此前 C4 线每张卡都把 `gates/**` 列为 forbidden —— 它是「验我的东西」的验证器）。
+- **rebase**：原 base `0d31a8b`，落后 master 18 个提交且 `CONFLICTING` → 已 rebase 到 master `f16b427`，干净重放 6 个提交；冲突仅 `docs/HANDOFF.md` 追加段与生成的 `AI_USAGE_LOG.md`（前者按时间顺序保留双方，后者取 master 侧后重新 build）。附带：原「登记 DSH actor」对 `docs/ID_MAP.md` 与 `tools/build_ai_usage_index.py` 的改动已被 master 吸收、**diff 归零**，故从 `allowed_paths` 移除。
+- **Blocker 1（`txn_id` 逃出 `report_root`）**：`_text()` 放行 `/` `\` `..`，而该 id 被 join 成 `report_root/exports/<txn_id>/<role>`，并嵌入 `write_thin_verification` 的输出文件名（后者同样可逃）。新增 `_identifier()`（`[A-Za-z0-9_-]{1,64}`），在 `fresh_export` / `bind_inputs` / `verify_stage` / `write_thin_verification` 四处统一校验。回归 5 种形态全部 `BLOCKED`/`REPAIR_INPUT_DRIFT`，且 report_root 之外无任何目录/文件产生。
+- **Blocker 2（`report_root` 父级 link/reparse 未封）**：原只有 `_absolute()`，随后 `os.makedirs()`。新增 `_has_linked_component()`（逐组件 no-link，与 C4 同规则），在 `verify_stage` 与 `write_thin_verification` 调用。**过程诚实记录**：第一版只检查了 `report_root` **自身**组件，而 junction 在 `report_root/exports` **内部** —— 回归 `test_the_report_root_must_not_traverse_a_link` 立刻以 `'PASS' != 'BLOCKED'` 失败，**是测试先抓到我的修复不完整**；把检查扩展到运行期真正创建的 `export_root` 与 `output_dir` 两级后才通过。
+- **P1（kicad-cli digest 只核一次）**：已在 subprocess 之后复核 `digest after == manifest digest`，不一致 → `TOOL_ERROR`/`REPAIR_TOOL_UNAVAILABLE`，与 C4 的 toolchain binding 哲学一致；回归用 mock 让执行后那次读取返回不同字节，并断言「执行后确实读了二进制」以防对照空转。
+- **真 KiCad 10.0.5 qualification（原 `NOT_RUN` 理由已不成立）**：本机钉版 `kicad-cli` SHA256 = `FC142E3B…D0C3`**与 C4 线一致**。新增 opt-in 用例 `NativeKiCadExportTests`（`AEDL_PR1_NATIVE=1` + `AEDL_KICAD_CLI`，变量名取自判据 §4）。实测 BEFORE/AFTER 各一次真导出 → `PASS`、`exit=0`、`completed=True`、XML 35839 B 可解析、**三个 source 哈希相等**；`_kicad_partition()` 在真导出上 → **20 components / 29 nets**；`_projected_coverage()` → **pin 82==82、component keyset 哈希相等、agree=True**。这正面回答了本 PR 自述的最大未知面（此前二者**只用人工构造 XML 验证过**）。
+- opt-in 语义：未 opt-in → `OK (skipped=1)`；opt-in + 钉版二进制 → `OK`；opt-in + 路径不存在 → **`FAILED (failures=1)`**（FAIL 而非 SKIP）。
+- 验证：`tests.test_repair_verification` **75 OK（skipped=1）**；三条新回归单独复跑均 `ok`（非 skip）。
+- **未做并如实声明**：**C3-P1..C3-P7 独立扰动执行 = `NOT_RUN`**（B5 验收侧、7 条扰动，属另一张卡的量级）；未新增夹具、未改判据、未动 `run_gates.py` / `schematic_semantics.py` / `tools/repair_pipeline.py` / `tools/akcli_adapter.py`。
+- 状态：`PENDING_HUMAN_REVIEW`。
+
+## 2026-09-19 C3 第三轮复审整改（同卡 PR1-C3，分支 feat-pr1-c3-fresh-export，PR #72，head b93104d）
+
+- 触发：Owner 对 head `b93104d` 复审裁定 **REQUEST_CHANGES / 不 merge** —— 3 个实质代码点 + 1 个治理项，并明确「三点都属 C3 自己的 frozen §9 / B5 边界，不是扩到 C5/C6」。
+- **Blocker 1（C3-P7 假红 + deferred 可伪写）**：原 P7 用例用 `stage_marker="drift_after_export"` 驱动 —— 那是 C3-P3 先失败，`exact_topology_delta` / `protected_diff` 只是**顺带**停在 NOT_RUN，属判据 §1 rule 2 的假红；且 `invariants` 从不检查 `deferred`，`_DEFERRED["erc"]="PASS"` 时整体仍会 PASS。修法：PASS 不变量改为对**冻结名字** `_DEFERRED_CHECKS` 逐个要求 `NOT_RUN`；P7 改为两条**直接扰动**（① 其它全 PASS、仅 `exact_topology_delta` = NOT_RUN；② 仅 `deferred.erc` 伪写成 PASS）。
+- **Blocker 2（dependencies_unchanged 不是真实结束态证明）**：原实现只比较 `before_manifest` / `staged_manifest` 两份**声明 JSON**，两次导出后从未重读真实 bytes。修法：新增 `_dependency_end_state()`，在最终 PASS 前重跑 `_tree_digest()` 并与 `bind_inputs()` 的初始 `before_files` / `staged_files` 全量比较；不一致 → `BLOCKED` / `REPAIR_INPUT_DRIFT`，`dependencies_unchanged=false`。
+- **Blocker 3（钉住 kicad-cli 却允许执行另一个 launcher）**：原 `argv = launcher_argv + [kicad_cli] + …`，认真 hash 的二进制可以只是某个 wrapper 的参数。修法：生产 C3 要求 `launcher_argv == []`，`argv = [kicad_cli] + …`；测试改用进程 seam（`mock.patch` `_spawn`）跑桩，不再把测试注入机制泄漏进生产 schema。**同处的第二半**：新增 `libraries` / `configs` 两个宿主只读 FileManifest（绝对路径 + sha256 + size_bytes + role=READONLY_DEPENDENCY），每次导出前后各复核一次 —— 冻结 §9 要求 toolchain manifest 绑定 library/config 摘要，而原实现只有任意 `environment` 字符串。
+- **治理项**：`tasks/PR1-C3.yaml` 的 `goal` 仍写「本卡只做小项 1–2」，与 PR 实际（四小项 + P1..P7 资格）自相矛盾 —— 已同步；`change_budget.contract_change` 由 `false` 改为 `true`（toolchain manifest 形状变更），理由写在卡内注释。
+- **回归先行的自证（本轮新增 7 例，全部先证伪）**：把每处修复临时还原成缺陷形态，确认对应回归**确实红** —— `deferred` 自证式不变量 → `test_p7_a_forged_deferred_status_is_never_pass` 报 `'PASS' == 'PASS'`；去掉 end re-check → 依赖回归报 `'PASS' != 'BLOCKED'`（正是 Owner 描述的 T4 场景）；还原旧 launcher schema → launcher 回归报 `'PASS' != 'BLOCKED'`。还原后全部复绿。
+- 验证：`py -3.9 -m py_compile` 两文件 exit 0；`tests.test_repair_verification` **94 OK（skipped=1）**（新增 7 例）；全量 `discover -s tests` 与 `dev_gate` 结果见台账条目。
+- **未做**：C4/C5/C6；未改判据、未新增夹具、未动 `run_gates.py` / `schematic_semantics.py` / `tools/repair_pipeline.py` / `tools/akcli_adapter.py`；`notes/b5-acceptance/**` 一字未动。
+- 状态：`PENDING_HUMAN_REVIEW`。
+
+## 2026-09-19 C3 第三轮整改复审收口（同卡 PR1-C3，分支 feat-pr1-c3-fresh-export，PR #72）
+
+- 触发：Owner 复核 head `354cf72` —— 三个原 blocker（C3-P7 直接扰动、dependency end-state rebinding、direct kicad-cli execution + library/config manifests）全部 **PASS**；仅剩 **1 个代码 blocker**：**实际子进程 environment 未被绑定**。
+- **唯一剩余 blocker（已闭）**：原实现 `environment = dict(os.environ) + toolchain["environment"]`，而 `toolchain_sha256` 只 hash 后者 —— 宿主的 `KICAD_*` / `HOME` / `APPDATA` 等变量可以在**不被绑定、也不出现在回执**的情况下影响 kicad-cli 的配置与查找路径。与刚修掉的 launcher 洞同属一类（「声明的被绑定了，实际执行的没有」）。修法：`fresh_export()` 只把**声明环境本身**交给 child；宿主若需要 `SYSTEMROOT` / `TEMP` / `PATH`，必须显式写进 manifest，从而进入 canonical hash。
+- **反向回归（真子进程观测）**：桩 CLI 新增 `dump_environment` 分支，把自己的 `os.environ` 落盘；新用例在宿主 `os.environ` 注入未声明的 `AEDL_UNBOUND_PROBE`，断言子进程**看不到**它、而声明过的 `AEDL_DECLARED_PROBE` 必须看到。**证伪**：还原 ambient merge 后该回归报 `'AEDL_UNBOUND_PROBE' unexpectedly found`，并把整份宿主环境（含 `DSH_*` / `WEBOTS_HOME` / 完整 `PATH`）打印出来 —— 这正是原先会一路传给 KiCad 的东西。
+- **测试宿主需显式声明环境**：新增 TEST_ONLY 助手 `declared_child_environment()`，把 `SYSTEMROOT` / `windir` / `PATH` / `PATHEXT` / `TEMP` / `TMP` / `COMSPEC` / `HOME` 等**按平台存在与否**显式放进 manifest。实测：空环境在 Windows 上子进程根本无法启动（`OSError [WinError 87]`），该 essential 集合可正常启动 —— 与 Owner 的说明一致。
+- **Owner 裁定的两个残余（已按裁定处理）**：① 完整 `{akcli, python, kicad, libraries, configs, execution}` 统一 schema **不要求**，留到 **C5 接线前**统一（已在 envelope 登记 follow-up：冻结 host-level canonical binding → 派生 C3/C4 slice → 定义跨层 equality）；② `libraries` / `configs` **允许显式为空**（表示该 qualification profile 无外部 library/config 依赖），不再为「列表必须非空」伪造文件。
+- 验证：`py -3.9 -m py_compile` exit 0；`tests.test_repair_verification` **95 OK（skipped=1）**，opt-in 真 KiCad 10.0.5 **95 OK（无 skip）**；全量 `discover -s tests`、`admit`、`dev_gate`、双平台 CI 见台账与本轮回执。
+- **未做**：C4/C5/C6；未改判据、未新增夹具、未动 `run_gates.py` / `schematic_semantics.py` / `tools/repair_pipeline.py` / `tools/akcli_adapter.py`；`notes/b5-acceptance/**` 一字未动。
+- 状态：`PENDING_HUMAN_REVIEW`。
