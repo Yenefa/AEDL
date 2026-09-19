@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 108 条。完整正文在各自条目文件中；本索引只做导航。
+共 109 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -155,3 +155,6 @@
 
 - [`AI-20260918-DSH-C7396AEC9D7DC7BCD22C6337E56A806E`](ai-usage/AI-20260918-DSH-C7396AEC9D7DC7BCD22C6337E56A806E.md) — SchGen exposed DEV native-ingest re-cut（ingest-only BENCH/DEV PR）
 - [`AI-20260918-DSH-F2475116AF034D8996D0B8CCF350455F`](ai-usage/AI-20260918-DSH-F2475116AF034D8996D0B8CCF350455F.md) — C4-P3 native qualification — 正对照 + 固定负扰动（两半均为原生）
+## 2026-09-19
+
+- [`AI-20260919-DSH-D522EAA442AF6B11D8E26D7626CBD3A7`](ai-usage/AI-20260919-DSH-D522EAA442AF6B11D8E26D7626CBD3A7.md) — PR1-C5-PRE HostToolchainBinding：C3/C4 工具链 slice 的统一宿主身份与跨层 equality
