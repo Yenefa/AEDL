@@ -464,3 +464,15 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
 - 验证：`py -3.9 -m py_compile` exit 0；`tests.test_repair_verification` **95 OK（skipped=1）**，opt-in 真 KiCad 10.0.5 **95 OK（无 skip）**；全量 `discover -s tests`、`admit`、`dev_gate`、双平台 CI 见台账与本轮回执。
 - **未做**：C4/C5/C6；未改判据、未新增夹具、未动 `run_gates.py` / `schematic_semantics.py` / `tools/repair_pipeline.py` / `tools/akcli_adapter.py`；`notes/b5-acceptance/**` 一字未动。
 - 状态：`PENDING_HUMAN_REVIEW`。
+
+## 2026-09-19 PR1-C5-PRE HostToolchainBinding（C5 前置，分支 feat-pr1-c5-pre-host-toolchain，base 4e441ca5）
+
+- 触发：C3（PR #72，merge commit `4e441ca5`）留下的 follow-up —— C3 与 C4 各自绑定**不同形状**的 toolchain manifest，而 C5 的 commit predicate 需要证明两层用的是同一宿主工具链。Owner 裁定该统一在 **C5 接线前**完成；本卡只做 integration primitive，**不实现事务机**。
+- **开卡方式（envelope-first，issue #83）**：`tools/admit.py:210-226` 决定「envelope 未提交 → 工作树 dirty」与「envelope 已提交 → HEAD != base.sha」二者必居其一，**零例外在结构上不可达**；故例外由 `allow_dirty` 收窄为 `allow_drift`（admission 时工作树仍然干净）。首个 commit 只含 `tasks/PR1-C5-PRE.yaml`，随后 `admit --allow-drift` → **ADMIT / exit 0**。
+- **Owner 的三处设计修正（逐条核对通过，均带代码行号证据）**：① `symbol_digest` 由 `_symbol_digest(target)` 从**当前 candidate 的内嵌库**算出（`tools/akcli_adapter.py:459`）→ 属 candidate binding，不进 `HostToolchainBinding`；② `akcli_artifact_sha256` 来自 `_distribution_manifest()` 对**已安装字节**的观测（:440），与冻结 schema 的 `sdist_sha256` / `package_files_sha256`（声明）**语义域不同**，禁止隐式代换 → 观测值放 `resolution.installed_akcli`；③ library/config 需要 logical → host 路径解析，不只是三个 executable。
+- **落地**：`tools/host_toolchain.py`（新增）——两层 `manifest`（对齐冻结 `src/repair/patch_schema_v1.json#/$defs/ToolchainManifest`，**不改该文件**）/ `resolution`（host-only）；API `validate_host_binding` / `host_binding_sha256` / `derive_kicad_slice` / `derive_akcli_slice(binding, candidate_symbol_digest)` / `same_host_toolchain(...)`。**派生即校验**：两个 derive 内部调用 C3/C4 **各自现有**的 `toolchain_manifest()`，被任一层拒绝即 `HostBindingError` —— 「派生 slice 被现有校验器原样接受」在**运行时**成立，不只是测试断言。
+- **equality 定义**：`same_host_toolchain` 为真 ⟺ 两个回执 hash 分别等于各自派生 slice 的 digest；**不要求** `c3_sha == c4_sha`（两者结构不同，digest 永不相等）—— 是「共同祖先相同」，不是叶子相等。
+- **边界（Owner 要求钉住，已写入 envelope）**：`candidate_symbol_digest` 不属于 `HostToolchainBinding`；`manifest` 是可移植冻结声明、`resolution` 是 host-only 执行绑定，**跨域 digest 不得互相代换**，除非契约定义显式 canonical derivation。另：C3 slice 的 `launcher_argv` 恒为 `[]`（C3 明确拒绝 launcher），`resolution.launcher_argv` 只进 C4 slice；`akcli_upstream_commit` 由冻结 `argv_profile == PR1_V1` 映射到 `AKCLI_UPSTREAM_COMMIT` 常量，不设第二个真相源。
+- 验证：`py -3.9 -X utf8 -m unittest tests.test_host_toolchain` → **21 OK**；`discover -s tests` → **802 OK (skipped=14)**（master 781 → +21，无回归）；`admit --allow-drift` → **ADMIT / exit 0**（clean tree）。
+- **未做**：C5 事务机 / `run_round` / rollback（本卡 non-goal）；未接进任何 C5 调用点；未修改 `gates/repair_verification.py`、`tools/akcli_adapter.py`、`src/repair/patch_schema_v1.json` 任一行；未生成正式 Evidence（`docs/evidence/**` 在本卡 forbidden_paths 内）。
+- 状态：`PENDING_HUMAN_REVIEW`。
