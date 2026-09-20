@@ -39,6 +39,9 @@
 > rev1 的两句旧文本 ——「…`instances` 内容、`exclude_from_sim`、`fields_autoplaced` 等 writer 噪声」
 > 与「`_integer` / `_text` / `_identifier` 是纯校验器，返回 `None`」—— **在本版已不存在**
 > （分别被 §7.2 / §7.3 与 §2.2「返回值必须分清」取代）。若你看到的仍是这两句，说明读的是 rev1 快照。
+>
+> **逐条核对件（新路径，无缓存）**：`notes/pr1-c5-erratum/REV4_VERIFICATION.md` —— 由 pwsh 从本文件
+> **抽取行区间**生成（逐字，非复述），给出 §2.2 / §7.1–§7.5 / R9–R12 / §8 的 HEAD 原文与核验命令。
 
 ---
 
