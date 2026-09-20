@@ -108,6 +108,10 @@ forbidden_paths:
 acceptance: |
   - **Owner grant 前置**：Owner 于 issue #83 明确批准 scope expansion 之前，
     不得 admission、不得改任何代码。decision_ref 必须是人工评论 permalink。
+  - **申请顺序（architecture review 最高指示，2026-09-20）**：先取得 architecture review 的
+    DESIGN_ACCEPTED / READY_FOR_HUMAN_SCOPE_GRANT，然后才在 issue #83 请求 human Owner
+    明确批准 contract_change: true 与 gates/repair_verification.py 的 scope expansion。
+    当前 Owner scope grant 保持 PENDING，不得提前申请。
   - 新对象 expected 形状为 closed schema，且与旧形状互斥（混用 → ObservationError）
   - _delta() 与 _projection() 的函数体**零改动**（diff 可逐行核对）
   - existing object full AST exact 不放松（回归 R1）

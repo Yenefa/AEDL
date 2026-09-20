@@ -1,6 +1,6 @@
 # PR1-C5-ERRATUM — C2 new-source-object expected semantics（函数级补丁草案）
 
-> **状态：DRAFT（rev2）— 未应用任何代码改动。**
+> **状态：DRAFT（rev3）— 未应用任何代码改动。**
 > 基线：`669aa16`（origin/master）。`gates/repair_verification.py` blob `88a311e17763e0ac83f33c5fd499c2a1852b2c44`
 > （与 C5 HEAD `2460d5d` 逐字节相同，已用 `git hash-object` 双向核对）。
 > 配套：`tasks/PR1-C5-ERRATUM.yaml`。
@@ -20,6 +20,11 @@
 > 错误，rev2 已更正。issue #83 现有 3 条评论中：2 条是 PR1-C5 / PR1-C5-PRE 的 `allow_drift`
 > grant，1 条是本轮 agent 的 BLOCKED 状态记录；**没有**针对本 erratum 的人工 scope grant。
 > grant 之前不得改 `gates/repair_verification.py`，也不得 admission。
+>
+> **Gate 顺序（architecture review 最高指示，2026-09-20）**：先由 architecture review 给出
+> `DESIGN_ACCEPTED` / `READY_FOR_HUMAN_SCOPE_GRANT`，**然后**才在 issue #83 请求 human Owner
+> 明确批准 `contract_change: true` 与 `gates/repair_verification.py` 的 scope expansion。
+> 当前 `Owner scope grant: PENDING` **保持不变**；不得提前申请、不得自行放宽。
 
 ---
 
@@ -149,8 +154,14 @@ for obj in obs["source_objects"]:
 
 - `_closed` 是**精确 key 集**（`:87-89`）→ 混用形状（新形状带 `descriptor`、旧形状带 `semantics`）
   自动被拒（回归 **R10**）。
-- `_integer` / `_text` / `_identifier` 是**纯校验器，返回 `None`** —— 上面刻意不写成
-  `x = _integer(...)`（这是 C3 曾踩过的真实坑，见 HANDOFF 2026-09-18 段）。
+- **返回值必须分清**（这是 C3 曾踩过的真实坑，见 HANDOFF 2026-09-18 段）：
+  - **返回规范值**：`_text`（`return value`，`:92-95`）、`_identifier`（`return text`，`:101-112`）、
+    `_sorted_unique`（`return ordered`，`:149-156`）、`_index`（返回映射，`:159-160`）；
+  - **纯校验器、返回 `None`**：`_closed`（`:87-89`）、`_integer`（`:115-117`）、`_sha`（`:120-122`）、
+    `_uuid`（`:125-132`）、`_identity`（`:135-146`）。
+- 因此上面的代码里 `reference = _identifier(...)` 是**正确**的（它返回规范化 reference）；
+  而 `_text(semantics["name"], ...)` 与 `_integer(coordinate, ...)` 只做校验、**不得赋值**
+  （`_integer` 会静默返回 `None`）。
 - 新形状**只在 `expected=True` 时接受**；`expected=False` 仍要求旧形状。
 - `scope` 在 qualified subset 里结构性恒为 `"local"`（`observe_source:1023-1025` 的 root
   `_source_fields` 只允许 `label`，不含 `global_label`/`hierarchical_label`）。仍显式携带并校验，
