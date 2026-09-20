@@ -1868,6 +1868,122 @@ def runtime_bindings(host_context, proposal, native_before, policy_sha, approved
         raise HostContextError([_host_finding("runtime bindings are incomplete: %s" % missing)])
     return values
 
+def resolve_pin_identity(token, observation):
+    """Resolve one REFERENCE.PIN token against the host BEFORE observation.
+
+    Member selection is exact: zero matches or more than one match is a binding
+    failure, never a guess.  Nothing here reads the proposal or a fixture.
+    """
+    text = _host_text(token, "member token")
+    reference, separator, number = text.partition(".")
+    if not separator or not reference or not number:
+        raise HostContextError([_host_finding("invalid member token %r" % text)])
+    matches = [row["identity"] for row in observation["pins"]
+               if row["identity"]["reference"] == reference
+               and row["identity"]["number"] == number]
+    if len(matches) != 1:
+        raise HostContextError([_host_finding(
+            "member token %r resolves to %d pin identities, expected exactly one"
+            % (text, len(matches)))])
+    return matches[0]
+
+
+def _member_keys(members):
+    return sorted({canonical_json_bytes(identity) for identity in members})
+
+
+def capture_before_partitions(observation, declarations):
+    """Capture the BEFORE partitions a policy rule names, once and completely.
+
+    binding_contract.capture_rule: CAPTURE ENTIRE BEFORE PARTITION ONCE; NO
+    REBIND AFTER APPLY.  So a captured slot holds the observed before members, and
+    a later stage can never re-derive them from the applied result.
+    """
+    captured = {}
+    partitions = observation["partitions"]
+    for declaration in declarations:
+        slot = _host_identifier(declaration["slot"], "partition slot")
+        if slot in captured:
+            raise HostContextError([_host_finding("duplicate partition slot %r" % slot)])
+        names = sorted(declaration.get("names_exact") or [])
+        if declaration.get("capture_all_members"):
+            contains = _member_keys(resolve_pin_identity(token, observation)
+                                    for token in declaration.get("contains") or [])
+            excludes = _member_keys(resolve_pin_identity(token, observation)
+                                    for token in declaration.get("excludes") or [])
+            candidates = []
+            for partition in partitions:
+                observed = _member_keys(partition["members"])
+                if sorted(partition["names"]) != names:
+                    continue
+                if not set(contains) <= set(observed):
+                    continue
+                if set(excludes) & set(observed):
+                    continue
+                candidates.append(partition)
+            if len(candidates) != 1:
+                raise HostContextError([_host_finding(
+                    "capture_all_members slot %r matches %d before partitions, expected one"
+                    % (slot, len(candidates)))])
+            members = sorted(candidates[0]["members"], key=canonical_json_bytes)
+        else:
+            members = sorted((resolve_pin_identity(token, observation)
+                              for token in declaration.get("members_exact") or []),
+                             key=canonical_json_bytes)
+            matches = [partition for partition in partitions
+                       if _member_keys(partition["members"]) == _member_keys(members)
+                       and sorted(partition["names"]) == names]
+            if len(matches) != 1:
+                raise HostContextError([_host_finding(
+                    "slot %r members/names match %d before partitions, expected one"
+                    % (slot, len(matches)))])
+        if not members:
+            raise HostContextError([_host_finding("slot %r captured no members" % slot)])
+        captured[slot] = {"key": canonical_sha256("topology", members),
+                          "names": names, "members": members}
+    return captured
+
+
+def project_expected_partitions(observation, rule, captured, new_pins):
+    """Frozen policy transformation: replace the named slots, keep every other
+    before partition byte-identical.
+
+    Members come from the CAPTURED before partition plus the rule's exact
+    additions; the policy never lets a later stage re-derive them.
+    """
+    replace = set(rule["after"].get("replace_partitions") or [])
+    unknown = replace - set(captured)
+    if unknown:
+        raise HostContextError([_host_finding(
+            "replace_partitions names uncaptured slots %s" % sorted(unknown))])
+    replacement = {}
+    for entry in rule["after"].get("partitions") or []:
+        names = sorted(entry.get("names_exact") or [])
+        members = []
+        source = entry.get("members_from")
+        if source is not None:
+            if source not in captured:
+                raise HostContextError([_host_finding(
+                    "members_from names uncaptured slot %r" % source)])
+            members.extend(captured[source]["members"])
+        for token in entry.get("members_exact") or []:
+            members.append(resolve_pin_identity(token, observation))
+        for token in entry.get("add_exact") or []:
+            members.append(new_pins.get(token) or resolve_pin_identity(token, observation))
+        key = canonical_sha256("topology", sorted(members, key=canonical_json_bytes))
+        if key in replacement:
+            raise HostContextError([_host_finding("two expected partitions share a member set")])
+        replacement[key] = {"key": key, "names": names,
+                            "members": sorted(members, key=canonical_json_bytes)}
+    kept = [partition for partition in observation["partitions"]
+            if not any(name in replace and sorted(partition["names"]) == captured[name]["names"]
+                       and _member_keys(partition["members"]) == _member_keys(captured[name]["members"])
+                       for name in replace)]
+    if len(kept) != len(observation["partitions"]) - len(replace):
+        raise HostContextError([_host_finding(
+            "replace_partitions does not name whole before partitions")])
+    return kept + list(replacement.values())
+
 def _feedback_reason(outcome: str, receipt: Mapping) -> str:
     if outcome in (OUTCOME_APPLIED, OUTCOME_NO_CHANGE, OUTCOME_REFUSED):
         return "OK"

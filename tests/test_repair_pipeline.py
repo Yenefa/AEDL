@@ -285,5 +285,106 @@ class RuntimeBindingTests(unittest.TestCase):
         self.assertIn("candidate_symbol_digest", caught.exception.findings[0].detail)
 
 
+class PartitionCaptureTests(unittest.TestCase):
+    """S1b capture layer: BEFORE partitions are captured exactly once."""
+
+    def setUp(self):
+        self.observation = circuit()
+
+    def test_member_tokens_resolve_exactly(self):
+        identity = pipeline.resolve_pin_identity("R1.2", self.observation)
+        self.assertEqual(identity["reference"], "R1")
+        self.assertEqual(identity["number"], "2")
+
+    def test_a_token_that_misses_or_is_malformed_is_refused(self):
+        for token in ("R9.1", "R1", "R1.1.2", "", "R1.x"):
+            with self.subTest(token=token):
+                with self.assertRaises(pipeline.HostContextError):
+                    pipeline.resolve_pin_identity(token, self.observation)
+
+    def test_members_exact_captures_the_observed_before_partition(self):
+        captured = pipeline.capture_before_partitions(self.observation, [
+            {"slot": "one", "names_exact": [], "members_exact": ["R1.1"]}])
+        self.assertEqual(len(captured["one"]["members"]), 1)
+        self.assertEqual(captured["one"]["key"],
+                         pipeline.canonical_sha256("topology", captured["one"]["members"]))
+
+    def test_capture_all_members_takes_the_whole_partition_once(self):
+        captured = pipeline.capture_before_partitions(self.observation, [
+            {"slot": "gnd", "names_exact": [], "capture_all_members": True,
+             "contains": ["R1.1"], "excludes": ["R2.1"]}])
+        self.assertEqual([item["reference"] for item in captured["gnd"]["members"]], ["R1"])
+
+    def test_capture_all_members_that_matches_several_partitions_is_refused(self):
+        with self.assertRaises(pipeline.HostContextError):
+            pipeline.capture_before_partitions(self.observation, [
+                {"slot": "gnd", "names_exact": [], "capture_all_members": True}])
+
+    def test_a_member_assertion_matching_no_partition_is_refused(self):
+        with self.assertRaises(pipeline.HostContextError):
+            pipeline.capture_before_partitions(self.observation, [
+                {"slot": "one", "names_exact": ["/X"], "members_exact": ["R1.1"]}])
+
+    def test_a_slot_with_no_members_is_refused(self):
+        with self.assertRaises(pipeline.HostContextError):
+            pipeline.capture_before_partitions(self.observation, [
+                {"slot": "one", "names_exact": [], "members_exact": []}])
+
+    def test_duplicate_slots_are_refused(self):
+        with self.assertRaises(pipeline.HostContextError):
+            pipeline.capture_before_partitions(self.observation, [
+                {"slot": "a", "names_exact": [], "members_exact": ["R1.1"]},
+                {"slot": "a", "names_exact": [], "members_exact": ["R2.1"]}])
+
+
+class PartitionTransformTests(unittest.TestCase):
+    """S1b frozen transformation: replace the named slots, keep the rest."""
+
+    def setUp(self):
+        self.observation = circuit()
+        self.captured = pipeline.capture_before_partitions(self.observation, [
+            {"slot": "one", "names_exact": [], "members_exact": ["R1.1"]}])
+
+    def rule(self):
+        return {"id": "T", "route": pipeline.ROUTE_STRICT,
+                "after": {"replace_partitions": ["one"],
+                          "partitions": [{"names_exact": ["/A"], "members_from": "one",
+                                          "add_exact": ["R2.1"]}],
+                          "all_other_partitions": "UNCHANGED"}}
+
+    def test_the_named_slot_is_replaced_and_every_other_partition_is_kept(self):
+        partitions = pipeline.project_expected_partitions(
+            self.observation, self.rule(), self.captured, {})
+        self.assertEqual(len(partitions), len(self.observation["partitions"]))
+        self.assertIn(["/A"], [partition["names"] for partition in partitions])
+
+    def test_naming_an_uncaptured_slot_is_refused(self):
+        rule = self.rule()
+        rule["after"]["replace_partitions"] = ["nope"]
+        with self.assertRaises(pipeline.HostContextError):
+            pipeline.project_expected_partitions(self.observation, rule, self.captured, {})
+
+    def test_members_from_an_uncaptured_slot_is_refused(self):
+        rule = self.rule()
+        rule["after"]["partitions"][0]["members_from"] = "nope"
+        with self.assertRaises(pipeline.HostContextError):
+            pipeline.project_expected_partitions(self.observation, rule, self.captured, {})
+
+    def test_a_new_pin_binding_is_used_instead_of_the_before_observation(self):
+        rule = {"id": "T", "route": pipeline.ROUTE_STRICT,
+                "after": {"replace_partitions": ["one"],
+                          "partitions": [{"names_exact": ["/A"], "members_from": "one",
+                                          "add_exact": ["R9.1"]}],
+                          "all_other_partitions": "UNCHANGED"}}
+        synthetic = dict(pipeline.resolve_pin_identity("R1.1", self.observation))
+        synthetic["component_uuid"] = "new:R9"
+        synthetic["reference"] = "R9"
+        synthetic["number"] = "1"
+        partitions = pipeline.project_expected_partitions(
+            self.observation, rule, self.captured, {"R9.1": synthetic})
+        members = [m for m in partitions if m["names"] == ["/A"]][0]["members"]
+        self.assertEqual([m["reference"] for m in members].count("R9"), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
