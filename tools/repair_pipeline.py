@@ -1873,6 +1873,16 @@ def runtime_bindings(host_context, proposal, native_before, policy_sha, approved
         if entry["kind"] not in ("wire", "label"):
             raise HostContextError([_host_finding(
                 "removal %r has unsupported kind %r" % (slot, entry["kind"]))])
+    # C2 only consumes values(), so the slot keys carry no weight there.  The binder
+    # has to make them mean something: one slot, one object, and no two slots may
+    # silently bind the same UUID.
+    by_uuid = {}
+    for slot, entry in removals.items():
+        if entry["uuid"] in by_uuid:
+            raise HostContextError([_host_finding(
+                "removal slots %r and %r bind the same object %s"
+                % (by_uuid[entry["uuid"]], slot, entry["uuid"]))])
+        by_uuid[entry["uuid"]] = slot
 
     pin_identity_map = {}
     embedded_symbol_hashes = {}
@@ -2118,8 +2128,12 @@ def resolve_removal_selector(index, selector):
         return _selector_finding("UNKNOWN", REASON_PARSER_DISAGREEMENT,
                                  "%s: the selector AST and the observed descriptor disagree"
                                  % detail)
+    # C2 _prepare() requires canonical_sha256("protected", obj["descriptor"]), i.e. the
+    # digest of {"ast": node} -- NOT semantic_ast_sha256, which is the digest of the
+    # bare node.  hash(node) != hash({"ast": node}); the two are different domains.
     return "PASS", {"uuid": matched["uuid"], "kind": kind,
-                    "descriptor_sha256": observed["semantic_ast_sha256"]}
+                    "descriptor_sha256": canonical_sha256("protected",
+                                                          observed["descriptor"])}
 
 
 def resolve_removals(index, selectors):
@@ -2139,6 +2153,34 @@ def resolve_removals(index, selectors):
             return status, None, [payload]
         declarations[slot] = payload
     return "PASS", declarations, []
+
+def validate_captured_partitions(captured, rule):
+    """C5 freezes the capture invariants; C2 only checks that this is a mapping.
+
+    captured_partitions is a capture-once AUDIT record, not a selector cache that a
+    later stage may rebind: the slot set, the names, the members and the partition
+    key all have to be re-derivable from what was observed BEFORE the write.
+    """
+    declared = [entry["slot"] for entry in (rule.get("before") or {}).get("partitions") or []]
+    if sorted(captured) != sorted(declared):
+        raise HostContextError([_host_finding(
+            "captured slot set must equal the rule's before.partitions slots: "
+            "declared=%s captured=%s" % (sorted(declared), sorted(captured)))])
+    for slot, entry in captured.items():
+        _host_closed(entry, ("key", "names", "members"), "captured partition %r" % slot)
+        members = entry["members"]
+        if not members:
+            raise HostContextError([_host_finding(
+                "captured partition %r holds no members" % slot)])
+        if entry["names"] != sorted(entry["names"]):
+            raise HostContextError([_host_finding(
+                "captured partition %r names are not canonically ordered" % slot)])
+        if entry["key"] != canonical_sha256("topology",
+                                            sorted(members, key=canonical_json_bytes)):
+            raise HostContextError([_host_finding(
+                "captured partition %r key is not the digest of its members" % slot)])
+    return captured
+
 
 def _feedback_reason(outcome: str, receipt: Mapping) -> str:
     if outcome in (OUTCOME_APPLIED, OUTCOME_NO_CHANGE, OUTCOME_REFUSED):

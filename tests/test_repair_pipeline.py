@@ -462,7 +462,8 @@ class SelectorResolutionTests(unittest.TestCase):
         self.pin = pipeline.resolve_pin_identity("R1.1", self.observation)
         self.anchor = (1000, 2000)
         self.uuid = "11111111-2222-3333-4444-555555555555"
-        self.node = ["label", "USB_DM", ["at", 0.001, 0.002, 0]]
+        # the C2 AST is canonical-JSON safe: no floats (canonical_json_bytes rejects them)
+        self.node = ["label", "USB_DM", ["at", 1000, 2000, 0]]
         self.index = {
             "observation": self.observation,
             "pin_anchor": {pipeline.canonical_json_bytes(self.pin): self.anchor},
@@ -489,11 +490,15 @@ class SelectorResolutionTests(unittest.TestCase):
                                        "descriptor": {"ast": node}}
         return uuid
 
-    def test_a_unique_local_label_at_a_pin_resolves_to_its_observed_digest(self):
+    def test_a_unique_local_label_at_a_pin_resolves_to_its_descriptor_digest(self):
         status, payload = pipeline.resolve_removal_selector(self.index, self.selector())
         self.assertEqual(status, "PASS")
-        self.assertEqual(payload, {"uuid": self.uuid, "kind": "label",
-                                   "descriptor_sha256": "a" * 64})
+        self.assertEqual(payload, {
+            "uuid": self.uuid, "kind": "label",
+            "descriptor_sha256": pipeline.canonical_sha256("protected",
+                                                           {"ast": self.node})})
+        # C2 wants hash(descriptor), not hash(node): the two domains differ.
+        self.assertNotEqual(payload["descriptor_sha256"], "a" * 64)
 
     def test_zero_matches_is_unknown_input_drift_not_incomplete_coverage(self):
         # source complete + AST parseable: the failure is that the current bytes no
@@ -584,6 +589,89 @@ class SelectorResolutionTests(unittest.TestCase):
     def test_bytes_outside_the_qualified_subset_are_refused(self):
         with self.assertRaises(pipeline.HostContextError):
             pipeline.selector_source_index(b"(kicad_sch (version 1))")
+
+
+class BinderInvariantTests(unittest.TestCase):
+    """C5 must freeze the invariants C2 does not re-derive for itself."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        design = self.root / "cand" / "design"
+        design.mkdir(parents=True)
+        (design / TARGET).write_bytes(b"(kicad_sch)")
+        self.context = pipeline.validate_host_context(
+            host_context(design_root=str(self.root / "cand")))
+        self.observation = circuit()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def declaration(self, uuid):
+        return {"uuid": uuid, "kind": "label", "descriptor_sha256": "1" * 64}
+
+    def rule(self, slots):
+        return {"id": "T", "route": pipeline.ROUTE_STRICT,
+                "object_delta": {"remove": [{"slot": slot} for slot in slots]}}
+
+    def bind(self, rule, removals):
+        return pipeline.runtime_bindings(self.context, proposal(), native_before(),
+                                         policy_sha(), {"E1"}, rule=rule,
+                                         removals=removals)
+
+    def test_two_slots_may_not_bind_the_same_object(self):
+        same = self.declaration("11111111-2222-3333-4444-555555555555")
+        with self.assertRaises(pipeline.HostContextError) as caught:
+            self.bind(self.rule(["a", "b"]), {"a": same, "b": dict(same)})
+        self.assertIn("same object", caught.exception.findings[0].detail)
+
+    def test_distinct_slots_binding_distinct_objects_is_accepted(self):
+        values = self.bind(self.rule(["a", "b"]), {
+            "a": self.declaration("11111111-2222-3333-4444-555555555555"),
+            "b": self.declaration("66666666-7777-8888-9999-000000000000")})
+        self.assertEqual(sorted(values["object_identity_map"]), ["a", "b"])
+
+    def captured_rule(self, slots):
+        return {"id": "T", "route": pipeline.ROUTE_STRICT,
+                "before": {"partitions": [{"slot": slot} for slot in slots]},
+                "after": {"replace_partitions": [], "partitions": []}}
+
+    def capture(self):
+        return pipeline.capture_before_partitions(self.observation, [
+            {"slot": "one", "names_exact": [], "members_exact": ["R1.1"]}])
+
+    def test_the_capture_slot_set_must_equal_the_rule(self):
+        with self.assertRaises(pipeline.HostContextError) as caught:
+            pipeline.validate_captured_partitions(self.capture(),
+                                                  self.captured_rule(["other"]))
+        self.assertIn("captured slot set", caught.exception.findings[0].detail)
+
+    def test_the_captured_key_must_be_the_digest_of_its_members(self):
+        captured = self.capture()
+        captured["one"]["key"] = "0" * 64
+        with self.assertRaises(pipeline.HostContextError) as caught:
+            pipeline.validate_captured_partitions(captured, self.captured_rule(["one"]))
+        self.assertIn("key", caught.exception.findings[0].detail)
+
+    def test_captured_names_must_be_canonically_ordered(self):
+        captured = self.capture()
+        captured["one"]["names"] = ["/B", "/A"]
+        with self.assertRaises(pipeline.HostContextError) as caught:
+            pipeline.validate_captured_partitions(captured, self.captured_rule(["one"]))
+        self.assertIn("canonically ordered", caught.exception.findings[0].detail)
+
+    def test_an_empty_capture_is_refused(self):
+        captured = self.capture()
+        captured["one"]["members"] = []
+        with self.assertRaises(pipeline.HostContextError) as caught:
+            pipeline.validate_captured_partitions(captured, self.captured_rule(["one"]))
+        self.assertIn("no members", caught.exception.findings[0].detail)
+
+    def test_a_well_formed_capture_passes(self):
+        captured = self.capture()
+        self.assertEqual(
+            pipeline.validate_captured_partitions(captured, self.captured_rule(["one"])),
+            captured)
 
 
 if __name__ == "__main__":
