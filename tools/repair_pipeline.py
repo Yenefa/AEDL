@@ -30,6 +30,18 @@ from gates.repair_verification import (  # single home for digests since C2
     canonical_sha256,
     hash_bytes,
     topology_sha256,
+    # C5 reuses verifier-private source helpers because selector binding must use the
+    # exact same source semantics as C2.  Publicising this interface is deferred; C5
+    # must not fork or reinterpret the parser, so the geometry stays defined in C2.
+    observe_source as _c2_observe_source,
+    _source_ast as _c2_source_ast,
+    _source_at as _c2_source_at,
+    _source_children as _c2_source_children,
+    _source_components as _c2_source_components,
+    _source_integer as _c2_source_integer,
+    _source_one as _c2_source_one,
+    _source_text as _c2_source_text,
+    _source_value as _c2_source_value,
 )
 from tools import host_toolchain  # PR1-C5-PRE: the host toolchain identity
 
@@ -2006,6 +2018,123 @@ def project_expected_partitions(observation, rule, captured, new_pins):
         raise HostContextError([_host_finding(
             "replace_partitions does not name whole before partitions")])
     return kept + list(replacement.values())
+
+def selector_source_index(raw_bytes):
+    """Rebuild the geometry a removal selector needs from the SAME candidate bytes.
+
+    C2's full observer validates the input first, so this index can only ever
+    describe bytes inside the qualified M2 subset.  Pin anchors come from C2's own
+    _source_components(); this layer must never fork or reinterpret that geometry.
+    """
+    try:
+        observation = _c2_observe_source(raw_bytes)
+        root = _c2_source_ast(raw_bytes)
+        sheet = "/" + _c2_source_value(root, "uuid")
+        _components, _pins, positions = _c2_source_components(root, sheet)
+    except (ValueError, TypeError, KeyError, IndexError) as exc:
+        raise HostContextError([_host_finding(
+            "the candidate bytes are outside the qualified source subset: %s" % exc)]) from exc
+
+    pin_anchor = {}
+    for point, items in positions.items():
+        for item in items:
+            pin_anchor[canonical_json_bytes(item["identity"])] = point
+
+    labels = []
+    for node in _c2_source_children(root, "label"):
+        point, _rotation = _c2_source_at(node)
+        labels.append({"uuid": _c2_source_value(node, "uuid"),
+                       "name": _c2_source_text(node[1]), "point": point, "node": node})
+    wires = []
+    for node in _c2_source_children(root, "wire"):
+        pts = _c2_source_one(node, "pts")
+        start, end = [tuple(_c2_source_integer(value, 1000000) for value in item[1:])
+                      for item in pts[1:]]
+        # A wire's identity does not depend on which endpoint is drawn first.
+        wires.append({"uuid": _c2_source_value(node, "uuid"),
+                      "endpoints": frozenset((start, end)), "node": node})
+    return {"observation": observation, "pin_anchor": pin_anchor,
+            "labels": labels, "wires": wires,
+            "objects": {obj["identity"]: obj for obj in observation["source_objects"]}}
+
+
+def _selector_finding(status, code, detail):
+    return status, _finding(code, detail)
+
+
+def resolve_removal_selector(index, selector):
+    """Resolve one policy removal selector to its unique source object.
+
+    The chain is: policy selector -> C2 AST over the current bytes -> one UUID ->
+    the same UUID in the BEFORE observation -> the frozen descriptor digest.  The
+    digest is taken from what C2/C4 already observed, never re-invented here.
+    """
+    kind = selector.get("kind")
+    if kind not in ("label", "wire"):
+        return _selector_finding("BLOCKED", REASON_SCHEMA_INVALID,
+                                 "unsupported removal selector kind %r" % kind)
+    if kind == "label":
+        if selector.get("scope") != "local":
+            return _selector_finding("BLOCKED", REASON_SCHEMA_INVALID,
+                                     "only root-local label selectors are supported")
+        try:
+            identity = resolve_pin_identity(selector.get("at_pin"), index["observation"])
+        except HostContextError as exc:
+            return _selector_finding("BLOCKED", REASON_SCHEMA_INVALID,
+                                     "invalid at_pin selector: %s" % exc.findings[0].detail)
+        anchor = index["pin_anchor"].get(canonical_json_bytes(identity))
+        if anchor is None:
+            return _selector_finding("UNKNOWN", REASON_COVERAGE_INCOMPLETE,
+                                     "the pinned pin has no observed anchor")
+        matches = [row for row in index["labels"]
+                   if row["name"] == selector.get("name") and row["point"] == anchor]
+        detail = "local label %r at %s" % (selector.get("name"), selector.get("at_pin"))
+    else:
+        endpoints = selector.get("endpoints_nm")
+        if not isinstance(endpoints, (list, tuple)) or len(endpoints) != 2:
+            return _selector_finding("BLOCKED", REASON_SCHEMA_INVALID,
+                                     "a wire selector needs exactly two endpoints_nm")
+        wanted = frozenset(tuple(int(value) for value in point) for point in endpoints)
+        matches = [row for row in index["wires"] if row["endpoints"] == wanted]
+        detail = "wire %s" % sorted(sorted(point) for point in wanted)
+
+    if not matches:
+        return _selector_finding("UNKNOWN", REASON_COVERAGE_INCOMPLETE,
+                                 "%s matches no source object in the current bytes" % detail)
+    if len(matches) > 1:
+        return _selector_finding("UNKNOWN", REASON_SELECTOR_AMBIGUOUS,
+                                 "%s matches %d source objects" % (detail, len(matches)))
+    matched = matches[0]
+    observed = index["objects"].get(matched["uuid"])
+    if observed is None or observed["kind"] != kind:
+        return _selector_finding("UNKNOWN", REASON_PARSER_DISAGREEMENT,
+                                 "%s resolved to %s, which the BEFORE observation does not "
+                                 "carry as a %s" % (detail, matched["uuid"], kind))
+    if observed["descriptor"]["ast"] != matched["node"]:
+        return _selector_finding("UNKNOWN", REASON_PARSER_DISAGREEMENT,
+                                 "%s: the selector AST and the observed descriptor disagree"
+                                 % detail)
+    return "PASS", {"uuid": matched["uuid"], "kind": kind,
+                    "descriptor_sha256": observed["semantic_ast_sha256"]}
+
+
+def resolve_removals(index, selectors):
+    """Resolve every removal selector; the first failure decides the outcome.
+
+    Selector failures are deliberately NOT collapsed into one class: not being able
+    to determine identity is UNKNOWN, while an illegal selector field is BLOCKED.
+    """
+    declarations = {}
+    for selector in selectors:
+        slot = _host_identifier(selector["slot"], "removal slot")
+        if slot in declarations:
+            return "BLOCKED", None, [_finding(REASON_SCHEMA_INVALID,
+                                              "duplicate removal slot %r" % slot)]
+        status, payload = resolve_removal_selector(index, selector)
+        if status != "PASS":
+            return status, None, [payload]
+        declarations[slot] = payload
+    return "PASS", declarations, []
 
 def _feedback_reason(outcome: str, receipt: Mapping) -> str:
     if outcome in (OUTCOME_APPLIED, OUTCOME_NO_CHANGE, OUTCOME_REFUSED):

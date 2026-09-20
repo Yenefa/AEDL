@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 
 from tests.test_host_toolchain import base_binding
-from tests.test_repair_verification import circuit
+from tests.test_repair_verification import circuit, mini
 from tools import repair_pipeline as pipeline
 
 
@@ -447,6 +447,135 @@ class RemovalBindingTests(unittest.TestCase):
             with self.subTest(entry=entry):
                 with self.assertRaises(pipeline.HostContextError):
                     self.bind(rule=self.rule(["wrong_dm"]), removals={"wrong_dm": entry})
+
+
+class SelectorResolutionTests(unittest.TestCase):
+    """S1b: a removal selector resolves through C2's AST to one observed object.
+
+    The host must PROVE which object a policy authorizes deleting; it never trusts
+    a proposer-supplied uuid.  Failures keep their class: identity that cannot be
+    determined is UNKNOWN, an illegal selector field is BLOCKED.
+    """
+
+    def setUp(self):
+        self.observation = circuit()
+        self.pin = pipeline.resolve_pin_identity("R1.1", self.observation)
+        self.anchor = (1000, 2000)
+        self.uuid = "11111111-2222-3333-4444-555555555555"
+        self.node = ["label", "USB_DM", ["at", 0.001, 0.002, 0]]
+        self.index = {
+            "observation": self.observation,
+            "pin_anchor": {pipeline.canonical_json_bytes(self.pin): self.anchor},
+            "labels": [{"uuid": self.uuid, "name": "USB_DM",
+                        "point": self.anchor, "node": self.node}],
+            "wires": [],
+            "objects": {self.uuid: {"identity": self.uuid, "kind": "label",
+                                    "semantic_ast_sha256": "a" * 64,
+                                    "descriptor": {"ast": self.node}}},
+        }
+
+    def selector(self, **overrides):
+        document = {"kind": "label", "name": "USB_DM", "at_pin": "R1.1", "scope": "local"}
+        document.update(overrides)
+        return document
+
+    def add_wire(self):
+        uuid = "99999999-8888-7777-6666-555555555555"
+        node = ["wire", ["pts", ["xy", 1, 2], ["xy", 3, 4]]]
+        self.index["wires"] = [{"uuid": uuid,
+                                "endpoints": frozenset(((1, 2), (3, 4))), "node": node}]
+        self.index["objects"][uuid] = {"identity": uuid, "kind": "wire",
+                                       "semantic_ast_sha256": "b" * 64,
+                                       "descriptor": {"ast": node}}
+        return uuid
+
+    def test_a_unique_local_label_at_a_pin_resolves_to_its_observed_digest(self):
+        status, payload = pipeline.resolve_removal_selector(self.index, self.selector())
+        self.assertEqual(status, "PASS")
+        self.assertEqual(payload, {"uuid": self.uuid, "kind": "label",
+                                   "descriptor_sha256": "a" * 64})
+
+    def test_zero_matches_is_unknown_not_blocked(self):
+        status, finding = pipeline.resolve_removal_selector(
+            self.index, self.selector(name="USB_DP"))
+        self.assertEqual(status, "UNKNOWN")
+        self.assertEqual(finding.code, pipeline.REASON_COVERAGE_INCOMPLETE)
+
+    def test_more_than_one_match_is_ambiguous(self):
+        self.index["labels"].append(dict(self.index["labels"][0],
+                                         uuid="22222222-3333-4444-5555-666666666666"))
+        status, finding = pipeline.resolve_removal_selector(self.index, self.selector())
+        self.assertEqual(status, "UNKNOWN")
+        self.assertEqual(finding.code, pipeline.REASON_SELECTOR_AMBIGUOUS)
+
+    def test_an_illegal_selector_field_is_blocked(self):
+        for selector in (self.selector(scope="global"), {"kind": "net"},
+                         self.selector(at_pin="nope")):
+            with self.subTest(selector=selector):
+                status, finding = pipeline.resolve_removal_selector(self.index, selector)
+                self.assertEqual(status, "BLOCKED")
+                self.assertEqual(finding.code, pipeline.REASON_SCHEMA_INVALID)
+
+    def test_a_selector_ast_disagreeing_with_the_observation_is_not_guessed(self):
+        self.index["objects"][self.uuid]["descriptor"]["ast"] = ["label", "OTHER"]
+        status, finding = pipeline.resolve_removal_selector(self.index, self.selector())
+        self.assertEqual(status, "UNKNOWN")
+        self.assertEqual(finding.code, pipeline.REASON_PARSER_DISAGREEMENT)
+
+    def test_a_label_absent_from_the_before_observation_is_not_guessed(self):
+        self.index["objects"] = {}
+        status, finding = pipeline.resolve_removal_selector(self.index, self.selector())
+        self.assertEqual(status, "UNKNOWN")
+        self.assertEqual(finding.code, pipeline.REASON_PARSER_DISAGREEMENT)
+
+    def test_a_wire_selector_ignores_endpoint_direction(self):
+        uuid = self.add_wire()
+        status, payload = pipeline.resolve_removal_selector(
+            self.index, {"kind": "wire", "endpoints_nm": [[3, 4], [1, 2]]})
+        self.assertEqual(status, "PASS")
+        self.assertEqual(payload["uuid"], uuid)
+
+    def test_a_wire_selector_needs_exactly_two_endpoints(self):
+        status, finding = pipeline.resolve_removal_selector(
+            self.index, {"kind": "wire", "endpoints_nm": [[1, 2]]})
+        self.assertEqual(status, "BLOCKED")
+        self.assertEqual(finding.code, pipeline.REASON_SCHEMA_INVALID)
+
+    def test_resolve_removals_returns_the_first_failure(self):
+        status, declarations, findings = pipeline.resolve_removals(
+            self.index, [{"slot": "wrong_dm", "kind": "label", "name": "USB_DM",
+                          "at_pin": "R1.1", "scope": "local"},
+                         {"slot": "gone", "kind": "label", "name": "NOPE",
+                          "at_pin": "R1.1", "scope": "local"}])
+        self.assertEqual(status, "UNKNOWN")
+        self.assertIsNone(declarations)
+        self.assertEqual(findings[0].code, pipeline.REASON_COVERAGE_INCOMPLETE)
+
+    def test_resolve_removals_binds_every_named_slot(self):
+        status, declarations, findings = pipeline.resolve_removals(
+            self.index, [{"slot": "wrong_dm", "kind": "label", "name": "USB_DM",
+                          "at_pin": "R1.1", "scope": "local"}])
+        self.assertEqual((status, findings), ("PASS", []))
+        self.assertEqual(sorted(declarations), ["wrong_dm"])
+
+    def test_duplicate_slots_are_blocked(self):
+        status, declarations, findings = pipeline.resolve_removals(
+            self.index, [{"slot": "a", "kind": "label", "name": "USB_DM",
+                          "at_pin": "R1.1", "scope": "local"},
+                         {"slot": "a", "kind": "wire", "endpoints_nm": [[1, 2], [3, 4]]}])
+        self.assertEqual(status, "BLOCKED")
+        self.assertEqual(findings[0].code, pipeline.REASON_SCHEMA_INVALID)
+
+    def test_the_index_is_built_from_the_c2_observation_of_the_same_bytes(self):
+        raw = mini()
+        index = pipeline.selector_source_index(raw)
+        self.assertEqual(index["observation"]["source_sha256"], pipeline.hash_bytes(raw))
+        self.assertTrue(index["objects"])
+        self.assertIsInstance(index["pin_anchor"], dict)
+
+    def test_bytes_outside_the_qualified_subset_are_refused(self):
+        with self.assertRaises(pipeline.HostContextError):
+            pipeline.selector_source_index(b"(kicad_sch (version 1))")
 
 
 if __name__ == "__main__":
