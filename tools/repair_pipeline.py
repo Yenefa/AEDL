@@ -1803,7 +1803,8 @@ def observe_candidate_manifest(host_context):
     return {"version": 1, "files": rows}
 
 
-def runtime_bindings(host_context, proposal, native_before, policy_sha, approved):
+def runtime_bindings(host_context, proposal, native_before, policy_sha, approved,
+                     rule=None, removals=None):
     """Derive the policy's 14 required runtime values.
 
     Values the proposal, the host native read or C5's own observation already
@@ -1836,12 +1837,34 @@ def runtime_bindings(host_context, proposal, native_before, policy_sha, approved
     except host_toolchain.HostBindingError as exc:
         raise HostContextError([_host_finding("toolchain slice is not derivable: %s" % exc)]) from exc
 
+    # object_identity_map is NOT a component identity index.  C2 _prepare() L498-504
+    # reads it as the declarations of the source objects this round is authorized to
+    # REMOVE, keyed by {uuid, kind, descriptor_sha256}.  Component identity belongs to
+    # the BEFORE observation; the removal declarations belong to the selected rule.
+    # The two have different lifecycles, so this is resolved here -- after rule
+    # selection -- and never before it.
+    removals = dict(removals or {})
+    declared = ((rule or {}).get("object_delta") or {}).get("remove") or []
+    declared_slots = [entry["slot"] for entry in declared]
+    if declared and not removals:
+        raise HostContextError([_host_finding(
+            "the selected rule removes %d source object(s); object_identity_map must be "
+            "resolved from the current fault bytes, not left empty" % len(declared))])
+    if sorted(removals) != sorted(declared_slots):
+        raise HostContextError([_host_finding(
+            "object_identity_map must bind exactly the selected rule's removal slots: "
+            "declared=%s resolved=%s" % (sorted(declared_slots), sorted(removals)))])
+    for slot, entry in removals.items():
+        _host_closed(entry, ("uuid", "kind", "descriptor_sha256"), "removal %r" % slot)
+        _host_sha(entry["descriptor_sha256"], "removal descriptor digest")
+        _host_text(entry["uuid"], "removal uuid")
+        if entry["kind"] not in ("wire", "label"):
+            raise HostContextError([_host_finding(
+                "removal %r has unsupported kind %r" % (slot, entry["kind"]))])
+
     pin_identity_map = {}
-    object_identity_map = {}
     embedded_symbol_hashes = {}
     for comp in observation["components"]:
-        ident = comp["identity"]
-        object_identity_map[ident["component_uuid"]] = ident
         embedded_symbol_hashes[comp["lib_id"]] = comp["lib_definition_sha256"]
     for row in observation["pins"]:
         ident = row["identity"]
@@ -1860,7 +1883,7 @@ def runtime_bindings(host_context, proposal, native_before, policy_sha, approved
         "authority_context": host_context["authority"],
         "approved_rule_ids": sorted(approved),
         "pin_identity_map": pin_identity_map,
-        "object_identity_map": object_identity_map,
+        "object_identity_map": removals,
         "embedded_symbol_hashes": embedded_symbol_hashes,
     }
     missing = [field for field in _RUNTIME_BINDING_FIELDS if field not in values]

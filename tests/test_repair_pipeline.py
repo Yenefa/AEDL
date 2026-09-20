@@ -263,7 +263,9 @@ class RuntimeBindingTests(unittest.TestCase):
         # identity maps and symbol hashes come from the native observation
         self.assertEqual(values["embedded_symbol_hashes"]["Device:R"], "1" * 64)
         self.assertTrue(values["pin_identity_map"])
-        self.assertTrue(values["object_identity_map"])
+        # object_identity_map binds REMOVALS, not the component inventory: with no
+        # rule selected there is nothing to remove.
+        self.assertEqual(values["object_identity_map"], {})
         # only the akcli slice is bound here; the C3 slice is checked after verify
         self.assertEqual(values["toolchain_manifest"]["akcli_version"], "0.21.0")
 
@@ -384,6 +386,67 @@ class PartitionTransformTests(unittest.TestCase):
             self.observation, rule, self.captured, {"R9.1": synthetic})
         members = [m for m in partitions if m["names"] == ["/A"]][0]["members"]
         self.assertEqual([m["reference"] for m in members].count("R9"), 1)
+
+
+class RemovalBindingTests(unittest.TestCase):
+    """S1b: object_identity_map binds exactly the selected rule's removals.
+
+    C2 _prepare() reads it as the declarations of the objects this round may
+    delete; a component identity index is a different thing with a different
+    lifecycle and must never be substituted for it.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.design = self.root / "cand" / "design"
+        self.design.mkdir(parents=True)
+        (self.design / TARGET).write_bytes(b"(kicad_sch)")
+        self.context = pipeline.validate_host_context(
+            host_context(design_root=str(self.root / "cand")))
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def rule(self, slots):
+        return {"id": "T", "route": pipeline.ROUTE_STRICT,
+                "object_delta": {"remove": [{"slot": slot} for slot in slots]}}
+
+    def declaration(self, uuid):
+        return {"uuid": uuid, "kind": "label", "descriptor_sha256": "1" * 64}
+
+    def bind(self, rule=None, removals=None):
+        return pipeline.runtime_bindings(self.context, proposal(), native_before(),
+                                         policy_sha(), {"E1"}, rule=rule,
+                                         removals=removals)
+
+    def test_a_rule_that_removes_objects_must_have_them_resolved(self):
+        with self.assertRaises(pipeline.HostContextError) as caught:
+            self.bind(rule=self.rule(["wrong_dm"]), removals={})
+        self.assertIn("object_identity_map", caught.exception.findings[0].detail)
+
+    def test_resolved_slots_must_match_the_rule_exactly(self):
+        for removals in ({"other": self.declaration("u")},
+                         {"wrong_dm": self.declaration("u"),
+                          "extra": self.declaration("v")}):
+            with self.subTest(removals=sorted(removals)):
+                with self.assertRaises(pipeline.HostContextError) as caught:
+                    self.bind(rule=self.rule(["wrong_dm"]), removals=removals)
+                self.assertIn("removal slots", caught.exception.findings[0].detail)
+
+    def test_resolved_removals_reach_the_binding_unchanged(self):
+        declared = self.declaration("11111111-2222-3333-4444-555555555555")
+        values = self.bind(rule=self.rule(["wrong_dm"]), removals={"wrong_dm": declared})
+        self.assertEqual(values["object_identity_map"], {"wrong_dm": declared})
+        self.assertEqual(len(values), len(pipeline._RUNTIME_BINDING_FIELDS))
+
+    def test_a_removal_declaration_is_closed_and_typed(self):
+        for entry in ({"uuid": "u", "kind": "label"},
+                      {"uuid": "u", "kind": "symbol", "descriptor_sha256": "1" * 64},
+                      {"uuid": "u", "kind": "label", "descriptor_sha256": "nope"}):
+            with self.subTest(entry=entry):
+                with self.assertRaises(pipeline.HostContextError):
+                    self.bind(rule=self.rule(["wrong_dm"]), removals={"wrong_dm": entry})
 
 
 if __name__ == "__main__":
