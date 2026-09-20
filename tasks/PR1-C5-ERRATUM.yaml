@@ -1,0 +1,132 @@
+# Task Envelope — PR1-C5-ERRATUM  C2 new-source-object expected semantics
+#
+# 状态：DRAFT — **等待 human Owner 的明确 scope grant**。
+# 本卡尚未 admission。在 Owner 于 issue #83 给出决定之前，不得修改
+# gates/repair_verification.py（它当前仍是 PR1-C5 的 forbidden_paths）。
+# decision_ref 必须是**人工评论** permalink；agent 用 Yenefa credential 发出的
+# PENDING 评论只是状态记录，不构成 grant。
+#
+# 缺陷定位（逐行核对，C5 HEAD 2460d5d / 基线 669aa16）：
+#   gates/repair_verification.py:251-262 要求**每一个** source object —— 包括
+#   identity 以 "new:" 开头的新建 symbol/label —— 都携带完整未来 writer AST
+#   （descriptor.ast + semantic_ast_sha256 == canonical_sha256("protected", ast)）；
+#   :410-419 的 _align_new 更用「mask 掉 UUID 后的完整 AST」作为新 label 的匹配键。
+#   而 frozen runtime policy（src/repair/topology_policy_v1.json）只定义工程语义
+#   （name / at_pin / scope / rotation、器件属性、placement）；pinned akcli 0.21.0
+#   的序列化由 writer + 内嵌库 + 当前 document 状态共同决定：
+#     akcli/writers/handlers/labels.py:109-135  _emit_net_label 自造 tag/name/at/effects/uuid
+#     akcli/writers/placement.py:48-97          _place_symbol 依赖 lib_cache + unit_pins
+#     akcli/writers/properties.py:106+          _autoplace_ref_value 依赖几何与邻居锚点
+#   PR-1 实现合同（docs/competition/internal/AEDL_PR1_实现合同_20260907.md）
+#   L152 写「新增组件整棵 instance 子树允许由固定 native writer 生成」，
+#   L160 写「expected_after 不声称预知 writer 将产生的 bytes hash」。
+#   => 这是 C2 对新对象的 expected 语义**过度绑定到 writer 序列化**，不是 C5 缺 helper。
+#
+# 追溯关系：缺陷位于 C2，但在 C5 integration（S1b 第 4 步 build_expected_after /
+# bind_policy）时被发现并直接阻塞 C5，故命名 PR1-C5-ERRATUM。
+# 缺陷全貌与函数级补丁草案：notes/pr1-c5-erratum/C2_NEW_SOURCE_OBJECT_ERRATUM_DRAFT.md
+
+task: PR1-C5-ERRATUM
+
+base:
+  branch: feat-pr1-c5-erratum
+  sha: 669aa1622385d598758c0376bc874ff7ca0842f8
+
+goal: |
+  以**窄域**方式修正 C2（gates/repair_verification.py）对 **new source object only**
+  的 expected / alignment 语义：把「必须预言 writer 的完整序列化 AST」换成
+  「必须精确匹配工程语义」。
+
+  只改四块：
+    normalize_observation(expected=True)  新对象改为 closed semantic expectation
+    _align_new()                          新 label 改为按 (name, scope, point_nm, rotation) 唯一匹配
+    _reidentify() + 新增 _canonicalize_new_objects()  已对齐新对象规范化为同一语义形状
+    新增 _label_semantics() / _canonical_new_object()
+  _delta() 与 _projection() **函数体零改动**（语义投影在规范化阶段一次完成，
+  比较站点保持 shape-blind，避免两侧不对称投影）。
+
+  一个都不放松：
+    - existing object：full AST exact（逐节点）
+    - removed object：exact UUID + kind + original descriptor digest
+    - exact topology（components / pins / partitions）
+    - protected projection（before 侧）与 protected_projection_sha256
+
+scope: |
+  Writable paths are whitelisted in allowed_paths; everything else is FOREIGN.
+  本卡是 Owner 授权的**窄域**验证语义修正：只动 C2 对 new source object 的
+  expected / alignment 语义，以及其测试。C1 policy schema、C4 adapter、
+  C5 pipeline 一律只读。
+
+  Impact Analysis
+
+  Direct modifications:   gates/repair_verification.py
+                          tests/test_repair_verification.py
+                          tasks/PR1-C5-ERRATUM.yaml
+                          notes/pr1-c5-erratum/**
+                          docs/HANDOFF.md
+                          docs/compliance/AI_USAGE_LOG.md
+                          docs/compliance/ai-usage/**
+  Potentially affected:   PR1-C5 S1b 第 4 步 build_expected_after（恢复后须按新形状
+                          产出 expected_after.source_objects）；tests/test_repair_pipeline.py
+                          未来的 expected_after 构造；C6 若引用 expected_after 形状
+  Explicitly not touched: tools/**（C4 adapter / C5 pipeline）、src/**（policy 与冻结 schema）、
+                          sandbox_runtime/**、tests/fixtures/**（native 证据字节）、
+                          gates/run_gates.py、gates/schematic_semantics.py、
+                          docs/evidence/**、delivery/**、.gitattributes
+  Risk: MEDIUM-HIGH（改 C2 验证语义本身 —— 故本卡先出草案经 Owner 审，再落代码）
+
+  change_budget:
+    expected_files: 7
+    expected_modules: [gates, tests, tasks, notes, docs]
+    cross_module: true
+    # 从 PR1-C5 的 false 翻转为 true：本卡修改 C2 验证语义本身
+    contract_change: true
+    evidence_semantics_change: false
+
+dependencies: []
+
+allowed_paths:
+  - gates/repair_verification.py
+  - tests/test_repair_verification.py
+  - tasks/PR1-C5-ERRATUM.yaml
+  - notes/pr1-c5-erratum/**
+  - docs/HANDOFF.md
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/compliance/ai-usage/**
+
+forbidden_paths:
+  - tools/**
+  - src/**
+  - sandbox_runtime/**
+  - tests/fixtures/**
+  - gates/run_gates.py
+  - gates/schematic_semantics.py
+  - docs/evidence/**
+  - delivery/**
+  - .gitattributes
+
+acceptance: |
+  - **Owner grant 前置**：Owner 于 issue #83 明确批准 scope expansion 之前，
+    不得 admission、不得改任何代码。decision_ref 必须是人工评论 permalink。
+  - 新对象 expected 形状为 closed schema，且与旧形状互斥（混用 → ObservationError）
+  - _delta() 与 _projection() 的函数体**零改动**（diff 可逐行核对）
+  - existing object full AST exact 不放松（回归 R1）
+  - removed object exact UUID + kind + descriptor digest 不放松（回归 R2/R3）
+  - old UUID 复用 → FAIL（R4）；额外 source object → FAIL（R5）；
+    缺 expected 新对象 → FAIL（R6）
+  - new label 语义字段错 → FAIL，且必须**不是**被 mask 掉（R7）
+  - 两个真实 label 与同一 expected semantic tuple 匹配 → FAIL（R8）
+  - 新 symbol source-object UUID 与 aligned component_uuid 绑定断言成立（R9）
+  - expected new object 混用形状 → FAIL（R10）
+  - protected_projection_sha256 在 before 侧不因新对象语义改变而改变（R11）
+  - py -3.9 -X utf8 -m unittest tests.test_repair_verification → 全绿
+  - py -3.9 -X utf8 -m unittest discover -s tests → 无回归
+  - py -3.9 -m tools.dev_gate --envelope tasks/PR1-C5-ERRATUM.yaml → exit 0
+  - 台账 + HANDOFF 如实追加；状态 PENDING_HUMAN_REVIEW
+
+exceptions:
+  # PENDING —— 在 Owner 于 issue #83 给出人工 grant 之前不得填写 granted_by/decision_ref。
+  # 预期需要 allow_drift（envelope-first，同 PR1-C5 / PR1-C5-PRE 先例）。
+
+escalation:
+  owner: Yenefa
