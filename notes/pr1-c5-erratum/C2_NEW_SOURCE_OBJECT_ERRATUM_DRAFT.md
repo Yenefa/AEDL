@@ -1,10 +1,25 @@
 # PR1-C5-ERRATUM — C2 new-source-object expected semantics（函数级补丁草案）
 
-> **状态：DRAFT — 未应用任何代码改动。**
+> **状态：DRAFT（rev2）— 未应用任何代码改动。**
 > 基线：`669aa16`（origin/master）。`gates/repair_verification.py` blob `88a311e17763e0ac83f33c5fd499c2a1852b2c44`
 > （与 C5 HEAD `2460d5d` 逐字节相同，已用 `git hash-object` 双向核对）。
-> Owner scope grant：**PENDING**（issue #83）。grant 之前不得改 `gates/repair_verification.py`。
 > 配套：`tasks/PR1-C5-ERRATUM.yaml`。
+>
+> **Provenance（不得混淆）**
+>
+> ```text
+> Architecture review decision (AI reviewer, 2026-09-20):
+>   CHANGES_REQUESTED -> rev2 已修 2 blockers + 5 items
+>   recommend narrow C2 erratum; do not implement before human Owner scope grant
+>
+> Human Owner scope grant: PENDING
+> Decision ref:            PENDING
+> ```
+>
+> 本文件与相关记录的 rev1 曾把该**架构评审**写成「Owner 裁定 / 人类指令」—— 那是 provenance
+> 错误，rev2 已更正。issue #83 现有 3 条评论中：2 条是 PR1-C5 / PR1-C5-PRE 的 `allow_drift`
+> grant，1 条是本轮 agent 的 BLOCKED 状态记录；**没有**针对本 erratum 的人工 scope grant。
+> grant 之前不得改 `gates/repair_verification.py`，也不得 admission。
 
 ---
 
@@ -16,7 +31,7 @@
 | 2 | `_align_new()` 唯一匹配 | 新 label 按 `(name, scope, point_nm, rotation)` 恰好一对一；新 symbol 仍按 reference，另加 Q6 绑定断言 |
 | 3 | `_delta()` 如何消费 | **不加 `new:` 分支**。语义投影在 `_canonicalize_new_objects()` **一次**完成，两侧同形状，`_delta` 保持 shape-blind |
 | 4 | `_projection()` fail-closed | **不加分支**。mask 条件是整份 `{identity, kind, semantics}` 相等 —— **identity 相等不构成 mask 理由** |
-| 5 | existing / removed 不放松 | §6 逐条列出零改动代码路径 + R1..R11 回归矩阵 |
+| 5 | existing / removed 不放松 | §6 逐条列出零改动代码路径 + R1..R13 回归矩阵 |
 | 6 | symbol ↔ component 绑定 | `_canonical_new_object()` 断言 source-object UUID **恰等于** component_uuid，且唯一 |
 
 ---
@@ -230,6 +245,11 @@ def _canonical_new_object(obj, components):
         reference = owners[0]["reference"]
         if ident != "new:" + reference:
             raise _BindingError("new symbol identity is not its component role")
+        node = obj["descriptor"]["ast"]
+        if not isinstance(node, list) or not node or node[0] != "symbol":
+            raise _BindingError("new symbol source object is not a symbol node")
+        if _source_flag(node, "exclude_from_sim", False):          # v1: false / absent only
+            raise _BindingError("new symbol must not exclude itself from simulation (v1)")
         return {"identity": ident, "kind": "symbol", "semantics": {"reference": reference}}
     if kind == "label":
         return {"identity": ident, "kind": "label",
@@ -337,6 +357,8 @@ existing 对象逐对象相等，所以 existing 永不进 `changed`）。remove
 | R9 | new symbol source-object UUID ≠ aligned component_uuid | FAIL（见 §6.3） |
 | R10 | expected new object 混用形状 | FAIL（`ObservationError`） |
 | R11 | 改新对象语义 → `protected_projection_sha256` **不变**（before 侧对照） | 相等断言 |
+| R12 | new symbol 携带 `exclude_from_sim = yes` | FAIL（v1 只允许 false/absent，见 §7.3） |
+| R13 | new symbol source-object 的 reference 与 component 一致，但 source-object UUID 未绑定到该 `component_uuid` | FAIL —— 且必须走**真实 AFTER full object → `_align_new` → `_canonicalize_new_objects`** 全路径（`compare_delta` + `compare_protected`），不得只单测 helper |
 
 ### 6.3 Q6 — 新 symbol 的 source object 与 component observation 绑定
 
@@ -361,31 +383,83 @@ delta 不等 → FAIL。
 
 ---
 
-## 7. 残留自由度（**需要 Owner 明确接受或加严**）
+## 7. new symbol 的 v1 边界（rev2 更正）
 
-erratum 之后，新 symbol 的真实子树不再与「完整未来 AST」比较，只由下列事实约束：
+> rev1 把 `instances` 列为「残留自由度」是**事实错误**，把 `exclude_from_sim` 笼统称为
+> 「writer 噪声」是**口径错误**。rev2 按 architecture review 的技术结论更正如下。
 
-- `observe_source:1023-1025` / `:866-868` 的**结构白名单**（未知字段 fail-closed）；
-- `lib_id` 必须解析到内嵌 `lib_symbols`（`:870-871`）；
-- pin inventory 必须等于库定义（`:904-905`）；
-- Reference/Value 必填、Footprint 有 fallback（`:874-875`、`:910`）；
-- `lib_definition_sha256`（`:909`）/ `pin_definition_sha256`（`:915`）逐字节绑定；
-- components / pins / partitions 由 `_prepare:472-491` exact 比较。
+### 7.1 v1 边界（逐条）
 
-**因此残留的未绑定自由度是**：instance 子树里**非电气**的
-`property` 名称集合、`instances` 内容、`exclude_from_sim`、`fields_autoplaced` 等 writer 噪声。
+```text
+new symbol:
+  components / pins / topology                exact
+  source-object <-> component UUID            exact（§6.3 断言）
+  instances reference / path / unit           existing parser invariants
+  dnp / in_bom / on_board                     exact
+  exclude_from_sim                            false / absent only      <- rev2 收紧
+  property placement / effects /
+  fields_autoplaced                           non-electrical presentation freedom
+  unknown structural fields                   fail closed
+```
 
-**可选加严（建议，但须先实测校准）**：
+### 7.2 更正点 1 —— `instances` **不是**未绑定自由度
+
+`_source_components:886-895` 已经严格约束 `instances`：
+
+```python
+instances = _source_one(node, "instances")
+_source_fields(instances, {"project"})
+project = _source_one(instances, "project")
+_text(_source_text(project[1]), "instance project")
+_source_fields(project, {"path"}, positional=1)
+path = _source_one(project, "path")
+_source_fields(path, {"reference", "unit"}, positional=1)
+if (_source_text(path[1]) != sheet or _source_value(path, "reference") != reference or
+        _source_one(path, "unit") != unit_node):
+    raise ObservationError("instance path or identity disagrees with source")
+```
+
+即 sheet path / reference / unit 都必须与当前 source observation 一致，且 `_source_fields` 对
+未知字段 fail-closed。因此 `instances` 属**既有 parser invariant**，不是 erratum 引入的自由度。
+
+### 7.3 更正点 2 —— `exclude_from_sim` 收紧为 false/absent
+
+`exclude_from_sim` 目前只出现在 `_source_fields` 白名单里（`:867`、`:822`），**从未被读取**。
+它不是视觉格式噪声，而是**行为 metadata**；即使当前 PR-1 的 topology / netlist 验证不消费它，
+也不应归入「serialization noise」。rev2 采用 architecture review 指定的 v1 口径：
+
+```text
+exclude_from_sim 必须 false 或 absent
+```
+
+落点：`_canonical_new_object()` 的 symbol 分支读真实 AFTER 节点
+（`_source_flag(node, "exclude_from_sim", False)` 必须为 `False`），否则 `_BindingError`（回归 R12）。
+
+> **TO_VERIFY（实现时必做，不是 blocker）**：需在真实 DC-04 / DC-05 native AFTER 上确认
+> akcli 0.21.0 对 `Device:R` / `Device:C` 实际写出的 `exclude_from_sim` 形态是 `no` 或 absent；
+> 若它写出 `yes`，该要求会 false-negative，须回 Owner 重新裁定。
+
+### 7.4 明确**不批准**的方案 —— property 名称集合闭合
+
+rev1 提出的
 
 ```text
 set(instance_properties) == set(library_properties) | {"Reference", "Value", "Footprint"}
 ```
 
-把「额外 property」也关掉。**但这必须先拿到 C4 的真实 native AFTER**（DC-04 / DC-05），
-确认 akcli 0.21.0 实际写出的 property 集合，否则会 false-negative。
+**不作为本 erratum 的条件**（architecture review 明确不批准）：容易 false-negative，
+且需要真实 DC-04 / DC-05 AFTER 校准才能定形。本 erratum 只保留 §7.1 的边界。
 
-> **请 Owner 裁定**：接受残留自由度（writer 噪声不属授权内容，符合合同 L152 的
-> 「无附加电气结构」），还是要求加严到 property 名称集合闭合？
+### 7.5 残留自由度（更正后的准确表述）
+
+erratum 之后，新 symbol 真实子树中**未进入授权语义**的只剩**表现层**内容：
+
+- instance `property` 的 placement / effects（`at` / `effects`）与额外的非电气 property 节点；
+- `fields_autoplaced`；
+- writer 自造的 `uuid`（由 alignment 映射到 symbolic identity，不参与授权）。
+
+其余一切（components / pins / topology / lib+pin digest / placement / assembly flags /
+`instances` / `exclude_from_sim` / 未知结构字段）要么 exact，要么 fail-closed。
 
 ---
 
@@ -404,7 +478,7 @@ Direct modifications:   gates/repair_verification.py
                         tests/test_repair_verification.py
                           setUp source_object() builder (:60-65) and new:label fixture (:296)
                           existing fixtures' new-object shape
-                          new R1..R11
+                          new R1..R13
                         tasks/PR1-C5-ERRATUM.yaml, notes/pr1-c5-erratum/**,
                         docs/HANDOFF.md, docs/compliance/ai-usage/**
 
@@ -462,14 +536,17 @@ change_budget:
 
 ---
 
-## 11. 请 Owner 一并裁定
+## 11. 设计问题的处置（rev2）
 
-1. **Q1 形状**：新 symbol 的 `semantics` 是否只保留 `{reference}`（本草案），
-   还是要求把 position/rotation/mirror/value/footprint/assembly flags 也复制进来？
-   本草案主张**不复制**：这些字段已由同一份观测的 `components` 段在
-   `_prepare:472-491` exact 比较，复制会产生第二个真相源。
-2. **§7 残留自由度**：接受 writer 噪声不属授权内容，还是加严 property 名称集合闭合？
-3. **Q3 收敛点**：同意「`_delta` / `_projection` 零改动 + 语义投影收敛到
-   `_canonicalize_new_objects` 一处」，还是在 `_delta` 内显式加 `new:` 分支？
-4. **R7 的 mask 断言**：是否同意把「语义错的新对象必须仍出现在 after 投影里」
-   写成显式断言（而不只是断言整体 FAIL）？
+| # | 问题 | 处置 |
+| --- | --- | --- |
+| Q1 | new symbol `semantics` 是否只有 `{reference}` | **批准**：不复制 component fields，避免第二真相源 |
+| Q2 | 残留自由度 | **有条件批准**：删除 `instances`（事实错误）；`exclude_from_sim` 收紧为 false/absent；presentation-only property / effects / `fields_autoplaced` 不进入授权语义；property 名称集合闭合**不批准**（§7.4） |
+| Q3 | `_delta` / `_projection` 零改动 + canonicalization 单点收敛 | **批准** |
+| Q4 | R7 显式断言错误 new label 未被 mask | **批准，且必须保留** —— 只断言最终 FAIL 不够，必须证明 fail-closed 的具体机制没被绕掉 |
+
+### 11.1 仍需 human Owner scope grant
+
+以上全部是 **architecture review（AI reviewer）** 的技术结论，**不构成** Owner authorization。
+要改 `gates/repair_verification.py`，仍必须取得 **issue #83 上 human Owner 的明确 scope grant
+permalink**（已核：现有 3 条评论中没有针对本 erratum 的人工 grant）。
