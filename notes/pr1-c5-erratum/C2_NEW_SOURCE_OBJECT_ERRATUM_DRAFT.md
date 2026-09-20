@@ -1,6 +1,6 @@
 # PR1-C5-ERRATUM — C2 new-source-object expected semantics（函数级补丁草案）
 
-> **状态：DRAFT（rev3）— 未应用任何代码改动。**
+> **状态：DRAFT（rev4）— 未应用任何代码改动。**
 > 基线：`669aa16`（origin/master）。`gates/repair_verification.py` blob `88a311e17763e0ac83f33c5fd499c2a1852b2c44`
 > （与 C5 HEAD `2460d5d` 逐字节相同，已用 `git hash-object` 双向核对）。
 > 配套：`tasks/PR1-C5-ERRATUM.yaml`。
@@ -25,6 +25,20 @@
 > `DESIGN_ACCEPTED` / `READY_FOR_HUMAN_SCOPE_GRANT`，**然后**才在 issue #83 请求 human Owner
 > 明确批准 `contract_change: true` 与 `gates/repair_verification.py` 的 scope expansion。
 > 当前 `Owner scope grant: PENDING` **保持不变**；不得提前申请、不得自行放宽。
+>
+> **版本核对（rev4）**：三项 review 要求的落点 ——
+>
+> ```text
+> item 1  _text / _identifier / _integer 返回值说明                  -> §2.2「返回值必须分清」
+> item 2  §7 删除 instances residual-freedom + exclude_from_sim 收紧 -> §7.2 / §7.3 / §7.1
+> item 3  R12 进入 §6 矩阵 + envelope acceptance + §8 impact        -> R12 行 / acceptance / §8
+> ```
+>
+> 核验命令（**不要用缓存快照**）：
+> `git show HEAD:notes/pr1-c5-erratum/C2_NEW_SOURCE_OBJECT_ERRATUM_DRAFT.md`
+> rev1 的两句旧文本 ——「…`instances` 内容、`exclude_from_sim`、`fields_autoplaced` 等 writer 噪声」
+> 与「`_integer` / `_text` / `_identifier` 是纯校验器，返回 `None`」—— **在本版已不存在**
+> （分别被 §7.2 / §7.3 与 §2.2「返回值必须分清」取代）。若你看到的仍是这两句，说明读的是 rev1 快照。
 
 ---
 
@@ -36,7 +50,7 @@
 | 2 | `_align_new()` 唯一匹配 | 新 label 按 `(name, scope, point_nm, rotation)` 恰好一对一；新 symbol 仍按 reference，另加 Q6 绑定断言 |
 | 3 | `_delta()` 如何消费 | **不加 `new:` 分支**。语义投影在 `_canonicalize_new_objects()` **一次**完成，两侧同形状，`_delta` 保持 shape-blind |
 | 4 | `_projection()` fail-closed | **不加分支**。mask 条件是整份 `{identity, kind, semantics}` 相等 —— **identity 相等不构成 mask 理由** |
-| 5 | existing / removed 不放松 | §6 逐条列出零改动代码路径 + R1..R13 回归矩阵 |
+| 5 | existing / removed 不放松 | §6 逐条列出零改动代码路径 + R1..R12 回归矩阵 |
 | 6 | symbol ↔ component 绑定 | `_canonical_new_object()` 断言 source-object UUID **恰等于** component_uuid，且唯一 |
 
 ---
@@ -365,11 +379,10 @@ existing 对象逐对象相等，所以 existing 永不进 `changed`）。remove
 | R6 | 少一个 expected new object（只 place 不加 label） | FAIL |
 | R7 | new label 语义字段错（name / point_nm / rotation 各一例） | FAIL，且断言它**没有被 mask**（after 投影里仍在） |
 | R8 | 两个真实 label 与同一 expected semantic tuple 匹配 | FAIL（`_BindingError`） |
-| R9 | new symbol source-object UUID ≠ aligned component_uuid | FAIL（见 §6.3） |
+| R9 | new symbol source-object UUID 未绑定到 aligned `component_uuid`（reference 可以一致） | FAIL —— **integration-path test**：必须走真实 AFTER full object → `_align_new` → `_canonicalize_new_objects` → `compare_delta` + `compare_protected`，不得只单测 helper（见 §6.3）。原 R13 已按 review 意见折入本条，不再单列 |
 | R10 | expected new object 混用形状 | FAIL（`ObservationError`） |
 | R11 | 改新对象语义 → `protected_projection_sha256` **不变**（before 侧对照） | 相等断言 |
-| R12 | new symbol 携带 `exclude_from_sim = yes` | FAIL（v1 只允许 false/absent，见 §7.3） |
-| R13 | new symbol source-object 的 reference 与 component 一致，但 source-object UUID 未绑定到该 `component_uuid` | FAIL —— 且必须走**真实 AFTER full object → `_align_new` → `_canonicalize_new_objects`** 全路径（`compare_delta` + `compare_protected`），不得只单测 helper |
+| R12 | new symbol 携带 `exclude_from_sim = yes` | FAIL（v1 只允许 false/absent，见 §7.3）；必须**同时**进入 §6 矩阵 + envelope acceptance + §8 impact，防止实现者只改描述不写 gate |
 
 ### 6.3 Q6 — 新 symbol 的 source object 与 component observation 绑定
 
@@ -463,11 +476,19 @@ set(instance_properties) == set(library_properties) | {"Reference", "Value", "Fo
 
 ### 7.5 残留自由度（更正后的准确表述）
 
-erratum 之后，新 symbol 真实子树中**未进入授权语义**的只剩**表现层**内容：
+erratum 之后，新 symbol 真实子树中**未进入授权语义**的只剩**非电气 presentation metadata**：
 
-- instance `property` 的 placement / effects（`at` / `effects`）与额外的非电气 property 节点；
-- `fields_autoplaced`；
-- writer 自造的 `uuid`（由 alignment 映射到 symbolic identity，不参与授权）。
+```text
+非电气 presentation metadata:
+  property 的额外非电气表现细节
+  property 的 at / effects
+  fields_autoplaced
+  writer 自造的 uuid（由 alignment 映射到 symbolic identity，不参与授权）
+```
+
+**这些仍受 `_source_fields()` 的 closed whitelist 约束**（instance 白名单 `observe_source:866-868`、
+root 白名单 `:1023-1025`）：未知结构字段一律 fail-closed，presentation freedom 只存在于白名单
+**之内**的取值/位置，不是「可以塞任意节点」。
 
 其余一切（components / pins / topology / lib+pin digest / placement / assembly flags /
 `instances` / `exclude_from_sim` / 未知结构字段）要么 exact，要么 fail-closed。
@@ -489,7 +510,8 @@ Direct modifications:   gates/repair_verification.py
                         tests/test_repair_verification.py
                           setUp source_object() builder (:60-65) and new:label fixture (:296)
                           existing fixtures' new-object shape
-                          new R1..R13
+                          new R1..R12（R12 = new symbol exclude_from_sim=yes -> FAIL）
+                          _canonical_new_object() 新增 exclude_from_sim false/absent 检查
                         tasks/PR1-C5-ERRATUM.yaml, notes/pr1-c5-erratum/**,
                         docs/HANDOFF.md, docs/compliance/ai-usage/**
 

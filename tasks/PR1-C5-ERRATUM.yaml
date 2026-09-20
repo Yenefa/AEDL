@@ -120,12 +120,13 @@ acceptance: |
     缺 expected 新对象 → FAIL（R6）
   - new label 语义字段错 → FAIL，且必须**不是**被 mask 掉（R7）
   - 两个真实 label 与同一 expected semantic tuple 匹配 → FAIL（R8）
-  - 新 symbol source-object UUID 与 aligned component_uuid 绑定断言成立（R9）
+  - 新 symbol source-object UUID 与 aligned component_uuid 绑定断言成立（R9，**integration-path**：
+    真实 AFTER full object → _align_new → _canonicalize_new_objects → compare_delta + compare_protected，
+    不得只单测 helper；原 R13 已折入本条）
   - expected new object 混用形状 → FAIL（R10）
   - protected_projection_sha256 在 before 侧不因新对象语义改变而改变（R11）
-  - new symbol 携带 exclude_from_sim=yes → FAIL（R12，v1 只允许 false/absent）
-  - new symbol source-object reference 与 component 一致但 UUID 未绑定 → FAIL（R13），
-    且必须走真实 AFTER full object → _align_new → _canonicalize_new_objects 全路径
+  - new symbol 携带 exclude_from_sim=yes → FAIL（R12，v1 只允许 false/absent）；
+    该条必须**同时**落在 §6 回归矩阵、本 acceptance 与 §8 implementation impact
   - **不要求** property 名称集合闭合（architecture review 明确不批准，易 false-negative）
   - py -3.9 -X utf8 -m unittest tests.test_repair_verification → 全绿
   - py -3.9 -X utf8 -m unittest discover -s tests → 无回归
