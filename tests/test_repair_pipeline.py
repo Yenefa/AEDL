@@ -495,9 +495,17 @@ class SelectorResolutionTests(unittest.TestCase):
         self.assertEqual(payload, {"uuid": self.uuid, "kind": "label",
                                    "descriptor_sha256": "a" * 64})
 
-    def test_zero_matches_is_unknown_not_blocked(self):
+    def test_zero_matches_is_unknown_input_drift_not_incomplete_coverage(self):
+        # source complete + AST parseable: the failure is that the current bytes no
+        # longer bind to the frozen selector, so the class is input drift.
         status, finding = pipeline.resolve_removal_selector(
             self.index, self.selector(name="USB_DP"))
+        self.assertEqual(status, "UNKNOWN")
+        self.assertEqual(finding.code, pipeline.REASON_INPUT_DRIFT)
+
+    def test_an_incomplete_geometry_is_incomplete_coverage(self):
+        self.index["pin_anchor"] = {}
+        status, finding = pipeline.resolve_removal_selector(self.index, self.selector())
         self.assertEqual(status, "UNKNOWN")
         self.assertEqual(finding.code, pipeline.REASON_COVERAGE_INCOMPLETE)
 
@@ -549,7 +557,7 @@ class SelectorResolutionTests(unittest.TestCase):
                           "at_pin": "R1.1", "scope": "local"}])
         self.assertEqual(status, "UNKNOWN")
         self.assertIsNone(declarations)
-        self.assertEqual(findings[0].code, pipeline.REASON_COVERAGE_INCOMPLETE)
+        self.assertEqual(findings[0].code, pipeline.REASON_INPUT_DRIFT)
 
     def test_resolve_removals_binds_every_named_slot(self):
         status, declarations, findings = pipeline.resolve_removals(

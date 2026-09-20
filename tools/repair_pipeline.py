@@ -2099,7 +2099,11 @@ def resolve_removal_selector(index, selector):
         detail = "wire %s" % sorted(sorted(point) for point in wanted)
 
     if not matches:
-        return _selector_finding("UNKNOWN", REASON_COVERAGE_INCOMPLETE,
+        # The source observation and the AST are both complete here; what failed is
+        # that the CURRENT fault bytes can no longer be bound to the object the frozen
+        # selector requires.  That is input drift (status stays UNKNOWN, per
+        # policy defaults.unresolved_binding), not incomplete coverage.
+        return _selector_finding("UNKNOWN", REASON_INPUT_DRIFT,
                                  "%s matches no source object in the current bytes" % detail)
     if len(matches) > 1:
         return _selector_finding("UNKNOWN", REASON_SELECTOR_AMBIGUOUS,
