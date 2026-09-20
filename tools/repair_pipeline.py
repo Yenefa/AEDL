@@ -19,6 +19,7 @@ this module imports from it (digest semantics verified identical 74/74).
 """
 
 import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,7 +29,9 @@ from gates.repair_verification import (  # single home for digests since C2
     canonical_json_bytes,
     canonical_sha256,
     hash_bytes,
+    topology_sha256,
 )
+from tools import host_toolchain  # PR1-C5-PRE: the host toolchain identity
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PATCH_SCHEMA_PATH = REPO_ROOT / "src" / "repair" / "patch_schema_v1.json"
@@ -1469,6 +1472,401 @@ def _feedback_outcome(status: Any, cause_status: Any) -> str:
         return OUTCOME_UNAVAILABLE
     return OUTCOME_UNAVAILABLE
 
+
+# ---------------------------------------------------------------------------
+# C5 stage 1: the host context contract, runtime bindings and rule binding
+# ---------------------------------------------------------------------------
+#
+# Two different closed sets live here and must not be conflated:
+#
+#   _HOST_CONTEXT_FIELDS          what the HOST must provide: identities, the
+#                                 candidate workspace, the toolchain binding, the
+#                                 static policy path, the resolved authority and
+#                                 the native execution binding (contract section 8).
+#   _RUNTIME_BINDING_FIELDS       what the policy's binding_contract requires a
+#                                 BoundPolicy to BIND.  Most of these are derived
+#                                 by C5 -- from the parsed proposal, from the host
+#                                 native read, or from C5's own observation of the
+#                                 candidate's current bytes -- precisely so that a
+#                                 caller cannot inject a second truth source for
+#                                 the pin/object identity maps, the symbol hashes,
+#                                 the before topology or the base file manifest.
+#
+# A value being in _RUNTIME_BINDING_FIELDS does NOT make it a host_context field.
+
+_HOST_CONTEXT_FIELDS = (
+    "run_id", "candidate_id", "round_id", "patch_id",
+    "context_id", "target", "base_source_sha256", "initial_context_digest",
+    "limits", "workspace", "toolchain_binding", "candidate_symbol_digest",
+    "policy_path", "authority", "native",
+)
+# candidate_symbol_digest is a BEFORE-candidate binding supplied by the host, not a
+# host-level toolchain property and not a transaction-after property: the C4 writer
+# resolves place_component against the current document's embedded library, so the
+# after-digest may legitimately change once a symbol is written.  It is therefore a
+# host_context input that PRECHECK cross-checks against the native BEFORE observation.
+_WORKSPACE_FIELDS = ("candidate_root", "design_root", "repair_root", "lock_path")
+_AUTHORITY_FIELDS = ("context_digest", "resolved_authorization_refs", "decisions",
+                     "approvals")
+_AUTHORITY_DECISION_FIELDS = ("capability", "effect")
+_APPROVAL_FIELDS = ("policy_file_sha256", "rule_id", "run_id", "candidate_id", "paths")
+_NATIVE_BINDING_FIELDS = ("read_root", "artifact_root")
+
+CAPABILITY_TOOL_EXECUTE = "TOOL_EXECUTE"
+CAPABILITY_FILE_WRITE = "FILE_WRITE"
+REQUIRED_CAPABILITIES = (CAPABILITY_TOOL_EXECUTE, CAPABILITY_FILE_WRITE)
+EFFECT_ALLOW = "ALLOW"
+
+# policy binding_contract.required_runtime_values (14 items), in contract order.
+_RUNTIME_BINDING_FIELDS = (
+    "run_id", "candidate_id", "round_id", "patch_id", "proposal_sha256",
+    "base_file_manifest", "base_topology_sha256", "toolchain_manifest",
+    "policy_document_sha256", "authority_context", "approved_rule_ids",
+    "pin_identity_map", "object_identity_map", "embedded_symbol_hashes",
+)
+
+
+class HostContextError(RepairContractError):
+    """The host context violates the C5 host contract.  Never a PASS."""
+
+
+def _host_finding(detail, code=REASON_INPUT_DRIFT, object_id=None):
+    return _finding(code, detail, object_id)
+
+
+def _host_closed(value, allowed, label):
+    if not isinstance(value, Mapping):
+        raise HostContextError([_host_finding("%s must be a mapping" % label)])
+    unknown = sorted(set(value) - set(allowed))
+    missing = sorted(set(allowed) - set(value))
+    if unknown or missing:
+        raise HostContextError([
+            _host_finding("%s has missing or unknown fields (missing=%s unknown=%s)"
+                          % (label, missing, unknown))
+        ])
+    return value
+
+
+def _host_text(value, label, allow_empty=False):
+    if not isinstance(value, str) or (not value and not allow_empty):
+        raise HostContextError([_host_finding("invalid %s" % label)])
+    return value
+
+
+def _host_identifier(value, label):
+    text = _host_text(value, label)
+    if not _ID_RE.match(text):
+        raise HostContextError([_host_finding("invalid %s" % label)])
+    return text
+
+
+def _host_sha(value, label):
+    text = _host_text(value, label)
+    if not _SHA256_RE.match(text):
+        raise HostContextError([_host_finding("invalid %s" % label)])
+    return text
+
+
+def _host_absolute(value, label):
+    text = _host_text(value, label)
+    if not os.path.isabs(text):
+        raise HostContextError([_host_finding("%s must be an absolute host path" % label)])
+    return os.path.normpath(text)
+
+
+def _host_sequence(value, label):
+    if not isinstance(value, (list, tuple)):
+        raise HostContextError([_host_finding("%s must be a sequence" % label)])
+    return list(value)
+
+
+def validate_host_context(host_context):
+    """Validate the closed host contract and return a normalized copy.
+
+    Every field here is something only the host can supply.  Anything the policy
+    requires but C5 can derive is deliberately absent: accepting it from the
+    caller would create the second truth source the binding contract forbids.
+    """
+    _host_closed(host_context, _HOST_CONTEXT_FIELDS, "host_context")
+    normalized = {
+        "run_id": _host_identifier(host_context["run_id"], "run_id"),
+        "candidate_id": _host_identifier(host_context["candidate_id"], "candidate_id"),
+        "round_id": _host_identifier(host_context["round_id"], "round_id"),
+        "patch_id": _host_identifier(host_context["patch_id"], "patch_id"),
+        "context_id": _host_identifier(host_context["context_id"], "context_id"),
+        "target": _candidate_path(host_context["target"], "host_context.target"),
+        "base_source_sha256": _host_sha(host_context["base_source_sha256"],
+                                        "base_source_sha256"),
+        "initial_context_digest": _host_sha(host_context["initial_context_digest"],
+                                            "initial_context_digest"),
+        "limits": _host_closed_mapping(host_context["limits"], "limits"),
+        "workspace": _validate_workspace(host_context["workspace"]),
+        "toolchain_binding": _validate_toolchain_binding(host_context["toolchain_binding"]),
+        "candidate_symbol_digest": _host_sha(host_context["candidate_symbol_digest"],
+                                             "candidate_symbol_digest"),
+        "policy_path": _host_absolute(host_context["policy_path"], "policy_path"),
+        "authority": _validate_authority(host_context["authority"]),
+        "native": _validate_native_binding(host_context["native"]),
+    }
+    return normalized
+
+
+def _host_closed_mapping(value, label):
+    if not isinstance(value, Mapping):
+        raise HostContextError([_host_finding("%s must be a mapping" % label)])
+    return dict(value)
+
+
+def _validate_workspace(workspace):
+    _host_closed(workspace, _WORKSPACE_FIELDS, "workspace")
+    return {
+        "candidate_root": _host_absolute(workspace["candidate_root"], "candidate_root"),
+        "design_root": _host_absolute(workspace["design_root"], "design_root"),
+        "repair_root": _host_absolute(workspace["repair_root"], "repair_root"),
+        "lock_path": _host_absolute(workspace["lock_path"], "lock_path"),
+    }
+
+
+def _validate_toolchain_binding(binding):
+    """The PR1-C5-PRE host toolchain identity, validated by its own module."""
+    try:
+        return host_toolchain.validate_host_binding(binding)
+    except host_toolchain.HostBindingError as exc:
+        raise HostContextError([_host_finding("invalid toolchain_binding: %s" % exc)]) from exc
+
+
+def _validate_native_binding(native):
+    _host_closed(native, _NATIVE_BINDING_FIELDS, "native")
+    return {
+        "read_root": _host_absolute(native["read_root"], "native.read_root"),
+        "artifact_root": _host_absolute(native["artifact_root"], "native.artifact_root"),
+    }
+
+
+def _validate_authority(authority):
+    _host_closed(authority, _AUTHORITY_FIELDS, "authority")
+    decisions = []
+    for index, row in enumerate(_host_sequence(authority["decisions"], "authority.decisions")):
+        _host_closed(row, _AUTHORITY_DECISION_FIELDS, "authority.decisions[%d]" % index)
+        capability = _host_text(row["capability"], "capability")
+        effect = _host_text(row["effect"], "effect")
+        if capability not in REQUIRED_CAPABILITIES:
+            raise HostContextError([_host_finding("unknown capability %r" % capability)])
+        if effect not in (EFFECT_ALLOW, "DENY"):
+            raise HostContextError([_host_finding("unknown effect %r" % effect)])
+        decisions.append({"capability": capability, "effect": effect})
+    approvals = []
+    for index, row in enumerate(_host_sequence(authority["approvals"], "authority.approvals")):
+        _host_closed(row, _APPROVAL_FIELDS, "authority.approvals[%d]" % index)
+        approvals.append({
+            "policy_file_sha256": _host_sha(row["policy_file_sha256"], "approval policy digest"),
+            "rule_id": _host_identifier(row["rule_id"], "approval rule id"),
+            "run_id": _host_identifier(row["run_id"], "approval run id"),
+            "candidate_id": _host_identifier(row["candidate_id"], "approval candidate id"),
+            "paths": [_host_absolute(item, "approval path")
+                      for item in _host_sequence(row["paths"], "approval paths")],
+        })
+    return {
+        "context_digest": _host_sha(authority["context_digest"], "authority context digest"),
+        "resolved_authorization_refs": [
+            _host_identifier(item, "authorization ref")
+            for item in _host_sequence(authority["resolved_authorization_refs"],
+                                       "resolved_authorization_refs")
+        ],
+        "decisions": decisions,
+        "approvals": approvals,
+    }
+
+
+def _policy_document_sha256(policy):
+    return canonical_sha256("policy-bound", policy)
+
+
+def approved_rule_ids(host_context, policy_sha):
+    """Host-resolved approvals filtered to this policy digest, run and candidate.
+
+    Contract section 8: an approval must bind this policy digest, the rule and the
+    run/candidate.  Nothing here can come from the proposal.
+    """
+    approved = set()
+    for row in host_context["authority"]["approvals"]:
+        if row["policy_file_sha256"] != policy_sha:
+            continue
+        if row["run_id"] != host_context["run_id"]:
+            continue
+        if row["candidate_id"] != host_context["candidate_id"]:
+            continue
+        approved.add(row["rule_id"])
+    return approved
+
+
+def authority_findings(host_context, required_paths=()):
+    """A missing or DENY decision on a required capability is a hard BLOCK."""
+    effects = {}
+    for row in host_context["authority"]["decisions"]:
+        effects[row["capability"]] = row["effect"]
+    findings = []
+    for capability in REQUIRED_CAPABILITIES:
+        if effects.get(capability) != EFFECT_ALLOW:
+            findings.append(_finding(
+                REASON_AUTH_DENIED,
+                "the resolved host authority does not allow %s for this round"
+                % capability))
+    if findings:
+        return findings
+    for path in required_paths:
+        covered = any(path in row["paths"] for row in host_context["authority"]["approvals"])
+        if not covered:
+            findings.append(_finding(
+                REASON_AUTH_DENIED,
+                "no host approval binds the write path %s" % path))
+    return findings
+
+
+def proposal_rule_ids(proposal):
+    ordered = []
+    for entry in proposal.diagnosis:
+        rule_id = entry.get("rule_id")
+        if rule_id not in ordered:
+            ordered.append(rule_id)
+    return ordered
+
+
+def select_rule(policy, proposal, approved):
+    """Exactly one approved rule, taken from the host policy and nowhere else."""
+    rules = {rule["id"]: rule for rule in policy["rules"]}
+    matched = [rules[rule_id] for rule_id in proposal_rule_ids(proposal)
+               if rule_id in rules]
+    if not matched:
+        return None, [_finding(REASON_INPUT_DRIFT,
+                               "no policy rule matches the proposal diagnosis")]
+    ids = sorted({rule["id"] for rule in matched})
+    if len(ids) > 1:
+        return None, [_finding(REASON_INPUT_DRIFT,
+                               "multiple policy rules match: %s" % ids)]
+    rule = matched[0]
+    if rule["id"] not in approved:
+        return None, [_finding(REASON_AUTH_DENIED,
+                               "rule %s is not host-approved for this policy digest"
+                               % rule["id"])]
+    if not any(rule["route"] == route for route in ROUTES):
+        return None, [_finding(REASON_SCHEMA_INVALID,
+                               "unknown route %r" % rule["route"])]
+    return rule, []
+
+
+def refusal_verdict(policy, proposal):
+    """A legal REFUSE terminates at PRECHECK: no tool call, no stage write.
+
+    The bytes-must-remain-unchanged half of the refusal boundary is a
+    transaction property and is asserted by the round, not here.
+    """
+    boundary = policy.get("refusal_boundary") or {}
+    if proposal.decision != DECISION_REFUSE:
+        return [_finding(REASON_SCHEMA_INVALID, "not a REFUSE proposal")]
+    findings = []
+    if boundary.get("valid_proposal_decision") not in (None, DECISION_REFUSE):
+        findings.append(_finding(REASON_SCHEMA_INVALID,
+                                 "the policy refusal boundary does not admit REFUSE"))
+    if proposal.oplist is not None or proposal.refusal is None:
+        findings.append(_finding(REASON_SCHEMA_INVALID,
+                                 "a REFUSE proposal carries a refusal and no oplist"))
+    return findings
+
+
+def observe_candidate_manifest(host_context):
+    """C5's own observation of the candidate design bytes (contract section 9).
+
+    The base file manifest is observed here rather than accepted from the caller:
+    a declaration handed in by the caller is not evidence about the bytes that are
+    about to be repaired.
+    """
+    root = Path(host_context["workspace"]["design_root"])
+    target = host_context["target"]
+    if not root.is_dir():
+        raise HostContextError([_host_finding("design root is not a directory")])
+    rows = []
+    for path in sorted(root.rglob("*")):
+        if path.is_symlink():
+            raise HostContextError([_host_finding("the candidate design contains a link")])
+        if not path.is_file():
+            continue
+        relative = path.relative_to(root).as_posix()
+        raw = path.read_bytes()
+        rows.append({"path": relative, "sha256": hash_bytes(raw),
+                     "size_bytes": len(raw),
+                     "role": "TARGET" if relative == target else "READONLY_DEPENDENCY"})
+    targets = [row for row in rows if row["role"] == "TARGET"]
+    if len(targets) != 1:
+        raise HostContextError([_host_finding(
+            "the candidate design must carry exactly one target, found %d" % len(targets))])
+    return {"version": 1, "files": rows}
+
+
+def runtime_bindings(host_context, proposal, native_before, policy_sha, approved):
+    """Derive the policy's 14 required runtime values.
+
+    Values the proposal, the host native read or C5's own observation already
+    determine are derived here and are never accepted from the caller: a second
+    caller-supplied truth source for the identity maps, the symbol hashes, the
+    before topology or the base manifest is exactly what the policy's
+    binding_contract.never_bind_from forbids.
+    """
+    if not isinstance(native_before, Mapping):
+        raise HostContextError([_host_finding("native_before must be a mapping")])
+    if native_before.get("status") != "PASS":
+        raise HostContextError([_host_finding(
+            "native_before is not a PASS; there is no current fault observation to bind")])
+    observation = native_before.get("observation")
+    if not isinstance(observation, Mapping):
+        raise HostContextError([_host_finding("native_before carries no observation")])
+    tool = native_before.get("tool") or {}
+    symbol_digest = tool.get("symbol_digest")
+    # The host supplied the before-candidate symbol digest at PRECHECK.  Cross-check
+    # it against what the native read actually measured: a mismatch means the writer
+    # would resolve against a different symbol environment than the one that was
+    # bound, and this must block BEFORE anything is written.
+    if host_context["candidate_symbol_digest"] != symbol_digest:
+        raise HostContextError([_host_finding(
+            "the host candidate_symbol_digest does not match the native BEFORE symbol "
+            "digest (%s != %s)" % (host_context["candidate_symbol_digest"], symbol_digest))])
+    binding = host_context["toolchain_binding"]
+    try:
+        slice_manifest = host_toolchain.derive_akcli_slice(binding, symbol_digest)
+    except host_toolchain.HostBindingError as exc:
+        raise HostContextError([_host_finding("toolchain slice is not derivable: %s" % exc)]) from exc
+
+    pin_identity_map = {}
+    object_identity_map = {}
+    embedded_symbol_hashes = {}
+    for comp in observation["components"]:
+        ident = comp["identity"]
+        object_identity_map[ident["component_uuid"]] = ident
+        embedded_symbol_hashes[comp["lib_id"]] = comp["lib_definition_sha256"]
+    for row in observation["pins"]:
+        ident = row["identity"]
+        pin_identity_map["%s.%s" % (ident["reference"], ident["number"])] = ident
+
+    values = {
+        "run_id": host_context["run_id"],
+        "candidate_id": host_context["candidate_id"],
+        "round_id": host_context["round_id"],
+        "patch_id": host_context["patch_id"],
+        "proposal_sha256": proposal.proposal_sha256,
+        "base_file_manifest": observe_candidate_manifest(host_context),
+        "base_topology_sha256": topology_sha256(observation),
+        "toolchain_manifest": slice_manifest,
+        "policy_document_sha256": policy_sha,
+        "authority_context": host_context["authority"],
+        "approved_rule_ids": sorted(approved),
+        "pin_identity_map": pin_identity_map,
+        "object_identity_map": object_identity_map,
+        "embedded_symbol_hashes": embedded_symbol_hashes,
+    }
+    missing = [field for field in _RUNTIME_BINDING_FIELDS if field not in values]
+    if missing:
+        raise HostContextError([_host_finding("runtime bindings are incomplete: %s" % missing)])
+    return values
 
 def _feedback_reason(outcome: str, receipt: Mapping) -> str:
     if outcome in (OUTCOME_APPLIED, OUTCOME_NO_CHANGE, OUTCOME_REFUSED):
