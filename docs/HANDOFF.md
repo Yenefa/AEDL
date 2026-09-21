@@ -526,4 +526,9 @@ C2 erratum: `PENDING_HUMAN_REVIEW`
 C4 blocker: **issue #86 OPEN**
 C5: `BLOCKED_CONTRACT`；**#86 闭合前不得恢复第 4 步**
 Formal Evidence: `NOT_RUN`
-PR: `NOT_OPENED`
+PR: **#87 OPEN**（head `7db78870568122265a05b37fdf86fcd4eb663f90`）
+- **CI 阻塞（2026-09-21，fail-closed escalation）**：PR #87 创建后触发 `minimal-ci`（run `35621320197`，head `7db7887`，event `pull_request`），**两个平台均 FAILURE，但都发生在 runner/step 启动之前**：`runner_id=0`、`runner_name=""`、`steps=0`、`started_at→completed_at` 约 1–2 s、billing `total_ms=0`、整轮 `run_duration_ms=4000`。即 **没有任何 checkout / setup-python / setup-uv / dev_gate 被执行过**，因此**不存在**「CI 证明代码测试失败」的证据。
+- **已做的处置**：`gh run rerun 35621320197` **复现同一形态**（再次 `runner_id=0` / `steps=0`），排除一次性抖动。仓库侧已核：Actions `enabled=true`、`allowed_actions=all`、workflow `.github/workflows/ci.yml` 为 `ubuntu-latest` / `windows-latest` 标准矩阵，未见自身配置问题。**从现有 API 证据无法进一步确定根因，不猜测具体原因。**
+- **治理口径（两套 GitHub 机制必须分开写）**：**Legacy commit statuses: none**；**GitHub Actions check runs: present, 2 条均 FAILURE（pre-run）**。此前文档里「该分支无 GitHub CI commit status」只对 Legacy Status API 成立，不得据此写成「GitHub 没有 CI」。
+- **按 fail-closed 治理升级**：`STOP → 说明 CI 无法执行 → human decision`。**是否接受 local `dev_gate` evidence 作为本次 exception，属人类决定；agent 不得自行豁免两个红叉。**
+- **人类 review 缺口（治理 blocker）**：PR #87 `reviews = 0`、`review comments = 0`，作者为 `Yenefa`。按仓库 ownership 规则（merge authorization → human reviewer；author must not self-approve；acceptance → another real human），**AI 的 architecture review / `APPROVED_FOR_HUMAN_MERGE` 不能替代 GitHub 上另一名真人的 acceptance**。已请求真人 reviewer：`la4876949-bot`（Percy）。
