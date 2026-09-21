@@ -2074,8 +2074,14 @@ class ErratumNewObjectTests(unittest.TestCase):
 
     # --- R4 a new object must not reuse a before UUID ------------------------
     def test_r4_new_object_must_not_reuse_a_before_uuid(self):
-        before, expected, bound, after = self.case()
-        reused = before["pins"][0]["identity"]["pin_uuid"]
+        # DC-01 carries authorized removals, so a BEFORE-only UUID exists that is
+        # absent from the legitimate AFTER. Using a still-live pin UUID would make
+        # the test red for the wrong reason (reidentify would corrupt the live pin
+        # inventory instead of exercising the before-UUID exclusion itself).
+        before, expected, bound, after = five_case("DC-01")
+        reused = sorted(bound["object_identity_map"])[0]
+        self.assertIn(reused, {o["identity"] for o in before["source_objects"]})
+        self.assertNotIn(reused, {o["identity"] for o in after["source_objects"]})
         mutated = copy.deepcopy(after)
         self.new_object(mutated, "new:label:0")["identity"] = reused
         self.both_fail(before, mutated, bound)
