@@ -581,6 +581,35 @@ change_budget:
 | Q3 | `_delta` / `_projection` 零改动 + canonicalization 单点收敛 | **批准** |
 | Q4 | R7 显式断言错误 new label 未被 mask | **批准，且必须保留** —— 只断言最终 FAIL 不够，必须证明 fail-closed 的具体机制没被绕掉 |
 
+
+## 12. label `rotation` 决策（human operator，2026-09-21）：**选 B**
+
+真实 DC-04 / DC-05 native AFTER 的 new label 是 `rotation: 90/270`，而 native op-list **不带 `rotation`**；
+pinned akcli `handlers/labels.py:78-88` 在 op 缺 `rotation` 时用
+`geometry.label_angle_away(pin.orientation, comp.rotation, comp.mirror)` 派生。
+
+**裁定：选 B —— `rotation` 保留在 semantic expectation 中（exact），由 C5 第 4 步派生。**
+
+- **本卡 C2 侧不改**：`normalize_observation` / `_label_semantics` / `_canonical_new_object` / R7 全部保持
+- **C5 第 4 步义务**：`build_expected_after` 必须按同一规则计算 expected label `rotation`
+- **可行性已实证**（用 pinned akcli 自己的几何函数 + 真实内嵌库 pin 角度）：
+
+```text
+Device:R lib pin angles: {'1': 270, '2': 90}
+   pin 1: label_angle_away(270, rot=0, mirror=none) = 90  | 真实 AFTER label = 90  | MATCH
+   pin 2: label_angle_away(90,  rot=0, mirror=none) = 270 | 真实 AFTER label = 270 | MATCH
+Device:C lib pin angles: {'1': 270, '2': 90}
+   pin 1 / pin 2 同上 MATCH
+DERIVATION_PROOF PASS
+```
+
+  输入恰在 frozen 范围内：内嵌库 pin `(at x y angle)` + placement `rotation=0 / mirror=none`。
+- **不采用 A**（会让已冻结在 policy 里的 label 朝向脱管）；**不采用 C**（`_parse_op` /
+  `_normalize_operation` 只允许 `rotation == 0`，要改 C1/C4 契约）。
+- **附带上报（本卡不处理）**：C4 比较 proposal 与磁盘 op-list 时会把 `rotation` 归一化（缺省补 0），
+  于是「省略 rotation」与「显式 rotation: 0」被判为相同，而 writer 读原始 dict、两者输出不同
+  （派生 90/270 vs 0）。建议单独记一条 finding。
+
 ### 11.1 仍需 human Owner scope grant
 
 以上全部是 **architecture review（AI reviewer）** 的技术结论，**不构成** Owner authorization。
