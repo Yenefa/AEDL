@@ -1,6 +1,6 @@
 # Task Envelope — PR1-C5-ERRATUM  C2 new-source-object expected semantics
 #
-# 状态：SCOPE GRANTED —— **等待 admission**。
+# 状态：SCOPE GRANTED — ADMISSION PASSED。
 # 人工 grant：https://github.com/Yenefa/AEDL/issues/83#issuecomment-5754735874
 # （人类操作者在工作会话中给出，原文「我看完了，授权通过」；由 agent 按 AGENTS.md §2.3
 #  Record 步骤登记于该线程，非 agent 自授权）。scope grant 申请全文：
@@ -108,12 +108,13 @@ forbidden_paths:
   - .gitattributes
 
 acceptance: |
-  - **Owner grant 前置**：Owner 于 issue #83 明确批准 scope expansion 之前，
-    不得 admission、不得改任何代码。decision_ref 必须是人工评论 permalink。
-  - **申请顺序（architecture review 最高指示，2026-09-20）**：先取得 architecture review 的
-    DESIGN_ACCEPTED / READY_FOR_HUMAN_SCOPE_GRANT，然后才在 issue #83 请求 human Owner
-    明确批准 contract_change: true 与 gates/repair_verification.py 的 scope expansion。
-    当前 Owner scope grant 保持 PENDING，不得提前申请。
+  - **Owner grant 前置：已满足（历史事实）。**
+    Scope grant: https://github.com/Yenefa/AEDL/issues/83#issuecomment-5754735874
+    Admission: ADMIT / exit 0（本条状态文案收口后已重新 admission）
+  - **申请顺序（architecture review 最高指示，2026-09-20）—— 已执行完毕，本条为历史事实，不再表示 PENDING**：
+    先取得 architecture review 的 DESIGN_ACCEPTED / READY_FOR_HUMAN_SCOPE_GRANT，
+    然后才在 issue #83 请求 human Owner 明确批准 contract_change: true 与
+    gates/repair_verification.py 的 scope expansion。
   - 新对象 expected 形状为 closed schema，且与旧形状互斥（混用 → ObservationError）
   - _delta() 与 _projection() 的函数体**零改动**（diff 可逐行核对）
   - existing object full AST exact 不放松（回归 R1）
