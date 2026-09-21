@@ -1,10 +1,12 @@
 # Task Envelope — PR1-C5-ERRATUM  C2 new-source-object expected semantics
 #
-# 状态：DRAFT — **等待 human Owner 的明确 scope grant**。
-# 本卡尚未 admission。在 Owner 于 issue #83 给出决定之前，不得修改
-# gates/repair_verification.py（它当前仍是 PR1-C5 的 forbidden_paths）。
-# decision_ref 必须是**人工评论** permalink；agent 用 Yenefa credential 发出的
-# PENDING 评论只是状态记录，不构成 grant。
+# 状态：SCOPE GRANTED —— **等待 admission**。
+# 人工 grant：https://github.com/Yenefa/AEDL/issues/83#issuecomment-5754735874
+# （人类操作者在工作会话中给出，原文「我看完了，授权通过」；由 agent 按 AGENTS.md §2.3
+#  Record 步骤登记于该线程，非 agent 自授权）。scope grant 申请全文：
+#  https://github.com/Yenefa/AEDL/issues/83#issuecomment-5750520949
+# 在 admission 返回 ADMIT 之前，不得修改 gates/repair_verification.py 与
+# tests/test_repair_verification.py 的任何一行。
 #
 # 缺陷定位（逐行核对，C5 HEAD 2460d5d / 基线 669aa16）：
 #   gates/repair_verification.py:251-262 要求**每一个** source object —— 包括
@@ -134,8 +136,12 @@ acceptance: |
   - 台账 + HANDOFF 如实追加；状态 PENDING_HUMAN_REVIEW
 
 exceptions:
-  # PENDING —— 在 Owner 于 issue #83 给出人工 grant 之前不得填写 granted_by/decision_ref。
-  # 预期需要 allow_drift（envelope-first，同 PR1-C5 / PR1-C5-PRE 先例）。
+  # 人工 grant 见上方 decision_ref。granted_by 写人类操作者；
+  # **不得**把任何技术 review 结论（如 DESIGN_ACCEPTED）当作 granted_by。
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "https://github.com/Yenefa/AEDL/issues/83#issuecomment-5754735874"
+    reason: "Envelope-first governance (same precedent as PR1-C5 / PR1-C5-PRE): the envelope claim is committed alone from base 669aa1622385d598758c0376bc874ff7ca0842f8 before admission, so HEAD necessarily differs from base.sha from that first commit onward while the worktree stays clean at admission time. This exception authorizes --allow-drift on branch feat-pr1-c5-erratum for that drift, and nothing else: it does not include allow_dirty; it does not authorize any functional code (gates/repair_verification.py, tests/test_repair_verification.py) to enter the worktree before admission passes; it does not authorize restoring PR1-C5; and it does not relax existing-object protection, removal descriptor binding, exact topology or the protected projection."
 
 escalation:
   owner: Yenefa
