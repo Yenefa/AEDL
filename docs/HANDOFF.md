@@ -479,7 +479,7 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
 
 ## 2026-09-20 PR1-C5-ERRATUM 开卡：C2 new-object expected 语义（C5 第 4 步 BLOCKED_CONTRACT，分支 feat-pr1-c5-erratum，base 669aa16）
 
-- **Provenance（不得混淆）**：本轮输入是 **architecture review（AI reviewer，2026-09-20）** 的技术结论，**不是** human Owner authorization。issue #83 现有 3 条评论中：2 条是 PR1-C5 / PR1-C5-PRE 的 `allow_drift` grant，1 条是本轮 agent 的 BLOCKED 状态记录 —— **没有**针对本 erratum 的人工 scope grant。`Human Owner scope grant: PENDING` / `Decision ref: PENDING`。本节 rev1 曾把该评审写成「Owner 2026-09-20 裁定」，rev2 已更正（见下方补记）。
+- **Provenance（不得混淆）**：本轮输入是 **architecture review（AI reviewer，2026-09-20）** 的技术结论，**不是** human Owner authorization。issue #83 现有 3 条评论中：2 条是 PR1-C5 / PR1-C5-PRE 的 `allow_drift` grant，1 条是本轮 agent 的 BLOCKED 状态记录 —— **没有**针对本 erratum 的人工 scope grant。（**当时状态**：`Human Owner scope grant: PENDING` / `Decision ref: PENDING`；**已被 2026-09-21 `#issuecomment-5754735874` APPROVED 取代**）。本节 rev1 曾把该评审写成「Owner 2026-09-20 裁定」，rev2 已更正（见下方补记）。
 - 触发：PR1-C5 S1b 第 4 步（`build_expected_after` / `_bound_policy` / `_host_patch` / `bind_policy`）开工前，architecture review 给出技术结论 —— ② 既不用 (a) 在 C5 复制 writer serializer，也不用裸 (b) 由宿主提供「未来 AST」；判定为**真 frozen-contract 缺陷**，应修合同而不是在 C5 里补一个「能过测试」的 AST 预言器；并要求**先交函数级草案、审完再进代码**。故 **C5 第 4 步停住**，改为开一张窄 erratum 卡。
 - **缺陷（逐行核对，带 file:line）**：C2 `gates/repair_verification.py:251-262` 要求**每一个** source object（含 identity 以 `new:` 开头的新建 symbol/label）都携带完整未来 writer AST（`descriptor.ast` + `semantic_ast_sha256`），`:410-419` 的 `_align_new` 更以「mask 掉 UUID 的完整 AST」作为新 label 的匹配键；而 frozen runtime policy（`src/repair/topology_policy_v1.json`）只定义工程语义（`name` / `at_pin` / `scope` / `rotation`、器件属性、placement），pinned akcli 0.21.0 的序列化由 writer + 内嵌库 + 当前 document 状态决定（`labels.py:109-135` / `placement.py:48-97` / `properties.py:106+`）。PR-1 实现合同 `L152`/`L160` 本身即写「新增组件整棵 instance 子树允许由固定 native writer 生成」「expected_after 不声称预知 writer 将产生的 bytes hash」。→ 抽象边界错误，不是 C5 缺 helper。
 - **状态冻结（reviewer 指定）**：`C5 HEAD 2460d5d` / `C5 status BLOCKED_CONTRACT` / `C5 code STOP` / `S2 NOT_STARTED`；**旧 C5 分支不删、不 rewrite**；erratum 合入 master 后 C5 再吸收新基线并重跑 admission（**不得在 2460d5d 上同时改 C2**）。
@@ -503,5 +503,23 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
 - **label `rotation` 决策（human operator，2026-09-21）：选 B** —— `rotation` 保留在 new-label semantic expectation 中（exact），由 C5 第 4 步派生 `geometry.label_angle_away(pin.orientation, comp.rotation, comp.mirror)`；**本卡 C2 侧不改**。可行性已实证（pinned akcli 自己的几何函数 + 真实内嵌库 pin 角度）：`Device:R` pin1@270 → 90、pin2@90 → 270，与真实 AFTER 的 `+3V3`/`BOOT` **逐值 MATCH**；`Device:C` 同理。`DERIVATION_PROOF PASS`。输入恰在 frozen 范围内。不采用 A（朝向脱管）与 C（要改 C1/C4 契约）。**附带上报**：C4 对 `rotation` 的归一化会让「省略」与「显式 0」被判相同，而 writer 读原始 dict、输出不同（派生 90/270 vs 0）——建议单独记 finding，本卡不处理。
 - **falsification 补齐（human review item 3，2026-09-21）**：R4 换用例（DC-01 的「BEFORE 存在、合法 AFTER 已授权删除」的 source-object UUID，并显式断言它不在 AFTER 中 —— 原先用仍存活的 pin UUID 会因 `_reidentify` 改坏 pin 清单而红，红的理由不是那条过滤）；R8 改用 reviewer 指定的 defect mutant（**多个 matching actual UUID 全部映射到同一 symbolic identity**，暴露 `_index()` 按 identity 建 dict 时折叠重复项的风险）。结果：**B2(before-UUID exclusion) → R4 RED**、**B4(ambiguity rejection) → R8 RED**，还原后 GREEN，`FALSIFICATION_SUITE PASS`。连同先前 B1(R2/R3)、B3(R1/R5/R6/R9)、B5(R11)，**R1–R12 全部逐条证伪完毕**；C2 文件还原后 `git diff` 为空。
 - **C4 finding 已单独登记（human review item 4）**：issue **#86** —— 「C4 INPUT-DRIFT — add_net_label rotation presence is erased by normalization but remains execution-semantic to the pinned writer」，严重度 **`P0 / BLOCKER_C5_S1b4`**。**不阻塞本卡 C2 erratum merge**；但在它闭合前**不得恢复 C5 第 4 步**。本卡**不修改** `tools/akcli_adapter.py`（修复需单独 envelope + human Owner grant）。
-- **Gate 顺序（architecture review 最高指示，2026-09-20）**：先取得 architecture review 的 `DESIGN_ACCEPTED` / `READY_FOR_HUMAN_SCOPE_GRANT`，**然后**才在 issue #83 请求 human Owner 明确批准 `contract_change: true` 与 `gates/repair_verification.py` 的 scope expansion。当前 `Owner scope grant: PENDING` **保持不变**，不得提前申请。
+- **Gate 顺序（architecture review 最高指示，2026-09-20）**：先取得 architecture review 的 `DESIGN_ACCEPTED` / `READY_FOR_HUMAN_SCOPE_GRANT`，**然后**才在 issue #83 请求 human Owner 明确批准 `contract_change: true` 与 `gates/repair_verification.py` 的 scope expansion。**2026-09-20 当时状态：`Owner scope grant = PENDING`，不得提前申请；该状态已被 2026-09-21 的 `#issuecomment-5754735874` APPROVED 取代（该顺序已执行完毕）。**
 - 状态：`PENDING_HUMAN_REVIEW`。
+### Current state — 2026-09-21（本卡最新事实）
+
+Owner scope grant: **APPROVED**
+Decision ref: https://github.com/Yenefa/AEDL/issues/83#issuecomment-5754735874
+
+Admission: **ADMIT / exit 0**（envelope_sha256 `0065f67f77f8bbf8…`）
+Tests:
+- `tests.test_repair_verification`: **107 OK (skipped=1)**
+- `discover -s tests`: **814 OK (skipped=14)**
+Development Gate: **PASS / exit 0**（8/8 checks，excluded=[]）
+
+Remote HEAD: `761e2aa7565c8e8a404be740f676c3bb0e48f0be`（与本地一致，已 push）
+
+C2 erratum: `PENDING_HUMAN_REVIEW`
+C4 blocker: **issue #86 OPEN**
+C5: `BLOCKED_CONTRACT`；**#86 闭合前不得恢复第 4 步**
+Formal Evidence: `NOT_RUN`
+PR: `NOT_OPENED`
