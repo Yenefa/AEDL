@@ -10,6 +10,7 @@
 > 三层结构：**本文件（work units，默认浏览入口）** → [`AI_USAGE_LOG.md`](AI_USAGE_LOG.md)（逐条索引，脚本生成，禁手改） → `docs/compliance/ai-usage/<ID>.md`（逐条真源）。
 >
 > - 覆盖核验（2026-09-13，WU-40 入库后重建索引）：本文件引用 98 条记录（上一轮 97 条 + WU-40 单元 1 条：`AI-20260912-PER-221898A27E0C3DCC8A60E5138378DBCF`），与 `AI_USAGE_LOG.md` 当前 98 条**双向一致**（无遗漏、无重复、无虚构 ID）。
+> - 覆盖核验（2026-09-21，rebase 到 master 669aa16 后重建索引）：本文件引用 111 条记录（master 109 条 + WU-43/WU-44 两单元各 1 条），与 `AI_USAGE_LOG.md` 当前 111 条**双向一致**。
 > - 本文件只做聚合与引用，**不改写任何条目正文**；条目正文的修订请直接改 `ai-usage/<ID>.md` 并重建索引。
 > - **`Human owner` 只在该工作单元的记录中明确出现时才具名**；未具名一律写 `TO_VERIFY`，不默认归属给任何人。
 > - `Human final decision`：`yes` = 有批准 / merge / 裁决记录；`pending` = 条目仍为 `PENDING_HUMAN_REVIEW` 且无 merge 记录；`TO_VERIFY` = 记录未具名。
@@ -59,6 +60,8 @@
 | WU-39 | 2026-09-13 | GH-56 PR #60 A2-L D 基线（LIO 初版 → A-2′ 端口）与 master 合并后台账重建 | GENERATE_CODE / GENERATE_TEST / DEBUG / DOCUMENT / REVIEW | Yenefa（D1=C / D2=A / A-2′ 路线、WU-39 与 push 授权由其给出） | pending — 条目 PENDING_HUMAN_REVIEW；PR #60 待人工复核 v0.6 | 2 |
 | WU-40 | 2026-09-12 | B5 前置 —— C3–C6 独立验收扰动判据（28 条，判据先于实现） | RESEARCH / DOCUMENT | Percy（决定先做 B5 前置；裁定公开方式/位置/冻结时点） | pending — 条目 PENDING_HUMAN_REVIEW；PR 待人工评审 | 1 |
 | WU-42 | 2026-09-12 | P3 F-U1-04 措辞人工核验入库（A3 rubric 冻结前置） | RESEARCH / DOCUMENT | Percy（打开冻结原件目视核对，裁定措辞为 `recommended`） | pending — 条目 PENDING_HUMAN_REVIEW；PR #64 待人工评审 | 1 |
+| WU-43 | 2026-09-13 | W2 A4 J1 决策包输入：Lior 工具链就绪与开源/交付风险备忘 | DOCUMENT / ADVISE | Lior（W2 任务卡 A4 归属人；备忘由其提交，J1 决策由三人会拍板） | pending — 条目 PENDING_HUMAN_REVIEW；J1 决策会未召开 | 1 |
+| WU-44 | 2026-09-14 | PR #70 A4 备忘返工：§6 PR #59 归属更正 + dev_gate/bundle 证据刷新 | DOCUMENT / REVIEW | Lior（备忘作者，按复核意见返工；B6 分工归属争议若有，由 Yenefa 裁定） | pending — 条目 PENDING_HUMAN_REVIEW；待 Percy/Yenefa 复核 | 1 |
 
 ## 明细
 
@@ -386,6 +389,26 @@
 - **证据**：核对对象为冻结原件 `src/hardware/m2-board/evidence/datasheets/U1_ESP32-C3-WROOM-02/esp32c3_schematic_checklist_power_supply_2026-08-31.html`；条目「本次改动」节列出 P3 的四处改动与摘录补全
 - **边界**：只覆盖 F-U1-04 的措辞；p34 Figure 9-1 图形附项仍为 `AI_EXTRACTED_UNVERIFIED`；A3 rubric 本体不在本单元范围内
 - **编号沿革**：原记 WU-37，与 Yenefa 2026-09-11 已改号的 #58 撞号（她在先），2026-09-13 让号为 **WU-42**
+
+### WU-43 · 2026-09-13 — W2 A4 J1 决策包输入：Lior 工具链就绪与开源/交付风险备忘
+
+- **Records (1)**：`AI-20260913-LIO-0066F5182C4864AE4485E07BD652571F`
+- **AI role**：ADVISE / DOCUMENT
+- **Human owner**：Lior（W2 任务卡 A4 明确三人各出 1h 输入，Lior 部分 = native/toolchain readiness 与开源/交付风险；备忘由其提交；J1 决策权属三人会/Yenefa）
+- **Human final decision**：pending — 条目 `PENDING_HUMAN_REVIEW`；J1 决策会尚未召开，备忘中 Q1–Q4（akcli 钉版、本机工具安装、KiCad 版本、CI 权威口径）待拍板
+- **证据**：本机 dev_gate 实测（2026-09-13T11:28:11+00:00，overall broken，唯一红点 sandbox_tests/uv 缺失，其余五项 pass）；工具探测实测（Python 3.12.10 vs onboarding 钉版 3.9、uv/kicad-cli/akcli MISSING、C: 188.1GB / D: 14.6GB）；PR #60 已合并入 master（897d679）
+- **边界**：纯文档工作单元；未接触 Percy private oracle/评分断言；不改代码、合同、冻结实验字节
+- **编号沿革**：原记 WU-40，rebase 到 master 669aa16 后与 Percy 的 B5 前置 WU-40 撞号，2026-09-21 改号为 **WU-43**
+
+### WU-44 · 2026-09-14 — PR #70 A4 备忘返工：§6 PR #59 归属更正 + dev_gate/bundle 证据刷新
+
+- **Records (1)**：`AI-20260914-LIO-CE9CD69688155F4E4099C3F1DD484334`
+- **AI role**：DOCUMENT / REVIEW
+- **Human owner**：Lior（备忘作者，按 Percy 复核意见返工；若 `W2_CARD_Lior_20260909_r3.md` 与三人真源在 B6 分工上不一致，归属争议由 Yenefa 裁定）
+- **Human final decision**：pending — 条目 `PENDING_HUMAN_REVIEW`；更正与复跑待 Percy/Yenefa 复核
+- **证据**：PR #59 作者实查（GitHub API：la4876949-bot）；master 897d679 dev_gate 复跑（2026-09-14T10:49:13+00:00：overall broken/exit 2，唯一红点 sandbox_tests/uv 缺失；bundle_check excluded——`stable branch master: no bundle required`，即 bundle_check 在 stable 分支按设计不适用）
+- **边界**：纯文档返工；未接触 Percy private oracle、评分断言、冻结实验字节、host 侧 gh56-y4-dry r* 归档
+- **编号沿革**：原记 WU-41，rebase 到 master 669aa16 后改号为 **WU-44**
 
 ---
 
