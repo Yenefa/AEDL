@@ -105,7 +105,7 @@ def join_first_two(before):
     first, second = after["partitions"][:2]
     after["partitions"] = [{"key": "", "members": first["members"] + second["members"],
                             "names": ["/TEST"]}] + after["partitions"][2:]
-    after["source_objects"].append(source_object("new:label:0", "label"))
+    after["source_objects"].append(semantic_label("new:label:0", "test-anchor-0", [1000000, 2000000]))
     after["source_sha256"] = "b" * 64
     return refresh(after)
 
@@ -133,6 +133,32 @@ def policy(before, expected):
     return bound
 
 
+def semantic_label(role, name, point_nm, rotation=0):
+    """TEST_ONLY expected shape for a new label: engineering semantics only."""
+    return {"identity": role, "kind": "label",
+            "semantics": {"name": name, "scope": "local",
+                          "point_nm": list(point_nm), "rotation": rotation}}
+
+
+def semantic_symbol(reference):
+    """TEST_ONLY expected shape for a new component symbol."""
+    return {"identity": "new:" + reference, "kind": "symbol",
+            "semantics": {"reference": reference}}
+
+
+def actual_new_object(obj, real):
+    """TEST_ONLY real AFTER shape for one semantic expectation."""
+    if obj["kind"] == "symbol":
+        return source_object(real, "symbol", ["symbol", ["uuid", {"string": real}]])
+    semantics = obj["semantics"]
+    x, y = semantics["point_nm"]
+    return source_object(real, "label", [
+        "label", {"string": semantics["name"]},
+        ["at", {"number": str(x / 1000000)}, {"number": str(y / 1000000)},
+         {"number": str(semantics["rotation"])}],
+        ["uuid", {"string": real}]])
+
+
 def actualize(expected):
     replacements = {}
 
@@ -146,8 +172,14 @@ def actualize(expected):
         return value
 
     actual = replace(copy.deepcopy(expected))
+    objects = []
     for obj in actual["source_objects"]:
-        obj["semantic_ast_sha256"] = digest("protected", obj["descriptor"]["ast"])
+        if "semantics" in obj:
+            objects.append(actual_new_object(obj, obj["identity"]))
+        else:
+            obj["semantic_ast_sha256"] = digest("protected", obj["descriptor"]["ast"])
+            objects.append(obj)
+    actual["source_objects"] = objects
     return refresh(actual)
 
 
@@ -164,7 +196,28 @@ def symbolic_labels(observation, mapping):
     for obj in observation["source_objects"]:
         if "descriptor" in obj and "ast" in obj["descriptor"]:
             obj["descriptor"]["ast"] = walk(obj["descriptor"]["ast"])
+        elif "semantics" in obj:
+            obj["semantics"] = walk(obj["semantics"])
         obj["identity"] = mapping.get(obj["identity"], obj["identity"])
+    return observation
+
+
+def semanticize(observation):
+    """TEST_ONLY: convert symbolic new: objects to the semantic expected shape."""
+    objects = []
+    for obj in observation["source_objects"]:
+        if obj["identity"].startswith("new:"):
+            if obj["kind"] == "label":
+                semantics = verification._label_semantics(obj["descriptor"]["ast"])
+            else:
+                semantics = {"reference": obj["identity"][len("new:"):]}
+            objects.append({"identity": obj["identity"], "kind": obj["kind"],
+                            "semantics": semantics})
+        else:
+            obj["semantic_ast_sha256"] = verification.canonical_sha256(
+                "protected", obj["descriptor"]["ast"])
+            objects.append(obj)
+    observation["source_objects"] = objects
     return observation
 
 
@@ -281,7 +334,7 @@ def five_case(case):
         expected["components"].append(c)
         expected["pins"].extend(pp)
         expected["partitions"].extend({"key": "", "members": [p["identity"]], "names": []} for p in pp)
-        expected["source_objects"].append(symbolic_source(c, pp))
+        expected["source_objects"].append(semantic_symbol(c["reference"]))
     definitions = []
     for part in acceptance["after"]:
         if "capture" in part:
@@ -294,8 +347,8 @@ def five_case(case):
     label_count = {"DC-01": 2, "DC-02": 1, "DC-03": 0, "DC-04": 2, "DC-05": 2}[case]
     for n in range(label_count):
         role = "new:label:" + str(n)
-        expected["source_objects"].append(source_object(role, "label", [
-            "label", {"string": "test-anchor-" + str(n)}, ["uuid", {"string": role}]]))
+        expected["source_objects"].append(
+            semantic_label(role, "test-anchor-" + str(n), [1000000 + n, 2000000 + n]))
     return obs, expected, policy(obs, expected), actualize(expected)
 
 
@@ -373,9 +426,7 @@ class DeltaAndProtectedTests(unittest.TestCase):
         after = verification.normalize_observation(
             verification.observe_source(raw.replace(label_a_uuid.encode(), stable_uuid("actual label A").encode())))
         expected = symbolic_labels(copy.deepcopy(after), {stable_uuid("actual label A"): role_a})
-        for obj in expected["source_objects"]:
-            obj["semantic_ast_sha256"] = verification.canonical_sha256(
-                "protected", obj["descriptor"]["ast"])
+        semanticize(expected)
         refresh(expected)
         original_descriptor = [o["descriptor"] for o in before["source_objects"]
                                if o["identity"] == label_a_uuid][0]
@@ -917,8 +968,7 @@ class SourceParserTests(unittest.TestCase):
             return value
 
         expected = symbolic(expected)
-        for obj in expected["source_objects"]:
-            obj["semantic_ast_sha256"] = digest("protected", obj["descriptor"]["ast"])
+        semanticize(expected)
         refresh(expected)
         bound = policy(before, expected)
         self.assertEqual(verification.compare_delta(before, after, bound)["status"], "PASS")
@@ -1967,6 +2017,169 @@ class C3PerturbationTests(unittest.TestCase):
         stalled = verification.verify_stage(self.scenario(stage_plan=b"")[0])
         self.assertNotPass(stalled, "C3-P7")
         self.assertEqual(stalled["deferred"]["erc"], "NOT_RUN")
+
+
+class ErratumNewObjectTests(unittest.TestCase):
+    """PR1-C5-ERRATUM R1..R12: the rev4 acceptance regression matrix.
+
+    Every case is driven through the real compare_delta / compare_protected
+    entry points (full AFTER observation -> alignment -> canonicalization),
+    never through a helper unit call alone.
+    """
+
+    def case(self):
+        return five_case("DC-04")
+
+    def actual_role(self, role):
+        return stable_uuid("actual:" + role)
+
+    def new_object(self, observation, role):
+        target = self.actual_role(role)
+        return next(o for o in observation["source_objects"] if o["identity"] == target)
+
+    def rehash(self, obj):
+        obj["semantic_ast_sha256"] = verification.canonical_sha256(
+            "protected", obj["descriptor"]["ast"])
+        return obj
+
+    def both_fail(self, before, mutated, bound):
+        self.assertEqual(verification.compare_delta(before, mutated, bound)["status"], "FAIL")
+        self.assertEqual(
+            verification.compare_protected(before, mutated, bound, manifests())["status"], "FAIL")
+
+    # --- R1 existing object: any unauthorized AST change ---------------------
+    def test_r1_existing_object_ast_change_fails(self):
+        before, expected, bound, after = self.case()
+        mutated = copy.deepcopy(after)
+        target = before["components"][0]["identity"]["component_uuid"]
+        obj = next(o for o in mutated["source_objects"] if o["identity"] == target)
+        obj["descriptor"]["ast"].append(["future_field", {"string": "changed"}])
+        self.rehash(obj)
+        self.both_fail(before, mutated, bound)
+
+    # --- R2 / R3 removed object binding --------------------------------------
+    def test_r2_removed_descriptor_mismatch_fails(self):
+        before, expected, bound, after = five_case("DC-01")
+        bound = copy.deepcopy(bound)
+        key = sorted(bound["object_identity_map"])[0]
+        bound["object_identity_map"][key]["descriptor_sha256"] = "0" * 64
+        self.assertEqual(verification.compare_delta(before, after, bound)["status"], "FAIL")
+
+    def test_r3_removed_kind_must_match(self):
+        before, expected, bound, after = five_case("DC-01")
+        bound = copy.deepcopy(bound)
+        key = sorted(bound["object_identity_map"])[0]
+        bound["object_identity_map"][key]["kind"] = "symbol"
+        self.assertEqual(verification.compare_delta(before, after, bound)["status"], "FAIL")
+
+    # --- R4 a new object must not reuse a before UUID ------------------------
+    def test_r4_new_object_must_not_reuse_a_before_uuid(self):
+        before, expected, bound, after = self.case()
+        reused = before["pins"][0]["identity"]["pin_uuid"]
+        mutated = copy.deepcopy(after)
+        self.new_object(mutated, "new:label:0")["identity"] = reused
+        self.both_fail(before, mutated, bound)
+
+    # --- R5 extra undeclared source object -----------------------------------
+    def test_r5_extra_source_object_fails(self):
+        before, expected, bound, after = self.case()
+        mutated = copy.deepcopy(after)
+        extra = stable_uuid("extra object")
+        mutated["source_objects"].append(source_object(
+            extra, "wire", ["wire", ["uuid", {"string": extra}]]))
+        self.both_fail(before, mutated, bound)
+
+    # --- R6 missing expected new object --------------------------------------
+    def test_r6_missing_expected_new_object_fails(self):
+        before, expected, bound, after = self.case()
+        mutated = copy.deepcopy(after)
+        target = self.actual_role("new:label:0")
+        mutated["source_objects"] = [o for o in mutated["source_objects"]
+                                     if o["identity"] != target]
+        # A MISSING authorized addition is the delta's job (missing/unexpected).
+        # compare_protected only reports unauthorized changes, so it stays PASS.
+        self.assertEqual(verification.compare_delta(before, mutated, bound)["status"], "FAIL")
+        self.assertEqual(
+            verification.compare_protected(before, mutated, bound, manifests())["status"], "PASS")
+
+    # --- R7 wrong new-label semantics: FAIL and never masked -----------------
+    def test_r7_wrong_label_semantics_fails_and_is_not_masked(self):
+        for mutation in ("name", "point", "rotation"):
+            before, expected, bound, after = self.case()
+            mutated = copy.deepcopy(after)
+            obj = self.new_object(mutated, "new:label:0")
+            node = obj["descriptor"]["ast"]
+            if mutation == "name":
+                node[1] = {"string": "WRONG"}
+            elif mutation == "point":
+                node[2][1] = {"number": "99"}
+            else:
+                node[2][3] = {"number": "90"}
+            self.rehash(obj)
+            self.assertEqual(
+                verification.compare_delta(before, mutated, bound)["status"], "FAIL", mutation)
+            protected = verification.compare_protected(before, mutated, bound, manifests())
+            self.assertEqual(protected["status"], "FAIL", mutation)
+            self.assertTrue(
+                any(change["identity"] == obj["identity"] for change in protected["changes"]),
+                "wrong %s must stay visible in the after projection" % mutation)
+
+    # --- R8 ambiguous new-label semantics ------------------------------------
+    def test_r8_ambiguous_label_semantics_fails(self):
+        before, expected, bound, after = self.case()
+        mutated = copy.deepcopy(after)
+        obj = self.new_object(mutated, "new:label:0")
+        twin = copy.deepcopy(obj)
+        twin_role = stable_uuid("twin label")
+        twin["identity"] = twin_role
+        twin["descriptor"]["ast"][-1] = ["uuid", {"string": twin_role}]
+        self.rehash(twin)
+        mutated["source_objects"].append(twin)
+        self.both_fail(before, mutated, bound)
+
+    # --- R9 new symbol must bind to the aligned component UUID ---------------
+    def test_r9_new_symbol_must_bind_to_the_component_uuid(self):
+        before, expected, bound, after = self.case()
+        mutated = copy.deepcopy(after)
+        obj = self.new_object(mutated, "new:R9")
+        obj["identity"] = stable_uuid("unbound symbol")
+        self.both_fail(before, mutated, bound)
+        with self.assertRaises(verification._BindingError):
+            verification._canonical_new_object(
+                {"identity": "new:R9", "kind": "symbol",
+                 "descriptor": {"ast": ["symbol", ["uuid", {"string": "x"}]]}}, [])
+
+    # --- R10 a mixed expected shape is never accepted ------------------------
+    def test_r10_mixed_expected_shape_is_never_accepted(self):
+        before, expected, bound, after = self.case()
+        bound = copy.deepcopy(bound)
+        obj = next(o for o in bound["expected_after"]["source_objects"]
+                   if o["identity"].startswith("new:"))
+        obj["descriptor"] = {"ast": ["label", ["uuid", {"string": obj["identity"]}]]}
+        result = verification.compare_delta(before, after, bound)
+        # A host-side schema violation is an incomplete observation, not a
+        # protected diff. The security property is that it is never PASS.
+        self.assertEqual(result["status"], "UNKNOWN")
+        self.assertEqual(result["reasons"][0]["code"], "REPAIR_COVERAGE_INCOMPLETE")
+
+    # --- R11 new-object semantics never enter the before projection ----------
+    def test_r11_new_semantics_do_not_change_the_before_projection(self):
+        before, expected, bound, after = self.case()
+        mutated = copy.deepcopy(bound)
+        obj = next(o for o in mutated["expected_after"]["source_objects"]
+                   if o["identity"] == "new:label:0")
+        obj["semantics"]["name"] = "OTHER"
+        self.assertEqual(verification.protected_projection_sha256(before, mutated),
+                         bound["protected_projection_sha256"])
+
+    # --- R12 new symbol must not exclude itself from simulation --------------
+    def test_r12_new_symbol_exclude_from_sim_fails(self):
+        before, expected, bound, after = self.case()
+        mutated = copy.deepcopy(after)
+        obj = self.new_object(mutated, "new:R9")
+        obj["descriptor"]["ast"].append(["exclude_from_sim", "yes"])
+        self.rehash(obj)
+        self.both_fail(before, mutated, bound)
 
 
 if __name__ == "__main__":

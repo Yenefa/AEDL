@@ -44,6 +44,7 @@ _BOUND_FIELDS = {"version", "rule_id", "route", "policy_file_sha256",
                  "authorized_delta", "authorized_delta_sha256",
                  "protected_projection_sha256", "operation_constraints"}
 _HEX = re.compile(r"[0-9a-f]{64}\Z")
+_NEW_PREFIX = "new:"
 
 
 class ObservationError(ValueError):
@@ -250,12 +251,40 @@ def normalize_observation(observation, expected=False):
         raise ObservationError("partition omitted a source pin")
     object_keys = set()
     for obj in obs["source_objects"]:
-        _closed(obj, {"identity", "kind", "semantic_ast_sha256", "descriptor"}, "source object")
         ident = _text(obj["identity"], "source object identity")
         if ident in object_keys:
             raise ObservationError("duplicate source object")
         object_keys.add(ident)
-        _text(obj["kind"], "source object kind")
+        kind = _text(obj["kind"], "source object kind")
+        if expected and ident.startswith(_NEW_PREFIX):
+            # NEW objects carry engineering semantics, never a writer AST: the
+            # pinned writer's serialization is not defined by the frozen policy.
+            _closed(obj, {"identity", "kind", "semantics"}, "new source object")
+            semantics = obj["semantics"]
+            if not isinstance(semantics, dict):
+                raise ObservationError("new source object semantics must be a mapping")
+            # Only the SHAPE is validated here. Identity/role rules stay in
+            # _prepare so they classify as _BindingError (FAIL), not as an
+            # incomplete observation (UNKNOWN).
+            if kind == "symbol":
+                _closed(semantics, {"reference"}, "new symbol semantics")
+                _identifier(semantics["reference"], "new symbol reference")
+            elif kind == "label":
+                _closed(semantics, {"name", "scope", "point_nm", "rotation"}, "new label semantics")
+                _text(semantics["name"], "new label name")
+                if semantics["scope"] != "local":
+                    raise ObservationError("only root-local labels are qualified")
+                point = semantics["point_nm"]
+                if not isinstance(point, list) or len(point) != 2:
+                    raise ObservationError("new label point must be an nm pair")
+                for coordinate in point:
+                    _integer(coordinate, "new label point")
+                if semantics["rotation"] not in (0, 90, 180, 270):
+                    raise ObservationError("unsupported new label rotation")
+            else:
+                raise ObservationError("unsupported new source object kind")
+            continue
+        _closed(obj, {"identity", "kind", "semantic_ast_sha256", "descriptor"}, "source object")
         if not isinstance(obj["descriptor"], dict) or "ast" not in obj["descriptor"]:
             raise ObservationError("source object is missing its complete AST")
         if obj["semantic_ast_sha256"] != canonical_sha256("protected", obj["descriptor"]["ast"]):
@@ -374,6 +403,52 @@ def _reidentify(obs, mapping):
     return out
 
 
+def _label_semantics(node):
+    """Engineering semantics of one real AFTER root-local label node."""
+    if not isinstance(node, list) or not node or node[0] != "label":
+        raise ObservationError("only root-local labels are qualified")
+    _source_fields(node, {"at", "effects", "uuid", "fields_autoplaced"}, positional=1)
+    name = _text(_source_text(node[1]), "label")
+    point, angle = _source_at(node)
+    _source_value(node, "uuid")
+    return {"name": name, "scope": "local", "point_nm": list(point), "rotation": angle}
+
+
+def _canonical_new_object(obj, components):
+    """Canonical {identity, kind, semantics} for one ALIGNED new source object."""
+    ident, kind = obj["identity"], obj["kind"]
+    if kind == "symbol":
+        owners = [c for c in components if c["identity"]["component_uuid"] == ident]
+        if len(owners) != 1:
+            raise _BindingError("new symbol source object is not bound to exactly one component")
+        reference = owners[0]["reference"]
+        if ident != _NEW_PREFIX + reference:
+            raise _BindingError("new symbol identity is not its component role")
+        node = obj["descriptor"]["ast"]
+        if not isinstance(node, list) or not node or node[0] != "symbol":
+            raise _BindingError("new symbol source object is not a symbol node")
+        if _source_flag(node, "exclude_from_sim", False):
+            raise _BindingError("new symbol must not exclude itself from simulation (v1)")
+        return {"identity": ident, "kind": "symbol", "semantics": {"reference": reference}}
+    if kind == "label":
+        return {"identity": ident, "kind": "label",
+                "semantics": _label_semantics(obj["descriptor"]["ast"])}
+    raise _BindingError("unsupported new source object kind")
+
+
+def _canonicalize_new_objects(obs):
+    """Rewrite ALIGNED new source objects into the expected semantic shape.
+
+    Existing objects keep their full AST (UUIDs already reidentified by
+    _reidentify). Unmapped new objects keep the raw shape on purpose: they must
+    stay visible as an unauthorized addition.
+    """
+    for index, obj in enumerate(obs["source_objects"]):
+        if obj["identity"].startswith(_NEW_PREFIX):
+            obs["source_objects"][index] = _canonical_new_object(obj, obs["components"])
+    return obs
+
+
 def _align_new(before, after, expected):
     mapping = {}
     old_refs = {c["reference"] for c in before["components"]}
@@ -405,18 +480,29 @@ def _align_new(before, after, expected):
                 if ident["pin_uuid"] in old_ids:
                     raise _BindingError("new pin reuses a before UUID")
                 mapping[ident["pin_uuid"]] = expected_pins[ident["number"]]["identity"]["pin_uuid"]
-    # Labels have no reference. Match complete semantic descriptors with only
-    # their own fresh UUID masked. More/fewer matches remain visible as deltas.
+    # Labels have no reference. Match on engineering semantics extracted by C2's
+    # own parser: the pinned writer's serialization is not part of the frozen
+    # authorization. Zero matches stay unmapped (delta/projection expose them);
+    # more than one match is ambiguous and must never pass.
     for obj in expected["source_objects"]:
-        if obj["kind"] != "label" or not obj["identity"].startswith("new:"):
+        if obj["kind"] != "label" or not obj["identity"].startswith(_NEW_PREFIX):
             continue
-        signature = _uuid_ast(obj["descriptor"], {}, mask=True)
-        matches = [o for o in after["source_objects"]
-                   if o["kind"] == "label" and o["identity"] not in old_ids
-                   and _uuid_ast(o["descriptor"], {}, mask=True) == signature]
+        wanted = obj["semantics"]
+        matches = []
+        for candidate in after["source_objects"]:
+            if candidate["kind"] != "label" or candidate["identity"] in old_ids:
+                continue
+            try:
+                actual = _label_semantics(candidate["descriptor"]["ast"])
+            except ObservationError:
+                continue
+            if actual == wanted:
+                matches.append(candidate)
+        if len(matches) > 1:
+            raise _BindingError("ambiguous new label semantics: %r" % obj["identity"])
         if len(matches) == 1 and matches[0]["identity"] not in mapping:
             mapping[matches[0]["identity"]] = obj["identity"]
-    return _reidentify(after, mapping)
+    return _canonicalize_new_objects(_reidentify(after, mapping))
 
 
 def _rows(obs, section):
