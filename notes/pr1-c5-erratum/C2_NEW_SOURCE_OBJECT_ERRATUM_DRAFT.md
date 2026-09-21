@@ -383,7 +383,7 @@ existing 对象逐对象相等，所以 existing 永不进 `changed`）。remove
 | R7 | new label 语义字段错（name / point_nm / rotation 各一例） | FAIL，且断言它**没有被 mask**（after 投影里仍在） |
 | R8 | 两个真实 label 与同一 expected semantic tuple 匹配 | FAIL（`_BindingError`） |
 | R9 | new symbol source-object UUID 未绑定到 aligned `component_uuid`（reference 可以一致） | FAIL —— **integration-path test**：必须走真实 AFTER full object → `_align_new` → `_canonicalize_new_objects` → `compare_delta` + `compare_protected`，不得只单测 helper（见 §6.3）。原 R13 已按 review 意见折入本条，不再单列 |
-| R10 | expected new object 混用形状 | FAIL（`ObservationError`） |
+| R10 | expected new object 混用形状 | **UNKNOWN / REPAIR_COVERAGE_INCOMPLETE**（`ObservationError`）；human review correction 2026-09-21 —— 原写 FAIL，实测 taxonomy 为 UNKNOWN，断言改为「永不 PASS + 精确 reason code」 |
 | R11 | 改新对象语义 → `protected_projection_sha256` **不变**（before 侧对照） | 相等断言 |
 | R12 | new symbol 携带 `exclude_from_sim = yes` | FAIL（v1 只允许 false/absent，见 §7.3）；必须**同时**进入 §6 矩阵 + envelope acceptance + §8 impact，防止实现者只改描述不写 gate |
 
@@ -528,7 +528,7 @@ Risk:                   MEDIUM-HIGH (changes C2 verification semantics)
 
 ```yaml
 change_budget:
-  expected_files: 7
+  expected_files: 8
   expected_modules: [gates, tests, tasks, notes, docs]
   cross_module: true
   contract_change: true          # flipped from PR1-C5's false -- requires the Owner grant

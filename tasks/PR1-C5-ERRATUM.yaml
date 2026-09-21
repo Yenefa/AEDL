@@ -78,7 +78,7 @@ scope: |
   Risk: MEDIUM-HIGH（改 C2 验证语义本身 —— 故本卡先出草案经 Owner 审，再落代码）
 
   change_budget:
-    expected_files: 7
+    expected_files: 8
     expected_modules: [gates, tests, tasks, notes, docs]
     cross_module: true
     # 从 PR1-C5 的 false 翻转为 true：本卡修改 C2 验证语义本身
@@ -126,7 +126,7 @@ acceptance: |
   - 新 symbol source-object UUID 与 aligned component_uuid 绑定断言成立（R9，**integration-path**：
     真实 AFTER full object → _align_new → _canonicalize_new_objects → compare_delta + compare_protected，
     不得只单测 helper；原 R13 已折入本条）
-  - expected new object 混用形状 → FAIL（R10）
+  - expected new object 混用形状 → **UNKNOWN / REPAIR_COVERAGE_INCOMPLETE**（R10；human review correction 2026-09-21：原写 FAIL，实测 taxonomy 为 UNKNOWN，安全性质是「永不 PASS」）
   - protected_projection_sha256 在 before 侧不因新对象语义改变而改变（R11）
   - new symbol 携带 exclude_from_sim=yes → FAIL（R12，v1 只允许 false/absent）；
     该条必须**同时**落在 §6 回归矩阵、本 acceptance 与 §8 implementation impact
