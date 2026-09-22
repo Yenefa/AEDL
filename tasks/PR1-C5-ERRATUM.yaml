@@ -5,8 +5,15 @@
 # （人类操作者在工作会话中给出，原文「我看完了，授权通过」；由 agent 按 AGENTS.md §2.3
 #  Record 步骤登记于该线程，非 agent 自授权）。scope grant 申请全文：
 #  https://github.com/Yenefa/AEDL/issues/83#issuecomment-5750520949
-# 在 admission 返回 ADMIT 之前，不得修改 gates/repair_verification.py 与
-# tests/test_repair_verification.py 的任何一行。
+#
+# M1 修订（2026-09-22）：Percy review 5279038034 在 HEAD cfea050 上实测出**本 PR 自己引入的
+# regression**（新 symbol 的额外 property 名在两层之间漏检：master FAIL → #87 PASS）。
+# Owner 决定：remedy = **A（property 名闭集）**；**扩本 envelope 而不另开卡**；
+# whitelist 只用 native 校准支持的实例层名称 {Reference, Value, Footprint}；
+# §7.4 superseded / revised after native calibration；§7.5 保留但仅限已批准 property 内部细节。
+# Owner decision 于 2026-09-22 工作会话给出（authorization order ≠ implementation order）。
+# 修订后必须**重新 admission 通过**，才可改动
+# gates/repair_verification.py 与 tests/test_repair_verification.py 的任何一行。
 #
 # 缺陷定位（逐行核对，C5 HEAD 2460d5d / 基线 669aa16）：
 #   gates/repair_verification.py:251-262 要求**每一个** source object —— 包括
@@ -130,7 +137,22 @@ acceptance: |
   - protected_projection_sha256 在 before 侧不因新对象语义改变而改变（R11）
   - new symbol 携带 exclude_from_sim=yes → FAIL（R12，v1 只允许 false/absent）；
     该条必须**同时**落在 §6 回归矩阵、本 acceptance 与 §8 implementation impact
-  - **不要求** property 名称集合闭合（architecture review 明确不批准，易 false-negative）
+  - **M1（Percy review 5279038034 / 2026-09-22）—— 本 PR 自己引入的 regression，必须修复。**
+    §7.4 **superseded / revised after native calibration**：原拒绝理由为「需要真实 DC-04 / DC-05
+    AFTER 校准才能定形」，该前置已由本 PR 的 native 校准满足。新的口径：
+    新 symbol 的**实例层** property 名必须闭集于 native 校准支持的集合
+    `_ALLOWED_NEW_SYMBOL_PROPERTIES = {Reference, Value, Footprint}`；集合外 → `_BindingError`。
+    只用校准支持的名称，**不得**因「看起来合理」把 `Datasheet` / `Description` 等塞进实例白名单
+    （`Datasheet` 只在内嵌库定义内，见 pinned `writers/symbol_lib.py:113-118`）。
+    · 正常新 symbol（DC-04 R9 / DC-05 C5）→ PASS（**不得 false-negative**）
+    · 新 symbol + `Sim.Params` → FAIL（回归 R13）
+    · 新 symbol + `Sim.Device` → FAIL（回归 R13）
+    · existing symbol + 额外 property → 仍 FAIL（既有 full AST exact 不放松）
+    §7.5 presentation freedom **保留**：自由度只存在于已批准 property 内部的
+    `at` / `effects` / `fields_autoplaced` / writer UUID。
+    「presentation metadata 可以自由」≠「可以凭空增加任意 property 名」。
+  - R13 的测试在变异后**必须重算 `semantic_ast_sha256`**，否则两侧都返回
+    `UNKNOWN / REPAIR_COVERAGE_INCOMPLETE`（那是观测完整性在抓篡改，不是 C2 抓到属性）
   - py -3.9 -X utf8 -m unittest tests.test_repair_verification → 全绿
   - py -3.9 -X utf8 -m unittest discover -s tests → 无回归
   - py -3.9 -m tools.dev_gate --envelope tasks/PR1-C5-ERRATUM.yaml → exit 0

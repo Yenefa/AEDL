@@ -466,16 +466,49 @@ exclude_from_sim 必须 false 或 absent
 > akcli 0.21.0 对 `Device:R` / `Device:C` 实际写出的 `exclude_from_sim` 形态是 `no` 或 absent；
 > 若它写出 `yes`，该要求会 false-negative，须回 Owner 重新裁定。
 
-### 7.4 明确**不批准**的方案 —— property 名称集合闭合
+### 7.4 property 名称集合闭合 —— **SUPERSEDED / revised after native calibration（2026-09-22）**
 
-rev1 提出的
+> **本节原结论已撤销，原文保留以备追溯：**
+>
+> rev1 提出的
+>
+> ```text
+> set(instance_properties) == set(library_properties) | {"Reference", "Value", "Footprint"}
+> ```
+>
+> **不作为本 erratum 的条件**（architecture review 明确不批准）：容易 false-negative，
+> 且需要真实 DC-04 / DC-05 AFTER 校准才能定形。本 erratum 只保留 §7.1 的边界。
+
+**撤销理由**：原拒绝的两条理由中，第二条（「需要真实 DC-04 / DC-05 AFTER 校准才能定形」）
+已由本 PR 的 native 校准满足（pinned akcli 0.21.0，DC-04 / DC-05，exit 0，61911→62825 B）。
+第一条（易 false-negative）改为以**校准支持的最小集合**约束，而不是沿用 rev1 的
+`lib_properties | {...}` 等式形状。
+
+**Percy review 5279038034（2026-09-22）实测出本 erratum 自己引入的 regression（M1）**：
+新 symbol 的额外 property 在两层之间漏检 —— `_canonical_new_object()` 把新 symbol 的
+source-object 压成 `{reference}`，而 `_source_components()` 虽然读了全部 property，
+component observation 只保留既有字段，**没有任何一层拒绝属性名**。实测：
 
 ```text
-set(instance_properties) == set(library_properties) | {"Reference", "Value", "Footprint"}
+master:  DC-04 新 R9 + (property "Sim.Params" …)  → FAIL
+#87:     DC-04 新 R9 + (property "Sim.Params" …)  → PASS   ← regression
 ```
 
-**不作为本 erratum 的条件**（architecture review 明确不批准）：容易 false-negative，
-且需要真实 DC-04 / DC-05 AFTER 校准才能定形。本 erratum 只保留 §7.1 的边界。
+与合同 L152 后半句直接冲突：
+
+> …但必须匹配 policy 的所有属性、固定库定义、两根 pin 的身份/位置和无附加电气结构；
+> **未知电气字段不能忽略。**
+
+**新口径（Owner 决定，2026-09-22）**：新 symbol 的**实例层** property 名闭集于 native 校准
+支持的集合：
+
+```python
+_ALLOWED_NEW_SYMBOL_PROPERTIES = {"Reference", "Value", "Footprint"}
+```
+
+集合外 → `_BindingError`。**不得**因「看起来合理」加入 `Datasheet` / `Description` ——
+`Datasheet` 只出现在内嵌库定义（pinned `writers/symbol_lib.py:113-118`），不在实例层。
+除非真实 DC-04 / DC-05 AFTER 明确证明实例层还有别的名称。
 
 ### 7.5 残留自由度（更正后的准确表述）
 
@@ -488,6 +521,10 @@ erratum 之后，新 symbol 真实子树中**未进入授权语义**的只剩**�
   fields_autoplaced
   writer 自造的 uuid（由 alignment 映射到 symbolic identity，不参与授权）
 ```
+
+> **2026-09-22 澄清（Owner）**：上一条 freedom **不等于**「可以凭空增加任意 property 名」。
+> 自由度只存在于**已批准 property 内部**的 `at` / `effects` / `fields_autoplaced` / writer uuid；
+> property **名称集合本身**由 §7.4 的闭集约束。
 
 **这些仍受 `_source_fields()` 的 closed whitelist 约束**（instance 白名单 `observe_source:866-868`、
 root 白名单 `:1023-1025`）：未知结构字段一律 fail-closed，presentation freedom 只存在于白名单
@@ -577,7 +614,7 @@ change_budget:
 | # | 问题 | 处置 |
 | --- | --- | --- |
 | Q1 | new symbol `semantics` 是否只有 `{reference}` | **批准**：不复制 component fields，避免第二真相源 |
-| Q2 | 残留自由度 | **有条件批准**：删除 `instances`（事实错误）；`exclude_from_sim` 收紧为 false/absent；presentation-only property / effects / `fields_autoplaced` 不进入授权语义；property 名称集合闭合**不批准**（§7.4） |
+| Q2 | 残留自由度 | **有条件批准**：删除 `instances`（事实错误）；`exclude_from_sim` 收紧为 false/absent；presentation-only property / effects / `fields_autoplaced` 不进入授权语义。~~property 名称集合闭合**不批准**（§7.4）~~ → **2026-09-22 撤销：§7.4 superseded**，改为闭集于 native 校准支持集合 `{Reference, Value, Footprint}`（修复 Percy review M1；见 §7.4 修订与 envelope acceptance） |
 | Q3 | `_delta` / `_projection` 零改动 + canonicalization 单点收敛 | **批准** |
 | Q4 | R7 显式断言错误 new label 未被 mask | **批准，且必须保留** —— 只断言最终 FAIL 不够，必须证明 fail-closed 的具体机制没被绕掉 |
 
