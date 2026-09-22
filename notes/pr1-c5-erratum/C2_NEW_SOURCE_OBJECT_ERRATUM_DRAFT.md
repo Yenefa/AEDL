@@ -386,6 +386,8 @@ existing 对象逐对象相等，所以 existing 永不进 `changed`）。remove
 | R10 | expected new object 混用形状 | **UNKNOWN / REPAIR_COVERAGE_INCOMPLETE**（`ObservationError`）；human review correction 2026-09-21 —— 原写 FAIL，实测 taxonomy 为 UNKNOWN，断言改为「永不 PASS + 精确 reason code」 |
 | R11 | 改新对象语义 → `protected_projection_sha256` **不变**（before 侧对照） | 相等断言 |
 | R12 | new symbol 携带 `exclude_from_sim = yes` | FAIL（v1 只允许 false/absent，见 §7.3）；必须**同时**进入 §6 矩阵 + envelope acceptance + §8 impact，防止实现者只改描述不写 gate |
+| R13 | new symbol 携带**校准集合外**的 property 名（`Sim.Params` / `Sim.Device`） | FAIL（`_BindingError`，见 §7.4 修订）；必须**同时**进入 §6 矩阵 + envelope acceptance + §8 impact。**Percy review 5279038034 M1**：不加此约束时 master=FAIL / #87=PASS，属本 erratum 自己引入的 regression |
+| R13b | new symbol 只带 `Reference` / `Value` / `Footprint` | PASS（正对照，防止闭集变成 false negative） |
 
 ### 6.3 Q6 — 新 symbol 的 source object 与 component observation 绑定
 
@@ -550,7 +552,7 @@ Direct modifications:   gates/repair_verification.py
                         tests/test_repair_verification.py
                           setUp source_object() builder (:60-65) and new:label fixture (:296)
                           existing fixtures' new-object shape
-                          new R1..R12（R12 = new symbol exclude_from_sim=yes -> FAIL）
+                          new R1..R13（R12 = new symbol exclude_from_sim=yes -> FAIL；R13 = new symbol 携带校准集合外 property 名 -> FAIL，R13b 为正对照）
                           _canonical_new_object() 新增 exclude_from_sim false/absent 检查
                         tasks/PR1-C5-ERRATUM.yaml, notes/pr1-c5-erratum/**,
                         docs/HANDOFF.md, docs/compliance/ai-usage/**

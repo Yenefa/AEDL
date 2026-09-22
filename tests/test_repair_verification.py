@@ -2187,6 +2187,45 @@ class ErratumNewObjectTests(unittest.TestCase):
         self.rehash(obj)
         self.both_fail(before, mutated, bound)
 
+    # --- R13 new symbol property NAMES are a closed, calibrated set -----------
+    def test_r13_new_symbol_uncalibrated_property_names_fail(self):
+        # Percy review 5279038034 M1: the erratum stopped comparing the new
+        # symbol's AST, and nothing else rejected property names, so an extra
+        # (property "Sim.Params" ...) slipped through both layers. Contract L152
+        # requires 未知电气字段不能忽略.
+        for name in ("Sim.Params", "Sim.Device"):
+            before, expected, bound, after = self.case()
+            mutated = copy.deepcopy(after)
+            obj = self.new_object(mutated, "new:R9")
+            obj["descriptor"]["ast"].append(["property", {"string": name}, {"string": "x"}])
+            # Without this the observation integrity check turns both trees into
+            # UNKNOWN/REPAIR_COVERAGE_INCOMPLETE and the property is never reached.
+            self.rehash(obj)
+            with self.subTest(name=name):
+                self.both_fail(before, mutated, bound)
+
+    def test_r13_the_calibrated_property_names_do_not_regress(self):
+        # Positive control: the names the pinned writer actually emits must not be
+        # rejected, otherwise the closed set would be a false negative.
+        node = ["symbol", ["uuid", {"string": "x"}],
+                ["property", {"string": "Reference"}, {"string": "R9"}],
+                ["property", {"string": "Value"}, {"string": "10k"}],
+                ["property", {"string": "Footprint"}, {"string": "R_0603"}],
+                ["pin", {"string": "1"}, ["uuid", {"string": "p1"}]]]
+        obj = {"identity": "new:R9", "kind": "symbol", "descriptor": {"ast": node}}
+        owners = [{"identity": {"component_uuid": "new:R9"}, "reference": "R9"}]
+        self.assertEqual(verification._canonical_new_object(obj, owners),
+                         {"identity": "new:R9", "kind": "symbol", "semantics": {"reference": "R9"}})
+
+    def test_r13_an_uncalibrated_name_is_rejected_by_the_canonicalizer(self):
+        node = ["symbol", ["uuid", {"string": "x"}],
+                ["property", {"string": "Reference"}, {"string": "R9"}],
+                ["property", {"string": "Sim.Params"}, {"string": "r=1Meg"}]]
+        obj = {"identity": "new:R9", "kind": "symbol", "descriptor": {"ast": node}}
+        owners = [{"identity": {"component_uuid": "new:R9"}, "reference": "R9"}]
+        with self.assertRaises(verification._BindingError):
+            verification._canonical_new_object(obj, owners)
+
 
 if __name__ == "__main__":
     unittest.main()

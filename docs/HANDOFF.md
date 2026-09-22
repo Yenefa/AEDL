@@ -532,3 +532,36 @@ PR: **#87 OPEN**（head `7db78870568122265a05b37fdf86fcd4eb663f90`）
 - **治理口径（两套 GitHub 机制必须分开写）**：**Legacy commit statuses: none**；**GitHub Actions check runs: present, 2 条均 FAILURE（pre-run）**。此前文档里「该分支无 GitHub CI commit status」只对 Legacy Status API 成立，不得据此写成「GitHub 没有 CI」。
 - **按 fail-closed 治理升级**：`STOP → 说明 CI 无法执行 → human decision`。**是否接受 local `dev_gate` evidence 作为本次 exception，属人类决定；agent 不得自行豁免两个红叉。**
 - **人类 review 缺口（治理 blocker）**：PR #87 `reviews = 0`、`review comments = 0`，作者为 `Yenefa`。按仓库 ownership 规则（merge authorization → human reviewer；author must not self-approve；acceptance → another real human），**AI 的 architecture review / `APPROVED_FOR_HUMAN_MERGE` 不能替代 GitHub 上另一名真人的 acceptance**。已请求真人 reviewer：`la4876949-bot`（Percy）。
+
+### Current state — 2026-09-22（M1 修订轮次）
+
+Percy 真人 review 已到：review id `5279038034`，**CHANGES_REQUESTED**（2026-09-22T13:54:46Z），对象 head `cfea050`。
+
+- **M1（本 PR 引入的 regression）**：`_canonical_new_object` 把新 symbol 的 AST 压成 `{reference}` 后
+  不再比较；components 层又是 `_COMP_FIELDS` 闭集；两层之间**没有任何地方拒绝 property 名**。
+  实测：新 symbol 加 `(property "Sim.Params" …)` 时 **master=FAIL / #87=PASS**。
+- **M2**：CI 从未执行（账户级 GitHub Actions 账单 gate，两个 job `steps=0`、无 runner）；
+  Percy 独立复现同一时间线与判据，并指出 #70（Lior）同样受影响。
+- Percy 确认成立：`_delta`/`_projection`/`_prepare` 与 base 逐字一致；变异 A/B；
+  `tests.test_repair_verification` 107 OK；范围干净；B5 的 28 条扰动无一依赖新对象完整 AST。
+
+**Owner 决定（2026-09-22 工作会话）**：remedy = **A（property 名闭集）**；**扩本 envelope，不另开卡**；
+`§7.4` **superseded / revised after native calibration**；`§7.5` 保留但仅限已批准 property 内部细节。
+
+**本轮改动**：
+
+```text
+tasks/PR1-C5-ERRATUM.yaml                                   acceptance 增补 M1 条款 + header 修订记录
+notes/pr1-c5-erratum/C2_NEW_SOURCE_OBJECT_ERRATUM_DRAFT.md  §7.4 撤销改订 / §7.5 澄清 / §14 Q2 改订 / §6.2 新增 R13·R13b
+gates/repair_verification.py                                _ALLOWED_NEW_SYMBOL_PROPERTIES + _canonical_new_object fail-closed
+tests/test_repair_verification.py                           R13（Sim.Params / Sim.Device）+ R13b（正对照）
+```
+
+```text
+Admission:    ADMIT / exit 0（allow_drift exception；HEAD fd630be）
+Tests:        tests.test_repair_verification 110 OK (skipped=1)；discover -s tests 817 OK (skipped=14)
+Falsification: 还原修复 → R13 真实红（'PASS' != 'FAIL'，M1 签名）→ 恢复 → GREEN；恢复文件 SHA256 逐位一致
+```
+
+**后坐力（必须写清）**：M1 的新 commit 使 `cfea050` 上的双环境补偿验证与一次性
+infrastructure exception **按各自条款失效**，且 Percy 必须在新 SHA 上重审。

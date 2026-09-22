@@ -33,6 +33,18 @@ _PIN_ID = _COMP_ID | {"number", "pin_uuid"}
 _COMP_FIELDS = {"identity", "reference", "lib_id", "lib_definition_sha256",
                 "value", "footprint", "unit", "position_nm", "rotation",
                 "mirror", "dnp", "in_bom", "on_board", "pin_definition_sha256"}
+# Instance-level property names the pinned akcli 0.21.0 writer can emit on a
+# freshly placed symbol: _set_property(sym, "Reference") / ("Value") /
+# ("Footprint") in writers/{instances,properties,handlers/components}.py.
+# Anything else on a NEW symbol is an unknown electrical field -- contract L152
+# is explicit that these may not be ignored -- so the set is closed and the
+# classification fails closed instead of guessing which names look electrical.
+# Datasheet/Description live only inside the embedded library definition
+# (writers/symbol_lib.py:113-118) and are deliberately NOT instance-level.
+# Presentation freedom inside these three names is untouched: _source_fields()
+# still bounds at/effects/fields_autoplaced, and the components layer still
+# compares the values it owns.
+_ALLOWED_NEW_SYMBOL_PROPERTIES = frozenset({"Reference", "Value", "Footprint"})
 _PIN_FIELDS = {"identity", "name", "electrical_type", "no_connect", "partition_key"}
 _COVERAGE_FIELDS = {"expected_pin_keys_sha256", "observed_pin_keys_sha256",
                     "expected_component_keys_sha256", "observed_component_keys_sha256",
@@ -429,6 +441,16 @@ def _canonical_new_object(obj, components):
             raise _BindingError("new symbol source object is not a symbol node")
         if _source_flag(node, "exclude_from_sim", False):
             raise _BindingError("new symbol must not exclude itself from simulation (v1)")
+        # The whole AST of a new symbol is no longer compared (that was the point
+        # of this erratum), so the property-NAME set is the only remaining place
+        # that can reject an unexpected electrical field on a new symbol. Without
+        # this check an extra (property "Sim.Params" ...) is invisible to both
+        # this layer and the closed _COMP_FIELDS component observation.
+        uncalibrated = set(_source_properties(node)) - _ALLOWED_NEW_SYMBOL_PROPERTIES
+        if uncalibrated:
+            raise _BindingError(
+                "new symbol carries properties outside the calibrated instance set: %s"
+                % ", ".join(sorted(uncalibrated)))
         return {"identity": ident, "kind": "symbol", "semantics": {"reference": reference}}
     if kind == "label":
         return {"identity": ident, "kind": "label",
