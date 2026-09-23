@@ -1,0 +1,183 @@
+# Task Envelope — PR1-C3 fresh KiCad export bound to staged bytes (gates/repair_verification)
+# 手写自 PR-1 Implementation Contract §9/§11 C3 + tasks/W1-C2.yaml 先例。
+# Human review + admission required before execution.
+
+task: PR1-C3
+
+base:
+  branch: feat-pr1-c3-fresh-export
+  sha: 069aaf82ada270dd072284f8dd8536332ac15f5f
+
+# rebase 记录（2026-09-18，Owner 复审后按序执行）：本卡原 base 为 0d31a8b（PR #71 合入点），
+# 落后 master 18 个提交且 mergeable=CONFLICTING。已 rebase 到 master f16b427（干净重放 6 个提交，
+# 冲突仅 docs/HANDOFF.md 追加段与生成的 AI_USAGE_LOG.md）。
+# 附带效果：原「登记 DSH actor」对 docs/ID_MAP.md 与 tools/build_ai_usage_index.py 的改动
+# 已被 master 吸收，diff 归零 —— 故二者从 allowed_paths 移除，本卡不再写这两个文件。
+# rebase 后 Owner 复审给出 2 个 merge blocker + 1 个 P1，均已列入本卡 acceptance。
+#
+# 第二次 rebase（2026-09-18，Owner 指示「PR 债务清零、WIP=1」，且 #78 合入后）：
+#   → master 069aaf82。冲突同样仅 docs/HANDOFF.md 追加段（保留双方）与生成的
+#   AI_USAGE_LOG.md（取 master 侧后重新 build，108 条）。base.sha 同步重锚。
+# Owner 同次指示本卡补做 **C3-P1..C3-P7 扰动资格**（判据 §2 C3 组；原 acceptance
+# 只要求「必须红在指定位置」，此前未执行）。本轮执行并在资格过程中发现并修复 1 个
+# 真实实现缺陷（见 acceptance 末条），如实记录，未扩大其它范围。
+#
+# 第三轮复审整改（2026-09-19，Owner REQUEST_CHANGES）：3 个代码点 + 1 个治理项 ——
+#   ① C3-P7 改为直接扰动 + deferred 冻结不变量；
+#   ② 真实依赖 start/end 字节复核（不再只比两份声明 manifest）；
+#   ③ 生产 C3 禁止 launcher，并把 library/config 摘要纳入 toolchain binding
+#      （toolchain manifest 形状变更，故 change_budget.contract_change 由 false 改为 true）；
+#   ④ envelope goal 与 PR 实际范围同步（原文仍写「只做小项 1–2」）。
+#   改动仍限在 allowed_paths 内，未扩到 C4/C5/C6。
+#
+# 第三轮整改的复审判定（Owner，2026-09-19）：3 个代码点全部 PASS，仅剩 1 个代码
+# blocker —— **实际子进程 environment 未绑定**（原实现 dict(os.environ) + overlay，
+# 而 toolchain_sha256 只 hash 了 overlay）。本轮改为「child 只收到被 canonical hash
+# 绑定的声明环境」，并补反向回归（宿主未声明的变量不得出现在子进程里）。
+# Owner 同时裁定：完整 {akcli, python, kicad, libraries, configs, execution} 统一
+# toolchain schema 留到 **C5 接线前**处理，不挡本卡；libraries/configs 允许显式为空。
+
+goal: |
+  PR-1 Commit 3（合同 §11 C3）：gates/repair_verification.py 的 fresh KiCad 导出绑定，
+  与 tests/test_repair_verification.py::FreshExportTests。
+  §9：KICAD_VERIFY 内对 snapshot before 与 stage after 各执行一次新的导出，固定 KiCad
+  10.0.5 与宿主配置的符号环境；使用 shell=false；输出目录为本次唯一新目录，启动前不存在
+  输出文件；不按 mtime 单独认定新鲜；不调用 gates/run_gates.py --skip-kicad 或历史
+  netlist fallback。记录 source 在导出前、导出后、解析结束三个 SHA256；两次进程都必须
+  正常完成、exit=0、产出非空且可解析的本轮 XML。
+  §11 C3 小项顺序：先两次独立新导出，再 source/依赖绑定，再 coverage 与 native 一致性，
+  再四项 PASS 不变量。
+  B5 判据（notes/b5-acceptance/C3-C6_PERTURBATION_CRITERIA_DRAFT.md，全文 sha256
+  0db60076…，PR #71 合入，判据先于实现冻结）C3-P1..C3-P7 必须红在指定位置。
+  本卡覆盖 §11 C3 的四个小项（导出证明、source/依赖绑定、coverage/native 一致性、四项
+  PASS 不变量）与 C3-P1..C3-P7 扰动资格；C4/C5/C6 不在本卡。
+
+scope: |
+  Writable paths are whitelisted in allowed_paths; everything else is FOREIGN (read-only).
+  不修改 run_gates.py / schematic_semantics.py / 既有 M2 合同 / Sandbox protocol / akcli 源码；
+  不做 ERC/semantic runner 集成；不实现 akcli_adapter（C4）与 run_round/bind_policy/
+  recover_incomplete（C5）；无 candidate 提交、无 rollback、无 promotion 功能。
+  verify_stage 不得在小项 3–4 落地前对任何输入返回 PASS。
+
+dependencies: []
+
+allowed_paths:
+  - gates/repair_verification.py
+  - tests/test_repair_verification.py
+  - tests/fixtures/repair_pr1/**
+  - docs/HANDOFF.md
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/compliance/ai-usage/**
+  - tasks/PR1-C3.yaml
+  # rebase 后 docs/ID_MAP.md 与 tools/build_ai_usage_index.py 的改动已被 master 吸收（diff 归零），
+  # 故不再列入 allowed_paths —— 本卡不写这两个文件。
+
+forbidden_paths:
+  - notes/b5-acceptance/** # 判据冻结后不改（B5 §5/§7）
+  - tools/repair_pipeline.py # C5
+  - tools/akcli_adapter.py # C4
+  - gates/run_gates.py
+  - gates/schematic_semantics.py
+  - gates/contracts/**
+  - sandbox_runtime/**
+  - src/**
+  - delivery/**
+  - docs/evidence/**
+
+acceptance: |
+  - tests.test_repair_verification.FreshExportTests 全绿（新增；C2 的
+    DeltaAndProtectedTests / SourceParserTests / FixtureProvenanceTests 保持绿）
+  - tests.test_repair_verification 全类无回归
+  - 小项 1–2 软件行为：旧 XML 残留而导出失败不得通过；exit=0 但空/坏 XML 不得通过；
+    导出与解析之间源字节改变必须体现在 source_hash_binding；错 txn/policy/tool 绑定
+    必须以 REPAIR_INPUT_DRIFT 拒绝；导出目录非本次新建即 fail-closed
+  - 真 KiCad 10.0.5 原生运行（**Owner 复审要求，2026-09-18**）：本机**已有**钉版
+    `kicad-cli` 10.0.5（C4 线已验证过 SHA256 `FC142E3B…D0C3`），故原先「本机无 kicad-cli」
+    的 `NOT_RUN` 理由**不再成立**。必须用真 kicad-cli 跑一次导出 sanity，并据此验证
+    `_kicad_partition()` / `_projected_coverage()` —— PR 自述此前只用**人工构造 XML** 验证过，
+    这是最大的未知面
+  - **修复 2 个 merge blocker（Owner 复审，均已按代码逐行确认）**：
+    - `txn_id` 可逃出 `report_root`：`_text()` 不禁止 `/` `\` `..`，而 `verify_stage` 把它
+      直接 join 进 `report_root/exports/<txn_id>/<role>`，`write_thin_verification` 亦把它
+      嵌进输出文件名。修法：`txn_id` 必须是 **canonical identifier**；回归
+      `txn_id = ../../escape` → 拒绝（`BLOCKED`/`REPAIR_INPUT_DRIFT`）且
+      **report_root 之外不产生任何目录/文件**
+    - `report_root` 的父级 link / reparse point 未封：原只有 `_absolute()`，随后
+      `fresh_export()` 会 `os.makedirs()`。修法：逐组件 no-link 检查（与 C4 同规则），
+      并补 Windows junction 回归
+  - **修复 P1（Owner 标 should-fix）**：kicad-cli digest 只在**执行前**核一次，
+    subprocess 之后**未**复核。修法：`binary digest before == after == manifest digest`，
+    与 C4 的 toolchain binding 哲学一致；不一致 → `TOOL_ERROR`/`REPAIR_TOOL_UNAVAILABLE`
+  - **C3-P1..C3-P7 扰动资格（Owner 2026-09-18 指示，本轮执行）**：
+    `C3PerturbationTests` 逐条施加判据 §2 C3 组的扰动，断言红落在判据指定的字段/状态，
+    且七条**均不得产生 PASS**（C3 层不产生 COMMITTED —— 那是 pipeline 的
+    TransactionStatus，属 C5，故以「无 PASS」如实记录）。
+    - P1 导出失败 + 输出目录残留上一轮旧 XML → `checks.fresh_export` FAIL /
+      `REPAIR_EXPORT_STALE`，旧 XML 未被消费；缺 binary → `REPAIR_TOOL_UNAVAILABLE`
+    - P2 exit=0 但空/坏 XML → `checks.fresh_export` FAIL / `REPAIR_TOOL_PROTOCOL_ERROR`
+    - P3 导出与解析之间改 stage 源 → `checks.source_hash_binding` FAIL / `REPAIR_SOURCE_UNBOUND`
+    - P4 verifier 返回后替换报告文件或 stage 源 → 新增只读复核 `recheck_reports()` 与
+      `bind_inputs()` 双双拒绝（commit 谓词落空）
+    - P5 非 10.0.5 / policy 绑定漂移 / toolchain digest 不符 → 非 PASS，reason 落
+      `REPAIR_INPUT_DRIFT`（版本、policy）或 `REPAIR_TOOL_UNAVAILABLE`（digest）
+    - P6 漏一个 pin 的导出 → `coverage.after.complete=false` + `REPAIR_COVERAGE_INCOMPLETE`；
+      native 与导出分歧 → `parser_agreement.after` FAIL / `REPAIR_PARSER_DISAGREEMENT`
+    - P7 必需检查停在 `NOT_RUN` → 整体非 PASS；`deferred.erc` 恒为 `NOT_RUN`（PASS 亦然）
+  - **资格过程中发现并修复的真实缺陷（如实记录）**：`_sha()` 是纯校验器（无返回值），
+    而 `verify_stage` 写成 `result["patch_sha256"] = _sha(...)` /
+    `result["bound_policy_sha256"] = _sha(...)` —— 于是回执里这两个字段**恒为 null**，
+    判据 C3-P5 指定的绑定锚点在回执上根本读不到。已改为先校验再显式携带该值，
+    并补回归 `test_p5_the_receipt_carries_the_patch_and_policy_bindings`。
+  - **第三轮复审整改（Owner 2026-09-19 REQUEST_CHANGES，3 个代码点 + 1 个治理项）**：
+    - C3-P7 改为**直接扰动**：其它条件全 PASS、仅 checks.exact_topology_delta = NOT_RUN
+      → 整体非 PASS；以及 deferred.erc 被伪写成 PASS → 整体非 PASS。PASS 不变量改为对
+      **冻结名字**逐个要求 NOT_RUN（不再读可变 _DEFERRED，避免伪值自证）。
+    - **真实依赖 start/end 绑定**：两次导出后重跑 _tree_digest()，与 bind_inputs() 的初始
+      before_files / staged_files 全量比较；READONLY_DEPENDENCY 在导出期间被改 → 非 PASS
+      （BLOCKED / REPAIR_INPUT_DRIFT）且 dependencies_unchanged = false。原实现只比较两份
+      **声明 manifest**，证明的是「声明一致」，不是「真实文件未变」。
+    - **执行体绑定**：生产 C3 要求 launcher_argv == []（冻结命令是 kicad-cli sch export
+      netlist … 本身，不是「任意 launcher + kicad-cli 当参数」）；测试改走进程 seam
+      （mock.patch _spawn），不再把测试注入机制泄漏进生产 toolchain contract。
+    - **toolchain library/config 摘要**：toolchain manifest 新增 libraries / configs 两个宿主
+      只读 FileManifest（绝对路径 + sha256 + size_bytes + role=READONLY_DEPENDENCY），每次导出
+      前后各复核一次；缺失 / 不符 / 运行中变化 → TOOL_ERROR / REPAIR_TOOL_UNAVAILABLE。
+    - envelope goal 同步为「四个小项 + P1..P7 资格」；change_budget.contract_change 由
+      false 改为 **true**（上述 toolchain manifest 形状变更），理由见本卡注释。
+    - **子进程 environment 全量绑定（Owner 复审后唯一剩余 blocker）**：原实现
+      environment = dict(os.environ) + toolchain["environment"]，而 toolchain_sha256 只覆盖
+      后者 —— 宿主环境变量可在不被绑定、不被回执记录的情况下影响 KiCad 的配置与查找路径。
+      已改为 child 只收到声明环境本身；宿主需要的 SYSTEMROOT / TEMP / PATH 必须显式写进
+      manifest。回归用桩 CLI dump 真实子进程 os.environ：未声明的宿主变量不得出现、
+      声明的探针必须出现。**证伪**：还原 ambient merge 后该回归报
+      「'AEDL_UNBOUND_PROBE' unexpectedly found」。
+  - **follow-up（Owner 裁定，不挡本卡）**：C5 接线前冻结 host-level canonical toolchain
+    binding → 派生 C3 的 KiCad slice 与 C4 的 akcli/Python slice → 定义跨层 toolchain
+    binding equality。本卡不做该重构。
+  - 台账 + HANDOFF 如实追加
+
+change_budget:
+  expected_files: 6
+  expected_modules: [gates, tests, tasks, docs]
+  cross_module: true
+  # 第三轮复审整改把 C3 toolchain manifest 从「任意 environment 字符串 + 任意 launcher」
+  # 改为「launcher_argv 必须为空 + libraries/configs 宿主只读 FileManifest 摘要绑定」，
+  # 这是宿主 toolchain 绑定的形状变更，故由 false 改为 true。
+  contract_change: true
+  evidence_semantics_change: false
+
+exceptions:
+  # Agent cannot self-authorize. 脏树来源 = envelope 本体存在于工作树（C1/C2 先例：
+  # 文件无法包含自身提交）。授权链：大统领 2026-09-07 冻结 PR-1 contract 后指令开写
+  # C1–C6（tasks/W1-C2.yaml 同链）；PR #71（2026-09-14 合入）明确「可以开 C3 了」。
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "PR-1 合同 §11 C3 + tasks/W1-C2.yaml allow_dirty 先例 + PR #71 合入判据冻结并放行 C3"
+  # 终端复核（clean-tree re-admit）需要：分支首个提交后 HEAD 必然离开 base.sha，
+  # 与 W1-C2 同一情形、同一授权链。
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "同上；base 0d31a8b 为分支起点，提交后按 W1-C2 rebaseline 先例重锚"
+
+escalation:
+  owner: Yenefa

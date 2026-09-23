@@ -9,7 +9,7 @@
 >
 > 三层结构：**本文件（work units，默认浏览入口）** → [`AI_USAGE_LOG.md`](AI_USAGE_LOG.md)（逐条索引，脚本生成，禁手改） → `docs/compliance/ai-usage/<ID>.md`（逐条真源）。
 >
-> - 覆盖核验（2026-09-13，合入 `origin/master`（含 PR #61）后重建索引）：本文件引用 97 条记录（93 条历史 + WU-34/WU-35 条目 2 条 + WU-39 单元 2 条：`AI-20260910-LIO-4CADC9CD6CC1E745477A23F629A1AAD5` 与 `AI-20260913-OPENCODE-B411981B20EBDA38FBC7F2E6B2AD30D4`），与 `AI_USAGE_LOG.md` 当前 97 条**双向一致**（无遗漏、无重复、无虚构 ID）。
+> - 覆盖核验（2026-09-23，PR #67 与 master 冲突合并后重建索引；WU-41 一览行与明细并入）：本文件引用 **100** 条记录；`AI_USAGE_LOG.md` 当前 **112** 条。二者**不逐条相等且本就不应相等**——本文件按**工作单元**聚合，只收录已归入 WU 的条目；未归入任何 WU 的条目只存在于 `AI_USAGE_LOG.md` 与 `ai-usage/<ID>.md` 层。本文件侧保证**无重复、无虚构 ID**；ID 有效性与索引同步由 `tools.build_ai_usage_index check` 与 `dev_gate.ai_usage_ledger` fail-closed 校验。
 > - 本文件只做聚合与引用，**不改写任何条目正文**；条目正文的修订请直接改 `ai-usage/<ID>.md` 并重建索引。
 > - **`Human owner` 只在该工作单元的记录中明确出现时才具名**；未具名一律写 `TO_VERIFY`，不默认归属给任何人。
 > - `Human final decision`：`yes` = 有批准 / merge / 裁决记录；`pending` = 条目仍为 `PENDING_HUMAN_REVIEW` 且无 merge 记录；`TO_VERIFY` = 记录未具名。
@@ -56,8 +56,11 @@
 | WU-34 | 2026-09-09 / 09-11 | GH-56 Y4-dry 公共输入打包、五例协议修订与 r12 harness 终验（r13 收尾中） | GENERATE_CODE / GENERATE_TEST / DOCUMENT / DEBUG | Yenefa | yes — 2026-09-10 批准 dry scoring 与五例修订；2026-09-11 审查结论 REQUEST_CHANGES，r13 收尾后倾向 APPROVE；实现审核仍 PENDING_HUMAN_REVIEW | 1 |
 | WU-35 | 2026-09-11 | GH-56 自主预冻结战役（r10–r15）：语义闭环、冻结前准备、证据修复、独立复核与 G6 可达性审计 | GENERATE_CODE / GENERATE_TEST / DOCUMENT / DEBUG / RESEARCH | Yenefa（G1–G11 决策与 G10/G11 明确授权） | yes — G11 授权入账；G10 授权更新权威文档；无 merge/冻结授权 | 1 |
 | WU-36 | 2026-09-11 | GH-56 r19/r20 修正版审计与提交 + PR #60 复核取证 | RESEARCH / REVIEW / DOCUMENT | Yenefa（授权提交 GH-56 变更集；PR #60 复核结论由其判定） | pending — 条目 PENDING_HUMAN_REVIEW；PR #61 待人工评审 | 1 |
+| WU-38 | 2026-09-10 | W2 TASK-B6 —— 再分发 / 隐私 / 证据三条发布边界 | RESEARCH / DOCUMENT | Percy（按 r3 任务卡指派并执行） | pending — 条目 PENDING_HUMAN_REVIEW；B-1/B-2/B-3 待 owner 裁定 | 1 |
 | WU-39 | 2026-09-13 | GH-56 PR #60 A2-L D 基线（LIO 初版 → A-2′ 端口）与 master 合并后台账重建 | GENERATE_CODE / GENERATE_TEST / DEBUG / DOCUMENT / REVIEW | Yenefa（D1=C / D2=A / A-2′ 路线、WU-39 与 push 授权由其给出） | pending — 条目 PENDING_HUMAN_REVIEW；PR #60 待人工复核 v0.6 | 2 |
+| WU-40 | 2026-09-12 | B5 前置 —— C3–C6 独立验收扰动判据（28 条，判据先于实现） | RESEARCH / DOCUMENT | Percy（决定先做 B5 前置；裁定公开方式/位置/冻结时点） | pending — 条目 PENDING_HUMAN_REVIEW；PR 待人工评审 | 1 |
 | WU-41 | 2026-09-13 | 仓库级行尾规则 —— `*.md` 固化为 LF（含字节冻结件豁免） | DOCUMENT | Percy（裁定固化该规则；Yenefa 在 PR #61 交还裁决） | pending — 条目 PENDING_HUMAN_REVIEW；PR #67 待人工评审 | 1 |
+| WU-42 | 2026-09-12 | P3 F-U1-04 措辞人工核验入库（A3 rubric 冻结前置） | RESEARCH / DOCUMENT | Percy（打开冻结原件目视核对，裁定措辞为 `recommended`） | pending — 条目 PENDING_HUMAN_REVIEW；PR #64 待人工评审 | 1 |
 
 ## 明细
 
@@ -358,6 +361,13 @@
 - **证据**：PR #61（commit `e641b5eb`，CI 双绿）；PR #60 review（`CHANGES_REQUESTED`）；r20 归档全链哈希独立复核；真实冻结包 CLI 实测 exit 2 ×2
 - **边界**：未接触 Percy private oracle；复核仅使用公开仓库内容与公开冻结包
 
+### WU-38 · 2026-09-10 — W2 TASK-B6 发布边界（再分发 / 隐私 / 证据）
+
+- **Records (1)**：`AI-20260910-PER-AFCEDEBF75ADD3D18C37E52BCB552A37`
+- **AI role**：RESEARCH / DOCUMENT
+- **Human owner**：Percy（W2 r3 §B6 指派其负责 redistribution / privacy / evidence boundary）
+- **Human final decision**：pending — 条目 `PENDING_HUMAN_REVIEW`；B-1 / B-2 / B-3 三项阻断项待 owner 裁定
+- **证据**：该条目「主要发现」节——RES-007 登记 `是否随 AEDL 再分发：NO`，而 `git ls-files` 实测 8 份第三方原件 8/8 已跟踪、4628 KB；「边界纪律」节声明本文件不改写任何登记、不裁定 LICENSE / secrets / public timing（属 Yenefa）。
 ### WU-39 · 2026-09-13 — GH-56 PR #60 A2-L D 基线（LIO 初版 → A-2′ 端口）与机械收尾
 
 - **Records (2)**：`AI-20260910-LIO-4CADC9CD6CC1E745477A23F629A1AAD5`（v0.3–v0.5 初版）、`AI-20260913-OPENCODE-B411981B20EBDA38FBC7F2E6B2AD30D4`（v0.6 A-2′ 端口 + 机械收尾）
@@ -367,6 +377,15 @@
 - **证据**：五个冻结计分包逐字节等价 5/5（host 侧 `gh56-y4-dry/r23/candidates/a2l-port/PORT-EQUIVALENCE-RECEIPT.json`，不入库）；`unittest tests.test_repair_baseline` OK 35（skipped=3）；`unittest discover -s tests` OK 552（skipped=3）；合并 `origin/master@c286489` 后台账 `check` fail → `build`（94 条）→ `check` OK
 - **边界**：未接触 Percy private oracle；引擎只读仓库内公共合同与公共包内观测/源码
 
+### WU-40 · 2026-09-12 — B5 前置：C3–C6 独立验收扰动判据
+
+- **Records (1)**：`AI-20260912-PER-221898A27E0C3DCC8A60E5138378DBCF`
+- **AI role**：RESEARCH / DOCUMENT
+- **Human owner**：Percy（决定先做 B5 前置；裁定 Q-B5-1 公开方式、Q-B5-2 位置、Q-B5-3 冻结时点；批准开 PR）
+- **Human final decision**：pending — 条目 `PENDING_HUMAN_REVIEW`；PR 待人工评审
+- **证据**：条目「起因」节记录 C3–C6 在 master 零命中的实测；「本次改动」节列出四组 28 条扰动与通用规则；「未处理项」节声明判据未冻结、载荷未生成、B5 正体未执行
+- **边界**：判据来自 PR-1 实现合同与任务卡，不来自实现代码（尚不存在）；AI 未实现 C3–C6
+
 ### WU-41 · 2026-09-13 — 仓库级行尾规则：`*.md` 固化为 LF
 
 - **Records (1)**：`AI-20260913-PER-6C88D8B5D955513505AD1638F45F66D9`
@@ -375,6 +394,25 @@
 - **Human final decision**：pending — 条目 `PENDING_HUMAN_REVIEW`；PR #67 待人工评审
 - **证据**：条目「起因」节记录两次同类事故（PR #61 的方案文件 245/242、本仓库 2026-09-12 台账汇总 +355/-345）；「刻意未做」节声明不碰 json / Gerber
 - **边界**：规则只在 `git add` 时生效，不修正历史提交；Gerber 的 CRLF 由既有规则保留；PR #69 落地的两份 PBF 交接件按字节冻结豁免（`-text`），以免其已公布的 sha256 失配
+
+---
+
+## 维护规则
+
+1. 新增 AI 记录后：先建 `ai-usage/<ID>.md` → `python -m tools.build_ai_usage_index build` → 再把该 ID 归入本文件的一个工作单元（同 Issue / PR / 同一目标的多轮活动合并为一个 unit）。
+2. 本文件的引用集合必须与 `AI_USAGE_LOG.md` 完全一致；出现差异时以台账为准并修正本文件。
+3. 不在此处重述条目结论、不添加条目中没有的事实；需要补充事实时改真源条目。
+4. `Human owner` 与 `Human final decision` 的证据不足时写 `TO_VERIFY`，禁止默认归属。
+
+### WU-42 · 2026-09-12 — P3 F-U1-04 措辞人工核验入库
+
+- **Records (1)**：`AI-20260912-PER-8CDC04C60044592378A3C4FCCCB53E76`
+- **AI role**：RESEARCH / DOCUMENT
+- **Human owner**：Percy（打开冻结原件目视核对，裁定措辞为 `recommended`；核验本身未由 AI 代做）
+- **Human final decision**：pending — 条目 `PENDING_HUMAN_REVIEW`；PR #64 待人工评审
+- **证据**：核对对象为冻结原件 `src/hardware/m2-board/evidence/datasheets/U1_ESP32-C3-WROOM-02/esp32c3_schematic_checklist_power_supply_2026-08-31.html`；条目「本次改动」节列出 P3 的四处改动与摘录补全
+- **边界**：只覆盖 F-U1-04 的措辞；p34 Figure 9-1 图形附项仍为 `AI_EXTRACTED_UNVERIFIED`；A3 rubric 本体不在本单元范围内
+- **编号沿革**：原记 WU-37，与 Yenefa 2026-09-11 已改号的 #58 撞号（她在先），2026-09-13 让号为 **WU-42**
 
 ---
 

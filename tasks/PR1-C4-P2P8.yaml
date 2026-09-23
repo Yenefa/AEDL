@@ -1,0 +1,141 @@
+# Task Envelope — PR1-C4-P2P8  C4-P2..P8 Native Perturbation Qualification
+# 判据唯一来源：notes/b5-acceptance/C3-C6_PERTURBATION_CRITERIA_DRAFT.md §C4（draft-4，冻结；
+# 本卡只读，不改写、不反向照着实现改判据）。
+# 先例：tasks/PR1-C4-PQ.yaml（C4-P1）、tasks/PR1-C4-UUIDS.yaml。
+#
+# 依赖：验收对象 tools/akcli_adapter.py 由 PR #75 合入；created UUID 绑定由 PR #77 合入。
+# 本卡 base = master 0626375（Merge PR #77）；2026-09-18 按先例两次重锚：
+#   → 9d04833（#79/#80/#81 合入后，见本卡 rebase 更新记录）
+#   → f486e013（#69/#82 合入后，Owner 指示「PR 债务清零、WIP=1」）
+# base.sha 以本文件下方 base.sha 字段为准。
+
+task: PR1-C4-P2P8
+
+base:
+  branch: feat-pr1-c4-p2-p8
+  sha: f486e013b373338db7e3bfb56285d4895e24a75f
+
+goal: |
+  把 B5 判据 §C4 的 C4-P2..P8 从「桩层语义相近 / 未跑」推进到**逐条可复现的 qualification**，
+  每条如实标注证据等级（native / stub-level / NOT_RUN），并给出 expectations 的落点。
+  C4-P1 已在 PR #76 完成；本卡不重开 P1。
+
+  本卡是**验收侧**卡片：不得修改被验对象。`tools/**`、`gates/**` 为 forbidden。
+  若 qualification 暴露 adapter 缺陷：STOP → 记 BLOCKED → 升级 Owner。
+
+  开工探针（2026-09-17，真 akcli 0.21.0 + 真 DC-04 资格夹具，scratch 副本）已确定
+  每条的可行性，结论如下（原始回执已留 host 侧）：
+
+  - **C4-P5 native 可行**：`add_net_label name=GND at=U1.6`（U1.6 是 DC-04 的 no_connect 脚，
+    原属未命名网络）在**干净**夹具上触发真 writer 合法拒绝：
+    exit=6 / `error.code=OPLIST` / "REFUSED: --strict-nets: net split/merge touches a named
+    net; nothing written" / 字节零变化。这是 pre-write 拒绝，可直接验证「strict 被拒后不得
+    自动改走 exception」以及「一次写调用」。
+  - **C4-P6 native 可行**（**已按 PR #79 更新**）：真工具运行 + 宿主 manifest 的
+    `symbol_digest` 被扰动 → `TOOL_ERROR / REPAIR_TOOL_UNAVAILABLE`；`akcli_version` 被扰动 →
+    `toolchain_manifest` 在**任何写调用之前**拒绝（BLOCKED，写调用数 0）。
+    **rebase 说明**：本卡最初测得 digest 失配是**写后**才拦（真写入 `exit=0` 已发生）。
+    Owner 裁定那是**真实 C4 缺陷**，已由 **PR #79** 把整个 toolchain 绑定前移到 PRECHECK。
+    故本卡 P6 native 用例在 rebase 后断言的是**写前**拒绝：写调用 0 次、`exit_code is None`、
+    stage 字节不变。
+  - **C4-P7 native 可行**：单批 3 op = 1 次写调用且 `APPLIED_TO_STAGE`；把 DC-04 拆成
+    [place_component] + [两个 add_net_label] 两批时，第 1 批单独作废（字节已变且 net_diff 报
+    `+ NEW <unnamed@R9.1/R9.2>`），第 2 批被真 writer 拒绝 —— 拆批与单批**不等价**。
+    另在桩层验证「一次携带两批的 op-list 容器」被拒（input drift）。
+  - **C4-P8 native 不可行（本卡最重要的负面结论）**：真 writer 能产生连通性 finding 的形态
+    （悬空 wire；把 no_connect 脚真正 wire 起来）都需要 Operation v1 之外的 op，adapter 会在
+    **词表**处即拒（0 次写调用）—— 按判据 §1 规则 2 与 §C4「假红示例」，这是**假红**，
+    不能算 P8 的资格。且实测 v1 的 `add_net_label` 打在被 no_connect 的脚上
+    （J1.A8 / U1.5）后，**fresh read 与回执的 connectivity 均为 0 条 finding**。
+    故 P8 停在 stub-level；native 记 **`NOT_REACHABLE_WITH_CURRENT_V1+FIXTURES`** ——
+    Owner 已**接受**该结论，明确**无需再探、不得为凑齐而扩 Operation v1**（属夹具/词表边界，
+    不是缺陷）。
+  - ~~**C4-P3 不可行**~~ —— **该结论已被 Owner 裁定推翻（保留为历史记录）**：当时判断
+    「走 API 路径需要 E1/E2/E3 原生夹具」。合同本就规定 E1/DC-01、E2/DC-02、E3/DC-03 走受限
+    写入器，**不需要新造 schematic fixture**；**PR #81** 已用现有 DC-01/02/03 完成 C4-P3 的
+    **native 正对照 + 固定负扰动**。故 C4-P3 不再是本卡的 `NOT_RUN`，其资格归 #81。
+  - **C4-P2 / C4-P4**：真 writer 在成功路径恒返回 `applied=true` 且 op_results 完整，
+    无法从真工具观测到「字段缺失 / 伪造 true / op 缺项 / 重复 index」→ 桩层固定，
+    测试名与文档明确标注 stub-level，绝不写成原生资格。
+
+scope: |
+  Writable paths are whitelisted in allowed_paths; everything else is FOREIGN.
+  只新增/扩展 tests/test_akcli_adapter.py 内的 qualification 测试类与必要的桩形态；
+  **不改被验对象**（tools/akcli_adapter.py 本体），不改 gates/**、src/**、
+  sandbox_runtime/**、tools/repair_pipeline.py、notes/b5-acceptance/**（冻结判据）、
+  docs/competition/**、docs/evidence/**、tests/fixtures/repair_pr1/**。
+
+  Impact Analysis
+
+  Direct modifications:   tests/test_akcli_adapter.py（新增 opt-in 原生扰动类 + 桩层标注）、
+                          tasks/PR1-C4-P2P8.yaml、docs/HANDOFF.md、
+                          docs/compliance/ai-usage/<ID>.md、AI_USAGE_LOG.md
+  Potentially affected:   C4 组的整体通过判据（八条是否齐备）——本卡预期给出「未齐备」的
+                          诚实结论并升级 P3 / P8-native
+  Explicitly not touched: tools/**、gates/**、src/**、sandbox_runtime/**、
+                          notes/**、docs/evidence/**、tests/fixtures/repair_pr1/**
+  Risk: LOW（只新增 opt-in 测试与桩形态；只读仓库、扰动只作用在 scratch 副本）
+
+  change_budget:
+    expected_files: 5
+    expected_modules: [tests, tasks, docs]
+    cross_module: false
+    contract_change: false
+    evidence_semantics_change: false
+
+dependencies: []
+
+allowed_paths:
+  - tests/test_akcli_adapter.py
+  - tasks/PR1-C4-P2P8.yaml
+  - docs/HANDOFF.md
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/compliance/ai-usage/**
+
+forbidden_paths:
+  - tools/**
+  - gates/**
+  - src/**
+  - sandbox_runtime/**
+  - notes/b5-acceptance/**
+  - docs/competition/**
+  - docs/evidence/**
+  - tests/fixtures/repair_pr1/**
+
+acceptance: |
+  - C4-P5 native：真 writer 对 `add_net_label name=GND at=U1.6` 返回合法拒绝（exit 6 /
+    error.code=OPLIST）→ adapter `BLOCKED` / `REPAIR_STRICT_REFUSED`；且**写调用恰好 1 次、
+    exception writer 调用 0 次**（strict 被拒不得 fallback 到 exception）
+  - C4-P6 native（**rebase 后按 #79 的新语义**）：真工具 + 被扰动的 symbol_digest →
+    `TOOL_ERROR / REPAIR_TOOL_UNAVAILABLE`，且**写调用 0 次、`exit_code is None`、stage 字节不变**
+    （PR #79 把 toolchain 绑定前移到 PRECHECK；本卡原断言「真写入 exit=0 之后才拒」已作废）；
+    被扰动的 akcli_version → 同样在写调用之前即拒（BLOCKED，写调用 0 次），不得静默继续
+  - C4-P7 native：单批 3 op → `APPLIED_TO_STAGE` 且写调用恰好 1 次；拆成两批时真 writer
+    对第 2 批合法拒绝、且拆批后的中间态与单批结果**不等价**（net_diff 出现新的未命名网络）
+  - C4-P7 桩层：一次携带两批的 op-list 容器被拒（input drift，写调用 0 次）
+  - C4-P2 桩层：`applied` 缺失 / `false` / JSON 层伪造 `true`（含伪造 `authorized=true`）
+    → 绝不 `APPLIED_TO_STAGE`；桩层结果用测试名/文档标注 stub-level
+  - C4-P4 桩层：`op_results` 缺项 / 重复 index / 任一 `status=error` → `BLOCKED`，
+    且必须逐一覆盖 0..n-1 且全 ok 才可能通过
+  - C4-P8 桩层：新增 WARNING / 任何 NO_CONNECT_CONFLICT / 回执与 fresh read 分项矛盾 → 阻断；
+    并如实记录「P8 无合法原生路径（词表假红）」的探针证据
+  - C4-P8 native：`NOT_REACHABLE_WITH_CURRENT_V1+FIXTURES`（Owner 已接受，无需再探）
+  - C4-P3：**本卡不做**（原记 `NOT_RUN`，理由「缺夹具」已被 Owner 推翻）；C4-P3 的 native
+    正对照 + 固定负扰动由 **PR #81** 用现有 DC-01/02/03（E1/E2/E3）完成，本卡只引用其结论
+  - 每条 qualification 给出判据 §3 的 verdict 字段；native 与 stub-level 严格区分，
+    绝不把 stub 结果写成原生资格；不得为通过而放宽断言或改判据
+  - 未 opt-in 时原生类 SKIP 并如实标注；opt-in 后缺工具/坏版本必须 FAIL 不得 SKIP
+  - tests.test_akcli_adapter 全绿；全量 discover 不回归；dev_gate 带本 envelope 通过；
+    反向对照证明新增原生用例在未修的桩/真工具边界上确实会红
+  - 台账 + HANDOFF 如实追加；状态 PENDING_HUMAN_REVIEW
+
+exceptions:
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "用户 2026-09-17 本会话：PR #77 已 merge（master 0626375）后指示继续推进 C4 线、开卡 2；envelope 本体必须在工作树，同 PR1-C4/PR1-C4-PQ/PR1-C4-UUIDS 先例"
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "同上；分支起点 master 0626375（PR #77 合入后），提交后按先例重锚。2026-09-18 Owner 指示进入 PR 债务清零（WIP=1）、先关 #78：在 #81/#69/#82 陆续合入后 rebase 到 master f486e013 并重锚 base.sha；冲突仅在 docs/HANDOFF.md 的追加段落（保留双方）与生成的 docs/compliance/AI_USAGE_LOG.md（取 master 侧后重新 build）。本卡未加任何功能。"
+
+escalation:
+  owner: Yenefa

@@ -1,0 +1,104 @@
+# Task Envelope — PR1-C5-PRE HostToolchainBinding（C5 前置：统一宿主工具链身份）
+# 手写自 PR-1 实现合同 §9（toolchain manifest）/ §11 C4-C5 + Owner 决定（issue #83）。
+# Human review + admission required before execution.
+
+task: PR1-C5-PRE
+
+base:
+  # 工作分支。tools/admit.py:205-209 要求 base.branch == 当前分支，故不写 master
+  # （与 tasks/PR1-C3.yaml 同一写法：那里写的是 feat-pr1-c3-fresh-export）。
+  branch: feat-pr1-c5-pre-host-toolchain
+  sha: 4e441ca58091bed64dd3926058f665a47c2a2ed7
+
+# 开卡方式（Owner 决定，见 exceptions.allow_drift.decision_ref）：envelope-first ——
+# 本卡首个 commit 只含本文件，随后在 clean tree 上执行 admit --allow-drift。
+# 原因：envelope 本体必须在仓库内，因此「未提交 → 工作树 dirty」与
+# 「已提交 → HEAD != base.sha」二者必居其一，零例外在结构上不可达
+# （tools/admit.py:210-226）。该授权只覆盖这一处 baseline drift。
+
+# 边界（Owner 要求钉住，防止后来者「简化」）：
+# 1. candidate_symbol_digest 不属于 HostToolchainBinding；它是 C4 的
+#    candidate-specific binding input。
+# 2. HostToolchainBinding.manifest is the portable frozen declaration; resolution is
+#    host-only execution binding. A digest from one domain MUST NOT be substituted for
+#    a digest from another domain unless this contract defines an explicit canonical
+#    derivation.
+
+goal: |
+  C5 前置：定义 HostToolchainBinding，把「可移植的冻结声明」与「宿主专属执行绑定」
+  分开，并让 C3 verifier 的 KiCad slice 与 C4 adapter 的 akcli/Python slice 都能被
+  确定性派生，使 C5 的 commit predicate 能证明两层使用的是同一宿主工具链。
+  equality 的定义是「两个 leaf digest 均可追溯到同一 host binding」，
+  不是 c3_toolchain_sha256 == c4_toolchain_sha256 —— 两者结构本就不同。
+  两层：manifest 原样对齐冻结的 src/repair/patch_schema_v1.json#/$defs/ToolchainManifest
+  （不改该文件）；resolution 为 host-only，承载 executable 绝对路径、library/config
+  逻辑路径到宿主绝对路径的映射、执行环境，以及观测到的 installed akcli distribution。
+  不解决 symbol_digest：它由当前 schematic 的内嵌库算出，属 candidate binding。
+
+scope: |
+  Writable paths are whitelisted in allowed_paths; everything else is FOREIGN (read-only).
+  只新增 tools/host_toolchain.py 与 tests/test_host_toolchain.py。派生出的 slice 必须被
+  C3/C4 的**现有**校验器原样接受，因此不得修改 gates/repair_verification.py 或
+  tools/akcli_adapter.py，也不得修改 src/repair/patch_schema_v1.json。
+  不实现 run_round / 事务机 / rollback / promotion；不碰 SchGen scorer、GUI、
+  generator、C7、PR-2。
+
+dependencies: []
+
+allowed_paths:
+  - tools/host_toolchain.py
+  - tests/test_host_toolchain.py
+  - tasks/PR1-C5-PRE.yaml
+  - docs/HANDOFF.md
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/compliance/ai-usage/**
+
+forbidden_paths:
+  - notes/b5-acceptance/** # 判据冻结后不改
+  - gates/repair_verification.py # C3：只读，slice 必须被其现有校验器接受
+  - tools/akcli_adapter.py # C4：只读，同上
+  - tools/repair_pipeline.py # C5
+  - gates/run_gates.py
+  - gates/schematic_semantics.py
+  - gates/contracts/**
+  - src/** # 冻结 schema 不改
+  - sandbox_runtime/**
+  - docs/evidence/**
+  - delivery/**
+
+acceptance: |
+  - HostToolchainBinding 两层结构 fail-closed 校验：manifest 闭合对齐冻结 schema；
+    resolution 承载 host-only 绑定（三个 executable 绝对路径、library/config 逻辑路径
+    到绝对路径映射、kicad/akcli 执行环境、launcher_argv、观测到的 installed
+    akcli distribution）
+  - derive_kicad_slice(binding) 的产物被 gates.repair_verification.toolchain_manifest()
+    原样接受（用真实校验器交叉验证，不造平行校验）
+  - derive_akcli_slice(binding, candidate_symbol_digest) 的产物被
+    tools.akcli_adapter.toolchain_manifest() 原样接受
+  - same_host_toolchain(c3_sha, c4_sha, binding, candidate_symbol_digest) 为真
+    ⟺ 两个 leaf digest 分别等于各自派生 slice 的 canonical hash；**不要求**两者相等
+  - 负例：任一字段篡改、跨域 digest 代换（sdist_sha256 / package_files_sha256
+    冒充 akcli_artifact_sha256）、把 C3 slice 当 C4 slice 递交 → 一律不得为真，
+    且 reason 具名
+  - candidate_symbol_digest 只出现在 C4 派生与 equality 判据中，绝不进入
+    HostToolchainBinding
+  - 确定性：同一 binding 跨进程、跨键序产生相同 digest
+  - 台账 + HANDOFF 如实追加
+
+change_budget:
+  expected_files: 6
+  expected_modules: [tools, tests, tasks, docs]
+  cross_module: false
+  # 新增 host-level 契约（加性），不改 C3/C4 既有契约与语义
+  contract_change: true
+  evidence_semantics_change: false
+
+exceptions:
+  # Agent cannot self-authorize. 授权来源见 decision_ref（人类操作者决定，agent 仅登记）。
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "https://github.com/Yenefa/AEDL/issues/83#issuecomment-5742642366"
+    reason: "Envelope-first governance: the task envelope is committed alone from base 4e441ca58091bed64dd3926058f665a47c2a2ed7 before admission, so HEAD necessarily differs from base.sha from that first commit onward, while the worktree stays clean at admission time. This exception authorizes --allow-drift on this branch for that drift, and nothing else: it does not include allow_dirty and does not authorize any functional code to enter the worktree before admission passes."
+
+escalation:
+  owner: Yenefa
