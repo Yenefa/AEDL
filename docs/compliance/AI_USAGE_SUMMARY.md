@@ -9,7 +9,7 @@
 >
 > 三层结构：**本文件（work units，默认浏览入口）** → [`AI_USAGE_LOG.md`](AI_USAGE_LOG.md)（逐条索引，脚本生成，禁手改） → `docs/compliance/ai-usage/<ID>.md`（逐条真源）。
 >
-> - 覆盖核验（2026-09-23，PR #65 与 master 冲突合并后重建索引；WU-43 一览行与明细并入）：本文件引用 **100** 条记录；`AI_USAGE_LOG.md` 当前 **112** 条。二者**不逐条相等且本就不应相等**——本文件按**工作单元**聚合，只收录已归入 WU 的条目；未归入任何 WU 的条目只存在于 `AI_USAGE_LOG.md` 与 `ai-usage/<ID>.md` 层。本文件侧保证**无重复、无虚构 ID**；ID 有效性与索引同步由 `tools.build_ai_usage_index check` 与 `dev_gate.ai_usage_ledger` fail-closed 校验。
+> - 覆盖核验（2026-09-23，PR #65 与 master 冲突合并后重建索引；WU-45 一览行与明细并入）：本文件引用 **100** 条记录；`AI_USAGE_LOG.md` 当前 **112** 条。二者**不逐条相等且本就不应相等**——本文件按**工作单元**聚合，只收录已归入 WU 的条目；未归入任何 WU 的条目只存在于 `AI_USAGE_LOG.md` 与 `ai-usage/<ID>.md` 层。本文件侧保证**无重复、无虚构 ID**；ID 有效性与索引同步由 `tools.build_ai_usage_index check` 与 `dev_gate.ai_usage_ledger` fail-closed 校验。
 > - 本文件只做聚合与引用，**不改写任何条目正文**；条目正文的修订请直接改 `ai-usage/<ID>.md` 并重建索引。
 > - **`Human owner` 只在该工作单元的记录中明确出现时才具名**；未具名一律写 `TO_VERIFY`，不默认归属给任何人。
 > - `Human final decision`：`yes` = 有批准 / merge / 裁决记录；`pending` = 条目仍为 `PENDING_HUMAN_REVIEW` 且无 merge 记录；`TO_VERIFY` = 记录未具名。
@@ -60,7 +60,7 @@
 | WU-39 | 2026-09-13 | GH-56 PR #60 A2-L D 基线（LIO 初版 → A-2′ 端口）与 master 合并后台账重建 | GENERATE_CODE / GENERATE_TEST / DEBUG / DOCUMENT / REVIEW | Yenefa（D1=C / D2=A / A-2′ 路线、WU-39 与 push 授权由其给出） | pending — 条目 PENDING_HUMAN_REVIEW；PR #60 待人工复核 v0.6 | 2 |
 | WU-40 | 2026-09-12 | B5 前置 —— C3–C6 独立验收扰动判据（28 条，判据先于实现） | RESEARCH / DOCUMENT | Percy（决定先做 B5 前置；裁定公开方式/位置/冻结时点） | pending — 条目 PENDING_HUMAN_REVIEW；PR 待人工评审 | 1 |
 | WU-42 | 2026-09-12 | P3 F-U1-04 措辞人工核验入库（A3 rubric 冻结前置） | RESEARCH / DOCUMENT | Percy（打开冻结原件目视核对，裁定措辞为 `recommended`） | pending — 条目 PENDING_HUMAN_REVIEW；PR #64 待人工评审 | 1 |
-| WU-43 | 2026-09-11 | W2 A4/J1 —— Percy 侧交叉复核（八项零越界） | REVIEW / DOCUMENT | Percy（复核执行时点由其决定） | pending — 条目 PENDING_HUMAN_REVIEW；§2 待另一侧执行，§3 依据链未闭合 | 1 |
+| WU-45 | 2026-09-11 | W2 A4/J1 —— Percy 侧交叉复核（八项零越界） | REVIEW / DOCUMENT | Percy（复核执行时点由其决定） | pending — 条目 PENDING_HUMAN_REVIEW；§2 待另一侧执行，§3 依据链未闭合 | 1 |
 
 ## 明细
 
@@ -405,14 +405,14 @@
 3. 不在此处重述条目结论、不添加条目中没有的事实；需要补充事实时改真源条目。
 4. `Human owner` 与 `Human final decision` 的证据不足时写 `TO_VERIFY`，禁止默认归属。
 
-### WU-43 · 2026-09-11 — W2 A4 / TASK-J1 交叉复核（Percy 侧）
+### WU-45 · 2026-09-11 — W2 A4 / TASK-J1 交叉复核（Percy 侧）
 
 - **Records (1)**：`AI-20260911-PER-BA94BF6FC9D43C7427A6BCDECC297648`
 - **AI role**：REVIEW / DOCUMENT
 - **Human owner**：Percy（2026-09-11 指令「现在把交叉复核做了」）
 - **Human final decision**：pending — 条目 `PENDING_HUMAN_REVIEW`；W1 止损决策的最终裁定按 W2 r3 归 Yenefa
 - **证据**：该条目「§1 方法与结论」节——11 个 PR、149 个文件、八项逐条核查；「§2/§3 的处理方式」节说明为何不代为执行与不代为作决策；「已知限制」节声明模式检索不能排除等价措辞
-- **编号沿革**：本单元先后记作 WU-36、WU-38，均与他人已占号冲突；2026-09-13 让号为 **WU-43**
+- **编号沿革**：本单元先后记作 WU-36、WU-38，均与他人已占号冲突；2026-09-13 让号为 **WU-43**。**2026-09-23 第三次让号：WU-43 → WU-45**——Lior 的 PR #70 亦取 WU-43（且连带 WU-44），本侧让出以免拆散其连号；master 当时最高为 WU-42，#58 取 WU-37、#67 取 WU-41，故 WU-45 为下一个空号。
 
 ---
 
