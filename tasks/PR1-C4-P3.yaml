@@ -1,0 +1,111 @@
+# Task Envelope — PR1-C4-P3  C4-P3 native qualification (positive control + fixed negative perturbation)
+# 判据唯一来源：notes/b5-acceptance/C3-C6_PERTURBATION_CRITERIA_DRAFT.md §C4 的 C4-P3 行
+# （**draft-5**，已随 PR #80 合入 master `f16b427`；本卡只读，不改判据）。
+# 先例：tasks/PR1-C4-PQ.yaml（C4-P1）、tasks/PR1-C4-P2P8.yaml（C4-P2..P8）。
+#
+# 本卡是**验收侧**卡片：`tools/**`、`gates/**`、`notes/**` 为 forbidden，不改被验对象。
+# 若 qualification 暴露 adapter 缺陷：STOP → 记 BLOCKED → 升级 Owner。
+
+task: PR1-C4-P3
+
+base:
+  branch: test-pr1-c4-p3-qualification
+  sha: f16b427963c180b2af5aa397752aa5cd52c0aa84
+
+goal: |
+  把 §C4 的 **C4-P3** 推进到 qualification，并**证明两半都能用真工具链跑**（不必降级到 stub）。
+  判据 draft-5 把 P3 定义为一个**正对照**加一个**真扰动**：
+
+    正对照 : tool_applied=null 且独立条件全成立（op_results 完整且全 ok、源 bytes 确实改变、
+             fresh reread 成功、connectivity gate 成立）→ 允许 APPLIED_TO_STAGE
+    负扰动 : tool_applied=null、op_results 非空且全 ok，但**源 bytes 不改变**
+             → 必须非 APPLIED_TO_STAGE，且 reasons 含 REPAIR_EFFECT_MISMATCH
+    判定有效性 : 正对照必须先通过；正对照失败 → 本条 NOT_RUN / qualification invalid，
+             不得因负扰动是红的就算 PASS
+
+  **开工 bounded probe（2026-09-18，真 akcli 0.21.0，只作用在 scratch 副本）已证明两半都 native 可达**：
+
+  - 正对照（native，三个夹具）：DC-01 → rule `E1`、DC-02 → `E2`、DC-03 → `E3`，
+    全部 `CONSTRAINED_EXCEPTION`；实测 `status=APPLIED_TO_STAGE`、`tool_applied=None`、
+    `changed=True`、`exit=0`、op status 全 `ok`（4 / 1 / 4 个 op）。
+  - 负扰动（native，同样三个夹具）：`add_net_label name=+3V3 at=C2.1`（C2.1 本就在 +3V3 上，
+    故是不改字节的 no-op），实测 `status=BLOCKED`、`changed=False`、`tool_applied=None`、
+    `ops=['ok']`、`exit=0`，reasons = **`REPAIR_EFFECT_MISMATCH`**（+ `REPAIR_DELTA_MISMATCH`）。
+    **两次独立运行逐字段相同**，连 created_uuid 都稳定（`1d801691-1263-56ad-b675-4a56a3e789b5`）。
+
+  因此本卡**不需要 stub、不需要新夹具、不需要扩词表** —— 与 Owner 对 #78 的裁定
+  （「native 做不到就明确降级，不制造 fixture」）一致，而这次是**不必降级**。
+
+scope: |
+  Writable paths are whitelisted in allowed_paths; everything else is FOREIGN.
+  只新增/扩展 tests/test_akcli_adapter.py 内的 opt-in 原生 qualification 用例与必要的
+  最小测试工具改动；**不改被验对象**（tools/akcli_adapter.py），不改 gates/**、src/**、
+  sandbox_runtime/**、tools/repair_pipeline.py、notes/b5-acceptance/**（冻结判据）、
+  docs/competition/**、docs/evidence/**、tests/fixtures/repair_pr1/**。
+
+  Impact Analysis
+
+  Direct modifications:   tests/test_akcli_adapter.py（原生 qualification 工具加 route/rule 形参；
+                          新增 C4-P3 正对照与负扰动用例）、tasks/PR1-C4-P3.yaml、
+                          docs/HANDOFF.md、docs/compliance/ai-usage/<ID>.md、AI_USAGE_LOG.md
+  Potentially affected:   C4 组的整体通过判据（P3 归位后，仍未齐备的只剩 C4-P8 native 的
+                          词表边界结论，已由 PR #78 记录为 NOT_REACHABLE）
+  Explicitly not touched: tools/**、gates/**、src/**、sandbox_runtime/**、notes/**、
+                          docs/evidence/**、tests/fixtures/repair_pr1/**
+  Risk: LOW（只新增 opt-in 测试；扰动只作用在冻结夹具的 scratch 副本上）
+
+  change_budget:
+    expected_files: 5
+    expected_modules: [tests, tasks, docs]
+    cross_module: false
+    contract_change: false
+    evidence_semantics_change: false
+
+dependencies: []
+
+allowed_paths:
+  - tests/test_akcli_adapter.py
+  - tasks/PR1-C4-P3.yaml
+  - docs/HANDOFF.md
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/compliance/ai-usage/**
+
+forbidden_paths:
+  - tools/**
+  - gates/**
+  - src/**
+  - sandbox_runtime/**
+  - tools/repair_pipeline.py
+  - notes/b5-acceptance/**
+  - docs/competition/**
+  - docs/evidence/**
+  - tests/fixtures/repair_pr1/**
+
+acceptance: |
+  - 正对照 native：DC-01/DC-02/DC-03 分别以 rule `E1`/`E2`/`E3` 走 `CONSTRAINED_EXCEPTION`，
+    断言 `status == APPLIED_TO_STAGE`、`tool["tool_applied"] is None`、`changed is True`、
+    `op_results` 逐一覆盖且 status 全 `ok`；**并断言 writer 真的跑了**（`exit_code == 0`），
+    以排除「因别的原因提前返回」的假绿
+  - 负扰动 native：同样三个夹具，op 固定为 `add_net_label name=+3V3 at=C2.1`，断言
+    `status != APPLIED_TO_STAGE` 且 `reasons` 含 **`REPAIR_EFFECT_MISMATCH`**；同时断言该红
+    **确实发生在 writer 之后**：`tool["tool_applied"] is None`、`changed is False`、
+    `op_results` 非空且全 `ok`、`exit_code == 0` —— 否则就是判据 §1 规则 2 所说的「假红」
+  - **判定有效性内联强制**（判据 C4-P3 的 qualification validity）：负扰动用例在施加扰动**之前**
+    先在同一夹具上跑正对照并断言其通过；正对照一旦失败，该用例也随之失败——
+    即「正对照失败 → qualification invalid」，红负扰动不能单独把 P3 判成 PASS
+  - 未 opt-in 时原生类 SKIP 并如实标注；opt-in 后缺工具/坏版本必须 FAIL 不得 SKIP
+  - tests.test_akcli_adapter 全绿；全量 discover 不回归；dev_gate 带本 envelope 通过
+  - 台账 + HANDOFF 如实追加，并写明 P3 的证据等级为 **native**（正对照与负扰动均为原生，
+    无 stub 成分）；若最终有任何一半降级，必须如实标注为 stub/hybrid 且给 NOT_REACHABLE 理由
+  - 状态 PENDING_HUMAN_REVIEW
+
+exceptions:
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "用户 2026-09-18 本会话「继续吧」——#80 已 merge（master f16b427），按既定顺序第 ⑤ 步开 P3 qualification 卡；envelope 本体必须在工作树，同前几张卡先例"
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "同上；分支起点 master f16b427（PR #80 合入后），提交后按先例重锚"
+
+escalation:
+  owner: Yenefa

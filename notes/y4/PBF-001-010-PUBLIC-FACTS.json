@@ -1,0 +1,161 @@
+{
+  "document_type": "Y4_DRY_PBF_PUBLIC_FACTS_HANDOFF",
+  "purpose": "A3/Percy scoring-side review of the public facts for semantic escalation (typical->mandatory, recommended->required)",
+  "authoritative_provenance": {
+    "freeze_manifest_sha256": "3935891e9f144a88d09ba514b8695ec113e97d6fd64773499ddf49169ec09b56",
+    "bound_case": "Y4-001",
+    "bound_case_package_sha256": "9767134b33a708cb785d86b2953346cdfb0e425103a767ce2e7994df3485e5db",
+    "field": "public_context.public_facts",
+    "statement": "this handoff is a verbatim extraction of that bound field"
+  },
+  "reconstruction_location": {
+    "path": "r20/critic20/claim3/freeze-work/pass2/Y4-001.json",
+    "note": "critic workspace path; bytes match the freeze binding, but authority is the manifest -> package-hash chain, not this path"
+  },
+  "checks": {
+    "case_set_identical": "Y4-001..Y4-005 all carry 10 facts with the same id set",
+    "id_field_note": "PBF-* use fact_id; BB-001 uses id and is NOT present in v3d",
+    "approval_ref": "r17/FACTS-CHANGE-REVIEW.md (BB-001 ACCEPTED_PUBLIC_POLICY_ADDITION); PBF-001..010 OWNER_APPROVED (r8)",
+    "review_focus": "semantic escalation (typical->mandatory, recommended->required); treat differences as input defects per plan section 8"
+  },
+  "facts": [
+    {
+      "fact_id": "PBF-001",
+      "scope": "Generic device information; no case-specific repair target.",
+      "source": {
+        "document_sha256": null,
+        "locator": "Table 3-1, printed p11",
+        "url": "https://documentation.espressif.com/esp32-c3-wroom-02_datasheet_en.pdf",
+        "version": "1.7"
+      },
+      "statement": "Module pin 13 is GPIO18/USB D-; pin 14 is GPIO19/USB D+.",
+      "subject": "ESP32-C3-WROOM-02/02U module",
+      "verification_status": "PRIMARY_SOURCE_TEXT_CHECKED_BY_AGENT"
+    },
+    {
+      "fact_id": "PBF-002",
+      "scope": "Generic device information; no case-specific repair target.",
+      "source": {
+        "document_sha256": null,
+        "locator": "Table 3-1, printed p11",
+        "url": "https://documentation.espressif.com/esp32-c3-wroom-02_datasheet_en.pdf",
+        "version": "1.7"
+      },
+      "statement": "EN high enables the chip, EN low disables it; the EN input must not float.",
+      "subject": "ESP32-C3-WROOM-02/02U EN",
+      "verification_status": "PRIMARY_SOURCE_TEXT_CHECKED_BY_AGENT"
+    },
+    {
+      "fact_id": "PBF-003",
+      "scope": "Generic device information; no case-specific repair target.",
+      "source": {
+        "document_sha256": null,
+        "locator": "Table 4-1 and accompanying text, printed p12",
+        "url": "https://documentation.espressif.com/esp32-c3-wroom-02_datasheet_en.pdf",
+        "version": "1.7"
+      },
+      "statement": "GPIO9 defaults to a weak pull-up at reset when external circuitry is absent or high-impedance; external drive and reset sampling conditions matter.",
+      "subject": "ESP32-C3 strapping inputs",
+      "verification_status": "PRIMARY_SOURCE_TEXT_CHECKED_BY_AGENT"
+    },
+    {
+      "fact_id": "PBF-004",
+      "scope": "Generic device information; no case-specific repair target.",
+      "source": {
+        "document_sha256": null,
+        "locator": "Table 6-3, printed p22",
+        "url": "https://documentation.espressif.com/esp32-c3-wroom-02_datasheet_en.pdf",
+        "version": "1.7"
+      },
+      "statement": "45 kohm is a typical internal weak pull-up/down value at 3.3 V and 25 C, not a guaranteed minimum or maximum.",
+      "subject": "ESP32-C3 internal pull resistors",
+      "verification_status": "PRIMARY_SOURCE_TEXT_CHECKED_BY_AGENT"
+    },
+    {
+      "fact_id": "PBF-005",
+      "scope": "Generic device information; no case-specific repair target.",
+      "source": {
+        "document_sha256": null,
+        "locator": "Section 9 notes, printed p34",
+        "url": "https://documentation.espressif.com/esp32-c3-wroom-02_datasheet_en.pdf",
+        "version": "1.7"
+      },
+      "statement": "An EN RC delay is advised; 10 kohm and 1 uF are usual recommended values, to be adjusted for actual supply rise and reset timing.",
+      "subject": "ESP32-C3-WROOM-02/02U EN timing",
+      "verification_status": "PRIMARY_SOURCE_TEXT_CHECKED_BY_AGENT"
+    },
+    {
+      "fact_id": "PBF-006",
+      "scope": "Generic device information; no case-specific repair target.",
+      "source": {
+        "document_sha256": null,
+        "locator": "USB section",
+        "url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32c3/schematic-checklist.html",
+        "version": "latest; captured 2026-09-10"
+      },
+      "statement": "The guide recommends reserving series resistors with initial values 22/33 ohm and optional initially unpopulated shunt capacitors near the chip; this is a design recommendation.",
+      "subject": "ESP32-C3 USB design",
+      "verification_status": "PRIMARY_SOURCE_TEXT_CHECKED_BY_AGENT"
+    },
+    {
+      "fact_id": "PBF-007",
+      "scope": "Generic device information; no case-specific repair target.",
+      "source": {
+        "document_sha256": null,
+        "locator": "Strapping Pins section",
+        "url": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32c3/schematic-checklist.html",
+        "version": "latest; captured 2026-09-10"
+      },
+      "statement": "The guide recommends an external GPIO9 pull-up and warns against high-value capacitors there. This does not erase its default internal pull-up.",
+      "subject": "ESP32-C3 GPIO9 design",
+      "verification_status": "PRIMARY_SOURCE_TEXT_CHECKED_BY_AGENT"
+    },
+    {
+      "fact_id": "PBF-008",
+      "scope": "Generic device information; no case-specific repair target.",
+      "source": {
+        "document_sha256": "095b1853e7f4328f5897c9ca6c392a7dd8b0202eda66b0a2629f9cb840dd496d",
+        "locator": "Table 7 / Section 3.4 / Table 8, printed pp8-9",
+        "url": "https://sensirion.com/media/documents/213E6A3B/63A5A569/Datasheet_SHT3x_DIS.pdf",
+        "version": "December 2022, Version 7"
+      },
+      "statement": "ADDR must not float. Logic low selects 7-bit address 0x44; logic high selects 0x45. Keep its level stable throughout an I2C transaction.",
+      "subject": "SHT3x-DIS ADDR",
+      "verification_status": "PRIMARY_SOURCE_TEXT_CHECKED_BY_AGENT"
+    },
+    {
+      "fact_id": "PBF-009",
+      "scope": "Generic device information; no case-specific repair target.",
+      "source": {
+        "document_sha256": "095b1853e7f4328f5897c9ca6c392a7dd8b0202eda66b0a2629f9cb840dd496d",
+        "locator": "Section 3.6, printed p9",
+        "url": "https://sensirion.com/media/documents/213E6A3B/63A5A569/Datasheet_SHT3x_DIS.pdf",
+        "version": "December 2022, Version 7"
+      },
+      "statement": "Unused nRESET is recommended to float or connect to VDD through at least 2 kohm; it has an internal typical 50 kohm pull-up.",
+      "subject": "SHT3x-DIS nRESET",
+      "verification_status": "PRIMARY_SOURCE_TEXT_CHECKED_BY_AGENT"
+    },
+    {
+      "fact_id": "PBF-010",
+      "scope": "Owner-approved ordinary project-source observation (not an immutable requirement).",
+      "source": {
+        "baseline": "63bc7e31523b403f3229cda2f2db5c291b33482d",
+        "files": {
+          "src/firmware/include/sht30.h": {
+            "bytes": 1440,
+            "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+          },
+          "src/firmware/src/main.cpp": {
+            "bytes": 2904,
+            "sha256": "b780e874b391f6d55e3a6a7b8649a894b887b72f21644cd206c1c9f25968a7aa"
+          }
+        },
+        "repository": "Yenefa/AEDL"
+      },
+      "statement": "The driver source defines DEFAULT_ADDR as 0x44; application source assigns SHT_ADDR from that constant. This is a static source observation, not proof of deployed firmware or a human-approved immutable requirement.",
+      "subject": "Current project firmware source",
+      "verification_status": "SOURCE_CONSTANTS_READ_BY_AGENT; RUNTIME_NOT_CHECKED"
+    }
+  ]
+}
