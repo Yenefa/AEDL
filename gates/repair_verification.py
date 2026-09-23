@@ -17,8 +17,12 @@ import copy
 from decimal import Decimal, localcontext
 import hashlib
 import json
+import os
 import re
+import stat
+import subprocess
 import uuid
+import xml.etree.ElementTree as ElementTree
 
 
 DIGEST_KINDS = ("manifest", "proposal", "patch", "policy-bound", "topology",
@@ -29,6 +33,18 @@ _PIN_ID = _COMP_ID | {"number", "pin_uuid"}
 _COMP_FIELDS = {"identity", "reference", "lib_id", "lib_definition_sha256",
                 "value", "footprint", "unit", "position_nm", "rotation",
                 "mirror", "dnp", "in_bom", "on_board", "pin_definition_sha256"}
+# Instance-level property names the pinned akcli 0.21.0 writer can emit on a
+# freshly placed symbol: _set_property(sym, "Reference") / ("Value") /
+# ("Footprint") in writers/{instances,properties,handlers/components}.py.
+# Anything else on a NEW symbol is an unknown electrical field -- contract L152
+# is explicit that these may not be ignored -- so the set is closed and the
+# classification fails closed instead of guessing which names look electrical.
+# Datasheet/Description live only inside the embedded library definition
+# (writers/symbol_lib.py:113-118) and are deliberately NOT instance-level.
+# Presentation freedom inside these three names is untouched: _source_fields()
+# still bounds at/effects/fields_autoplaced, and the components layer still
+# compares the values it owns.
+_ALLOWED_NEW_SYMBOL_PROPERTIES = frozenset({"Reference", "Value", "Footprint"})
 _PIN_FIELDS = {"identity", "name", "electrical_type", "no_connect", "partition_key"}
 _COVERAGE_FIELDS = {"expected_pin_keys_sha256", "observed_pin_keys_sha256",
                     "expected_component_keys_sha256", "observed_component_keys_sha256",
@@ -40,6 +56,7 @@ _BOUND_FIELDS = {"version", "rule_id", "route", "policy_file_sha256",
                  "authorized_delta", "authorized_delta_sha256",
                  "protected_projection_sha256", "operation_constraints"}
 _HEX = re.compile(r"[0-9a-f]{64}\Z")
+_NEW_PREFIX = "new:"
 
 
 class ObservationError(ValueError):
@@ -89,6 +106,23 @@ def _text(value, label, empty=False):
     if not isinstance(value, str) or (not value and not empty) or any(ord(c) < 32 for c in value):
         raise ObservationError("invalid %s" % label)
     return value
+
+
+_IDENTIFIER = re.compile(r"[A-Za-z0-9_-]{1,64}\Z")
+
+
+def _identifier(value, label):
+    """A canonical identifier: no separators, no traversal, no drive letter.
+
+    Identifiers reach the filesystem as path segments (the export directory and the
+    thin-verification file name are built from the transaction id), so "it is a
+    non-empty string" is not a strong enough check: `../../outside` is a perfectly
+    good string and a perfectly bad path segment.
+    """
+    text = _text(value, label)
+    if not _IDENTIFIER.match(text):
+        raise ObservationError("invalid %s" % label)
+    return text
 
 
 def _integer(value, label, minimum=None):
@@ -229,12 +263,40 @@ def normalize_observation(observation, expected=False):
         raise ObservationError("partition omitted a source pin")
     object_keys = set()
     for obj in obs["source_objects"]:
-        _closed(obj, {"identity", "kind", "semantic_ast_sha256", "descriptor"}, "source object")
         ident = _text(obj["identity"], "source object identity")
         if ident in object_keys:
             raise ObservationError("duplicate source object")
         object_keys.add(ident)
-        _text(obj["kind"], "source object kind")
+        kind = _text(obj["kind"], "source object kind")
+        if expected and ident.startswith(_NEW_PREFIX):
+            # NEW objects carry engineering semantics, never a writer AST: the
+            # pinned writer's serialization is not defined by the frozen policy.
+            _closed(obj, {"identity", "kind", "semantics"}, "new source object")
+            semantics = obj["semantics"]
+            if not isinstance(semantics, dict):
+                raise ObservationError("new source object semantics must be a mapping")
+            # Only the SHAPE is validated here. Identity/role rules stay in
+            # _prepare so they classify as _BindingError (FAIL), not as an
+            # incomplete observation (UNKNOWN).
+            if kind == "symbol":
+                _closed(semantics, {"reference"}, "new symbol semantics")
+                _identifier(semantics["reference"], "new symbol reference")
+            elif kind == "label":
+                _closed(semantics, {"name", "scope", "point_nm", "rotation"}, "new label semantics")
+                _text(semantics["name"], "new label name")
+                if semantics["scope"] != "local":
+                    raise ObservationError("only root-local labels are qualified")
+                point = semantics["point_nm"]
+                if not isinstance(point, list) or len(point) != 2:
+                    raise ObservationError("new label point must be an nm pair")
+                for coordinate in point:
+                    _integer(coordinate, "new label point")
+                if semantics["rotation"] not in (0, 90, 180, 270):
+                    raise ObservationError("unsupported new label rotation")
+            else:
+                raise ObservationError("unsupported new source object kind")
+            continue
+        _closed(obj, {"identity", "kind", "semantic_ast_sha256", "descriptor"}, "source object")
         if not isinstance(obj["descriptor"], dict) or "ast" not in obj["descriptor"]:
             raise ObservationError("source object is missing its complete AST")
         if obj["semantic_ast_sha256"] != canonical_sha256("protected", obj["descriptor"]["ast"]):
@@ -353,6 +415,62 @@ def _reidentify(obs, mapping):
     return out
 
 
+def _label_semantics(node):
+    """Engineering semantics of one real AFTER root-local label node."""
+    if not isinstance(node, list) or not node or node[0] != "label":
+        raise ObservationError("only root-local labels are qualified")
+    _source_fields(node, {"at", "effects", "uuid", "fields_autoplaced"}, positional=1)
+    name = _text(_source_text(node[1]), "label")
+    point, angle = _source_at(node)
+    _source_value(node, "uuid")
+    return {"name": name, "scope": "local", "point_nm": list(point), "rotation": angle}
+
+
+def _canonical_new_object(obj, components):
+    """Canonical {identity, kind, semantics} for one ALIGNED new source object."""
+    ident, kind = obj["identity"], obj["kind"]
+    if kind == "symbol":
+        owners = [c for c in components if c["identity"]["component_uuid"] == ident]
+        if len(owners) != 1:
+            raise _BindingError("new symbol source object is not bound to exactly one component")
+        reference = owners[0]["reference"]
+        if ident != _NEW_PREFIX + reference:
+            raise _BindingError("new symbol identity is not its component role")
+        node = obj["descriptor"]["ast"]
+        if not isinstance(node, list) or not node or node[0] != "symbol":
+            raise _BindingError("new symbol source object is not a symbol node")
+        if _source_flag(node, "exclude_from_sim", False):
+            raise _BindingError("new symbol must not exclude itself from simulation (v1)")
+        # The whole AST of a new symbol is no longer compared (that was the point
+        # of this erratum), so the property-NAME set is the only remaining place
+        # that can reject an unexpected electrical field on a new symbol. Without
+        # this check an extra (property "Sim.Params" ...) is invisible to both
+        # this layer and the closed _COMP_FIELDS component observation.
+        uncalibrated = set(_source_properties(node)) - _ALLOWED_NEW_SYMBOL_PROPERTIES
+        if uncalibrated:
+            raise _BindingError(
+                "new symbol carries properties outside the calibrated instance set: %s"
+                % ", ".join(sorted(uncalibrated)))
+        return {"identity": ident, "kind": "symbol", "semantics": {"reference": reference}}
+    if kind == "label":
+        return {"identity": ident, "kind": "label",
+                "semantics": _label_semantics(obj["descriptor"]["ast"])}
+    raise _BindingError("unsupported new source object kind")
+
+
+def _canonicalize_new_objects(obs):
+    """Rewrite ALIGNED new source objects into the expected semantic shape.
+
+    Existing objects keep their full AST (UUIDs already reidentified by
+    _reidentify). Unmapped new objects keep the raw shape on purpose: they must
+    stay visible as an unauthorized addition.
+    """
+    for index, obj in enumerate(obs["source_objects"]):
+        if obj["identity"].startswith(_NEW_PREFIX):
+            obs["source_objects"][index] = _canonical_new_object(obj, obs["components"])
+    return obs
+
+
 def _align_new(before, after, expected):
     mapping = {}
     old_refs = {c["reference"] for c in before["components"]}
@@ -384,18 +502,29 @@ def _align_new(before, after, expected):
                 if ident["pin_uuid"] in old_ids:
                     raise _BindingError("new pin reuses a before UUID")
                 mapping[ident["pin_uuid"]] = expected_pins[ident["number"]]["identity"]["pin_uuid"]
-    # Labels have no reference. Match complete semantic descriptors with only
-    # their own fresh UUID masked. More/fewer matches remain visible as deltas.
+    # Labels have no reference. Match on engineering semantics extracted by C2's
+    # own parser: the pinned writer's serialization is not part of the frozen
+    # authorization. Zero matches stay unmapped (delta/projection expose them);
+    # more than one match is ambiguous and must never pass.
     for obj in expected["source_objects"]:
-        if obj["kind"] != "label" or not obj["identity"].startswith("new:"):
+        if obj["kind"] != "label" or not obj["identity"].startswith(_NEW_PREFIX):
             continue
-        signature = _uuid_ast(obj["descriptor"], {}, mask=True)
-        matches = [o for o in after["source_objects"]
-                   if o["kind"] == "label" and o["identity"] not in old_ids
-                   and _uuid_ast(o["descriptor"], {}, mask=True) == signature]
+        wanted = obj["semantics"]
+        matches = []
+        for candidate in after["source_objects"]:
+            if candidate["kind"] != "label" or candidate["identity"] in old_ids:
+                continue
+            try:
+                actual = _label_semantics(candidate["descriptor"]["ast"])
+            except ObservationError:
+                continue
+            if actual == wanted:
+                matches.append(candidate)
+        if len(matches) > 1:
+            raise _BindingError("ambiguous new label semantics: %r" % obj["identity"])
         if len(matches) == 1 and matches[0]["identity"] not in mapping:
             mapping[matches[0]["identity"]] = obj["identity"]
-    return _reidentify(after, mapping)
+    return _canonicalize_new_objects(_reidentify(after, mapping))
 
 
 def _rows(obs, section):
@@ -1031,3 +1160,935 @@ def observe_source(raw):
         if isinstance(exc, ObservationError):
             raise
         raise ObservationError("incomplete source: %s" % exc) from exc
+
+# ---------------------------------------------------------------------------
+# C3: fresh KiCad export bound to staged bytes (contract section 9)
+#
+# The frozen PR-1 command is kicad-cli sch export netlist --format kicadxml.
+# Every export runs in a directory this run created, with shell=false, and is
+# only accepted when the process completed, exited 0, produced a non-empty
+# parseable XML and the source bytes hash is identical before the export,
+# after the export and after parsing.  A leftover XML is never a result.
+# ---------------------------------------------------------------------------
+
+REQUIRED_KICAD_VERSION = "10.0.5"
+EXPORT_TIMEOUT_SECONDS = 60
+EXPORT_ARGUMENTS = ("sch", "export", "netlist", "--format", "kicadxml", "--output")
+_TOOLCHAIN_FIELDS = {"version", "kicad_cli", "kicad_version", "kicad_cli_sha256",
+                     "launcher_argv", "arguments", "timeout_seconds", "environment",
+                     "libraries", "configs"}
+_EXPORT_REQUEST_FIELDS = {"txn_id", "role", "source_root", "relative_source",
+                          "output_dir", "toolchain"}
+_BINDING_REQUEST_FIELDS = {"txn_id", "run_id", "candidate_id", "relative_target",
+                           "snapshot_root", "stage_root", "before_manifest",
+                           "staged_manifest", "bound_policy", "bound_policy_sha256",
+                           "toolchain"}
+_FILE_MANIFEST_FIELDS = {"version", "files"}
+
+
+class _ExportHalt(ValueError):
+    """A fail-closed export outcome that must stay attributable."""
+
+    def __init__(self, status, code, detail, proof=None):
+        ValueError.__init__(self, detail)
+        self.status = status
+        self.code = code
+        self.detail = detail
+        self.proof = proof
+
+
+def _reason_code(code, detail, stage="KICAD_VERIFY"):
+    return {"code": code, "stage": stage, "object_id": None, "detail": detail}
+
+
+def _read_bytes(path):
+    try:
+        with open(path, "rb") as handle:
+            return handle.read()
+    except OSError as exc:
+        raise ObservationError("unreadable file: %s" % exc) from exc
+
+
+def _is_link(path):
+    """True for symlinks and Windows reparse points (junctions included)."""
+    try:
+        info = os.lstat(path)
+    except OSError:
+        return False
+    if stat.S_ISLNK(info.st_mode):
+        return True
+    attributes = getattr(info, "st_file_attributes", 0)
+    return bool(attributes & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0))
+
+
+def _absolute(path, label):
+    text = _text(path, label)
+    if not os.path.isabs(text):
+        raise ObservationError("%s must be absolute" % label)
+    return os.path.normpath(text)
+
+
+def _has_linked_component(path):
+    """True when the path itself or any existing component is a link/reparse point.
+
+    C3 writes into a declared report root, so containment has to be checked on the
+    path that actually gets created, not only on the leaf: a junction at any level
+    above it redirects the whole write (same rule the C4 adapter applies to its
+    native artifact root).
+    """
+    text = os.path.normpath(path)
+    parts = text.replace("\\", "/").split("/")
+    if parts and re.match(r"^[A-Za-z]:$", parts[0]):
+        cursor = parts[0] + os.sep
+        parts = parts[1:]
+    else:
+        cursor = os.sep
+        parts = text.split(os.sep)
+    for part in parts:
+        if not part:
+            continue
+        cursor = os.path.join(cursor, part)
+        if os.path.exists(cursor) and _is_link(cursor):
+            return True
+    return False
+
+
+def _resolve_within(root, relative):
+    """Resolve a candidate-relative path strictly inside its declared root."""
+    root_path = _absolute(root, "declared root")
+    rel = _text(relative, "candidate-relative path")
+    if rel.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:", rel):
+        raise ObservationError("candidate-relative path must not be absolute")
+    parts = rel.replace("\\", "/").split("/")
+    if any(part in ("", ".", "..") for part in parts):
+        raise ObservationError("unsafe candidate-relative path")
+    if _is_link(root_path):
+        raise ObservationError("the declared root must not be a link")
+    cursor = root_path
+    for part in parts:
+        cursor = os.path.join(cursor, part)
+        if os.path.exists(cursor) and _is_link(cursor):
+            raise ObservationError("linked path components are not allowed")
+    real_root = os.path.realpath(root_path)
+    real_target = os.path.realpath(cursor)
+    if os.path.commonpath([real_root, real_target]) != real_root:
+        raise ObservationError("path escapes its declared root")
+    return cursor
+
+
+def _host_file_manifest(manifest, label):
+    """Validate the shape of a host read-only file manifest.
+
+    These are the symbol-library and KiCad-config files the export actually
+    consumes.  They are host-absolute observation inputs, not candidate-relative
+    paths, so the candidate path rules do not apply; what has to hold is that the
+    host declares real bytes for every one of them.  Structure only:
+    _host_file_digest reads the bytes.
+    """
+    _closed(manifest, _FILE_MANIFEST_FIELDS, "%s manifest" % label)
+    if type(manifest["version"]) is not int or manifest["version"] != 1:
+        raise ObservationError("unsupported %s manifest version" % label)
+    rows = manifest["files"]
+    if not isinstance(rows, list):
+        raise ObservationError("the %s manifest files must be a list" % label)
+    seen = set()
+    for row in rows:
+        _closed(row, {"path", "sha256", "size_bytes", "role"}, "%s file" % label)
+        path = _text(row["path"], "%s path" % label)
+        if not os.path.isabs(path):
+            raise ObservationError("a %s path must be absolute" % label)
+        if row["role"] != "READONLY_DEPENDENCY":
+            raise ObservationError("a %s file must be a READONLY_DEPENDENCY" % label)
+        _sha(row["sha256"], "%s digest" % label)
+        _integer(row["size_bytes"], "%s size" % label, 0)
+        key = os.path.normcase(os.path.normpath(path))
+        if key in seen:
+            raise ObservationError("the %s manifest declares %s twice" % (label, path))
+        seen.add(key)
+    return rows
+
+
+def _host_file_digest(manifest, label):
+    """Read every file a host manifest declares and return its observed digest.
+
+    A declared library or config is only a binding when the bytes behind it are
+    read and re-read: a path string, or a digest that is never checked, proves
+    nothing.  Missing, linked or mismatched files are fatal.
+    """
+    observed = {}
+    for row in _host_file_manifest(manifest, label):
+        path = row["path"]
+        if not os.path.isfile(path) or _is_link(path):
+            raise ObservationError("the %s file is missing or a link: %s" % (label, path))
+        raw = _read_bytes(path)
+        if len(raw) != row["size_bytes"] or hash_bytes(raw) != row["sha256"]:
+            raise ObservationError("the %s file does not match its declared digest: %s"
+                                   % (label, path))
+        observed[os.path.normcase(os.path.normpath(path))] = {
+            "sha256": row["sha256"], "size_bytes": row["size_bytes"]}
+    return observed
+
+
+def _toolchain_input_digests(toolchain):
+    """Bind the declared symbol libraries and KiCad config for one export."""
+    digests = {}
+    for label, manifest in (("library", toolchain["libraries"]),
+                            ("config", toolchain["configs"])):
+        try:
+            digests[label] = _host_file_digest(manifest, label)
+        except ObservationError as exc:
+            raise _ExportHalt("TOOL_ERROR", "REPAIR_TOOL_UNAVAILABLE",
+                              "a declared toolchain %s is not bound: %s"
+                              % (label, exc)) from exc
+    return digests
+
+
+def _spawn(argv, **kwargs):
+    """The single place C3 starts an export process.
+
+    Production always runs the pinned kicad-cli binary itself: the frozen
+    section 9 command is kicad-cli sch export netlist ..., never an arbitrary
+    launcher with kicad-cli as one of its arguments.  The seam exists so tests
+    can substitute a stub without widening the production toolchain contract.
+    """
+    return subprocess.run(argv, **kwargs)
+
+
+def toolchain_manifest(manifest):
+    """Validate the host toolchain binding, or raise ObservationError.
+
+    The manifest carries the absolute kicad-cli path, its digest, the pinned
+    version, the frozen command arguments, the digested symbol-library and
+    KiCad-config files the export consumes, and the complete child environment.
+    A missing value or a different version never proceeds silently.
+    """
+    _closed(manifest, _TOOLCHAIN_FIELDS, "toolchain manifest")
+    if type(manifest["version"]) is not int or manifest["version"] != 1:
+        raise ObservationError("unsupported toolchain manifest version")
+    executable = _text(manifest["kicad_cli"], "kicad-cli path")
+    if not os.path.isabs(executable):
+        raise ObservationError("the kicad-cli path must be absolute")
+    if _text(manifest["kicad_version"], "kicad version") != REQUIRED_KICAD_VERSION:
+        raise ObservationError("the toolchain does not pin KiCad %s" % REQUIRED_KICAD_VERSION)
+    _sha(manifest["kicad_cli_sha256"], "kicad-cli digest")
+    # The frozen command is kicad-cli sch export netlist itself.  A non-empty
+    # launcher would make the digested binary merely an argument to some other
+    # program, so the program that actually ran need not be the pinned one.
+    if manifest["launcher_argv"] != []:
+        raise ObservationError(
+            "the frozen command runs kicad-cli directly; launcher_argv must be empty")
+    arguments = manifest["arguments"]
+    if not isinstance(arguments, list) or tuple(arguments) != EXPORT_ARGUMENTS:
+        raise ObservationError("the export arguments are not the frozen command")
+    _integer(manifest["timeout_seconds"], "toolchain timeout", 1)
+    if manifest["timeout_seconds"] > EXPORT_TIMEOUT_SECONDS:
+        raise ObservationError("the toolchain timeout exceeds the frozen %d seconds"
+                               % EXPORT_TIMEOUT_SECONDS)
+    _host_file_manifest(manifest["libraries"], "library")
+    _host_file_manifest(manifest["configs"], "config")
+    # This mapping is the child's complete environment, not an overlay applied
+    # on top of os.environ.
+    environment = manifest["environment"]
+    if not isinstance(environment, dict):
+        raise ObservationError("the toolchain environment must be a mapping")
+    for key, value in environment.items():
+        _text(key, "environment name")
+        _text(value, "environment value", empty=True)
+    return manifest
+
+
+def fresh_export(request):
+    """Run one new export and return {status, role, proof, xml_bytes, reasons}.
+
+    Two calls of this function (role BEFORE from the snapshot root, role AFTER
+    from the stage root) are what the thin verifier binds.  The proof is
+    returned even when the outcome is a failure, so a receipt can show what
+    actually happened; a proof never claims completion the run did not reach.
+    """
+    result = {"status": "TOOL_ERROR", "role": None, "proof": None, "xml_bytes": None,
+              "reasons": [_reason_code("REPAIR_TOOL_PROTOCOL_ERROR",
+                                       "the fresh export did not complete")]}
+    try:
+        _closed(request, _EXPORT_REQUEST_FIELDS, "fresh export request")
+        role = _text(request["role"], "export role")
+        if role not in ("BEFORE", "AFTER"):
+            raise ObservationError("the export role must be BEFORE or AFTER")
+        result["role"] = role
+        txn_id = _identifier(request["txn_id"], "transaction id")
+        toolchain = toolchain_manifest(request["toolchain"])
+        digest = canonical_sha256("toolchain", toolchain)
+        source = _resolve_within(request["source_root"], request["relative_source"])
+        if not os.path.isfile(source) or _is_link(source):
+            raise ObservationError("the export source is missing or a link")
+        output_dir = _absolute(request["output_dir"], "export output directory")
+        if os.path.exists(output_dir) or _is_link(output_dir):
+            raise _ExportHalt("BLOCKED", "REPAIR_EXPORT_STALE",
+                              "the export directory must be created by this run; "
+                              "a leftover directory or XML is never reused")
+        try:
+            os.makedirs(output_dir)
+        except OSError as exc:
+            raise _ExportHalt("BLOCKED", "REPAIR_EXPORT_STALE",
+                              "the export directory could not be created fresh: %s" % exc) from exc
+        executable = toolchain["kicad_cli"]
+        if not os.path.isfile(executable) or _is_link(executable):
+            raise _ExportHalt("TOOL_ERROR", "REPAIR_TOOL_UNAVAILABLE",
+                              "the pinned kicad-cli binary is missing")
+        if hash_bytes(_read_bytes(executable)) != toolchain["kicad_cli_sha256"]:
+            raise _ExportHalt("TOOL_ERROR", "REPAIR_TOOL_UNAVAILABLE",
+                              "the kicad-cli binary no longer matches its pinned digest")
+        # The symbol libraries and KiCad config the export reads are bound by
+        # digest too: a path string in the environment is not a binding.
+        inputs_before = _toolchain_input_digests(toolchain)
+        xml_path = os.path.join(output_dir, role.lower() + ".net.xml")
+        argv = ([executable] + list(toolchain["arguments"]) + [xml_path, source])
+        before = hash_bytes(_read_bytes(source))
+        # The child receives exactly the declared environment, never an ambient
+        # os.environ copy: toolchain_sha256 hashes the declared map, so anything
+        # inherited silently would reach kicad-cli without being bound -- the
+        # same class of hole as a launcher, one layer down.  A host that needs
+        # SYSTEMROOT/TEMP/PATH declares them in the manifest.
+        environment = dict(toolchain["environment"])
+        try:
+            completed = _spawn(argv, shell=False, cwd=output_dir,
+                               timeout=toolchain["timeout_seconds"],
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               env=environment)
+        except subprocess.TimeoutExpired as exc:
+            raise _ExportHalt("TOOL_ERROR", "REPAIR_TIMEOUT",
+                              "the export exceeded the frozen timeout") from exc
+        except OSError as exc:
+            raise _ExportHalt("TOOL_ERROR", "REPAIR_TOOL_UNAVAILABLE",
+                              "the export process could not start: %s" % exc) from exc
+        after = hash_bytes(_read_bytes(source))
+        # The binary was digested before the run; a fresh proof also has to show that
+        # the tool that actually ran is still the pinned one.  This is the same rule
+        # the C4 adapter applies to its toolchain binding.
+        executable_after = (hash_bytes(_read_bytes(executable))
+                            if os.path.isfile(executable) and not _is_link(executable) else None)
+        if executable_after != toolchain["kicad_cli_sha256"]:
+            raise _ExportHalt("TOOL_ERROR", "REPAIR_TOOL_UNAVAILABLE",
+                              "the kicad-cli binary changed while the export was running")
+        if _toolchain_input_digests(toolchain) != inputs_before:
+            raise _ExportHalt("TOOL_ERROR", "REPAIR_TOOL_UNAVAILABLE",
+                              "a declared toolchain library or config changed while "
+                              "the export was running")
+        xml_bytes = None
+        if os.path.isfile(xml_path) and not _is_link(xml_path):
+            xml_bytes = _read_bytes(xml_path)
+        parse_end = hash_bytes(_read_bytes(source))
+        parsed = False
+        if xml_bytes:
+            try:
+                ElementTree.fromstring(xml_bytes)
+                parsed = True
+            except ElementTree.ParseError:
+                parsed = False
+        proof = {"role": role, "txn_id": txn_id, "argv": argv,
+                 "exit_code": completed.returncode,
+                 "source_before_sha256": before, "source_after_sha256": after,
+                 "source_parse_end_sha256": parse_end, "xml_path": xml_path,
+                 "xml_sha256": hash_bytes(xml_bytes) if xml_bytes else None,
+                 "toolchain_sha256": digest,
+                 "completed": bool(completed.returncode == 0 and parsed and
+                                   before == after == parse_end)}
+        result["proof"] = proof
+        if before != after or after != parse_end:
+            raise _ExportHalt("FAIL", "REPAIR_SOURCE_UNBOUND",
+                              "the source changed while it was exported and parsed", proof)
+        if completed.returncode != 0:
+            raise _ExportHalt("TOOL_ERROR", "REPAIR_TOOL_PROTOCOL_ERROR",
+                              "the export process exited %d" % completed.returncode, proof)
+        if not xml_bytes:
+            raise _ExportHalt("FAIL", "REPAIR_TOOL_PROTOCOL_ERROR",
+                              "exit=0 produced no netlist file", proof)
+        if not parsed:
+            raise _ExportHalt("FAIL", "REPAIR_TOOL_PROTOCOL_ERROR",
+                              "exit=0 produced an unparseable netlist", proof)
+        result.update(status="PASS", xml_bytes=xml_bytes, reasons=[])
+        return result
+    except _ExportHalt as halt:
+        result["status"] = halt.status
+        if halt.proof is not None:
+            result["proof"] = halt.proof
+        result["reasons"] = [_reason_code(halt.code, halt.detail)]
+        return result
+    except ObservationError as exc:
+        result["status"] = "BLOCKED"
+        result["reasons"] = [_reason_code("REPAIR_INPUT_DRIFT",
+                                          "unverifiable export input: %s" % exc)]
+        return result
+
+
+def _tree_digest(root, manifest, label):
+    files, target = _manifest(manifest)
+    observed = {}
+    for path, row in sorted(files.items()):
+        absolute = _resolve_within(root, path)
+        if not os.path.isfile(absolute) or _is_link(absolute):
+            raise _BindingError("%s file %s is missing or a link" % (label, path))
+        raw = _read_bytes(absolute)
+        if len(raw) != row["size_bytes"] or hash_bytes(raw) != row["sha256"]:
+            raise _BindingError("%s file %s does not match its declared manifest"
+                                % (label, path))
+        observed[path] = {"sha256": row["sha256"], "size_bytes": row["size_bytes"],
+                          "role": row["role"]}
+    return observed, target
+
+
+def bind_inputs(request):
+    """Recompute snapshot/stage manifests, policy and toolchain bindings.
+
+    This is the C3 "verifier first recomputes the snapshot, stage and
+    dependency hashes; a mismatched input is not PASS" step.  It reads real
+    bytes; it does not execute a tool and does not publish anything.
+    """
+    result = {"status": "BLOCKED", "txn_id": None, "before_files": None,
+              "staged_files": None, "before_target": None, "staged_target": None,
+              "toolchain_sha256": None, "reasons": []}
+    try:
+        _closed(request, _BINDING_REQUEST_FIELDS, "stage binding request")
+        result["txn_id"] = _identifier(request["txn_id"], "transaction id")
+        _text(request["run_id"], "run id")
+        _text(request["candidate_id"], "candidate id")
+        relative_target = _text(request["relative_target"], "target path")
+        toolchain = toolchain_manifest(request["toolchain"])
+        result["toolchain_sha256"] = canonical_sha256("toolchain", toolchain)
+        bound = request["bound_policy"]
+        _closed(bound, _BOUND_FIELDS, "bound policy")
+        _sha(request["bound_policy_sha256"], "bound policy digest")
+        if request["bound_policy_sha256"] != canonical_sha256("policy-bound", bound):
+            raise _BindingError("the bound policy digest does not match the supplied policy")
+        before_files, before_target = _tree_digest(request["snapshot_root"],
+                                                   request["before_manifest"], "snapshot")
+        staged_files, staged_target = _tree_digest(request["stage_root"],
+                                                   request["staged_manifest"], "stage")
+        if before_target != relative_target or staged_target != relative_target:
+            raise _BindingError("a manifest target does not match the requested target")
+        result.update(status="PASS", before_files=before_files,
+                      staged_files=staged_files, before_target=before_target,
+                      staged_target=staged_target)
+    except _BindingError as exc:
+        result["reasons"] = [_reason_code("REPAIR_INPUT_DRIFT", str(exc), "SNAPSHOT")]
+    except ObservationError as exc:
+        result["status"] = "UNKNOWN"
+        result["reasons"] = [_reason_code("REPAIR_INPUT_DRIFT",
+                                          "unverifiable binding input: %s" % exc, "SNAPSHOT")]
+    return result
+
+
+def _dependency_end_state(binding, snapshot_root, stage_root, before_manifest,
+                          staged_manifest):
+    """Re-read the real dependency bytes and require the start digests to hold.
+
+    Section 9 requires the dependency set and content to be identical at the
+    start and the end of the verification window.  bind_inputs() reads the real
+    bytes once, before the exports; comparing the two supplied manifests only
+    proves the declarations agree with each other, not that the files did.
+    """
+    for label, root, manifest, expected in (
+            ("snapshot", snapshot_root, before_manifest, binding["before_files"]),
+            ("stage", stage_root, staged_manifest, binding["staged_files"])):
+        try:
+            observed, _ = _tree_digest(root, manifest, label)
+        except (ObservationError, _BindingError) as exc:
+            return False, ("the %s dependencies changed during verification: %s"
+                           % (label, exc))
+        if observed != expected:
+            return False, ("the %s dependencies changed during verification" % label)
+    return True, None
+
+
+# ---------------------------------------------------------------------------
+# C3: thin verification of staged candidate bytes (contract section 9)
+# ---------------------------------------------------------------------------
+
+_VERIFICATION_REQUEST_FIELDS = {"txn_id", "run_id", "candidate_id", "patch_sha256",
+                                "bound_policy_sha256", "snapshot_root", "stage_root",
+                                "relative_target", "before_manifest", "staged_manifest",
+                                "bound_policy", "toolchain_manifest", "native_before",
+                                "native_after", "report_root"}
+_THIN_RESULT_FIELDS = {"schema_version", "scope", "status", "txn_id", "run_id",
+                       "candidate_id", "patch_sha256", "bound_policy_sha256",
+                       "before_source_sha256", "staged_source_sha256",
+                       "toolchain_sha256", "checks", "coverage", "parser_agreement",
+                       "authorized_delta_sha256", "actual_delta_sha256",
+                       "unexpected_delta", "missing_delta", "protected_changes",
+                       "dependencies_unchanged", "exports", "reports", "deferred",
+                       "reasons"}
+_THIN_SCOPE = "PR1_CANDIDATE_BYTES"
+# The deferred checks are the ones this commit does not run.  Their names are
+# frozen separately from the mutable report value, so a forged "deferred" entry
+# cannot make the PASS invariant agree with itself.
+_DEFERRED_CHECKS = ("erc", "semantic_runner", "formal_evidence")
+_DEFERRED = {name: "NOT_RUN" for name in _DEFERRED_CHECKS}
+
+
+def _check(status, codes=(), paths=()):
+    return {"status": status, "reason_codes": list(codes),
+            "artifact_paths": list(paths)}
+
+
+def _kicad_partition(raw):
+    """Read one kicadxml export as {components, nets}; anything odd fails closed."""
+    try:
+        root = ElementTree.fromstring(raw)
+    except ElementTree.ParseError as exc:
+        raise ObservationError("unparseable netlist: %s" % exc) from exc
+    if root.tag != "export":
+        raise ObservationError("unknown export root %r" % root.tag)
+    components = {}
+    section = root.find("components")
+    if section is None:
+        raise ObservationError("the export carries no component inventory")
+    for comp in section.findall("comp"):
+        reference = comp.get("ref")
+        if not reference:
+            raise ObservationError("an exported component carries no reference")
+        if reference in components:
+            raise ObservationError("duplicate exported component %s" % reference)
+        numbers = []
+        pins = comp.find("pins")
+        if pins is not None:
+            for item in pins.findall("pin"):
+                number = item.get("num")
+                if not number:
+                    raise ObservationError("an exported pin carries no number")
+                if number in numbers:
+                    raise ObservationError("duplicate exported pin %s.%s" % (reference, number))
+                numbers.append(number)
+        components[reference] = sorted(numbers)
+    nets = []
+    section = root.find("nets")
+    if section is None:
+        raise ObservationError("the export carries no net section")
+    for net in section.findall("net"):
+        nodes = []
+        for node in net.findall("node"):
+            reference, number = node.get("ref"), node.get("pin")
+            if not reference or not number:
+                raise ObservationError("an exported node is missing its identity")
+            nodes.append((reference, number))
+        nets.append(sorted(set(nodes)))
+    return components, nets
+
+
+def _partition_groups(observation, drop_virtual=False):
+    groups = set()
+    for part in observation["partitions"]:
+        members = {(member["reference"], member["number"]) for member in part["members"]
+                   if not (drop_virtual and str(member["reference"]).startswith("#"))}
+        if members:
+            groups.add(frozenset(members))
+    return groups
+
+
+def _projected_coverage(observation, components, nets):
+    """Coverage of one export against the source observation, plus agreement.
+
+    KiCad 10.0.5 exports every pin as a net node and omits virtual symbols
+    (references starting with '#', such as power flags) from <components>, so
+    the placed nodes are the exported pin inventory and the expected component
+    inventory is the source's non-virtual set.  When an export does carry
+    per-component pin lists, they must agree with the placed nodes.
+    """
+    source_pins = {(row["identity"]["reference"], row["identity"]["number"])
+                   for row in observation["pins"]}
+    source_components = {row["reference"] for row in observation["components"]}
+    virtual_components = {reference for reference in source_components
+                          if reference.startswith("#")}
+    declared_pins, duplicated = set(), False
+    for reference, numbers in components.items():
+        for number in numbers:
+            key = (reference, number)
+            if key in declared_pins:
+                duplicated = True
+            declared_pins.add(key)
+    placed = set()
+    placement_conflict = False
+    for nodes in nets:
+        for key in nodes:
+            if key in placed:
+                placement_conflict = True
+            placed.add(key)
+    unknown = (declared_pins | placed) - source_pins
+    expected_pins = {key for key in source_pins if key[0] not in virtual_components}
+    expected_components = source_components - virtual_components
+    pin_lookup = {(row["identity"]["reference"], row["identity"]["number"]): row
+                  for row in observation["pins"]}
+    component_lookup = {row["reference"]: row for row in observation["components"]}
+    observed_pin_ids = sorted([pin_lookup[key]["identity"] for key in placed
+                               if key in pin_lookup and key in expected_pins],
+                              key=canonical_json_bytes)
+    expected_pin_ids = sorted([pin_lookup[key]["identity"] for key in expected_pins],
+                              key=canonical_json_bytes)
+    observed_component_ids = sorted([component_lookup[ref]["identity"]
+                                     for ref in set(components) & expected_components],
+                                    key=canonical_json_bytes)
+    expected_component_ids = sorted([component_lookup[ref]["identity"]
+                                     for ref in expected_components],
+                                    key=canonical_json_bytes)
+    groups = {frozenset(nodes) for nodes in nets if nodes}
+    complete = bool(placed == expected_pins and declared_pins <= placed and
+                    not duplicated and not placement_conflict and not unknown and
+                    set(components) == expected_components)
+    coverage = {
+        "expected_pin_count": len(expected_pins),
+        "observed_pin_count": len(observed_pin_ids),
+        "expected_pin_keys_sha256": canonical_sha256("topology", expected_pin_ids),
+        "observed_pin_keys_sha256": canonical_sha256("topology", observed_pin_ids),
+        "expected_component_keys_sha256": canonical_sha256("topology", expected_component_ids),
+        "observed_component_keys_sha256": canonical_sha256("topology", observed_component_ids),
+        "complete": complete,
+    }
+    agree = bool(complete and groups == _partition_groups(observation, drop_virtual=True))
+    return coverage, agree
+
+
+_COMPARABLE_COMPONENT_FIELDS = ("reference", "lib_id", "value", "footprint", "unit",
+                                  "position_nm", "rotation", "mirror", "dnp", "in_bom",
+                                  "on_board")
+
+
+def _component_view(observation):
+    rows = [{field: row[field] for field in _COMPARABLE_COMPONENT_FIELDS}
+            for row in observation["components"]]
+    return sorted(rows, key=canonical_json_bytes)
+
+
+def _pin_view(observation):
+    rows = [[row["identity"]["reference"], row["identity"]["number"], row["name"],
+             row["electrical_type"], row["no_connect"]] for row in observation["pins"]]
+    return sorted(rows, key=canonical_json_bytes)
+
+
+def _native_agreement(observation, native):
+    """Compare the source observation with the host native read of the same bytes.
+
+    Only comparable partitions, component fields and pin state are compared;
+    reader-specific definition digests are not, so a disagreement here means
+    the two observations do not describe the same design.
+    """
+    if not isinstance(native, dict):
+        return "UNKNOWN", ["REPAIR_COVERAGE_INCOMPLETE"]
+    try:
+        normalized = normalize_observation(native)
+    except (ObservationError, ValueError, TypeError, KeyError, IndexError):
+        return "UNKNOWN", ["REPAIR_PARSER_DISAGREEMENT"]
+    if (_partition_groups(normalized) != _partition_groups(observation)
+            or _component_view(normalized) != _component_view(observation)
+            or _pin_view(normalized) != _pin_view(observation)):
+        return "FAIL", ["REPAIR_PARSER_DISAGREEMENT"]
+    return "PASS", []
+
+
+def _read_target(root, relative):
+    path = _resolve_within(root, relative)
+    if not os.path.isfile(path) or _is_link(path):
+        raise ObservationError("the design target is missing or a link")
+    return path, _read_bytes(path)
+
+
+def verify_stage(request):
+    """Bind fresh exports of the snapshot and the stage to their real bytes.
+
+    Contract section 9: PASS requires the four required checks to PASS, both
+    coverage records complete with equal keysets, both parser agreements PASS,
+    exactly one completed BEFORE and AFTER export, equal authorized/actual
+    delta hashes, empty diff lists and unchanged dependencies.  Anything else
+    is reported with the unperformed checks kept NOT_RUN; a partial result is
+    never PASS.
+    """
+    result = {
+        "schema_version": 1, "scope": _THIN_SCOPE, "status": "UNKNOWN",
+        "txn_id": None, "run_id": None, "candidate_id": None,
+        "patch_sha256": None, "bound_policy_sha256": None,
+        "before_source_sha256": None, "staged_source_sha256": None,
+        "toolchain_sha256": None,
+        "checks": {"fresh_export": _check("NOT_RUN"),
+                   "source_hash_binding": _check("NOT_RUN"),
+                   "exact_topology_delta": _check("NOT_RUN"),
+                   "protected_diff": _check("NOT_RUN")},
+        "coverage": {"before": None, "after": None},
+        "parser_agreement": {"before": _check("NOT_RUN"), "after": _check("NOT_RUN")},
+        "authorized_delta_sha256": None, "actual_delta_sha256": None,
+        "unexpected_delta": [], "missing_delta": [], "protected_changes": [],
+        "dependencies_unchanged": False, "exports": [], "reports": None,
+        "deferred": dict(_DEFERRED), "reasons": [],
+    }
+    try:
+        _closed(request, _VERIFICATION_REQUEST_FIELDS, "verification request")
+        result["txn_id"] = _identifier(request["txn_id"], "transaction id")
+        result["run_id"] = _text(request["run_id"], "run id")
+        result["candidate_id"] = _text(request["candidate_id"], "candidate id")
+        # _sha validates and returns nothing: the validated value has to be carried
+        # explicitly, otherwise the receipt would report the binding as null and
+        # section 9's toolchain/policy anchors could not be read off it.
+        _sha(request["patch_sha256"], "patch digest")
+        result["patch_sha256"] = request["patch_sha256"]
+        _sha(request["bound_policy_sha256"], "bound policy digest")
+        result["bound_policy_sha256"] = request["bound_policy_sha256"]
+        relative_target = _text(request["relative_target"], "target path")
+        report_root = _absolute(request["report_root"], "report root")
+        if _has_linked_component(report_root):
+            raise ObservationError("the report root must not contain a link or reparse point")
+        toolchain = toolchain_manifest(request["toolchain_manifest"])
+        result["toolchain_sha256"] = canonical_sha256("toolchain", toolchain)
+        binding = bind_inputs({"txn_id": request["txn_id"], "run_id": request["run_id"],
+                               "candidate_id": request["candidate_id"],
+                               "relative_target": relative_target,
+                               "snapshot_root": request["snapshot_root"],
+                               "stage_root": request["stage_root"],
+                               "before_manifest": request["before_manifest"],
+                               "staged_manifest": request["staged_manifest"],
+                               "bound_policy": request["bound_policy"],
+                               "bound_policy_sha256": request["bound_policy_sha256"],
+                               "toolchain": toolchain})
+        if binding["status"] != "PASS":
+            result["status"] = binding["status"] if binding["status"] != "TOOL_ERROR" else "TOOL_ERROR"
+            result["reasons"] = binding["reasons"]
+            return result
+        bound = request["bound_policy"]
+        result["authorized_delta_sha256"] = bound["authorized_delta_sha256"]
+        before_path, before_raw = _read_target(request["snapshot_root"], relative_target)
+        after_path, after_raw = _read_target(request["stage_root"], relative_target)
+        before_sha, after_sha = hash_bytes(before_raw), hash_bytes(after_raw)
+        result["before_source_sha256"] = before_sha
+        result["staged_source_sha256"] = after_sha
+        try:
+            before_observation = observe_source(before_raw)
+            after_observation = observe_source(after_raw)
+        except ObservationError as exc:
+            result["reasons"] = [_reason_code("REPAIR_COVERAGE_INCOMPLETE",
+                                              "the candidate bytes are outside the qualified "
+                                              "profile: %s" % exc)]
+            return result
+        exports, halt = [], None
+        export_root = os.path.join(report_root, "exports")
+        # Containment has to cover the path this run will actually create, not just the
+        # declared root: a junction at report_root/exports redirects every export while
+        # report_root itself stays perfectly ordinary.
+        if _has_linked_component(export_root):
+            raise ObservationError("the export directory must not traverse a link or "
+                                   "reparse point")
+        for role, root in (("BEFORE", request["snapshot_root"]), ("AFTER", request["stage_root"])):
+            output_dir = os.path.join(export_root, request["txn_id"], role.lower())
+            if _has_linked_component(output_dir):
+                raise ObservationError("the export directory must not traverse a link or "
+                                       "reparse point")
+            outcome = fresh_export({"txn_id": request["txn_id"], "role": role,
+                                    "source_root": root,
+                                    "relative_source": relative_target,
+                                    "output_dir": output_dir,
+                                    "toolchain": toolchain})
+            if outcome["proof"] is not None:
+                exports.append(outcome["proof"])
+            if outcome["status"] != "PASS" and halt is None:
+                halt = outcome
+        result["exports"] = exports
+        if halt is not None:
+            code = halt["reasons"][0]["code"] if halt["reasons"] else "REPAIR_TOOL_PROTOCOL_ERROR"
+            result["checks"]["fresh_export"] = _check(
+                "FAIL", [code], [proof["xml_path"] for proof in exports])
+            if code == "REPAIR_SOURCE_UNBOUND":
+                result["checks"]["source_hash_binding"] = _check(
+                    "FAIL", [code], [proof["xml_path"] for proof in exports])
+            result["status"] = ("BLOCKED" if code in ("REPAIR_EXPORT_STALE", "REPAIR_SOURCE_UNBOUND")
+                                else "TOOL_ERROR")
+            result["reasons"] = halt["reasons"]
+            return result
+        expected_sources = {"BEFORE": before_sha, "AFTER": after_sha}
+        mismatched = [proof for proof in exports
+                      if not (proof["completed"]
+                              and proof["source_before_sha256"]
+                              == proof["source_after_sha256"]
+                              == proof["source_parse_end_sha256"]
+                              == expected_sources[proof["role"]])]
+        result["checks"]["fresh_export"] = _check(
+            "PASS" if not mismatched else "FAIL",
+            [] if not mismatched else ["REPAIR_TOOL_PROTOCOL_ERROR"],
+            [proof["xml_path"] for proof in exports])
+        result["checks"]["source_hash_binding"] = _check(
+            "PASS" if not mismatched else "FAIL",
+            [] if not mismatched else ["REPAIR_SOURCE_UNBOUND"],
+            [proof["xml_path"] for proof in exports])
+        if mismatched:
+            result["status"] = "BLOCKED"
+            result["reasons"] = [_reason_code("REPAIR_SOURCE_UNBOUND",
+                                              "an export proof does not bind to the request source")]
+            return result
+        coverage, agreement = {}, {}
+        for proof, role, observation in ((exports[0], "BEFORE", before_observation),
+                                         (exports[1], "AFTER", after_observation)):
+            if proof["role"] != role:
+                raise ObservationError("the export proofs are not one BEFORE and one AFTER")
+            raw = _read_bytes(proof["xml_path"])
+            if hash_bytes(raw) != proof["xml_sha256"]:
+                result["status"] = "BLOCKED"
+                result["reasons"] = [_reason_code("REPAIR_EXPORT_STALE",
+                                                  "an exported netlist changed after its proof")]
+                return result
+            try:
+                components, nets = _kicad_partition(raw)
+            except ObservationError as exc:
+                result["status"] = "TOOL_ERROR"
+                result["reasons"] = [_reason_code("REPAIR_TOOL_PROTOCOL_ERROR", str(exc))]
+                return result
+            key = role.lower()
+            coverage[key], agree = _projected_coverage(observation, components, nets)
+            native_status, native_codes = _native_agreement(
+                observation, request["native_before" if role == "BEFORE" else "native_after"])
+            if not coverage[key]["complete"]:
+                agreement[key] = _check("FAIL", ["REPAIR_COVERAGE_INCOMPLETE"], [proof["xml_path"]])
+            elif not agree:
+                agreement[key] = _check("FAIL", ["REPAIR_PARSER_DISAGREEMENT"], [proof["xml_path"]])
+            elif native_status != "PASS":
+                agreement[key] = _check(native_status,
+                                        native_codes or ["REPAIR_PARSER_DISAGREEMENT"],
+                                        [proof["xml_path"]])
+            else:
+                agreement[key] = _check("PASS", [], [proof["xml_path"]])
+        result["coverage"] = coverage
+        result["parser_agreement"] = agreement
+        reports = []
+        for proof in exports:
+            reports.append({"path": os.path.relpath(proof["xml_path"], report_root).replace(os.sep, "/"),
+                            "sha256": proof["xml_sha256"],
+                            "size_bytes": os.path.getsize(proof["xml_path"]),
+                            "role": "READONLY_DEPENDENCY"})
+        result["reports"] = {"version": 1, "files": reports}
+        incomplete = [role for role in ("before", "after") if not coverage[role]["complete"]]
+        disagreement = [role for role in ("before", "after")
+                        if agreement[role]["status"] != "PASS"]
+        if incomplete or disagreement:
+            result["status"] = "UNKNOWN"
+            result["reasons"] = [_reason_code(
+                "REPAIR_COVERAGE_INCOMPLETE" if incomplete else "REPAIR_PARSER_DISAGREEMENT",
+                "an export does not cover the complete source inventory" if incomplete
+                else "the export, the source and the native read disagree")]
+            return result
+        delta = compare_delta(before_observation, after_observation, bound)
+        protected = compare_protected(before_observation, after_observation, bound,
+                                      {"before": request["before_manifest"],
+                                       "after": request["staged_manifest"]})
+        result["checks"]["exact_topology_delta"] = _check(delta["status"],
+                                                          [item["code"] for item in delta["reasons"]])
+        result["checks"]["protected_diff"] = _check(protected["status"],
+                                                    [item["code"] for item in protected["reasons"]])
+        result["actual_delta_sha256"] = delta["actual_delta_sha256"]
+        result["unexpected_delta"] = delta["unexpected"]
+        result["missing_delta"] = delta["missing"]
+        result["protected_changes"] = protected["changes"]
+        result["dependencies_unchanged"] = protected["dependencies_unchanged"]
+        if delta["status"] != "PASS" or protected["status"] != "PASS":
+            result["status"] = "FAIL"
+            result["reasons"] = (delta["reasons"] + protected["reasons"]) or [
+                _reason_code("REPAIR_DELTA_MISMATCH", "the staged bytes are not the authorized change")]
+            return result
+        keysets_equal = all(
+            coverage[role]["expected_pin_keys_sha256"] == coverage[role]["observed_pin_keys_sha256"]
+            and coverage[role]["expected_component_keys_sha256"]
+            == coverage[role]["observed_component_keys_sha256"]
+            and coverage[role]["complete"] for role in ("before", "after"))
+        # Section 9: the dependency set and content must be identical at the start
+        # and the end of the window, so the real bytes are re-read now that both
+        # exports have run.  A manifest comparison is not that proof.
+        dependencies_bound, drift_detail = _dependency_end_state(
+            binding, request["snapshot_root"], request["stage_root"],
+            request["before_manifest"], request["staged_manifest"])
+        result["dependencies_unchanged"] = (protected["dependencies_unchanged"]
+                                            and dependencies_bound)
+        if not dependencies_bound:
+            result["status"] = "BLOCKED"
+            result["reasons"] = [_reason_code("REPAIR_INPUT_DRIFT", drift_detail,
+                                              "SNAPSHOT")]
+            return result
+        invariants = (len(exports) == 2
+                      and {proof["role"] for proof in exports} == {"BEFORE", "AFTER"}
+                      and all(proof["completed"] for proof in exports)
+                      and keysets_equal
+                      and delta["actual_delta_sha256"] == bound["authorized_delta_sha256"]
+                      and not result["unexpected_delta"] and not result["missing_delta"]
+                      and not result["protected_changes"]
+                      and result["dependencies_unchanged"]
+                      and len(result["checks"]) == 4
+                      and all(check["status"] == "PASS" for check in result["checks"].values())
+                      and set(result["deferred"]) == set(_DEFERRED_CHECKS)
+                      and all(result["deferred"][name] == "NOT_RUN"
+                              for name in _DEFERRED_CHECKS))
+        result["status"] = "PASS" if invariants else "UNKNOWN"
+        if not invariants:
+            result["reasons"] = [_reason_code("REPAIR_DELTA_MISMATCH",
+                                              "the PASS invariants of section 9 are not all met")]
+        return result
+    except ObservationError as exc:
+        result["status"] = "BLOCKED"
+        result["reasons"] = [_reason_code("REPAIR_INPUT_DRIFT",
+                                          "unverifiable verification input: %s" % exc)]
+        return result
+
+
+def write_thin_verification(result, report_root):
+    """Freeze one ThinVerificationResult next to its exports."""
+    _closed(result, _THIN_RESULT_FIELDS, "thin verification result")
+    root = _absolute(report_root, "report root")
+    if not os.path.isdir(root) or _is_link(root):
+        raise ObservationError("the report root must exist and not be a link")
+    if _has_linked_component(root):
+        raise ObservationError("the report root must not contain a link or reparse point")
+    path = os.path.join(root, "thin_verification_%s.json" % _identifier(result["txn_id"],
+                                                                      "transaction id"))
+    payload = json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2).encode("utf-8")
+    with open(path, "wb") as handle:
+        handle.write(payload)
+    return path, hash_bytes(payload)
+
+
+def recheck_reports(result, report_root):
+    """Re-read a frozen ThinVerificationResult's report files (contract section 9).
+
+    Section 9's commit predicate is: after the verifier returns, recompute the
+    stage source and report hashes and require them to match the receipt.  This
+    is the report half of that predicate -- the stage half is `bind_inputs`.
+    A replaced, resized, missing or linked report is refused, so a receipt can
+    never be carried into a commit it did not verify.  It executes no tool and
+    publishes nothing.
+    """
+    outcome = {"status": "FAIL", "checked": 0, "reasons": []}
+    try:
+        if not isinstance(result, dict):
+            raise ObservationError("the receipt is not a result object")
+        root = _absolute(report_root, "report root")
+        if _has_linked_component(root):
+            raise ObservationError("the report root must not contain a link or reparse point")
+        reports = result["reports"]
+        if not isinstance(reports, dict):
+            raise ObservationError("the receipt carries no reports manifest")
+        _closed(reports, _FILE_MANIFEST_FIELDS, "reports manifest")
+        if type(reports["version"]) is not int or reports["version"] != 1:
+            raise ObservationError("invalid reports manifest version")
+        rows = reports["files"]
+        if not isinstance(rows, list) or not rows:
+            raise ObservationError("the receipt names no report files")
+        for row in rows:
+            if not isinstance(row, dict):
+                raise ObservationError("a report row is not a mapping")
+            _closed(row, {"path", "sha256", "size_bytes", "role"}, "report row")
+            relative = _text(row["path"], "report path")
+            _sha(row["sha256"], "report digest")
+            _integer(row["size_bytes"], "report size", 0)
+            absolute = _resolve_within(root, relative)
+            if not os.path.isfile(absolute) or _is_link(absolute):
+                raise ObservationError("report %s is missing or a link" % relative)
+            raw = _read_bytes(absolute)
+            if len(raw) != row["size_bytes"] or hash_bytes(raw) != row["sha256"]:
+                raise ObservationError("report %s no longer matches the receipt" % relative)
+            outcome["checked"] += 1
+        outcome["status"] = "PASS"
+    except (ObservationError, KeyError, TypeError) as exc:
+        outcome["reasons"] = [_reason_code(
+            "REPAIR_EXPORT_STALE", "the reports no longer match the receipt: %s" % exc)]
+    return outcome
+
+
+
