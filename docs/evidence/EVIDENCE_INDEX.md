@@ -249,3 +249,40 @@ AP63205/5V 值）：经冻结 PDF 原文重新核对，DS41326 Rev. 3-2 Table 2 
 不受影响）；EV 板 corroboration 同步收窄至 power-entry 段（VBUS → SS34 → protected
 rail），buck 段证据责任归 datasheet + 冻结拓扑。本条目为更正记录，不替代原
 Evidence（其元数据冻结结论不受影响）。
+
+## EVID-20260918-001 — SchGen exposed DEV 格式导入（ingest-only 重切）
+
+- 分类：**DEV_ONLY**；本项是开发记录，不是 `gates/run_gates.py` 正式 Evidence，也不是 preregistered SchGen 实验或制造放行。
+- 对应主张：`tools/schgen_native_ingest.py` 能在**不导入任何 AEDL 修复模块**的前提下完成已曝光 DEV 输入的格式导入 —— 只删空的 legacy `(symbol_instances)` 根块，保持源字节与其他全部根形式，对象图（wire/junction/label/symbol/no_connect 清点）不变，并产出可独立复验的 fresh 观察与新清单。
+- 模块：`tools/schgen_native_ingest.py`；测试 `tests/test_schgen_native_ingest.py`。
+- 环境：Python 3.9.13（本机 `py -3.9`）。本轮**未**调用 KiCad 或 akcli：工具链调用是 `--kicad-cli` 的运行期要求，本 PR 只做单元边界验证。
+- 命令 / 方法 / 实数：
+  - `py -3.9 -m unittest tests.test_schgen_native_ingest` → **Ran 14, OK**。覆盖：legacy tail 判定与非 8.x 读取器、空导出视图拒绝、library-nested symbol 不计入 placement、删块前后 `graph_sha256` 相等、幂等、非空 instance 元数据拒绝、清单 split/重复/引用拒绝，以及模块 AST 级「不导入任何 `tools.*`」。
+  - `py -3.9 -m unittest discover -s tests` 与 `py -3.9 -m tools.dev_gate` → 见 PR 正文回执。
+- 原始证据路径：本 PR 的测试文件与其输出。历史 DEV 回放产物仍在 Codex 输出 `outputs/schgen-dev-mainline/`，属 **held 半，未进本 PR**。
+- 可复现状态：可复现（纯 Python，无外部工具依赖）。
+- 已知限制：真实 KiCad 8.0.9 端到端导入回放 **NOT_RUN**（本轮）。导入变化**不是**电气修复；本 PR 未重新测量任何 ΔJ。chain/score 半未移植，故本 PR 不产生任何修复或配对结论。`--kicad-cli` 的 8.0.9 门禁在真实回放前未经验证。
+- 关联：AI-20260918-DSH-C7396AEC9D7DC7BCD22C6337E56A806E；RES-011；`notes/schgen-dev-chain/TASK.md`；已关闭的 PR #74（held 半）。
+- **2026-09-18 评审整改轮（同一条目，不新开）**：Owner REQUEST_CHANGES 后闭环两项 P1 绑定缺陷 + 治理字段 + 交付证据。
+  - **修复**：raw/request/manifest 全部改为「读一次 → 哈希这些字节 → 用这些字节 parse/写盘」（原实现先 `sha(path)` 再 `shutil.copyfile(path)`，存在 TOCTOU 窗口）；reference 导出不再只看 `net.is_file()`，改为重新读字节 + 只读结构 sanity（单一 `(export ...)` 根、`(nets ...)` 下至少一个 `(node ...)`），未通过不得写入 `evaluation-references.json`；`cross_module` 改 `true`；`export_netlist` 记录 `kicad_cli_sha256` 并在运行后复算。
+  - **反向对照（变异测试）**：把绑定处还原为「`sha(path)` + `copyfile`」→ 新增扰动回归 **FAILED (failures=1)**；把 reference 处还原为「只看文件存在」→ 两条 reference 发布回归 **FAILED (failures=1)**。还原修复版后复跑全绿。
+  - **真实 KiCad 8.0.9 ingest smoke（已跑）**：二进制 sha256 `8b7f4a889dc8cfb8c3eae1337d64ade2fe0cf1ec5daa87878cc709904378fb26`。
+    - Case A（真实已曝光 DEV 生成件 stage1 `Qwiic_Power_Switch_Schematic_v10`，raw sha256 `1d39e5ebbe995d37323c1ae36e22a343f18a77cfee75f3e7602c9e541395b350`）：legacy `LEGACY_INSTANCE_TAIL`（empty=True，5 个后续根形式）→ `READY_FOR_DEV` / `FORMAT_ADAPTER_TRANSLATION` / 对象图不变；fresh netlist **PASS** exit=0 components=3 nets=5 pins=7；ERC **PASS**（6 flags）；prepared sha256 `693cd67b2465ae766f23c8c6134b731f58c7290a56e3276b14e15627ebdf3f5f`。
+    - Case B（同一真实产物导入后的字节，无需 translation）：`READY_FOR_DEV` / `UNCHANGED_FORMAT` / prepared 与 original **逐字节相同**；fresh netlist **PASS** exit=0 components=3 nets=5 pins=7；ERC **PASS**。
+  - 两次 fresh export 的 XML sha256 不同属**预期**（kicad-cli 导出含 `(date ...)` 时间戳，该哈希只作 provenance、不作比较键；连接性两次一致）。
+  - 测试：`tests.test_schgen_native_ingest` → **Ran 21, OK**（首轮 14 + 整改轮 7）。全量 `discover -s tests` 与 `dev_gate` 见 PR 回执。
+  - 原始产出：`scratch\schgen-recut\smoke\`（`SMOKE-RESULT.json` + `out-A` / `out-B` 完整 ingestion 记录）。
+  - **仍未运行**：scorer、任何 repair、held half、ΔJ、模型调用、正式实验、HELD_OUT 读取。
+- **2026-09-18 第二轮评审整改（同一条目）**：
+  - `ToolchainBinding` 消除「读不到 = 没观察到变化」：构造时读不到 binary 即失败；每次调用前后 `verify`，读不到报 `could not be rebound`，变了报 `changed A -> B`。
+  - 整轮绑定一个 binary：`export_netlist` / `export_erc` / reference `kicadsexpr` 导出三处调用前后各 `verify`；循环结束后再 `verify('at the end of the ingestion run')`，失败则 `ready=[]`，`repair-inputs.json` / `evaluation-references.json` 均不发布，rc=1。report 增加 `toolchain_binding`（PASS/FAILED）与 `toolchain_error`，`kicad_cli_sha256` 改为本轮绑定值。
+  - **反向对照**：还原为「容忍读不到的旧实现」→ `RunToolchainBindingTests.test_a_toolchain_that_vanishes_during_the_export_fails_closed` **FAILED (failures=1)**；还原后复跑全绿。
+  - **smoke 复跑（绑定后）**：Case A / Case B `toolchain_binding` 均 **PASS**、`toolchain_error` 均 `None`；连接性与 ERC 与首轮一致（A: `1d39e5eb…` → `693cd67b…`，FORMAT_ADAPTER_TRANSLATION，3 comps / 5 nets / 7 pins，ERC PASS；B: prepared == original，UNCHANGED_FORMAT，同连接性，ERC PASS）。
+  - 测试：`tests.test_schgen_native_ingest` → **Ran 26, OK**（21 + 5）。
+  - 交付文本同步：RES-011 由「本 PR 未调用」改为「已在 DEV-only ingest smoke 中实际调用」，附二进制 sha256。
+
+  - **2026-09-18 第四轮评审整改**：消除 helper 里的第二次未绑定 `--version`。版本探针收敛为 `ToolchainBinding.probe_version()`（verify → probe → verify + `exit_code == 0`），`main()` 只调用一次；有 binding 时 `export_netlist` / `export_erc` 不再 `find_kicad_cli`、不再 `tool_version`，只用 `binding.path` / `binding.version`，显式参数与 binding 不一致即 FAIL（不执行 subprocess）；standalone 路径也改为先绑定后探测。回归 +2 例（整轮 `tool_version` 恰好 1 次；helper 拒绝非绑定工具链），**变异对照**证明其有咬合力。smoke 复跑两例 binding 仍 **PASS**。
+  - **2026-09-18 第三轮评审整改**：version probe 纳入同一 binding bracket —— 先 `ToolchainBinding`，`verify('before the version probe')` → `tool_version` → `verify('after the version probe')`，并要求 `probe['exit_code'] == 0` 且 `version == '8.0.9'`；`--kicad-cli` 改为必须指向真实文件的绝对路径（无 PATH 回退），report 的 `kicad_cli` 记已解析路径。回归 +3 例（probe 后换 binary / 非零退出但打印 8.0.9 / binary 缺失），**变异对照**证明两条新回归有咬合力。smoke 复跑两例 `toolchain_binding` 仍 **PASS**。
+
+
+- 人工核验：PENDING_HUMAN_REVIEW。

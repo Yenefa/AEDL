@@ -1,0 +1,118 @@
+# Task Envelope — PR1-C4-UUIDS  created_uuids <-> actual top-level delta binding
+# 依据：PR-1 实现合同 §8「native reported created UUIDs 必须与实际新增的对应顶层
+# 对象一致」；PR #76 评审裁定「单独立一张 implementation fix card」，不在
+# qualification 卡内改 adapter。
+# 先例：tasks/PR1-C4.yaml / tasks/PR1-C4-PQ.yaml。
+
+task: PR1-C4-UUIDS
+
+base:
+  branch: fix-pr1-c4-created-uuid-binding
+  sha: 1814548e911a33717f780432cacfa0083c47460e
+
+goal: |
+  闭合合同 §8 的 created UUID 对应关系：
+  `StageApplyResult.tool.op_results[].created_uuids` 的并集必须**恰好等于**本次写入
+  实际新增的顶层 source 对象集合；报了却不存在、或新生成了却没人报，一律阻断。
+
+  前置缺陷（本轮探针实测，2026-09-17）：
+  `tools/akcli_adapter.py` 的 `source_objects()` **没有按 C2 `observe_source` 的口径
+  遍历文档子节点** —— 它把整个 `.kicad_sch` 当成一个顶层节点，因此 native 观察的
+  `source_objects` 永远只有 1 条（文档根），且身份带字面引号。实测：DC-04 真实
+  `.kicad_sch` 有 114 个顶层对象，native read 只报 1 个。因此「实际新增对象」在
+  当前实现下恒为空集，对应关系无法建立。本卡必须先修该口径。
+
+  真工具链事实（2026-09-17 实测，akcli 0.21.0）：用 C2 口径复算后，
+  - DC-04：114 -> 117 个顶层对象，3 个新增 = op_results 上报的 3 个 UUID，**严格相等**；
+  - DC-05：114 -> 117，同样严格相等。
+  故本卡按 §8 的严格相等实现，不引入容差。
+
+  PR #77 评审（2026-09-17，head 838acee）裁定 REQUEST_CHANGES，两项 blocker + 一项 gap，
+  本轮闭合（不改判据，只改实现与测试）：
+  1. 封套与 PR 正文写定的 TOOL_ERROR 被实现成 BLOCKED（测试在保护错误行为）；
+  2. 新增的 UUID 对应关系未绑定到同一份 source bytes（worker 读与 host 重读可跨 revision，
+     `_verify_effect` 也未要求 native 观察 hash == 事务 before/after hash）；
+  3. C2<->C4 source_objects 平价缺显式回归。
+  私有 helper 耦合（`_source_ast` 等）评审明确不挡 merge，留作 follow-up，不在本轮处理。
+
+scope: |
+  Writable paths are whitelisted in allowed_paths; everything else is FOREIGN.
+  不改 gates/**（含 repair_verification 的公共语义）、tools/repair_pipeline.py、
+  src/**、sandbox_runtime/**、notes/b5-acceptance/**（冻结判据）、
+  docs/competition/**、docs/evidence/**。
+
+  Impact Analysis
+
+  Direct modifications:   tools/akcli_adapter.py（source_objects 口径 + created UUID 绑定）、
+                          tests/test_akcli_adapter.py、tasks/PR1-C4-UUIDS.yaml、
+                          docs/HANDOFF.md、docs/compliance/ai-usage/<ID>.md、AI_USAGE_LOG.md
+  Potentially affected:   native 观察的 source_objects / topology hash（改为与 C2 同编码后
+                          才可跨 reader 比较）；C3 _native_agreement 仍只比较分区/组件/引脚
+                          视图，不受影响；C5 尚未实现
+  Explicitly not touched: gates/**、src/**、sandbox_runtime/**、tools/repair_pipeline.py、
+                          notes/**、docs/evidence/**、tests/fixtures/repair_pr1/**
+  Risk: MEDIUM（改 native 观察的 source 描述编码 + 新增写入后置校验；只读仓库、写在 scratch 副本）
+
+  change_budget:
+    expected_files: 6
+    expected_modules: [tools, tests, tasks, docs]
+    cross_module: false
+    contract_change: false
+    evidence_semantics_change: false
+
+dependencies: []
+
+allowed_paths:
+  - tools/akcli_adapter.py
+  - tests/test_akcli_adapter.py
+  - tasks/PR1-C4-UUIDS.yaml
+  - docs/HANDOFF.md
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/compliance/ai-usage/**
+
+forbidden_paths:
+  - gates/**
+  - tools/repair_pipeline.py
+  - src/**
+  - sandbox_runtime/**
+  - notes/**
+  - docs/competition/**
+  - docs/evidence/**
+  - tests/fixtures/repair_pr1/**
+
+acceptance: |
+  - source_objects 与 C2 observe_source 同口径：遍历文档子节点、身份取自 uuid 子节点
+    且不带字面引号、AST 编码一致（同一文件下 native 与 source 观察的 source_objects
+    身份集合相等）
+  - created UUID 绑定：op_results[].created_uuids 并集 != 实际新增顶层对象集合 ->
+    BLOCKED / REPAIR_DELTA_MISMATCH；非 canonical UUID -> TOOL_ERROR /
+    REPAIR_TOOL_PROTOCOL_ERROR
+  - （PR #77 评审 blocker 1）非 canonical 与「同一 created UUID 被多个 op 上报」
+    都必须以 TOOL_ERROR 收口，不得落成 BLOCKED；测试必须红在 TOOL_ERROR 上，
+    不得为迁就实现改判据。重复 op_index / op 缺项仍按 C4-P4 保持 BLOCKED
+  - （PR #77 评审 blocker 2）created UUID 对应关系必须绑定到同一份 source bytes：
+    native 观察的 source_sha256 必须等于本事务读写的 before/after 源哈希；worker
+    上报的 source 哈希必须等于 host 重读哈希。任一不一致 ->
+    BLOCKED / REPAIR_SOURCE_UNBOUND（合同 §7 固定 reason code），且不得据此推导
+    UUID delta；read_native 的 BLOCKED 必须原样向 apply_stage 传播，不得折叠成 UNKNOWN
+  - （PR #77 评审 gap 3）C2<->C4 source_objects 平价回归：identity / kind /
+    semantic_ast_sha256 三者逐一相等（普通套件一例 + opt-in 真工具一例），
+    防止 _source_* 或 adapter 遍历再次漂移
+  - 桩测试双向覆盖：上报 X 而实际新增 Y -> BLOCKED；上报 X 且实际新增 X -> APPLIED_TO_STAGE
+  - 真原生：DC-04/DC-05 仍 APPLIED_TO_STAGE 且 before/after 字节与独立复现一致；
+    并用真工具断言 reported == actual new
+  - 承接 PR #76 的遗留加固：P1 native 用例补 created_uuids 断言并钉住已观测 UUID
+    （两次独立运行同值，确定性已实测）
+  - tests.test_akcli_adapter 全绿；全量 discover 不回归；dev_gate 带本 envelope 通过
+  - 台账 + HANDOFF 如实追加；状态 PENDING_HUMAN_REVIEW
+
+exceptions:
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "用户 2026-09-17 本会话「okle」确认 PR #76 合入后按序起卡 1；envelope 本体必须在工作树，同 PR1-C3/PR1-C4/PR1-C4-PQ 先例"
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "同上；分支起点 master 1814548（PR #76 合入后），提交后按先例重锚"
+
+escalation:
+  owner: Yenefa

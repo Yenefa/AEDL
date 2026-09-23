@@ -1,0 +1,152 @@
+# Task Envelope — PR1-C4-P3-ERRATUM  P3 acceptance erratum (draft-5)
+# Owner 明确扩 Scope（2026-09-17 本会话）：只授权为修正**已确认的 C4-P3 判据与 PR-1 §8 的
+# 语义冲突**，不是重新开放整份 B5 判据自由修改。
+# 依据：PR-1 实现合同 §8 明确 CONSTRAINED_EXCEPTION / API 路径**本来就没有 `applied` 字段**
+# （`tool_applied = null` 是设计使然），该路径仍可在独立条件全部成立时成功。
+# 冻结判据 §C4 现写「走 API 路径且 tool.tool_applied=null → 不得当成成功」，与合同直接矛盾。
+#
+# 本卡原以 PR #79 head `4ccafca` 为 stacked base（同 tasks/PR1-C4-PQ.yaml 先例）。
+# #79 已于 2026-09-17 合入 master（merge `46f0612`），本卡已按 Owner 指示
+# **rebase 到 master 并重锚 base.sha 至此** —— 不再依赖任何未合入分支。
+# base.branch 声明为本卡自身分支（admission 要求 base.branch == 当前分支）。
+# 注：rebase 只改提交身份，不改文件字节 —— 冻结判据的 draft-5 sha256 仍为
+# `aa6df32b…`（可复现证据：rebase 前后 `git cat-file blob` 的 sha256 逐位相同）。
+
+task: PR1-C4-P3-ERRATUM
+
+base:
+  branch: docs-pr1-c4-p3-erratum
+  sha: 46f06129f3ba0a8346ac466bd4e57d56e633fa26
+
+goal: |
+  发布 **draft-5 acceptance erratum**，消除 C4-P3 判据与既有实现合同之间的直接矛盾。
+
+  被验事实（本卡开工前实测）：
+  - 合同 §8 规定 API/exception 路径没有 `applied` 字段，`tool_applied` 恒为 `null`；
+    该路径的成功由**独立条件**判定（`op_results` 覆盖 `0..n-1` 且全 `ok`、字节真实改变、
+    fresh reread 成功、connectivity 检查成立）。
+  - 冻结判据 §C4 的 C4-P3 行写的是「不得当成成功」，把「缺少 `applied` 字段」本身
+    当成了红 —— 这是把**设计使然的中性事实**误判为失败依据。
+
+  正确语义（Owner 指定）：`tool_applied=null` **不得被当作 affirmative applied evidence**；
+  CONSTRAINED_EXCEPTION 只有在上述独立条件**全部成立**时才可判 `APPLIED_TO_STAGE`。
+
+  本卡**只做 erratum**，不做 native P3 qualification（后者须等本卡合入后再开卡，
+  且用现有 DC-01/DC-02/DC-03 接 E1/E2/E3，**不新造 schematic fixture**）。
+
+scope: |
+  Writable paths are whitelisted in allowed_paths; everything else is FOREIGN.
+  本次是 Owner 授权的**窄域**冻结物修改：只动 C4-P3 判据、版本表、文件头状态口径，
+  以及新登记 draft-5 全文 sha256 与「修正发生在任何**正式 C4-P3 qualification / verdict**
+  之前」的声明（**不是**「任何观测之前」—— 实现层既存 stub-level 行为测试从未形成 P3 验收 verdict）。
+
+  明确**不动**：C4-P1 / C4-P2 / C4-P4..P8 任何一行、C3 / C5 / C6 任何一行、
+  §1 通用规则、§3 记录格式、§4 执行前置、§5 红线、§6 已决、§7 冻结程序正文、
+  §0.2 状态表（现已过期，但不在本次授权范围，另报）。
+  也不动 `.gitattributes`（见下「已知审计风险」）。
+
+  Impact Analysis
+
+  Direct modifications:   notes/b5-acceptance/C3-C6_PERTURBATION_CRITERIA_DRAFT.md
+                          （C4-P3 行；文件头状态块；版本表新增 draft-5 行；
+                            新增 draft-5 erratum 小节含新旧 sha256 与方法）
+                          tasks/PR1-C4-P3-ERRATUM.yaml、docs/HANDOFF.md、
+                          docs/compliance/ai-usage/<ID>.md、AI_USAGE_LOG.md
+  Potentially affected:   C4-P3 的 native qualification（下一张卡）；#78 的 grading matrix
+                          （须引用本卡合入后的正式判据，而不是待合版本）
+  Explicitly not touched: tools/**、gates/**、tests/**、tests/fixtures/**、其余 notes/**、
+                          docs/competition/**、docs/evidence/**、.gitattributes
+  Risk: MEDIUM（改冻结判据 —— 但属判据自身写错的正式 erratum 程序，且发生在任何**正式
+  C4-P3 qualification / verdict** 之前；实现层既存 stub-level 行为测试从未形成 P3 验收 verdict，
+  故不用于重判任何既有 P3 结果）
+
+  change_budget:
+    expected_files: 5
+    expected_modules: [notes, tasks, docs]
+    cross_module: false
+    contract_change: false           # 不改实现合同；本卡是让判据回到合同语义
+    evidence_semantics_change: false
+
+dependencies: []
+
+allowed_paths:
+  - notes/b5-acceptance/C3-C6_PERTURBATION_CRITERIA_DRAFT.md
+  - tasks/PR1-C4-P3-ERRATUM.yaml
+  - docs/HANDOFF.md
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/compliance/ai-usage/**
+
+forbidden_paths:
+  - tools/**
+  - gates/**
+  - src/**
+  - sandbox_runtime/**
+  - tests/**
+  - tests/fixtures/**
+  # "其余 notes/**" 必须逐条列出：scope_check 对 forbidden_paths 是**优先**判定，且不支持
+  # 取反，所以写 `notes/**` 会把本卡唯一被授权的那个文件也判成越界（实测 dev_gate
+  # scope_check fail：`notes/b5-acceptance/C3-C6_...md: matches forbidden path`）。
+  # 下列清单就是 `notes/**` 减去 allowed_paths 里那一个文件；未列出的路径依然 FOREIGN。
+  - notes/competitor-collision-analysis-2026-08-30.md
+  - notes/dev-cases/**
+  - notes/device-facts/**
+  - notes/e5-user-trial/**
+  - notes/edd001-esp32-base-circuit-2026-09-01.md
+  - notes/edd001-sandbox/**
+  - notes/m1-evidence/**
+  - notes/m2-evidence-reset/**
+  - notes/m2-semantic-repair/**
+  - notes/open_source_intake/**
+  - notes/three-repos-review-2026-09-01.md
+  - notes/y4/**
+  - docs/competition/**
+  - docs/evidence/**
+  - .gitattributes
+
+acceptance: |
+  - C4-P3 必须包含**完整实验结构**，且本 acceptance 与 draft-5 逐条同步（防止判据日后被改回
+    模糊结构而 acceptance 仍算满足）：
+      **正对照（positive control）**：`tool_applied=null`、`op_results` 完整（覆盖 0..n-1）
+        且全 `ok`、stage 源 bytes 确实改变、fresh reread 成功、connectivity gate 成立
+        → **允许** `APPLIED_TO_STAGE`（证明 `null` 本身不是失败）
+      **负扰动（negative perturbation，固定形态）**：`tool_applied=null`、`op_results` 非空
+        且全 `ok`、**源 bytes 不改变** → **必须非** `APPLIED_TO_STAGE`，
+        且 `reasons` 含 `REPAIR_EFFECT_MISMATCH`
+      **判定有效性（qualification validity）**：**正对照必须先通过**；正对照失败 →
+        本条记 `NOT_RUN` / qualification invalid，**不得**因负扰动是红的就算 PASS；
+        组判据「八条都红」中 P3 的一票由**负扰动**决定，正对照是控制组
+  - 登记 draft-4 全文 sha256 = `0db600762b06056f0da0479f23d5ee702311732f932fc8581ea17edfe1070a7c`
+    → draft-5 **最终生效 / 冻结** sha256，并写明**计算方法**（git blob / LF 字节，
+    非 Windows 工作树字节）；PR 内先后出现过的**两个** candidate —— `29483b9b…`（提交 `cd48153`）
+    与 `3c4f9167…`（提交 `f5492cf`）—— **均从未合入、从未生效**，**均不得**作为冻结版本引用
+    （与判据 §7 第 6 条、本卡台账口径一致）
+  - 明确记录：**本 erratum 发生在任何正式 C4-P3 qualification / verdict 之前**。实现层**已有**
+    既存 stub-level 行为测试，故**不得**声称「任何观测之前」；但这些测试**从未按 C4-P3 判据
+    形成验收 verdict**（C4-P3 至今 `NOT_RUN`），故本次修正**不用于重判任何既有 P3 结果**，
+    不触发 §5 / §7 第 3 条「观测之后的修正不得用于重判」
+  - 文件头把 `DRAFT — NOT FROZEN` 与实际冻结历史理顺：说明 draft-4 曾按 §7 冻结并登记 hash、
+    draft-5 是 Owner 授权的 **post-freeze erratum**，并给出状态口径
+  - 版本表新增 draft-5 行，说明只修 C4-P3 一处、条数不变（仍 28 条：C3 7 / C4 8 / C5 7 / C6 6）
+  - **不得**顺手修改 P1/P2/P4..P8、C3/C5/C6、§1/§3/§4/§5/§6/§7 正文；diff 必须能在评审中逐行核对
+  - 全量 discover 不回归；dev_gate 带本 envelope 通过；台账 + HANDOFF 如实追加
+  - 状态 PENDING_HUMAN_REVIEW
+
+exceptions:
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "用户 2026-09-17 本会话「确认。下一张 P3 acceptance erratum 卡可以、也应该把这个文件明确加入 allowed_paths」——Owner 明确扩 Scope；envelope 本体必须在工作树，同前几张卡先例"
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "同上；本卡原以 PR #79 head 4ccafca 为 stacked base，Owner 确认 #79 已合入（merge 46f0612）后指示 retarget/rebase 到 master 并重锚；重锚后 base.sha = 46f0612，不再需要 drift 容忍（仅在 rebase 后再改 envelope 自身时才用）"
+
+escalation:
+  owner: Yenefa
+
+# 已知审计风险（本卡**不**修，如实上报）
+#
+# 冻结 hash 是 **git blob（LF）** 字节的 sha256；而 `core.autocrlf=true` 且该文件在
+# `.gitattributes` 中**没有**规则，所以 Windows 工作树检出为 CRLF，同一文件
+# `Get-FileHash` 会得到**不同的**值（实测 21105 B / 0DB60076… vs 21312 B / D97DBF54…）。
+# 后果：Windows 上的核验者若直接哈希工作树文件，会误以为冻结被破坏。
+# 建议后续按 GH-20 的「LF byte baseline」给该文件加 `text eol=lf`；但 `.gitattributes`
+# 不在本卡 allowed_paths 内，故本卡只记录该风险，不擅自扩大范围。

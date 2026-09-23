@@ -28,9 +28,11 @@ PIT-20260830-001 的根因不是修复能力不足，而是**没有独立真值�
 
 **当前进度（2026-09-08）**：核验表共 **10 条**，其中 **9 条已由 Percy 人工核验通过**（F-U1-01/02/03/05/05b/06、F-U2-01/02/03，覆盖 U1 第 11/12/13/22/34 页与 U2 第 8/9 页，逐页对照原件，**无误**）。**下游三个关键判定所依赖的事实全部已核**：F-U1-01（DC-01）、F-U2-02（DC-02）、F-U1-05（DC-04）。
 
+**2026-09-12 补记**：第 10 条 **F-U1-04 的措辞**已由 Percy 目视冻结原件（`src/hardware/m2-board/evidence/datasheets/U1_ESP32-C3-WROOM-02/esp32c3_schematic_checklist_power_supply_2026-08-31.html`）核对——确为 `recommended`，且原句同时建议走线上对地电容（初始可不贴）并靠近芯片放置（全句见 §3 F-U1-04）。至此 **10 条事实的文字口径全部经人工核对**；只余 p34 Figure 9-1 的**图形内容**未目视，§7.1 已把它单列为附项。
+
 > 计数更正史：原文曾写"9 条中 6 条"——那是补入 F-U1-05b（p22 的 45 kΩ）之前的旧数，补行后未同步摘要，2026-09-06 更正为 7/10；2026-09-08 Percy 目视核验 p34 与 p22 后为 **9/10**。
 
-未核验的 **1 条**见 §7.1：F-U1-04 中 **p34 Figure 9-1 的图形内容**（`R4 0`/`R6 0` 是否确实串在 D+/D− 路径上）。该条需目视读图，文本提取只能给出无序标号，故保持未核验状态。
+仍未核验的是 §7.1 的**附项**：F-U1-04 中 **p34 Figure 9-1 的图形内容**（`R4 0`/`R6 0` 是否确实串在 D+/D− 路径上）。该项需目视读图，文本提取只能给出无序标号，故保持未核验状态；**它不影响 F-U1-04 的分级与结论**（理由见 §3 该条正文）。
 
 文本提取会出的错，重跑提取查不出来——**表格单元格错位**（例如把「0x44 = logic low」读成「= logic high」）、漏掉脚注中的适用条件、跨栏合并。这类错误只能靠人眼对着原件发现。
 
@@ -90,6 +92,11 @@ PIT-20260830-001 的根因不是修复能力不足，而是**没有独立真值�
 ### F-U1-04　USB 串联电阻　【建议 · B，非强制】
 
 > **来源 B**："GPIO18 and GPIO19 can be used as D- and D+ of USB respectively. It is **recommended** to reserve **series resistors (initial value can be 22/33 Ω)**"
+
+> **冻结原件全句（2026-09-12 Percy 目视核对时补全）**：
+> "GPIO18 and GPIO19 can be used as D- and D+ of USB respectively. It is **recommended** to reserve **series resistors (initial value can be 22/33 Ω)** **and capacitors to ground on the traces (initially can be unpopulated), and place them close to the chip.**"
+>
+> 初版摘录截至「22/33 Ω」，**漏掉了后半句**：原厂在同一句里还建议走线上对地电容（初始可不贴）并靠近芯片放置。措辞仍是 `recommended`，**分级不受影响**；补全的意义在于：下游若提到「同时建议对地电容」，那是原件原文，不属于事实错误。
 
 - 同样是 `recommended`。M2 的 `R7/R8 = 22Ω ±1% 100mW` 对应此条，取值落在建议区间内。
 - **datasheet 原件中确无此条（2026-09-06 复核，机械检索）**：全 47 页检索 `22Ω` / `33Ω` / `termination` **均无命中**；`resistor` 仅出现在 p12（strapping 的内部弱上拉/下拉）与 p22（电气特性表的内部上下拉阻值）；`Ω` 仅出现在 p22（45 kΩ 内部上下拉）、p25 与 p37（射频 50 Ω 阻抗）、p34（EN 的 RC 推荐值 10 kΩ）。
@@ -235,7 +242,8 @@ R_PD  Internal weak pull-down resistor  —  45  —  kΩ
 | F-U1-01 USB 差分对身份 | U1 v1.7 | 11 | **IO18 是否对 USB_D−、IO19 是否对 USB_D+**（若这两行被读反，DC-01 的答案就是错的） | `HUMAN_VERIFIED` | Percy |
 | F-U1-02 EN 不得悬空 | U1 v1.7 | 11 | `Note:` 原文是否确为 "Do not leave the EN pin floating" | `HUMAN_VERIFIED` | Percy |
 | F-U1-03 EN 的 RC | **U1 v1.7**（更正） | **34** | 措辞是否确为 `advised`/`recommended`（而非 must/shall）；R/C 取值。**本条来源等级已由 B 更正为 A** | `HUMAN_VERIFIED` | Percy |
-| F-U1-04 USB 串阻 | checklist HTML | — | 措辞是否确为 `recommended`。datasheet 无此条已由机械检索复核（`22Ω`/`33Ω`/`termination` 全 47 页零命中）；**剩余需人眼的部分**：p34 Figure 9-1 中 `R4 0`/`R6 0` 是否确实串在 D+/D− 路径上（文本提取只给无序标号，邻近≠已证明串联） | `AI_EXTRACTED_UNVERIFIED` | |
+| F-U1-04 USB 串阻（措辞） | checklist HTML | — | 措辞是否确为 `recommended`。**2026-09-12 Percy 目视核对：是**；原句同时建议走线上对地电容（初始可不贴）并靠近芯片放置，全句见 §3。datasheet 无此条已由机械检索复核（`22Ω`/`33Ω`/`termination` 全 47 页零命中） | `HUMAN_VERIFIED` | Percy |
+| F-U1-04 **附项**：p34 Figure 9-1 图形 | U1 v1.7 | 34 | `R4 0`/`R6 0` 是否确实串在 D+/D− 路径上（文本提取只给无序标号，邻近≠已证明串联）。**该项不影响 F-U1-04 的分级与结论**（§3 已说明） | `AI_EXTRACTED_UNVERIFIED` | |
 | F-U1-05 Strapping 默认 | U1 v1.7 | 12 | Table 4-1 中 GPIO9 = Weak pull-up / Bit 1 | `HUMAN_VERIFIED` | Percy |
 | F-U1-05b 内部上下拉阻值 | U1 v1.7 | 22 | Table 6-3 内部上下拉是否确为 **45 kΩ**；**并确认 Min/Max 两列均为「—」**（即仅给典型值、无保证边界） | `HUMAN_VERIFIED` | Percy |
 | F-U1-06 启动模式 | U1 v1.7 | 13 | Table 4-3 各列是否对齐（表格易错位） | `HUMAN_VERIFIED` | Percy |
