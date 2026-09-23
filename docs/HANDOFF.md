@@ -323,6 +323,10 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
 - **冲突本体**：C4-P3 原文「走 API 路径且 `tool.tool_applied=null` → 不得当成成功」，把「API 路径没有 `applied` 字段」这一**设计事实**当成失败依据。合同 §8 L253 规定该路径**原生没有** `applied` 字段（`null` 是设计使然），L255 规定 exception「同样要求每个 op ok、真实字节改变及重读成功；不能用 API list 非空作为成功条件」——`applied=true` 只是 **STRICT** 路径的合取项。实现亦如此（adapter：API 路径 `tool_applied is not None` → 拒；STRICT 路径 `is not True` → 拒）。
 - **反向证据检索（刻意敌意核对）**：合同中「不得当成成功 / 不能当成成功」**零命中**；无任何条文规定 API 路径的 `null` 本身必须失败。两处易被断章取义者均不支持反读（L425 是测试用例清单而非谓词；L371 的「applied 矛盾」指矛盾，而 L253 已确立 `null` 为非矛盾设计值）。结论：矛盾干净。
 - **改动（19 insertions / 2 deletions，仅四处）**：① C4-P3 行改为「`null` 不得当作 affirmative applied evidence；须 `op_results` 完整 + 真实字节改变 + fresh reread 成功 + connectivity 成立才可 `APPLIED_TO_STAGE`；红 = 缺任一独立条件却判成功」；② 文件头 `DRAFT — NOT FROZEN` 理顺为「draft-4 已按 §7 第 2 步冻结登记 + draft-5 是 Owner 授权的 post-freeze erratum」，并说明旧字样为历史口径、不改判据效力；③ 版本表新增 draft-5 行（只改一处、条数仍 28 条）；④ §7 新增第 6 条 erratum 登记（触发/范围/新旧 sha256/哈希方法/作废哈希警示/修正时点/依据）。C4-P1/P2/P4–P8 与 C3/C5/C6、§1/§3/§4/§5/§6 **零改动**，评审可按 diff 逐行核对。
+- **review 通过（architecture review，2026-09-21）**：`APPROVED_FOR_HUMAN_MERGE` —— 本轮不再提出任何 C2 修改要求；provenance 的 temporal correction 方式获认可（历史状态保留、当前状态单列、未重写审计历史）。冻结状态：`review: APPROVED_FOR_HUMAN_MERGE` / `implementation: ACCEPTED` / `governance: ACCEPTED` / `provenance: ACCEPTED` / `remaining C2 blockers: NONE`。
+- **merge 由人类执行**（AI 不 merge、不 approve、不设置批准状态）。**merge 完成后不得直接恢复 C5**：下一唯一 active blocker 是 **issue #86**；必须先单独开 C4 修复 envelope → human grant → 修复并验证 #86，之后才允许恢复 C5 `2460d5d`、吸收新 master 基线、重新 admission、继续 S1b 第 4 步。
+- **reviewer 远端独立核验（2026-09-21）**：HEAD `cddfa9d388014882f5ab62363a7243b12248ea19`；`master` 仍为 `669aa1622385d598758c0376bc874ff7ca0842f8`；分支 ahead 18 / behind 0；base→HEAD 8 个 tracked files；issue #86 仍 OPEN / P0。
+- **GitHub CI 口径（如实登记）**：该分支当前**没有 commit status**；107 / 814 / admission / dev_gate 均为**本地运行**并写入仓库的 evidence，reviewer 已明确不声称远端独立执行过。
 - **冻结哈希（按 §7 第 2 步登记）**：draft-4 `0db600762b06056f0da0479f23d5ee702311732f932fc8581ea17edfe1070a7c`（21105 B，blob `c36a14b`）→ **draft-5 `aa6df32bc0aabc4befce14e5b24310aeb1f34343d5a245348f281f5d4f338993`**（28825 B，blob `7345ecc`）。**哈希生效口径**：draft-5 只有这一个**最终生效 / 冻结** hash；PR 内先后出现的两个 candidate `29483b9b…`（`cd48153`）与 `3c4f9167…`（`f5492cf`）**确实 push 过、在 PR 上可见，但从未合入、从未生效，均不得作为冻结版本引用**（与 draft-4 那个已作废 `96f2596f…` 同理，区别是这次属正常的 pre-merge review 修订）。已写进判据 §7 第 6 条。
 - **PR #80 合入前评审修订（第 2 轮，Owner 裁定 REQUEST_CHANGES，只挡一处）**：draft-5 首版把 C4-P3 写成「`null` 不是失败；缺任一独立条件却仍成功才算红」—— 但**「缺哪一条条件」没被写进扰动本身**。拿正常 DC-01 去跑（`null` + ops all ok + bytes changed + reread ok + connectivity ok → `APPLIED_TO_STAGE`）是**完全正确**的结果，却与本组「八条都红在 adapter 层」的通过判据**自相矛盾**，会直接影响下一张 native P3 卡怎么判。已按 Owner 指定把 C4-P3 写成**一个正对照 + 一个真扰动**：正对照 = `null` + 独立条件全成立 → **允许** `APPLIED_TO_STAGE`；**负扰动（计入「八条都红」的就是这条）** = 保持 `null`、`op_results` 非空全 `ok`，但移除预先写死的独立成功条件 **「源 bytes 不改变」** → 必须非 `APPLIED_TO_STAGE` 且 `reasons` 含 `REPAIR_EFFECT_MISMATCH`；**verdict 只按负扰动判定**，正对照是控制组。相对首版 draft-5 仅 **7 insertions / 3 deletions**（只动 C4-P3 行 + §7 第 6 条），相对 draft-4 仍是「只改 C4-P3」。
 - 该轮顺带写进 §7 第 6 条的两条防重复推演结论：① **不会新设 §1 规则 3 的第二个例外** —— 该规则约束 `COMMITTED`，而它属 pipeline 层 `TransactionStatus`，adapter 层零命中；② **负扰动已有桩层覆盖**：`ExceptionWriterTests.test_a_non_empty_api_result_without_a_byte_change_is_blocked`（exception 路由、`tool_applied=null`、ops 全 `ok`、字节不变 → `BLOCKED` / `REPAIR_EFFECT_MISMATCH`），同类的 `test_the_api_path_reports_tool_applied_null_and_still_verifies_the_bytes` 即 stub 层正对照。
@@ -476,3 +480,88 @@ SHT30 距最近热源 35.2mm；丝印 21/21；方向敏感件 J1/U1/U2/U3/D1。�
 - 验证：`py -3.9 -X utf8 -m unittest tests.test_host_toolchain` → **21 OK**；`discover -s tests` → **802 OK (skipped=14)**（master 781 → +21，无回归）；`admit --allow-drift` → **ADMIT / exit 0**（clean tree）。
 - **未做**：C5 事务机 / `run_round` / rollback（本卡 non-goal）；未接进任何 C5 调用点；未修改 `gates/repair_verification.py`、`tools/akcli_adapter.py`、`src/repair/patch_schema_v1.json` 任一行；未生成正式 Evidence（`docs/evidence/**` 在本卡 forbidden_paths 内）。
 - 状态：`PENDING_HUMAN_REVIEW`。
+
+## 2026-09-20 PR1-C5-ERRATUM 开卡：C2 new-object expected 语义（C5 第 4 步 BLOCKED_CONTRACT，分支 feat-pr1-c5-erratum，base 669aa16）
+
+- **Provenance（不得混淆）**：本轮输入是 **architecture review（AI reviewer，2026-09-20）** 的技术结论，**不是** human Owner authorization。issue #83 现有 3 条评论中：2 条是 PR1-C5 / PR1-C5-PRE 的 `allow_drift` grant，1 条是本轮 agent 的 BLOCKED 状态记录 —— **没有**针对本 erratum 的人工 scope grant。（**当时状态**：`Human Owner scope grant: PENDING` / `Decision ref: PENDING`；**已被 2026-09-21 `#issuecomment-5754735874` APPROVED 取代**）。本节 rev1 曾把该评审写成「Owner 2026-09-20 裁定」，rev2 已更正（见下方补记）。
+- 触发：PR1-C5 S1b 第 4 步（`build_expected_after` / `_bound_policy` / `_host_patch` / `bind_policy`）开工前，architecture review 给出技术结论 —— ② 既不用 (a) 在 C5 复制 writer serializer，也不用裸 (b) 由宿主提供「未来 AST」；判定为**真 frozen-contract 缺陷**，应修合同而不是在 C5 里补一个「能过测试」的 AST 预言器；并要求**先交函数级草案、审完再进代码**。故 **C5 第 4 步停住**，改为开一张窄 erratum 卡。
+- **缺陷（逐行核对，带 file:line）**：C2 `gates/repair_verification.py:251-262` 要求**每一个** source object（含 identity 以 `new:` 开头的新建 symbol/label）都携带完整未来 writer AST（`descriptor.ast` + `semantic_ast_sha256`），`:410-419` 的 `_align_new` 更以「mask 掉 UUID 的完整 AST」作为新 label 的匹配键；而 frozen runtime policy（`src/repair/topology_policy_v1.json`）只定义工程语义（`name` / `at_pin` / `scope` / `rotation`、器件属性、placement），pinned akcli 0.21.0 的序列化由 writer + 内嵌库 + 当前 document 状态决定（`labels.py:109-135` / `placement.py:48-97` / `properties.py:106+`）。PR-1 实现合同 `L152`/`L160` 本身即写「新增组件整棵 instance 子树允许由固定 native writer 生成」「expected_after 不声称预知 writer 将产生的 bytes hash」。→ 抽象边界错误，不是 C5 缺 helper。
+- **状态冻结（reviewer 指定）**：`C5 HEAD 2460d5d` / `C5 status BLOCKED_CONTRACT` / `C5 code STOP` / `S2 NOT_STARTED`；**旧 C5 分支不删、不 rewrite**；erratum 合入 master 后 C5 再吸收新基线并重跑 admission（**不得在 2460d5d 上同时改 C2**）。
+- **本卡（PR1-C5-ERRATUM）**：`tasks/PR1-C5-ERRATUM.yaml`（envelope 草案）+ `notes/pr1-c5-erratum/C2_NEW_SOURCE_OBJECT_ERRATUM_DRAFT.md`（函数级补丁草案）。**未 admission、未改任何代码**；grant 之前不得改 `gates/repair_verification.py`。
+- **草案要点（rev2）**：按 identity 分流为 closed semantic expectation（新 symbol `{reference}`、新 label `{name, scope, point_nm, rotation}`，与旧 full-AST 形状互斥）；`_align_new` 新 label 改按语义元组唯一匹配（0 命中 / >1 命中都不得 PASS）；**`_delta` 与 `_projection` 函数体零改动** —— 语义投影收敛到新增的 `_canonicalize_new_objects()` 一处，避免两侧不对称投影；existing full AST exact、removed exact UUID+kind+descriptor digest、exact topology、protected projection **一条不松**；R1..R13 回归矩阵；新 symbol source-object UUID 必须恰等于 aligned `component_uuid`。
+- **rev2 修订（reviewer CHANGES_REQUESTED：2 blockers + 5 items，全部为文档改动）**：① **provenance 更正** —— 消除把 AI 架构评审写成「Owner 裁定 / 人类指令」的错误，改为 `Architecture review decision (AI reviewer)` + `Human Owner scope grant: PENDING`；② **§7 更正** —— 删除把 `instances` 列为「残留自由度」的事实错误（`_source_components:886-895` 已严格约束 `instances → project → path → reference/unit`，属既有 parser invariant）；③ `exclude_from_sim` 从「writer 噪声」改口径为**行为 metadata**，v1 边界收紧为 **false / absent only**（新增 R12）；④ property 名称集合闭合方案**不批准**为本 erratum 条件；⑤ 新增 R13（symbol source-object 与 component UUID 绑定，必须走真实 AFTER full path）。设计问题处置：Q1 批准（semantics 只留 `{reference}`，不复制 component fields）；Q2 有条件批准；Q3 批准；Q4 批准且必须保留。
+- **① / ③ 的落地位置（属 C5 第 4 步，本卡只登记不实现）**：① `canonical_authorized_ops` = policy 冻结序 `remove → add_components → add_labels`，`add_net_label.at = rule.at_pin`（`"R9.1"` 字符串，**不换算 nm**），比较必须是**有序 list equality**；③ `EXPECTED_SOURCE_SHA256 = canonical_sha256("context", {"role": "EXPECTED_AFTER_NOT_YET_WRITTEN"})`，语义写死为 STRUCTURAL PLACEHOLDER ONLY，不得与 BEFORE / staged / AFTER hash 比较、不得进 commit predicate；真实 AFTER bytes 仍由 C4 fresh native_after + C3 fresh staged read / verification 负责。
+- 验证（本轮为文档 / 治理工作）：`git hash-object gates/repair_verification.py` 在两个 worktree 双向一致 = `88a311e17763e0ac83f33c5fd499c2a1852b2c44`；`py -3.9 -m tools.dev_gate`（无 envelope）→ **status pass / exit 0**，baseline `13b180f`，`dirty: false`，main_tests **802 OK (skipped=14)**、sandbox_tests **283 OK (skipped=1, expected failures=1)**、secret_scan 520 files、ai_usage_ledger 110 entries index in sync、bundle_check pass（excluded：scope_check / binding_check，no --envelope）；`py -3.9 -m tools.build_ai_usage_index check` → **OK**。**NOT_RUN**：任何代码测试 —— 本轮**未改任何代码**。
+- **当时未做（rev1 时点，**已过时** —— 见本节的 rev4 / 实现 / push 条目）**：C5 第 4 步、S2 事务底座、C2 代码改动、任何 fixture 改动、正式 Evidence、push、admission。issue #83 的 BLOCKED_CONTRACT 评论是**状态记录**（`Owner decision: PENDING`），**不是** scope grant；agent 不得把它转义成授权。
+- **补记（rev2，同工作单元）**：本节 rev1 的两处问题已按 reviewer 意见修正 —— ①「Owner 2026-09-20 裁定」措辞（provenance 错误，与同节的 `grant = PENDING` 自相矛盾）已改为「architecture review（AI reviewer）」；② 草案 §7 的 `instances` 事实错误与 `exclude_from_sim` 口径已更正。更正全部发生在任何代码落地之前，未触碰 `gates/**`、`tools/**`、`src/**`、`tests/**`。
+- **rev3 修订（纯文档，未改代码）**：① **更正 §2.2 的返回值描述错误** —— `_text`（`:92-95`）与 `_identifier`（`:101-112`）**返回规范值**（`_sorted_unique` / `_index` 同理），只有 `_closed` / `_integer` / `_sha` / `_uuid` / `_identity` 是返回 `None` 的纯校验器；rev2 曾把三者一并写成「纯校验器」，属事实错误，已修。② 核对确认 §7 的 `instances` residual-freedom 说法删除、`exclude_from_sim` 收紧为 false/absent、R12 及 envelope acceptance 同步**均已在 rev2 落地**（草案 §7.2 / §7.3 / §6.2 + envelope acceptance），本轮无需再改。
+- **rev4 修订（纯文档，未改代码）**：① 按 review 意见把 **R9 升级为 integration-path test**（真实 AFTER full object → `_align_new` → `_canonicalize_new_objects` → `compare_delta` + `compare_protected`，不得只单测 helper），原 R13 折入 R9、不再单列（矩阵回到 **R1..R12**）；② §7.5 残留自由度改用「非电气 presentation metadata」措辞，并注明其仍受 `_source_fields()` closed whitelist 约束；③ §8 显式写出 R12 与 `_canonical_new_object()` 的 `exclude_from_sim` 检查；④ 草案头部新增「版本核对（rev4）」块与核验命令。**三项 review 要求（返回值说明 / §7 收紧 / R12）经 `git show HEAD:` 复核确认已在 rev2–rev3 落地**，本轮只做增量收紧。
+- **执行顺序（architecture review 指令，2026-09-20；不是 human Owner scope grant）**：① 在 issue #83 请求 human Owner 对 PR1-C5-ERRATUM 明确 scope grant（`contract_change: true` + `gates/repair_verification.py` + `tests/test_repair_verification.py` 窄范围 + envelope-first 必需的 `allow_drift`），评论 permalink 成为 `decision_ref` → ② 收到人工 grant 后**如实**写入 envelope exception，**`granted_by` 写人类操作者；不得把 reviewer 的 `DESIGN_ACCEPTED` 当 granted_by** → ③ 跑 admission，**只有 ADMIT 才开始实现** → ④ 实现严格按 rev4（`normalize_observation(expected=True)` 分流 → semantic `_align_new` → `_canonicalize_new_objects()` → R1–R12；`_delta()` / `_projection()` 零改动）→ ⑤ erratum 自己 review/merge 完成后，才恢复暂停的 C5（`2460d5d`），吸新 master 基线、重新 admission、继续 S1b 第 4 步。**申请已发**：https://github.com/Yenefa/AEDL/issues/83#issuecomment-5750520949
+- **push 授权（人类操作者，2026-09-20）**：`git push -u origin feat-pr1-c5-erratum` 已执行；远端 `refs/heads/feat-pr1-c5-erratum` = `904a7f39441abd09cab3e68331a1b4b29940ee11`（与本地 HEAD 逐位一致），上游 tracking 已建立。**该 push 仅用于远端 SHA / 差异独立核验**：不改变 `Owner decision: PENDING`、**不构成 scope grant**、不得据此跑 admission 或开始 C2 实现。
+- **环境修复（网络，2026-09-20）**：`git fetch/push/ls-remote` 间歇失败（`Failed to connect to github.com port 443`）。诊断：DNS 正常（`github.com → 20.205.243.166`，本地/1.1.1.1/8.8.8.8 一致）、git 与环境变量均无代理、ICMP 通（95ms / 0% loss），但**直连 TCP 443 到 20.205.243.166 被丢包**（SYN 重传 15–21s），而 `:22`、`:80`、`api.github.com:443` 全部可达 —— 属网络侧对 `github.com` HTTPS 的定向阻断。机器已在跑 FlClash（WinINET 系统代理 `127.0.0.1:7890`，浏览器可用），但 **git/libcurl 不读 WinINET**，故直连失败。**修复（repo-local，写入共享 `AEDL/.git/config`，未触碰 global）**：`http.proxy=http://127.0.0.1:7890` + `http.sslBackend=openssl`（schannel 经代理握手更不稳：实测 3/4 vs openssl 4/5）。实测：`git push` 成功（远端 `eac12d5` = 本地 HEAD）、`git fetch` exit 0、`ls-remote` 4/5–5/5。**残余**：约 20% 操作仍因 **FlClash 节点自身** TLS EOF（`unexpected eof while reading`）失败，建议切换更稳定节点。**回滚**：`git config --unset http.proxy; git config --unset http.sslBackend`。
+- **实现落地（rev4，2026-09-21；commit `33aa8a8`）**：按已批准 scope 只改两个文件（`gates/repair_verification.py` + `tests/test_repair_verification.py`，319 insertions / 20 deletions）。`normalize_observation(expected=True)` 把 `new:` source object 分流为 closed semantic shape（symbol `{reference}`、label `{name, scope, point_nm, rotation}`），与旧 full-AST 形状互斥；新增 `_label_semantics()`（复用 C2 自己的 `_source_fields` / `_source_at`）、`_canonical_new_object()`（含 §6.3 绑定断言 + `exclude_from_sim` false/absent）、`_canonicalize_new_objects()` 单点收敛；`_align_new()` new label 改按 semantic tuple 恰好一对一（>1 → `_BindingError`，0 → 不映射）。**`_delta()` / `_projection()` / `_prepare` 既有严格分支函数体零改动**。identity/role 规则刻意留在 `_prepare`（`_BindingError` → FAIL），避免降级为 UNKNOWN。测试更新 fixture 形状（`semantic_label` / `semantic_symbol` / `semanticize` / `actualize`）并新增 `ErratumNewObjectTests` R1–R12。
+- **实现验证（2026-09-21）**：`tests.test_repair_verification` **107 OK (skipped=1)**（原 95 + 12）；`discover -s tests` **814 OK (skipped=14)**（原 802 + 12，无回归）。**证伪自证**：关闭 `exclude_from_sim` 检查 → R12 红；关闭 label 语义相等 → R7 红（含「必须仍出现在 after 投影里」断言）；还原后全绿。
+- **R10 口径精化（human review correction 2026-09-21，已采纳）**：draft/envelope 原写「混用形状 → FAIL」，实测分类为 **`UNKNOWN / REPAIR_COVERAGE_INCOMPLETE`**；review 裁定**保留该 taxonomy、不硬改 FAIL**，rev4/envelope 文案已同步更正，测试断言「永不 PASS」+ 精确 reason code。
+- **merge 前收口（human review 2026-09-21，5 项）**：① R10 taxonomy 更正（draft + envelope 的 FAIL → `UNKNOWN / REPAIR_COVERAGE_INCOMPLETE`，不硬改代码）；② **真实 DC-04 / DC-05 native 校准**（pinned akcli 0.21.0 @ `toolchain/py311`，exit 0，61911→62825 B）：新 R9/C5 symbol 的 `exclude_from_sim` **ABSENT**、top-level tag `symbol`、source-object uuid == `component_uuid` **True**，`_reidentify` + `_canonicalize_new_objects` 在真实 AFTER 上产出正确 semantic shape；③ falsification：B1(R2/R3)、B3(R1/R5/R6/R9)、B5(R11) 逐条「破坏→红→还原→绿」，**R4/R8 在单点破坏下仍 fail-safe（多重机制），如实上报未完全证伪**；④ 清理 stale governance 文案（rev1「未做」条标注为已过时）；⑤ `change_budget.expected_files` 7 → **8**（base→HEAD 实测 tracked changed files = 8）。
+- **新发现（human operator 2026-09-21 裁定 = B）**：真实 AFTER 的 new label 是 `rotation: 90/270`，而 native op-list **不带 `rotation`** —— akcli `_op_add_net_label` 在 op 缺 `rotation` 时用 `geometry.label_angle_away(pin.orientation, comp.rotation, comp.mirror)` 派生（`handlers/labels.py:78-88`）。裁定 **B：保留 rotation exact，由 C5 第 4 步派生**。
+- **label `rotation` 决策（human operator，2026-09-21）：选 B** —— `rotation` 保留在 new-label semantic expectation 中（exact），由 C5 第 4 步派生 `geometry.label_angle_away(pin.orientation, comp.rotation, comp.mirror)`；**本卡 C2 侧不改**。可行性已实证（pinned akcli 自己的几何函数 + 真实内嵌库 pin 角度）：`Device:R` pin1@270 → 90、pin2@90 → 270，与真实 AFTER 的 `+3V3`/`BOOT` **逐值 MATCH**；`Device:C` 同理。`DERIVATION_PROOF PASS`。输入恰在 frozen 范围内。不采用 A（朝向脱管）与 C（要改 C1/C4 契约）。**附带上报**：C4 对 `rotation` 的归一化会让「省略」与「显式 0」被判相同，而 writer 读原始 dict、输出不同（派生 90/270 vs 0）——建议单独记 finding，本卡不处理。
+- **falsification 补齐（human review item 3，2026-09-21）**：R4 换用例（DC-01 的「BEFORE 存在、合法 AFTER 已授权删除」的 source-object UUID，并显式断言它不在 AFTER 中 —— 原先用仍存活的 pin UUID 会因 `_reidentify` 改坏 pin 清单而红，红的理由不是那条过滤）；R8 改用 reviewer 指定的 defect mutant（**多个 matching actual UUID 全部映射到同一 symbolic identity**，暴露 `_index()` 按 identity 建 dict 时折叠重复项的风险）。结果：**B2(before-UUID exclusion) → R4 RED**、**B4(ambiguity rejection) → R8 RED**，还原后 GREEN，`FALSIFICATION_SUITE PASS`。连同先前 B1(R2/R3)、B3(R1/R5/R6/R9)、B5(R11)，**R1–R12 全部逐条证伪完毕**；C2 文件还原后 `git diff` 为空。
+- **C4 finding 已单独登记（human review item 4）**：issue **#86** —— 「C4 INPUT-DRIFT — add_net_label rotation presence is erased by normalization but remains execution-semantic to the pinned writer」，严重度 **`P0 / BLOCKER_C5_S1b4`**。**不阻塞本卡 C2 erratum merge**；但在它闭合前**不得恢复 C5 第 4 步**。本卡**不修改** `tools/akcli_adapter.py`（修复需单独 envelope + human Owner grant）。
+- **Gate 顺序（architecture review 最高指示，2026-09-20）**：先取得 architecture review 的 `DESIGN_ACCEPTED` / `READY_FOR_HUMAN_SCOPE_GRANT`，**然后**才在 issue #83 请求 human Owner 明确批准 `contract_change: true` 与 `gates/repair_verification.py` 的 scope expansion。**2026-09-20 当时状态：`Owner scope grant = PENDING`，不得提前申请；该状态已被 2026-09-21 的 `#issuecomment-5754735874` APPROVED 取代（该顺序已执行完毕）。**
+- 状态：`PENDING_HUMAN_REVIEW`。
+### Current state — 2026-09-21（本卡最新事实）
+
+Owner scope grant: **APPROVED**
+Decision ref: https://github.com/Yenefa/AEDL/issues/83#issuecomment-5754735874
+
+Admission: **ADMIT / exit 0**（envelope_sha256 `0065f67f77f8bbf8…`）
+Tests:
+- `tests.test_repair_verification`: **107 OK (skipped=1)**
+- `discover -s tests`: **814 OK (skipped=14)**
+Development Gate: **PASS / exit 0**（8/8 checks，excluded=[]）
+
+Remote HEAD: `761e2aa7565c8e8a404be740f676c3bb0e48f0be`（与本地一致，已 push）
+
+C2 erratum: `PENDING_HUMAN_REVIEW`
+C4 blocker: **issue #86 OPEN**
+C5: `BLOCKED_CONTRACT`；**#86 闭合前不得恢复第 4 步**
+Formal Evidence: `NOT_RUN`
+PR: **#87 OPEN**（head `7db78870568122265a05b37fdf86fcd4eb663f90`）
+- **CI 阻塞（2026-09-21，fail-closed escalation）**：PR #87 创建后触发 `minimal-ci`（run `35621320197`，head `7db7887`，event `pull_request`），**两个平台均 FAILURE，但都发生在 runner/step 启动之前**：`runner_id=0`、`runner_name=""`、`steps=0`、`started_at→completed_at` 约 1–2 s、billing `total_ms=0`、整轮 `run_duration_ms=4000`。即 **没有任何 checkout / setup-python / setup-uv / dev_gate 被执行过**，因此**不存在**「CI 证明代码测试失败」的证据。
+- **已做的处置**：`gh run rerun 35621320197` **复现同一形态**（再次 `runner_id=0` / `steps=0`），排除一次性抖动。仓库侧已核：Actions `enabled=true`、`allowed_actions=all`、workflow `.github/workflows/ci.yml` 为 `ubuntu-latest` / `windows-latest` 标准矩阵，未见自身配置问题。**从现有 API 证据无法进一步确定根因，不猜测具体原因。**
+- **治理口径（两套 GitHub 机制必须分开写）**：**Legacy commit statuses: none**；**GitHub Actions check runs: present, 2 条均 FAILURE（pre-run）**。此前文档里「该分支无 GitHub CI commit status」只对 Legacy Status API 成立，不得据此写成「GitHub 没有 CI」。
+- **按 fail-closed 治理升级**：`STOP → 说明 CI 无法执行 → human decision`。**是否接受 local `dev_gate` evidence 作为本次 exception，属人类决定；agent 不得自行豁免两个红叉。**
+- **人类 review 缺口（治理 blocker）**：PR #87 `reviews = 0`、`review comments = 0`，作者为 `Yenefa`。按仓库 ownership 规则（merge authorization → human reviewer；author must not self-approve；acceptance → another real human），**AI 的 architecture review / `APPROVED_FOR_HUMAN_MERGE` 不能替代 GitHub 上另一名真人的 acceptance**。已请求真人 reviewer：`la4876949-bot`（Percy）。
+
+### Current state — 2026-09-22（M1 修订轮次）
+
+Percy 真人 review 已到：review id `5279038034`，**CHANGES_REQUESTED**（2026-09-22T13:54:46Z），对象 head `cfea050`。
+
+- **M1（本 PR 引入的 regression）**：`_canonical_new_object` 把新 symbol 的 AST 压成 `{reference}` 后
+  不再比较；components 层又是 `_COMP_FIELDS` 闭集；两层之间**没有任何地方拒绝 property 名**。
+  实测：新 symbol 加 `(property "Sim.Params" …)` 时 **master=FAIL / #87=PASS**。
+- **M2**：CI 从未执行（账户级 GitHub Actions 账单 gate，两个 job `steps=0`、无 runner）；
+  Percy 独立复现同一时间线与判据，并指出 #70（Lior）同样受影响。
+- Percy 确认成立：`_delta`/`_projection`/`_prepare` 与 base 逐字一致；变异 A/B；
+  `tests.test_repair_verification` 107 OK；范围干净；B5 的 28 条扰动无一依赖新对象完整 AST。
+
+**Owner 决定（2026-09-22 工作会话）**：remedy = **A（property 名闭集）**；**扩本 envelope，不另开卡**；
+`§7.4` **superseded / revised after native calibration**；`§7.5` 保留但仅限已批准 property 内部细节。
+
+**本轮改动**：
+
+```text
+tasks/PR1-C5-ERRATUM.yaml                                   acceptance 增补 M1 条款 + header 修订记录
+notes/pr1-c5-erratum/C2_NEW_SOURCE_OBJECT_ERRATUM_DRAFT.md  §7.4 撤销改订 / §7.5 澄清 / §14 Q2 改订 / §6.2 新增 R13·R13b
+gates/repair_verification.py                                _ALLOWED_NEW_SYMBOL_PROPERTIES + _canonical_new_object fail-closed
+tests/test_repair_verification.py                           R13（Sim.Params / Sim.Device）+ R13b（正对照）
+```
+
+```text
+Admission:    ADMIT / exit 0（allow_drift exception；HEAD fd630be）
+Tests:        tests.test_repair_verification 110 OK (skipped=1)；discover -s tests 817 OK (skipped=14)
+Falsification: 还原修复 → R13 真实红（'PASS' != 'FAIL'，M1 签名）→ 恢复 → GREEN；恢复文件 SHA256 逐位一致
+```
+
+**后坐力（必须写清）**：M1 的新 commit 使 `cfea050` 上的双环境补偿验证与一次性
+infrastructure exception **按各自条款失效**，且 Percy 必须在新 SHA 上重审。
