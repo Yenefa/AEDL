@@ -7,7 +7,9 @@ task: PR1-C5
 base:
   # 工作分支。tools/admit.py:205-209 要求 base.branch == 当前分支（同 PR1-C3 / PR1-C5-PRE 写法）。
   branch: feat-pr1-c5-single-round-transaction
-  sha: 669aa1622385d598758c0376bc874ff7ca0842f8
+  sha: 5ade5b8d1090f9c08d5d63f032bc83afa83e56fd
+  # 2026-09-24 重锚：PR #89（C1 presence erratum）merge 后，master = 5ade5b8（Merge pull request #89）。
+  # 本卡已 rebase 到该 commit 并重新吸收 C1+C2+C3+C4；旧 base 669aa16 与旧 receipt/evidence 全部作废（stale）。
 
 # 开卡方式（Owner 决定，见 exceptions.allow_drift.decision_ref）：envelope-first ——
 # 本卡首个 commit 只含本文件，随后在 clean tree 上执行 admit --allow-drift。
