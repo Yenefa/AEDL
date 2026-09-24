@@ -636,5 +636,7 @@ infrastructure exception **按各自条款失效**，且 Percy 必须在新 SHA 
   该文件确在 allowed_paths 内。已执行 `git config core.quotepath false`（共享 `.git/config`，非 global；
   未改任何被跟踪文件）；回滚 `git config --unset core.quotepath`。修复后 `scope_check` pass。
 - AI 台账：`AI-20260924-DSH-5214132684B03A9C290A20056371AAB6`。
-- 状态：`PENDING_HUMAN_REVIEW`；**未 commit / 未 push / 未开 PR**（等待人类授权，同 #86 先例）。
+- 状态：`PENDING_HUMAN_REVIEW`；**已 commit `cb98f27983d1f4e3cd158e4c13c201beebbbd8f9` / 已 push /
+  PR #89 OPEN**（base `master`，MERGEABLE；remote HEAD == local HEAD 已核）。
+  后续 state-sync commit 会推进 HEAD，最新值以 `git ls-remote` / PR #89 为准。
 - C5：**继续 `BLOCKED`**，直到本卡 merge；旧 C5 receipts/evidence 视为 **stale**。

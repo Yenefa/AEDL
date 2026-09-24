@@ -1,4 +1,4 @@
-# Task Envelope — PR1-C1-ROTATION-PRESENCE   *** DRAFT — NOT ADMITTED — NO IMPLEMENTATION ***
+# Task Envelope — PR1-C1-ROTATION-PRESENCE   *** ADMITTED — IMPLEMENTED — PENDING_HUMAN_REVIEW ***
 #
 # 性质：C1 窄域 contract erratum（presence-preserving parse）。
 # 来源：GH-86 阶段 4 纵向 probe 的 integration finding（notes/gh-86/INTEGRATION-FINDING.md；issue #86）。
@@ -13,8 +13,13 @@
 #   的公开合同；docs/competition/internal/AEDL_PR1_实现合同_20260907.md:98 是同一规则的合同层表述。
 #   三者（schema 文本 + 合同正文 + parser）必须同批落地。
 #
-# !!! 本文件是 DRAFT：exceptions 故意留空（Owner grant 之前不得填 granted_by/decision_ref）；
-#     未 admission；未写任何实现。tools/repair_pipeline.py 与 src/repair/** 至今未被修改。
+# 当前状态（2026-09-24）：ADMITTED（ADMIT / exit 0）→ IMPLEMENTED（三层同批）→ PENDING_HUMAN_REVIEW。
+#   commit cb98f27983d1f4e3cd158e4c13c201beebbbd8f9 / pushed / PR #89（base master）。
+#
+# historical pre-admission state（2026-09-23；已被上文取代，保留供审计）：
+#   本文件当时为 DRAFT —— 未 admission、未写实现，且 exceptions 刻意留空
+#   （Owner grant 之前不得填 granted_by/decision_ref）；tools/repair_pipeline.py 与 src/repair/**
+#   当时未被修改。该状态在 PR-88 merge + conditional grant 条件满足后结束。
 #
 # C5 解锁条件（统一口径，见 acceptance §D）：
 #   C4 fix human-reviewed & merged → C1 更新基线与真实依赖 → Owner grant → C1 ADMIT → implemented
