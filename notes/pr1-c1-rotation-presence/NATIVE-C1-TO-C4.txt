@@ -1,0 +1,12 @@
+absent     C1 parsed op has rotation key: False | proposal_sha=d125a19d5416 | status=APPLIED_TO_STAGE
+           label +3V3   at (34.29, 254) angle=90
+           label BOOT   at (34.29, 261.62) angle=270
+explicit0  C1 parsed op has rotation key: True  | proposal_sha=c8d485569a1b | status=APPLIED_TO_STAGE
+           label +3V3   at (34.29, 254) angle=0
+           label BOOT   at (34.29, 261.62) angle=0
+runTest (__main__._Probe.runTest) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 18.393s
+
+OK
