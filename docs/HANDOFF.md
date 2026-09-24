@@ -640,3 +640,27 @@ infrastructure exception **按各自条款失效**，且 Percy 必须在新 SHA 
   PR #89 OPEN**（base `master`，MERGEABLE；remote HEAD == local HEAD 已核）。
   后续 state-sync commit 会推进 HEAD，最新值以 `git ls-remote` / PR #89 为准。
 - C5：**继续 `BLOCKED`**，直到本卡 merge；旧 C5 receipts/evidence 视为 **stale**。
+
+### Current state — 2026-09-24（C5 恢复：rebase → 重锚 → fresh admission）
+
+- **PR #89 已 merge**：`state=MERGED`，`mergedAt=2026-09-24T03:58:46Z`，
+  `mergeCommit=5ade5b8d1090f9c08d5d63f032bc83afa83e56fd`（= 当时的 origin/master，已重新 fetch 核实）。
+- **C5 已 rebase 到 5ade5b8**：7 个 C5 commit 重放成功，master 落后数 = 0。
+  唯一冲突是**生成物** `docs/compliance/AI_USAGE_LOG.md`（ADR-012 已知类别）→ 未手工合并，
+  改为 rebase 后 `build_ai_usage_index build` 重新生成（114 entries / check OK）。
+- **重新吸收确认（逐处核对）**：C1 presence-preserving `_parse_op`（`tools/repair_pipeline.py:853-868`）、
+  C4 `rotation_mode`（`tools/akcli_adapter.py:981-984`）、C5 `runtime_bindings`（`repair_pipeline.py:1818`）
+  三者同时存在，无残留冲突标记。
+- **base 重锚**：`tasks/PR1-C5.yaml` 的 `base.sha` 由 `669aa16` → `5ade5b8`。
+- **旧 C5 receipts / evidence 全部作废（stale）**：rebase 前的 `_admit_PR1-C5*.json`、dev_gate 回执与
+  任何绑定到 `669aa16`/`2460d5d` 的结论，一律不得作为恢复依据。
+- **fresh admission：ADMIT / exit 0**（`--allow-drift`；envelope_sha256 `26745131c252…`；HEAD `39c5808`）。
+- **dev_gate：pass / exit 0**（8/8，excluded=[]）：main **899 OK (skipped=16)**；sandbox 283 OK；
+  secret 528；ledger 114 in sync；scope 0 files（clean）；binding bound（HEAD `39c5808`）。
+- **S1b 第 4 步状态（尚未开始）**：`tools/repair_pipeline.py` 中
+  `bind_policy` / `_bound_policy` / `_host_patch` / `build_expected_after` / `PolicyPort` = **0 处**。
+  冻结合同接口：§8 L209 `bind_policy(host_context, proposal, native_before) -> BoundPolicyResult`、
+  L230 `BoundPolicyResult={status, bound_policy|null, host_patch|null, reasons}`（无真实批准依据即 BLOCKED）；
+  另有 C2 erratum §12 的强制义务：`build_expected_after` 必须按同一规则计算 expected label `rotation`
+  （省略 → pin 派生；显式 0 → 0）——C1 修复后二者才可区分。
+- **下一步**：实现 S1b 第 4 步（`build_expected_after` / `_bound_policy` / `_host_patch` / `bind_policy`）。
