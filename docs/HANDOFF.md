@@ -611,3 +611,32 @@ infrastructure exception **按各自条款失效**，且 Percy 必须在新 SHA 
   benchmark；修复动作驱动 ΔScore ≈ 2/5（DC-01/DC-02），其余主考 B（不过度定性）；SchGen 旧数据
   10/10 ABSTAINED、mean ΔJ=0、5 个低 J 但 0 个有支持性自动修复。**不扩规则救 ΔScore**；census 暂不写仓库
   （不越 GH-86 scope），待 C1 卡建立后再决定是否给独立只读 evaluation note。
+
+### Current state — 2026-09-24（PR1-C1-ROTATION-PRESENCE 实施完成，待 human review）
+
+- 分支：`feat-pr1-c1-rotation-presence`（worktree `_wt_c1_rotation_presence`）；**base 已重锚**为
+  `b42280bd6afcc8030cb25685c3a84d21ffc38fba`（PR-88 merge 后的 master），分支已 rebase 到它。
+- **两个前置证明（Owner 要求缺一不可）**：
+  - dependency proof：PR-88 `state=MERGED`，`mergedAt=2026-09-24T02:20:24Z`，`mergeCommit=b42280b`；
+  - refreshed base proof：重新 fetch 后 `origin/master = b42280b`（与 mergeCommit 相同，期间无其他 commit）。
+- **Admission：ADMIT / exit 0**（`--allow-dirty`；receipt 同时显示 `baseline ok | b42280b` 与
+  `dependencies ok | PR-88 merged`）。conditional scope grant 的两个条件均已满足后才执行。
+- 三层改动：`src/repair/patch_schema_v1.json`（defaults 去 rotation + constraints 改写；`$defs` 结构不变）、
+  `docs/competition/internal/AEDL_PR1_实现合同_20260907.md`（Operation v1 表格 + 规范化段落）、
+  `tools/repair_pipeline.py`（`_parse_op` add_net_label 分支 presence-preserving）。
+- 验证：`tests.test_repair_contract` **109 OK**；`discover -s tests` **842 OK (skipped=16)**（C1 前 825，+17）；
+  **R4 证伪**：放回旧补 0 行为 → **5 RED**，还原后 SHA256 逐位一致 → GREEN。
+- **NP1 原生纵向证明**（pinned akcli 0.21.0）：absent → C1 无 rotation 键 / `proposal_sha d125a19d` /
+  写出 **90,270**；explicit 0 → C1 有 rotation:0 / `proposal_sha c8d48556` / 写出 **0,0**。
+- **H1 历史控制**：15 份历史 package 在新 schema 下 **0 OK / 15 REFUSED**（「输入包先失效」实测成立）；
+  历史 artifact sha256 已登记、bytes 未改写；兼容层按 Q4-C 另开 follow-up。
+- 预算偏差：`expected_files: 10`，实际 **14**；增量来自 acceptance 强制的 NP1/H1 探针，均在 allowed 条目内。
+- **环境修复（repo-local，可回滚）**：`dev_gate.changed_files()` 走 `git diff HEAD --name-only`，
+  而 `core.quotepath` 默认 true 会把非 ASCII 路径转义，使本卡的合同文件被误判为越界；
+  该文件确在 allowed_paths 内。已执行 `git config core.quotepath false`（共享 `.git/config`，非 global；
+  未改任何被跟踪文件）；回滚 `git config --unset core.quotepath`。修复后 `scope_check` pass。
+- AI 台账：`AI-20260924-DSH-5214132684B03A9C290A20056371AAB6`。
+- 状态：`PENDING_HUMAN_REVIEW`；**已 commit `cb98f27983d1f4e3cd158e4c13c201beebbbd8f9` / 已 push /
+  PR #89 OPEN**（base `master`，MERGEABLE；remote HEAD == local HEAD 已核）。
+  后续 state-sync commit 会推进 HEAD，最新值以 `git ls-remote` / PR #89 为准。
+- C5：**继续 `BLOCKED`**，直到本卡 merge；旧 C5 receipts/evidence 视为 **stale**。

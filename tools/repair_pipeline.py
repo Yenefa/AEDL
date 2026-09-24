@@ -835,18 +835,23 @@ def _parse_op(value: Any, path: str) -> Dict[str, Any]:
             scope = _text(op["scope"], path + ".scope", allow_empty=False)
             if scope != "local":
                 _reject(REASON_SCHEMA_INVALID, "%s.scope must be 'local'" % path)
-        rotation = 0
-        if "rotation" in op:
-            rotation = _integer(op["rotation"], path + ".rotation")
-            if rotation != 0:
-                _reject(REASON_SCHEMA_INVALID, "%s.rotation must be 0" % path)
-        return {
+        # rotation *presence* is execution-semantic: the pinned writer branches on
+        # `"rotation" in op` (akcli writers/handlers/labels.py:78-88), so an omitted
+        # rotation means the native pin-derived orientation while an explicit 0
+        # writes 0.  The two are different canonical Proposal identities, so the key
+        # is emitted only when the raw operation carried it -- never default-filled.
+        parsed = {
             "op": name,
             "name": _text(op["name"], path + ".name", allow_empty=False),
             "at": _pin_anchor(op["at"], path + ".at"),
             "scope": scope,
-            "rotation": rotation,
         }
+        if "rotation" in op:
+            rotation = _integer(op["rotation"], path + ".rotation")
+            if rotation != 0:
+                _reject(REASON_SCHEMA_INVALID, "%s.rotation must be 0" % path)
+            parsed["rotation"] = rotation
+        return parsed
     _closed_keys(op, PLACE_COMPONENT_KEYS, path)
     _require_keys(
         op,

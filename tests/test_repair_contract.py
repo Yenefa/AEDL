@@ -8,6 +8,8 @@ import json
 import unittest
 from pathlib import Path
 
+from tests.test_akcli_adapter import AdapterCase as _C4AdapterCase
+from tools import akcli_adapter as adapter
 from tools.repair_pipeline import (
     EXCEPTION_RULE_IDS,
     FORBIDDEN_PROPOSAL_FIELDS,
@@ -188,7 +190,44 @@ class ParseBranchTests(unittest.TestCase):
         b = parse_proposal(encode(patch_body(oplist={"protocol_version": 2, "target_format": "kicad", "ops": list(reversed(ops))})))
         self.assertNotEqual(a.proposal_sha256, b.proposal_sha256)
 
-    def test_defaults_are_normalised_before_digest(self):
+    def test_rotation_presence_changes_the_proposal_digest(self):
+        """PR1-C1-ROTATION-PRESENCE: rotation presence is execution-semantic.
+
+        The pinned writer branches on the presence of the "rotation" key (akcli
+        writers/handlers/labels.py:78-88), so an omitted rotation means the native
+        pin-derived orientation while an explicit 0 writes 0.  They are different
+        canonical Proposal identities and must never be normalised into each other.
+        """
+        absent = patch_body(
+            oplist={
+                "protocol_version": 2,
+                "target_format": "kicad",
+                "ops": [{"op": "add_net_label", "name": "NET", "at": "U1.13"}],
+            }
+        )
+        explicit = patch_body(
+            oplist={
+                "protocol_version": 2,
+                "target_format": "kicad",
+                "ops": [
+                    {
+                        "op": "add_net_label",
+                        "name": "NET",
+                        "at": "U1.13",
+                        "rotation": 0,
+                    }
+                ],
+            }
+        )
+        parsed_absent = parse_proposal(encode(absent))
+        parsed_explicit = parse_proposal(encode(explicit))
+        self.assertNotIn("rotation", parsed_absent.to_dict()["oplist"]["ops"][0])
+        self.assertEqual(parsed_explicit.to_dict()["oplist"]["ops"][0]["rotation"], 0)
+        self.assertNotEqual(parsed_absent.proposal_sha256, parsed_explicit.proposal_sha256)
+        # the raw layer already distinguished them and keeps doing so
+        self.assertNotEqual(parsed_absent.raw_sha256, parsed_explicit.raw_sha256)
+
+    def test_scope_default_is_still_normalised_before_digest(self):
         minimal = patch_body(
             oplist={
                 "protocol_version": 2,
@@ -206,7 +245,6 @@ class ParseBranchTests(unittest.TestCase):
                         "name": "NET",
                         "at": "U1.13",
                         "scope": "local",
-                        "rotation": 0,
                     }
                 ],
             }
@@ -215,6 +253,125 @@ class ParseBranchTests(unittest.TestCase):
             parse_proposal(encode(minimal)).proposal_sha256,
             parse_proposal(encode(explicit)).proposal_sha256,
         )
+
+    def test_place_component_defaults_are_still_normalised_before_digest(self):
+        component = {
+            "op": "place_component",
+            "lib_id": "Device:R",
+            "designator": "R9",
+            "x_mil": 1350,
+            "y_mil": 10150,
+            "value": "10k",
+            "footprint": "Resistor_SMD:R_0603_1608Metric",
+        }
+        minimal = patch_body(
+            oplist={"protocol_version": 2, "target_format": "kicad", "ops": [component]}
+        )
+        explicit = patch_body(
+            oplist={
+                "protocol_version": 2,
+                "target_format": "kicad",
+                "ops": [dict(component, rotation=0, mirror="none", unit=1)],
+            }
+        )
+        self.assertEqual(
+            parse_proposal(encode(minimal)).proposal_sha256,
+            parse_proposal(encode(explicit)).proposal_sha256,
+        )
+
+
+class RotationPresenceContractTests(unittest.TestCase):
+    """PR1-C1-ROTATION-PRESENCE: rotation presence must survive parse and every view.
+
+    R1/R2 (regression), P1/P2 (positive controls), N1 (negative controls) and S1
+    (the proposer-visible schema text).  The full C1 -> HostPatch -> stage op-list
+    -> C4 path lives in C1ToC4PresenceIntegrationTests below.
+    """
+
+    def _label(self, **extra):
+        op = {"op": "add_net_label", "name": "NET", "at": "U1.13"}
+        op.update(extra)
+        return op
+
+    def _parsed(self, op):
+        return parse_proposal(encode(patch_body(
+            oplist={"protocol_version": 2, "target_format": "kicad", "ops": [op]})))
+
+    def test_absent_rotation_stays_absent_through_every_view(self):
+        parsed = self._parsed(self._label())
+        self.assertNotIn("rotation", parsed.ops[0])
+        self.assertNotIn("rotation", parsed.to_dict()["oplist"]["ops"][0])
+        reparsed = parse_proposal(json.dumps(parsed.to_dict()).encode("utf-8"))
+        self.assertNotIn("rotation", reparsed.ops[0])
+        self.assertEqual(parsed.proposal_sha256, reparsed.proposal_sha256)
+
+    def test_explicit_zero_rotation_is_preserved(self):
+        parsed = self._parsed(self._label(rotation=0))
+        self.assertEqual(parsed.ops[0]["rotation"], 0)
+        reparsed = parse_proposal(json.dumps(parsed.to_dict()).encode("utf-8"))
+        self.assertEqual(reparsed.ops[0]["rotation"], 0)
+        self.assertEqual(parsed.proposal_sha256, reparsed.proposal_sha256)
+
+    def test_the_two_shapes_have_different_canonical_identity(self):
+        absent = self._parsed(self._label())
+        explicit = self._parsed(self._label(rotation=0))
+        self.assertNotEqual(absent.proposal_sha256, explicit.proposal_sha256)
+        self.assertNotEqual(absent.raw_sha256, explicit.raw_sha256)
+
+    def test_scope_absent_and_explicit_local_are_equivalent(self):
+        absent = self._parsed(self._label())
+        explicit = self._parsed(self._label(scope="local"))
+        self.assertEqual(absent.proposal_sha256, explicit.proposal_sha256)
+        self.assertEqual(absent.ops[0]["scope"], "local")
+
+    def test_place_component_defaults_stay_presence_neutral(self):
+        component = {"op": "place_component", "lib_id": "Device:R", "designator": "R9",
+                     "x_mil": 1350, "y_mil": 10150, "value": "10k",
+                     "footprint": "Resistor_SMD:R_0603_1608Metric"}
+        minimal = parse_proposal(encode(patch_body(
+            oplist={"protocol_version": 2, "target_format": "kicad", "ops": [component]})))
+        explicit = parse_proposal(encode(patch_body(
+            oplist={"protocol_version": 2, "target_format": "kicad",
+                    "ops": [dict(component, rotation=0, mirror="none", unit=1)]})))
+        self.assertEqual(minimal.proposal_sha256, explicit.proposal_sha256)
+
+    def test_illegal_rotation_values_are_still_rejected(self):
+        for bad in (90, None, True, "0", 0.0):
+            with self.assertRaises(ProposalInvalidError):
+                self._parsed(self._label(rotation=bad))
+
+    def test_a_non_local_scope_is_still_rejected(self):
+        with self.assertRaises(ProposalInvalidError):
+            self._parsed(self._label(scope="global"))
+
+    def test_a_public_rotation_mode_field_is_rejected(self):
+        """rotation_mode is C4-internal comparison state; it must not leak in here."""
+        with self.assertRaises(ProposalInvalidError):
+            self._parsed(self._label(rotation_mode="DERIVED_FROM_PIN"))
+
+    def test_the_public_schema_no_longer_normalises_rotation(self):
+        schema = load_patch_schema()
+        entry = [row for row in schema["public_op_schema"]["operations"]
+                 if row["op"] == "add_net_label"][0]
+        self.assertEqual(entry["defaults"], {"scope": "local"})
+        self.assertNotIn("rotation", entry["defaults"])
+        self.assertIn("presence", " ".join(entry["constraints"]))
+
+    def test_the_place_component_contract_is_unchanged(self):
+        schema = load_patch_schema()
+        entry = [row for row in schema["public_op_schema"]["operations"]
+                 if row["op"] == "place_component"][0]
+        self.assertEqual(entry["defaults"], {"rotation": 0, "mirror": "none", "unit": 1})
+
+    def test_the_json_schema_shape_keeps_rotation_optional(self):
+        schema = load_patch_schema()
+        label = schema["$defs"]["AddNetLabelOp"]
+        self.assertNotIn("rotation", label["required"])
+        self.assertEqual(label["properties"]["rotation"]["const"], 0)
+        component = schema["$defs"]["PlaceComponentOp"]
+        self.assertEqual(component["properties"]["rotation"]["const"], 0)
+        self.assertEqual(component["properties"]["mirror"]["const"], "none")
+        self.assertEqual(component["properties"]["unit"]["const"], 1)
 
 
 class ClosedFieldTests(unittest.TestCase):
@@ -962,6 +1119,93 @@ class HashHelperTests(unittest.TestCase):
         self.assertEqual(
             set(finding.to_dict()), {"code", "stage", "object_id", "detail"}
         )
+
+
+class C1ToC4PresenceIntegrationTests(_C4AdapterCase):
+    """R3/R3-: presence must survive C1 -> HostPatch -> stage op-list -> C4.
+
+    The HostPatch and the on-disk op-list are both built from
+    parse_proposal().to_dict(), never reassembled from the raw bytes: rebuilding
+    them from raw input would bypass the very defect this path test exists to
+    catch.  The stub akcli host comes from tests.test_akcli_adapter (read-only).
+    """
+
+    RULE = "DC-04"
+
+    def _parsed(self, op):
+        with open(self.target, "rb") as handle:
+            base_source_sha256 = hash_bytes(handle.read())
+        document = {"schema_version": 1, "context_id": "CTX-1",
+                    "target": "design/fault.kicad_sch",
+                    "base_source_sha256": base_source_sha256, "decision": "PATCH",
+                    "diagnosis": [],
+                    "oplist": {"protocol_version": 2, "target_format": "kicad", "ops": [op]}}
+        return parse_proposal(json.dumps(document).encode("utf-8"))
+
+    def _patch_from_parsed(self, parsed):
+        document = parsed.to_dict()
+        toolchain = self.toolchain()
+        body = {"schema_version": 1, "run_id": "RUN-1", "candidate_id": "CAND-1",
+                "round_id": "ROUND-1", "patch_id": "PATCH-1",
+                "context_id": document["context_id"],
+                "proposal": document, "proposal_sha256": parsed.proposal_sha256,
+                "target": document["target"],
+                "base": {"files": {}, "topology_sha256": canonical_sha256("topology", "T")},
+                "policy": {"id": "POLICY-1", "file_sha256": canonical_sha256("manifest", "F"),
+                           "bound_rule_id": self.RULE,
+                           "bound_policy_sha256": canonical_sha256("policy-bound", "B")},
+                "authority": {"context_digest": canonical_sha256("context", "C"),
+                              "resolved_authorization_refs": ["host:ledger:1"],
+                              "decisions": [{"capability": "TOOL_EXECUTE", "effect": "ALLOW"},
+                                            {"capability": "FILE_WRITE", "effect": "ALLOW"}]},
+                "toolchain_manifest": toolchain,
+                "toolchain_sha256": adapter._toolchain_digest(toolchain),
+                "route": "STRICT", "bound_policy": {"version": 1}}
+        body["patch_sha256"] = canonical_sha256("patch", body)
+        return body
+
+    def _write_disk_from_parsed(self, parsed):
+        with open(self.oplist_path, "w", encoding="utf-8", newline="\n") as handle:
+            json.dump(parsed.to_dict()["oplist"], handle)
+
+    def _assert_presence_survives(self, op):
+        parsed = self._parsed(op)
+        self._write_disk_from_parsed(parsed)
+        result = adapter.apply_stage(self.stage_request(self._patch_from_parsed(parsed)))
+        self.assertEqual(result["status"], "APPLIED_TO_STAGE",
+                         "%r -> %s" % (op, result["reasons"]))
+        return result
+
+    def test_absent_rotation_survives_the_full_c1_to_c4_path(self):
+        self._assert_presence_survives({"op": "add_net_label", "name": "BOOT0", "at": "R9.1"})
+
+    def test_explicit_zero_rotation_survives_the_full_c1_to_c4_path(self):
+        self._assert_presence_survives(
+            {"op": "add_net_label", "name": "BOOT0", "at": "R9.1", "rotation": 0})
+
+    def test_a_presence_mismatch_is_blocked_before_the_writer(self):
+        absent = self._parsed({"op": "add_net_label", "name": "BOOT0", "at": "R9.1"})
+        explicit = self._parsed({"op": "add_net_label", "name": "BOOT0", "at": "R9.1",
+                                 "rotation": 0})
+        before = self.stage_bytes()
+        self._write_disk_from_parsed(explicit)
+        result = adapter.apply_stage(self.stage_request(self._patch_from_parsed(absent)))
+        self.assertEqual(result["status"], "BLOCKED", result["reasons"])
+        self.assertIn("REPAIR_INPUT_DRIFT", self.codes(result))
+        self.assertEqual(self.call_log(), [])
+        self.assertEqual(self.stage_bytes(), before)
+
+    def test_the_reverse_presence_mismatch_is_blocked_before_the_writer(self):
+        absent = self._parsed({"op": "add_net_label", "name": "BOOT0", "at": "R9.1"})
+        explicit = self._parsed({"op": "add_net_label", "name": "BOOT0", "at": "R9.1",
+                                 "rotation": 0})
+        before = self.stage_bytes()
+        self._write_disk_from_parsed(absent)
+        result = adapter.apply_stage(self.stage_request(self._patch_from_parsed(explicit)))
+        self.assertEqual(result["status"], "BLOCKED", result["reasons"])
+        self.assertIn("REPAIR_INPUT_DRIFT", self.codes(result))
+        self.assertEqual(self.call_log(), [])
+        self.assertEqual(self.stage_bytes(), before)
 
 
 if __name__ == "__main__":
