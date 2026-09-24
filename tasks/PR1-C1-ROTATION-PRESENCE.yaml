@@ -14,7 +14,9 @@
 #   三者（schema 文本 + 合同正文 + parser）必须同批落地。
 #
 # 当前状态（2026-09-24）：ADMITTED（ADMIT / exit 0）→ IMPLEMENTED（三层同批）→ PENDING_HUMAN_REVIEW。
-#   commit cb98f27983d1f4e3cd158e4c13c201beebbbd8f9 / pushed / PR #89（base master）。
+#   交付：PR #89（base master）。实现 commit cb98f27983d1f4e3cd158e4c13c201beebbbd8f9；
+#   其后为 state-sync 提交（本文件的 header 状态同步）。**最新 HEAD 以 PR #89 / git ls-remote 为准，
+#   本文件不追写 SHA**（避免每次状态同步都让记录过期）。
 #
 # historical pre-admission state（2026-09-23；已被上文取代，保留供审计）：
 #   本文件当时为 DRAFT —— 未 admission、未写实现，且 exceptions 刻意留空
