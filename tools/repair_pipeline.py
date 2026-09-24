@@ -18,6 +18,7 @@ gates.repair_verification.  Since C2 landed, that module is the single home and
 this module imports from it (digest semantics verified identical 74/74).
 """
 
+import copy
 import json
 import os
 import re
@@ -29,7 +30,11 @@ from gates.repair_verification import (  # single home for digests since C2
     canonical_json_bytes,
     canonical_sha256,
     hash_bytes,
+    normalize_observation,
+    observation_delta,
+    protected_projection_sha256,
     topology_sha256,
+    _BOUND_FIELDS as _C2_BOUND_FIELDS,
     # C5 reuses verifier-private source helpers because selector binding must use the
     # exact same source semantics as C2.  Publicising this interface is deferred; C5
     # must not fork or reinterpret the parser, so the geometry stays defined in C2.
@@ -2283,13 +2288,12 @@ def _source_scalar_string(node, name):
     return _c2_source_text(child[1])
 
 
-def _pin_local_geometry(lib_symbols, lib_id, pin_number):
-    """(local_nm_yup, orientation) of one library pin.
+def _pin_node(lib_symbols, lib_id, pin_number):
+    """The unique library pin node for (lib_id, pin_number).
 
     A KiCad symbol keeps its pins inside unit sub-symbols such as
     '(symbol "R_1_1" ...)', so the search descends exactly one nesting level.
-    Missing, duplicated or unreadable geometry is a binding failure, never a
-    default.
+    A missing or duplicated definition is a binding failure, never a guess.
     """
     symbols = [node for node in _c2_source_children(lib_symbols, "symbol")
                if len(node) >= 2 and isinstance(node[1], dict)
@@ -2307,8 +2311,42 @@ def _pin_local_geometry(lib_symbols, lib_id, pin_number):
         raise HostContextError([_host_finding(
             "pin %s.%s resolves to %d library definitions, expected exactly one"
             % (lib_id, pin_number, len(matches)))])
-    point, angle = _c2_source_at(matches[0])
-    return point, angle
+    return matches[0]
+
+
+def _pin_local_geometry(lib_symbols, lib_id, pin_number):
+    """(local_nm_yup, orientation) of one library pin (see _pin_node)."""
+    return _c2_source_at(_pin_node(lib_symbols, lib_id, pin_number))
+
+
+def _pin_electrical_type(pin_node):
+    """The pin's electrical type token, read exactly as the reader reports it."""
+    if len(pin_node) < 2 or not isinstance(pin_node[1], str):
+        raise HostContextError([_host_finding("library pin lacks an electrical type")])
+    return pin_node[1]
+
+
+def _library_definition_digests(observation, lib_id):
+    """The unanimous library definition digests for one lib_id.
+
+    Every existing component of that lib_id must report the same
+    lib_definition_sha256 and pin_definition_sha256: the definition belongs to
+    the embedded library, not to an instance, so a disagreement means the
+    observation is internally inconsistent.  No instance, or a disagreement, is
+    a binding failure -- never a first-match guess.
+    """
+    rows = [row for row in observation["components"] if row["lib_id"] == lib_id]
+    if not rows:
+        raise HostContextError([_host_finding(
+            "the BEFORE observation carries no %r component, so the library "
+            "definition digests of a new %r cannot be established" % (lib_id, lib_id))])
+    lib_digests = {row["lib_definition_sha256"] for row in rows}
+    pin_digests = {row["pin_definition_sha256"] for row in rows}
+    if len(lib_digests) != 1 or len(pin_digests) != 1:
+        raise HostContextError([_host_finding(
+            "existing %r components disagree on their library definition digests "
+            "(%d lib, %d pin)" % (lib_id, len(lib_digests), len(pin_digests)))])
+    return lib_digests.pop(), pin_digests.pop()
 
 
 def _anchor_component(observation, proposal, reference):
@@ -2399,3 +2437,185 @@ def build_expected_after(observation, proposal, rule=None, runtime=None):
             slot += 1
     additions["new_labels"].sort(key=lambda row: row["slot"])
     return additions
+
+# ---------------------------------------------------------------------------
+# PR1-C5 S1b step 4 -- policy specialization (checkpoint 2)
+# ---------------------------------------------------------------------------
+#
+# _bound_policy answers exactly one question: if this round is authorized, what
+# precisely may change?  It performs NO authorization -- no policy port
+# evaluation, no TOOL_EXECUTE/FILE_WRITE decision, no ledger lookup, no default
+# allow.  Those belong to bind_policy().
+#
+# It consumes two single sources of truth and re-derives neither: the runtime
+# bindings (the only runtime-value source) and build_expected_after (the only
+# source of new label geometry).
+
+# The expected AFTER bytes do not exist yet, so an expectation cannot carry their
+# hash.  C2 excludes source_sha256 from the electrical topology, so a fixed
+# placeholder is the honest value; it is never compared with applied bytes.
+_EXPECTED_SOURCE_SHA256 = "0" * 64
+
+
+def _refresh_expected_bookkeeping(observation):
+    """Recompute partition keys, per-pin partition_key and coverage.
+
+    The expectation is a complete observation, so its bookkeeping must be
+    internally consistent before C2 ever normalizes it.  Every pin must belong to
+    exactly one partition.
+    """
+    for partition in observation["partitions"]:
+        members = sorted(partition["members"], key=canonical_json_bytes)
+        partition["members"] = members
+        partition["key"] = canonical_sha256("topology", members)
+    owner = {}
+    for partition in observation["partitions"]:
+        for member in partition["members"]:
+            key = canonical_json_bytes(member)
+            if key in owner:
+                raise HostContextError([_host_finding(
+                    "an expected pin appears in two partitions")])
+            owner[key] = partition["key"]
+    for row in observation["pins"]:
+        key = owner.get(canonical_json_bytes(row["identity"]))
+        if key is None:
+            raise HostContextError([_host_finding(
+                "an expected pin belongs to no partition")])
+        row["partition_key"] = key
+    pin_ids = sorted([row["identity"] for row in observation["pins"]],
+                     key=canonical_json_bytes)
+    comp_ids = sorted([row["identity"] for row in observation["components"]],
+                      key=canonical_json_bytes)
+    observation["coverage"] = {
+        "expected_pin_keys_sha256": canonical_sha256("topology", pin_ids),
+        "observed_pin_keys_sha256": canonical_sha256("topology", pin_ids),
+        "expected_component_keys_sha256": canonical_sha256("topology", comp_ids),
+        "observed_component_keys_sha256": canonical_sha256("topology", comp_ids),
+        "expected_pin_count": len(pin_ids),
+        "observed_pin_count": len(pin_ids),
+        "complete": True,
+    }
+    return observation
+
+
+def _expected_observation(observation, rule, runtime, additions):
+    """Materialize the full expected observation from the CP1 additions.
+
+    This does not recompute any label geometry: it wraps the single CP1 result
+    into the observation shape C2 verifies.  New component rows take their
+    library definition digests from the unanimous same-lib_id instance set, their
+    assembly booleans from the frozen rule, and everything else from the
+    placement op; new label semantics are the exact C2 four-tuple.
+
+    Returns (expected_observation, captured_partitions).
+    """
+    expected = copy.deepcopy(observation)
+    expected["source_sha256"] = _EXPECTED_SOURCE_SHA256
+    removed = set(runtime["object_identity_map"])
+    expected["source_objects"] = [obj for obj in expected["source_objects"]
+                                  if obj["identity"] not in removed]
+    if not observation["components"]:
+        raise HostContextError([_host_finding(
+            "the BEFORE observation carries no component, so a new component "
+            "cannot inherit its sheet path")])
+    sheet_path = observation["components"][0]["identity"]["sheet_path"]
+    lib_symbols = _lib_symbols_ast(observation)
+    declared = {row["reference"]: row
+                for row in (rule.get("after") or {}).get("add_components") or []}
+    new_pins = {}
+    for row in additions["new_components"]:
+        reference = row["reference"]
+        declaration = declared.get(reference)
+        if declaration is None:
+            raise HostContextError([_host_finding(
+                "the frozen rule does not declare the new component %r" % reference)])
+        lib_digest, pin_digest = _library_definition_digests(observation, row["lib_id"])
+        identity = {"sheet_path": sheet_path, "component_uuid": row["role"],
+                    "reference": reference, "unit": row["unit"]}
+        expected["components"].append({
+            "identity": identity, "reference": reference, "lib_id": row["lib_id"],
+            "lib_definition_sha256": lib_digest, "value": declaration["value"],
+            "footprint": declaration["footprint"], "unit": row["unit"],
+            "position_nm": [row["position_nm"][0], row["position_nm"][1]],
+            "rotation": row["rotation"], "mirror": row["mirror"],
+            "dnp": declaration["dnp"], "in_bom": declaration["in_bom"],
+            "on_board": declaration["on_board"],
+            "pin_definition_sha256": pin_digest})
+        for number in ("1", "2"):
+            pin_node = _pin_node(lib_symbols, row["lib_id"], number)
+            pin_identity = {"sheet_path": sheet_path, "component_uuid": row["role"],
+                            "reference": reference, "unit": row["unit"],
+                            "number": number,
+                            "pin_uuid": "new:%s.%s" % (reference, number)}
+            expected["pins"].append({
+                "identity": pin_identity, "name": _source_scalar_string(pin_node, "name"),
+                "electrical_type": _pin_electrical_type(pin_node),
+                "no_connect": False, "partition_key": ""})
+            new_pins["%s.%s" % (reference, number)] = pin_identity
+        expected["source_objects"].append({
+            "identity": row["role"], "kind": "symbol",
+            "semantics": {"reference": reference}})
+    for label in additions["new_labels"]:
+        expected["source_objects"].append({
+            "identity": label["role"], "kind": "label",
+            "semantics": {"name": label["name"], "scope": "local",
+                          "point_nm": [label["point_nm"][0], label["point_nm"][1]],
+                          "rotation": label["rotation"]}})
+    captured = capture_before_partitions(
+        observation, (rule.get("before") or {}).get("partitions") or [])
+    expected["partitions"] = project_expected_partitions(
+        observation, rule, captured, new_pins)
+    return _refresh_expected_bookkeeping(expected), captured
+
+
+def _bound_policy(observation, rule, runtime, additions, route):
+    """Specialize the frozen policy for this transaction (no authorization).
+
+    Consumes the runtime bindings as the only runtime-value source and the CP1
+    additions as the only source of new label geometry.  The transaction identity
+    (run / candidate / round / patch / proposal_sha256) stays in the runtime
+    bindings and is bound by the HostPatch, never here.
+    """
+    if not isinstance(runtime, Mapping):
+        raise HostContextError([_host_finding("runtime bindings must be a mapping")])
+    unknown = sorted(set(runtime) - set(_RUNTIME_BINDING_FIELDS))
+    if unknown:
+        raise HostContextError([_host_finding(
+            "runtime bindings carry fields outside the frozen set: %s"
+            % ", ".join(unknown))])
+    missing = sorted(field for field in _RUNTIME_BINDING_FIELDS if field not in runtime)
+    if missing:
+        raise HostContextError([_host_finding(
+            "runtime bindings are incomplete: %s" % ", ".join(missing))])
+    if route not in (ROUTE_STRICT, ROUTE_EXCEPTION):
+        raise HostContextError([_host_finding("unsupported route %r" % (route,))])
+    expected, captured = _expected_observation(observation, rule, runtime, additions)
+    normalized = normalize_observation(expected, expected=True)
+    authorized = observation_delta(normalize_observation(observation), normalized,
+                                   expected=True)
+    roles = {"new:" + row["reference"]: {"reference": row["reference"],
+                                         "pin_numbers": ["1", "2"]}
+             for row in additions["new_components"]}
+    bound = {
+        "version": 1,
+        "rule_id": rule["id"],
+        "route": route,
+        "policy_file_sha256": runtime["policy_document_sha256"],
+        "authority_context_digest": runtime["authority_context"]["context_digest"],
+        "before_source_sha256": observation["source_sha256"],
+        "before_topology_sha256": runtime["base_topology_sha256"],
+        "pin_identity_map": runtime["pin_identity_map"],
+        "object_identity_map": runtime["object_identity_map"],
+        "captured_partitions": captured,
+        "new_component_roles": roles,
+        "expected_after": expected,
+        "authorized_delta": authorized,
+        "authorized_delta_sha256": canonical_sha256("delta", authorized),
+        "protected_projection_sha256": None,
+        "operation_constraints": {},
+    }
+    bound["protected_projection_sha256"] = protected_projection_sha256(observation, bound)
+    if set(bound) != set(_C2_BOUND_FIELDS):
+        raise HostContextError([_host_finding(
+            "the specialized policy does not match the frozen bound-policy field set")])
+    return bound

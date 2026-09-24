@@ -904,5 +904,214 @@ class PinnedGeometryDifferentialTests(unittest.TestCase):
         self.assertEqual(pipeline.PINNED_AKCLI_VERSION, "0.21.0")
 
 
+NATIVE_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "repair_pr1" / "native"
+
+
+def real_lib_symbols_observation():
+    """circuit() with the frozen fixture's real lib_symbols AST grafted in."""
+    observation = circuit()
+    raw = (NATIVE_FIXTURES / "DC-04" / "fault.kicad_sch").read_bytes()
+    real = [obj for obj in adapter.source_objects(raw) if obj["kind"] == "lib_symbols"]
+    observation["source_objects"] = [obj for obj in observation["source_objects"]
+                                     if obj["kind"] != "lib_symbols"] + real
+    return observation
+
+
+def add_component_rule():
+    """A frozen-shaped rule that adds R9 and renames two captured slots."""
+    return {
+        "id": "T", "route": pipeline.ROUTE_STRICT,
+        "before": {"partitions": [
+            {"slot": "one", "names_exact": [], "members_exact": ["R1.1"]},
+            {"slot": "two", "names_exact": [], "members_exact": ["R1.2"]}]},
+        "after": {
+            "replace_partitions": ["one", "two"],
+            "partitions": [
+                {"names_exact": ["/A"], "members_from": "one", "add_exact": ["R9.1"]},
+                {"names_exact": ["/B"], "members_from": "two", "add_exact": ["R9.2"]}],
+            "all_other_partitions": "UNCHANGED",
+            "add_components": [{
+                "reference": "R9", "lib_id": "Device:R", "value": "10k",
+                "footprint": "Resistor_SMD:R_0603_1608Metric",
+                "position_mil": [1350, 10150], "rotation": 0, "mirror": "none",
+                "unit": 1, "dnp": False, "in_bom": True, "on_board": True}]},
+    }
+
+
+def add_component_ops(labels=("+3V3", "BOOT"), explicit_zero=False):
+    ops = [{"op": "place_component", "lib_id": "Device:R", "designator": "R9",
+            "x_mil": 1350, "y_mil": 10150, "value": "10k",
+            "footprint": "Resistor_SMD:R_0603_1608Metric"}]
+    for index, name in enumerate(labels):
+        op = {"op": "add_net_label", "name": name, "at": "R9.%d" % (index + 1)}
+        if explicit_zero:
+            op["rotation"] = 0
+        ops.append(op)
+    return ops
+
+
+class BoundPolicyTests(unittest.TestCase):
+    """Checkpoint 2: _bound_policy specializes the policy and never authorizes."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.design = self.root / "cand" / "design"
+        self.design.mkdir(parents=True)
+        (self.design / TARGET).write_bytes(b"(kicad_sch)")
+        self.context = pipeline.validate_host_context(
+            host_context(design_root=str(self.root / "cand")))
+        self.observation = real_lib_symbols_observation()
+        self.rule = add_component_rule()
+        self.proposal = self._proposal(add_component_ops())
+        self.additions = pipeline.build_expected_after(self.observation, self.proposal)
+        self.runtime = pipeline.runtime_bindings(
+            self.context, self.proposal, native_before(observation=self.observation),
+            policy_sha(), {"E1"}, rule=self.rule, removals={})
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _proposal(self, ops):
+        document = {"schema_version": 1, "context_id": CONTEXT, "target": TARGET,
+                    "base_source_sha256": "b" * 64, "decision": "PATCH",
+                    "diagnosis": [], "oplist": {"protocol_version": 2,
+                                                "target_format": "kicad", "ops": ops}}
+        return pipeline.parse_proposal(json.dumps(document).encode("utf-8"))
+
+    def _bound(self, runtime=None, additions=None):
+        return pipeline._bound_policy(
+            self.observation, self.rule, self.runtime if runtime is None else runtime,
+            self.additions if additions is None else additions, pipeline.ROUTE_STRICT)
+
+    # --- 1: determinism -----------------------------------------------------
+    def test_the_same_inputs_produce_a_byte_identical_bound_policy(self):
+        first = pipeline.canonical_json_bytes(self._bound())
+        second = pipeline.canonical_json_bytes(self._bound())
+        self.assertEqual(first, second)
+
+    # --- 2: no transaction identity leaks into the bound policy -------------
+    def test_transaction_identity_stays_in_the_runtime_bindings(self):
+        bound = self._bound()
+        self.assertEqual(set(bound), set(pipeline._C2_BOUND_FIELDS))
+        for leaked in ("run_id", "candidate_id", "round_id", "patch_id",
+                       "proposal_sha256", "authority_context"):
+            self.assertNotIn(leaked, bound)
+        self.assertEqual(bound["rule_id"], "T")
+        self.assertEqual(bound["route"], pipeline.ROUTE_STRICT)
+        self.assertEqual(bound["policy_file_sha256"], self.runtime["policy_document_sha256"])
+        self.assertEqual(bound["authority_context_digest"],
+                         self.runtime["authority_context"]["context_digest"])
+        self.assertEqual(bound["before_topology_sha256"],
+                         self.runtime["base_topology_sha256"])
+
+    # --- 3: expected_after geometry comes from CP1 alone --------------------
+    def test_label_semantics_are_the_exact_c2_four_tuple(self):
+        bound = self._bound()
+        labels = [obj for obj in bound["expected_after"]["source_objects"]
+                  if obj["kind"] == "label"]
+        self.assertEqual(len(labels), len(self.additions["new_labels"]))
+        for obj, addition in zip(sorted(labels, key=lambda o: o["identity"]),
+                                 sorted(self.additions["new_labels"],
+                                        key=lambda r: r["role"])):
+            self.assertEqual(set(obj["semantics"]),
+                             {"name", "scope", "point_nm", "rotation"})
+            self.assertNotIn("rotation_source", obj["semantics"])
+            self.assertEqual(obj["semantics"]["rotation"], addition["rotation"])
+            self.assertEqual(obj["semantics"]["point_nm"], addition["point_nm"])
+
+    def test_absent_rotation_still_derives_the_native_angle(self):
+        bound = self._bound()
+        labels = {obj["semantics"]["name"]: obj["semantics"]
+                  for obj in bound["expected_after"]["source_objects"]
+                  if obj["kind"] == "label"}
+        self.assertEqual(labels["+3V3"]["rotation"], 90)
+        self.assertEqual(labels["BOOT"]["rotation"], 270)
+
+    # --- 4: identity maps are consumed, not re-derived ----------------------
+    def test_identity_maps_are_the_runtime_bindings_unchanged(self):
+        bound = self._bound()
+        self.assertIs(bound["pin_identity_map"], self.runtime["pin_identity_map"])
+        self.assertIs(bound["object_identity_map"], self.runtime["object_identity_map"])
+
+    # --- 5/6: runtime binding set is closed and complete --------------------
+    def test_a_missing_runtime_binding_fails_closed(self):
+        broken = dict(self.runtime)
+        broken.pop("pin_identity_map")
+        with self.assertRaises(pipeline.HostContextError):
+            self._bound(runtime=broken)
+
+    def test_an_unknown_runtime_binding_is_refused(self):
+        broken = dict(self.runtime, authorized=True)
+        with self.assertRaises(pipeline.HostContextError) as caught:
+            self._bound(runtime=broken)
+        self.assertIn("outside the frozen set", caught.exception.findings[0].detail)
+
+    # --- 7: no grant, no allow ----------------------------------------------
+    def test_the_bound_policy_carries_no_grant_or_allow(self):
+        bound = self._bound()
+        for forbidden in ("authorized", "allowed", "grant", "approvals", "decisions"):
+            self.assertNotIn(forbidden, bound)
+
+    # --- 8: new component row + unanimous definitions -----------------------
+    def test_the_new_component_row_uses_unanimous_library_digests(self):
+        bound = self._bound()
+        added = [c for c in bound["expected_after"]["components"]
+                 if c["identity"]["component_uuid"] == "new:R9"]
+        self.assertEqual(len(added), 1)
+        row = added[0]
+        self.assertEqual(row["lib_id"], "Device:R")
+        self.assertEqual(row["lib_definition_sha256"], "1" * 64)
+        self.assertEqual(row["pin_definition_sha256"], "2" * 64)
+        self.assertEqual(row["value"], "10k")
+        self.assertEqual(row["position_nm"], [1350 * 25400, 10150 * 25400])
+        self.assertEqual(bound["new_component_roles"],
+                         {"new:R9": {"reference": "R9", "pin_numbers": ["1", "2"]}})
+
+    def test_a_lib_id_without_an_existing_instance_fails_closed(self):
+        # circuit() carries only Device:R, so a new Device:C has no existing
+        # instance to source its library definition digests from.
+        rule = add_component_rule()
+        rule["after"]["add_components"][0]["lib_id"] = "Device:C"
+        rule["after"]["add_components"][0]["reference"] = "C9"
+        ops = add_component_ops()
+        ops[0]["lib_id"] = "Device:C"
+        ops[0]["designator"] = "C9"
+        for index in range(1, len(ops)):
+            ops[index]["at"] = "C9.%d" % index
+        additions = pipeline.build_expected_after(self.observation, self._proposal(ops))
+        self.assertEqual(additions["new_components"][0]["lib_id"], "Device:C")
+        with self.assertRaises(pipeline.HostContextError) as caught:
+            pipeline._bound_policy(self.observation, rule, self.runtime, additions,
+                                   pipeline.ROUTE_STRICT)
+        self.assertIn("Device:C", caught.exception.findings[0].detail)
+
+    def test_disagreeing_library_digests_fail_closed(self):
+        observation = real_lib_symbols_observation()
+        observation["components"][1]["lib_definition_sha256"] = "9" * 64
+        with self.assertRaises(pipeline.HostContextError):
+            pipeline._bound_policy(observation, self.rule, self.runtime,
+                                   self.additions, pipeline.ROUTE_STRICT)
+
+    # --- 9: no authorization call inside _bound_policy ----------------------
+    def test_bound_policy_contains_no_authorization_call(self):
+        import inspect
+        source = inspect.getsource(pipeline._bound_policy)
+        for forbidden in ("PolicyPort", "evaluate", "EFFECT_ALLOW", "CAPABILITY_",
+                          "authorized=True", "approvals"):
+            self.assertNotIn(forbidden, source)
+
+    # --- 10: the expectation itself normalizes ------------------------------
+    def test_the_expected_after_passes_c2_normalization_directly(self):
+        bound = self._bound()
+        normalized = pipeline.normalize_observation(bound["expected_after"], expected=True)
+        self.assertTrue(normalized["coverage"]["complete"])
+        self.assertEqual(bound["authorized_delta_sha256"],
+                         pipeline.canonical_sha256("delta", bound["authorized_delta"]))
+        self.assertEqual(
+            bound["protected_projection_sha256"],
+            pipeline.protected_projection_sha256(self.observation, bound))
+
+
 if __name__ == "__main__":
     unittest.main()

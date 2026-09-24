@@ -689,4 +689,27 @@ infrastructure exception **按各自条款失效**，且 Percy 必须在新 SHA 
 - **范围自查**：诊断探针曾写在未授权的 `notes/pr1-c5-s1b/`，`scope_check` 报出后已移出仓库到 host scratch
   `_c5_s1b_probes/`；仓库内 clean，探针未入库（命令与结果见 AI 台账）。
 - **未做**：checkpoint 2 未开始（Owner 要求 checkpoint 1 认可后再进入）。
-- **下一步**：checkpoint 2 —— `_bound_policy`（只做 policy 专门化，不做授权；消费 `runtime_bindings` 14 项）。
+### Current state — 2026-09-24（S1b 第 4 步 checkpoint 2 完成：`_bound_policy`）
+
+- **Owner 裁定**：APPROVED —— expected_after observation 组装归 CP2（不回补 CP1）；
+  CP2 只做 policy specialization，**不做 authorization**；transaction identity 不泄漏进 BoundPolicy；
+  同 lib_id 定义摘要必须存在且全体一致。
+- **职责边界**：CP1 = 计算新增工程语义；CP2 = 把 before + CP1 additions + runtime bindings + 冻结规则
+  投影成 C2 可验证的完整 16 项 BoundPolicy。
+- **实现**（`tools/repair_pipeline.py`）：`_expected_observation` / `_refresh_expected_bookkeeping` /
+  `_library_definition_digests` / `_pin_node` / `_pin_electrical_type` / `_bound_policy`；
+  依赖 C2 **公开** helper `normalize_observation` / `observation_delta` / `protected_projection_sha256`
+  （**未复制** `_delta()` / `_projection()`）。
+- **单一真源**：runtime bindings = 唯一 runtime-value source；CP1 additions = 唯一 label 几何来源；
+  新组件行的 library 摘要取自同 lib_id 既有实例（全体一致才用），assembly 布尔取自冻结规则。
+- **验收（10 条，真实运行）**：`BoundPolicyTests` **13 OK**；`tests.test_repair_pipeline` **86 OK (skipped=3)**；
+  全量 `discover` **928 OK (skipped=19)**；`dev_gate` **pass / exit 0**（8/8，scope 2 files in scope）。
+  - 字段集精确 = frozen 16 项；无 `run/candidate/round/patch/proposal_sha256` 泄漏；
+  - `rotation_source` 已剥掉，semantics 精确 `{name, scope, point_nm, rotation}`；absent → 90/270；
+  - identity maps `is` runtime bindings 原对象；缺 binding / 未知 binding 均 fail-closed；
+  - 无 grant/ALLOW；`_bound_policy` 源码不含授权调用（inspect 断言）；
+  - expected_after 直接通过 `normalize_observation(expected=True)`；delta/protected digest 与 C2 复算一致。
+- **未做**：CP3 `_host_patch`、CP4 `bind_policy` 均未开始（按 Owner 要求停在 CP2 gate）。
+- **CP4 必须验收项（已登记）**：0.21.0 运行时闭环 —— actual host toolchain identity != pinned 0.21.0 →
+  BLOCKED/UNKNOWN，**绝不调用 qualified kernel**。
+- **下一步**：checkpoint 3 —— `_host_patch`（纯构造器；任何 ALLOW 不得来自 Proposal 字段）。
