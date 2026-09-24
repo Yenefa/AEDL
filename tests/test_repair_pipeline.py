@@ -935,6 +935,9 @@ def add_component_rule():
                 "footprint": "Resistor_SMD:R_0603_1608Metric",
                 "position_mil": [1350, 10150], "rotation": 0, "mirror": "none",
                 "unit": 1, "dnp": False, "in_bom": True, "on_board": True}]},
+        "object_delta": {"remove": [], "add_labels": [
+            {"name": "+3V3", "at_pin": "R9.1", "scope": "local", "rotation": 0},
+            {"name": "BOOT", "at_pin": "R9.2", "scope": "local", "rotation": 0}]},
     }
 
 
@@ -1092,6 +1095,105 @@ class BoundPolicyTests(unittest.TestCase):
         with self.assertRaises(pipeline.HostContextError):
             pipeline._bound_policy(observation, self.rule, self.runtime,
                                    self.additions, pipeline.ROUTE_STRICT)
+
+    # --- B1: removal declarations bind by UUID, kind and descriptor ---------
+    def _observation_with_removable_label(self):
+        observation = real_lib_symbols_observation()
+        identity = "aaaaaaaa-1111-2222-3333-444444444444"
+        ast = ["label", {"string": "OLD"},
+               ["at", {"number": "1"}, {"number": "2"}, {"number": "0"}],
+               ["uuid", {"string": identity}]]
+        observation["source_objects"].append({
+            "identity": identity, "kind": "label",
+            "semantic_ast_sha256": pipeline.canonical_sha256("protected", ast),
+            "descriptor": {"ast": ast}})
+        return observation, identity, pipeline.canonical_sha256("protected", {"ast": ast})
+
+    def _removal_case(self, uuid, kind, digest):
+        observation, identity, real_digest = self._observation_with_removable_label()
+        rule = add_component_rule()
+        rule["object_delta"]["remove"] = [{"slot": "old"}]
+        removals = {"old": {"uuid": identity if uuid is None else uuid,
+                            "kind": kind, "descriptor_sha256": real_digest if digest is None else digest}}
+        runtime = pipeline.runtime_bindings(
+            self.context, self.proposal, native_before(observation=observation),
+            policy_sha(), {"E1"}, rule=rule, removals=removals)
+        additions = pipeline.build_expected_after(observation, self.proposal)
+        return observation, rule, runtime, additions, identity
+
+    def test_removal_declarations_bind_by_uuid_and_are_consumed(self):
+        observation, rule, runtime, additions, identity = self._removal_case(None, "label", None)
+        bound = pipeline._bound_policy(observation, rule, runtime, additions,
+                                       pipeline.ROUTE_STRICT)
+        remaining = [obj["identity"] for obj in bound["expected_after"]["source_objects"]]
+        self.assertNotIn(identity, remaining)
+        hits = [row for row in bound["authorized_delta"] if row["identity"] == identity]
+        self.assertTrue(hits)
+        self.assertEqual(hits[0]["after"], {"absent": True})
+        self.assertEqual(bound["operation_constraints"]["counts"]["delete_object"], 1)
+        self.assertEqual(bound["operation_constraints"]["removed"][0]["uuid"], identity)
+        self.assertEqual(
+            bound["operation_constraints"]["canonical_authorized_ops"][0]["op"],
+            "delete_object")
+        self.assertEqual(bound["authorized_delta_sha256"],
+                         pipeline.canonical_sha256("delta", bound["authorized_delta"]))
+        self.assertEqual(bound["protected_projection_sha256"],
+                         pipeline.protected_projection_sha256(observation, bound))
+
+    def test_a_removal_uuid_that_matches_nothing_fails_closed(self):
+        observation, rule, runtime, additions, _ = self._removal_case(
+            "00000000-0000-0000-0000-000000000000", "label", None)
+        with self.assertRaises(pipeline.HostContextError):
+            pipeline._bound_policy(observation, rule, runtime, additions,
+                                   pipeline.ROUTE_STRICT)
+
+    def test_a_removal_descriptor_mismatch_fails_closed(self):
+        observation, rule, runtime, additions, _ = self._removal_case(None, "label", "9" * 64)
+        with self.assertRaises(pipeline.HostContextError):
+            pipeline._bound_policy(observation, rule, runtime, additions,
+                                   pipeline.ROUTE_STRICT)
+
+    def test_a_removal_kind_mismatch_fails_closed(self):
+        observation, rule, runtime, additions, _ = self._removal_case(None, "wire", None)
+        with self.assertRaises(pipeline.HostContextError):
+            pipeline._bound_policy(observation, rule, runtime, additions,
+                                   pipeline.ROUTE_STRICT)
+
+    # --- B2: the frozen expected-source sentinel ---------------------------
+    def test_the_expected_source_sentinel_is_the_frozen_value(self):
+        self.assertEqual(
+            pipeline._EXPECTED_SOURCE_SHA256,
+            pipeline.canonical_sha256("context", {"role": "EXPECTED_AFTER_NOT_YET_WRITTEN"}))
+
+    # --- B3: operation_constraints is a real specialization -----------------
+    def test_operation_constraints_carry_the_canonical_authorized_ops(self):
+        constraints = self._bound()["operation_constraints"]
+        self.assertEqual(constraints["stage_order"],
+                         ["delete_object", "place_component", "add_net_label"])
+        self.assertEqual(constraints["counts"],
+                         {"delete_object": 0, "place_component": 1, "add_net_label": 2})
+        self.assertEqual([op["op"] for op in constraints["canonical_authorized_ops"]],
+                         ["place_component", "add_net_label", "add_net_label"])
+        self.assertEqual([row["rotation_key"] for row in constraints["new_labels"]],
+                         ["ABSENT", "ABSENT"])
+        for op in constraints["canonical_authorized_ops"]:
+            if op["op"] == "add_net_label":
+                self.assertNotIn("rotation", op)
+                self.assertEqual(op["scope"], "local")
+
+    def test_the_frozen_proposal_matches_the_canonical_ops(self):
+        canonical = self._bound()["operation_constraints"]["canonical_authorized_ops"]
+        normalized = [pipeline._parse_op(op, "$.ops") for op in self.proposal.ops]
+        self.assertEqual(normalized, canonical)
+
+    def test_an_explicit_rotation_proposal_does_not_match_the_canonical_ops(self):
+        proposal = self._proposal(add_component_ops(explicit_zero=True))
+        additions = pipeline.build_expected_after(self.observation, proposal)
+        bound = pipeline._bound_policy(self.observation, self.rule, self.runtime,
+                                       additions, pipeline.ROUTE_STRICT)
+        canonical = bound["operation_constraints"]["canonical_authorized_ops"]
+        normalized = [pipeline._parse_op(op, "$.ops") for op in proposal.ops]
+        self.assertNotEqual(normalized, canonical)
 
     # --- 9: no authorization call inside _bound_policy ----------------------
     def test_bound_policy_contains_no_authorization_call(self):

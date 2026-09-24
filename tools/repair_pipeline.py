@@ -2454,7 +2454,13 @@ def build_expected_after(observation, proposal, rule=None, runtime=None):
 # The expected AFTER bytes do not exist yet, so an expectation cannot carry their
 # hash.  C2 excludes source_sha256 from the electrical topology, so a fixed
 # placeholder is the honest value; it is never compared with applied bytes.
-_EXPECTED_SOURCE_SHA256 = "0" * 64
+# C2 erratum section 10 freezes the exact sentinel for the not-yet-written
+# expected AFTER bytes.  It is a STRUCTURAL PLACEHOLDER ONLY: it must never be
+# compared with the BEFORE hash, with a staged/AFTER hash, or used in a commit
+# byte-equality predicate.  The only fact source for real AFTER bytes is C4's
+# fresh native_after plus C3's fresh staged read.
+_EXPECTED_SOURCE_SHA256 = canonical_sha256(
+    "context", {"role": "EXPECTED_AFTER_NOT_YET_WRITTEN"})
 
 
 def _refresh_expected_bookkeeping(observation):
@@ -2511,9 +2517,34 @@ def _expected_observation(observation, rule, runtime, additions):
     """
     expected = copy.deepcopy(observation)
     expected["source_sha256"] = _EXPECTED_SOURCE_SHA256
-    removed = set(runtime["object_identity_map"])
+    # object_identity_map is slot -> {uuid, kind, descriptor_sha256}; C2 consumes
+    # its VALUES and matches entry["uuid"] against a source-object identity.  Every
+    # declaration must bind exactly one BEFORE object whose kind and descriptor
+    # digest agree, and every declaration must actually remove something -- a
+    # declared removal that removes nothing is a binding failure, not a no-op.
+    removed_ids = set()
+    for slot, entry in sorted(runtime["object_identity_map"].items()):
+        matches = [obj for obj in expected["source_objects"]
+                   if obj["identity"] == entry["uuid"]]
+        if len(matches) != 1:
+            raise HostContextError([_host_finding(
+                "removal %r names %s, which matches %d source objects in the BEFORE "
+                "observation, expected exactly one" % (slot, entry["uuid"], len(matches)))])
+        obj = matches[0]
+        if obj["kind"] != entry["kind"]:
+            raise HostContextError([_host_finding(
+                "removal %r declares kind %r but %s is a %r"
+                % (slot, entry["kind"], entry["uuid"], obj["kind"]))])
+        digest = canonical_sha256("protected", obj["descriptor"])
+        if digest != entry["descriptor_sha256"]:
+            raise HostContextError([_host_finding(
+                "removal %r descriptor digest does not match the observed object" % slot)])
+        if obj["identity"] in removed_ids:
+            raise HostContextError([_host_finding(
+                "two removal declarations bind the same source object %s" % obj["identity"])])
+        removed_ids.add(obj["identity"])
     expected["source_objects"] = [obj for obj in expected["source_objects"]
-                                  if obj["identity"] not in removed]
+                                  if obj["identity"] not in removed_ids]
     if not observation["components"]:
         raise HostContextError([_host_finding(
             "the BEFORE observation carries no component, so a new component "
@@ -2568,6 +2599,93 @@ def _expected_observation(observation, rule, runtime, additions):
     return _refresh_expected_bookkeeping(expected), captured
 
 
+def _canonical_authorized_ops(rule, runtime):
+    """The ordered op-list this round is authorized to execute.
+
+    Frozen order: remove -> add_components -> add_labels.  Every op is built by
+    running the frozen rule's declaration through C1's own parser, so the
+    canonical shape cannot drift from what the proposal parser produces.
+
+    The label ops are built WITHOUT the rotation key on purpose.  The pinned
+    writer branches on that key's presence, so the policy's expected semantic
+    rotation must never be translated into an explicit rotation:0 that the
+    proposer did not write.  Presence sensitivity is what keeps the C4/C1
+    rotation binding intact at the C5 layer.
+    """
+    delta = rule.get("object_delta") or {}
+    removals = runtime["object_identity_map"]
+    ops = []
+    try:
+        for declaration in delta.get("remove") or []:
+            slot = declaration["slot"]
+            entry = removals.get(slot)
+            if entry is None:
+                raise HostContextError([_host_finding(
+                    "removal slot %r has no resolved object binding" % slot)])
+            ops.append(_parse_op({"op": "delete_object", "uuid": entry["uuid"]}, "$.ops"))
+        for row in (rule.get("after") or {}).get("add_components") or []:
+            position = row["position_mil"]
+            ops.append(_parse_op({
+                "op": "place_component", "lib_id": row["lib_id"],
+                "designator": row["reference"], "x_mil": position[0],
+                "y_mil": position[1], "value": row["value"],
+                "footprint": row["footprint"]}, "$.ops"))
+        for row in delta.get("add_labels") or []:
+            ops.append(_parse_op({"op": "add_net_label", "name": row["name"],
+                                  "at": row["at_pin"]}, "$.ops"))
+    except ProposalInvalidError as exc:
+        raise HostContextError([_host_finding(
+            "the frozen rule cannot be projected into an authorized op-list: %s" % exc)])
+    return ops
+
+
+def _operation_constraints(rule, runtime, additions):
+    """The transaction's operation snapshot.
+
+    Holds the counts, the exactly resolved removal objects, the new component and
+    label attributes, the frozen stage order and the canonical authorized op-list.
+    It is a snapshot, never a lazy binding: the later comparison against the
+    proposal happens in bind_policy, not here.
+    """
+    delta = rule.get("object_delta") or {}
+    removals = runtime["object_identity_map"]
+    removed = []
+    for declaration in delta.get("remove") or []:
+        entry = removals.get(declaration["slot"])
+        if entry is None:
+            raise HostContextError([_host_finding(
+                "removal slot %r has no resolved object binding" % declaration["slot"])])
+        removed.append({"slot": declaration["slot"], "uuid": entry["uuid"],
+                        "kind": entry["kind"],
+                        "descriptor_sha256": entry["descriptor_sha256"]})
+    components = []
+    for row in (rule.get("after") or {}).get("add_components") or []:
+        components.append({"reference": row["reference"], "lib_id": row["lib_id"],
+                           "value": row["value"], "footprint": row["footprint"],
+                           "position_mil": list(row["position_mil"]),
+                           "rotation": row["rotation"], "mirror": row["mirror"],
+                           "unit": row["unit"]})
+    labels = []
+    for row in delta.get("add_labels") or []:
+        labels.append({"name": row["name"], "at_pin": row["at_pin"],
+                       "scope": row.get("scope", "local"), "rotation_key": "ABSENT"})
+    ops = _canonical_authorized_ops(rule, runtime)
+    # The snapshot and the CP1 semantics must describe the same round.
+    if (len(components) != len(additions["new_components"])
+            or len(labels) != len(additions["new_labels"])):
+        raise HostContextError([_host_finding(
+            "the authorized op snapshot and the expected additions disagree")])
+    return {
+        "counts": {"delete_object": len(removed), "place_component": len(components),
+                   "add_net_label": len(labels)},
+        "removed": removed,
+        "new_components": components,
+        "new_labels": labels,
+        "stage_order": ["delete_object", "place_component", "add_net_label"],
+        "canonical_authorized_ops": ops,
+    }
+
+
 def _bound_policy(observation, rule, runtime, additions, route):
     """Specialize the frozen policy for this transaction (no authorization).
 
@@ -2612,7 +2730,7 @@ def _bound_policy(observation, rule, runtime, additions, route):
         "authorized_delta": authorized,
         "authorized_delta_sha256": canonical_sha256("delta", authorized),
         "protected_projection_sha256": None,
-        "operation_constraints": {},
+        "operation_constraints": _operation_constraints(rule, runtime, additions),
     }
     bound["protected_projection_sha256"] = protected_projection_sha256(observation, bound)
     if set(bound) != set(_C2_BOUND_FIELDS):

@@ -712,4 +712,25 @@ infrastructure exception **按各自条款失效**，且 Percy 必须在新 SHA 
 - **未做**：CP3 `_host_patch`、CP4 `bind_policy` 均未开始（按 Owner 要求停在 CP2 gate）。
 - **CP4 必须验收项（已登记）**：0.21.0 运行时闭环 —— actual host toolchain identity != pinned 0.21.0 →
   BLOCKED/UNKNOWN，**绝不调用 qualified kernel**。
+### Current state — 2026-09-24（CP2 correction pass 完成，Owner `CHANGES_REQUIRED` 三项已修）
+
+- **B1 删除绑定 slot ≠ UUID（功能 bug）**：原实现拿 `object_identity_map` 的 **slot key** 去过滤 source objects，
+  而冻结语义是 `slot → {uuid, kind, descriptor_sha256}`（C2 消费 `.values()` 并按 `entry["uuid"]` 匹配）——
+  E1/E3 的删除路径**一个也删不掉**，且原测试用 `removals={}` 完全没覆盖。
+  现改为逐条 declaration fail-closed：uuid 恰好命中 1 个 before source object、kind 一致、
+  `canonical_sha256("protected", obj["descriptor"])` 一致、两条不得绑同一对象；
+  **每条声明都必须真的删掉一个对象**。
+- **B2 sentinel 写错**：`"0"*64` → 冻结值 `canonical_sha256("context", {"role": "EXPECTED_AFTER_NOT_YET_WRITTEN"})`
+  （C2 erratum §10，STRUCTURAL PLACEHOLDER ONLY）。
+- **B3 `operation_constraints` 为空**：新增 `_canonical_authorized_ops` + `_operation_constraints`：
+  counts / 准确删除对象（uuid+kind+descriptor）/ 新组件与新 label 属性 / stage_order
+  （`delete_object → place_component → add_net_label`）/ `canonical_authorized_ops`。
+  ops 由冻结规则声明**经 C1 自己的 `_parse_op`** 生成（形状不漂移）；label op **刻意不带 rotation 键**，
+  presence-sensitive —— 绝不把静态 policy 的 `rotation: 0` 翻成 proposal 的显式 0；
+  并与 CP1 additions 数量交叉校验。**比较留给 CP4 `bind_policy`**（CP2 只生成许可）。
+- **验证**：`BoundPolicyTests` **21 OK**（13 → +8）；`tests.test_repair_pipeline` **94 OK (skipped=3)**；
+  全量 `discover` **936 OK (skipped=19)**；`dev_gate` **pass / exit 0**（8/8，scope 2 files in scope）。
+  新增测试含 E1/E3 风格 removal 正例（UUID 消失、delta `after == {"absent": True}`、C2 复算一致）、
+  wrong UUID / wrong descriptor / wrong kind 三负例、sentinel exact-value 回归、canonical ops 快照、
+  frozen proposal 有序相等、explicit-rotation proposal **不相等**。
 - **下一步**：checkpoint 3 —— `_host_patch`（纯构造器；任何 ALLOW 不得来自 Proposal 字段）。
