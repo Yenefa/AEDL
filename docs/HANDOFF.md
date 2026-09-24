@@ -565,3 +565,49 @@ Falsification: 还原修复 → R13 真实红（'PASS' != 'FAIL'，M1 签名）�
 
 **后坐力（必须写清）**：M1 的新 commit 使 `cfea050` 上的双环境补偿验证与一次性
 infrastructure exception **按各自条款失效**，且 Percy 必须在新 SHA 上重审。
+
+### Current state — 2026-09-23（GH-86 C4 rotation-presence 修复 + C1 integration finding）
+
+- 分支：`fix-pr1-c4-rotation-presence`（worktree `_wt_c4_rotation_presence`），base = master `d282c0b`（含 #87 M1）。
+- Envelope：`tasks/PR1-C4-ROTATION-PRESENCE.yaml`；Owner grant：issue #86 `#issuecomment-5778545662`（APPROVED）。
+- Admission：**ADMIT / exit 0**（`--allow-dirty`；envelope_sha256 `5f5980359eb0ef69…`；依赖 `PR-87 merged`）。
+- 代码（唯一改动）：`tools/akcli_adapter.py` 的 `_normalize_operation` `add_net_label` 分支新增 presence 标记
+  `rotation_mode`（`DERIVED_FROM_PIN` / `EXPLICIT_0`），只参与 PRECHECK 比较，从不交给 writer。
+- 测试：`tests.test_akcli_adapter.RotationPresenceTests` 6 例（四组合 + place_component 中性护栏 + presence 编码单测）。
+  - 证伪对照（未修代码）：**3 FAIL / 6**，两个 mismatch case 实测被放行（`APPLIED_TO_STAGE`）。
+  - 修复后：**6 OK**；`tests.test_akcli_adapter` **92 OK (skipped=13)**。
+- **INTEGRATION FINDING（未修，待 Owner 决定）**：C1 `tools.repair_pipeline._parse_op`（`:838-848`）
+  同样把 absent 归一成显式 `rotation: 0`；probe 实测 absent 与 explicit 0 的 `proposal_sha256` **完全相同**
+  （`bb9c5c66…`）。若 C5 从 C1 解析产物序列化「实际执行」的 op-list，proposer 的「省略→派生角度」会被静默
+  改成 0，C4 修复无法补救。`tools/repair_pipeline.py` 属 GH-86 forbidden，未改一行。
+  建议：新开 C1 卡（presence-preserving parse）或规定 C5 必须从 raw proposer bytes 序列化执行 op-list。
+- Development Gate：**PASS / exit 0**（8/8，excluded=[]；main 823 OK / sandbox 283 OK / scope 6 files / binding bound / ledger 112 in sync）。
+- AI 台账：`AI-20260923-DSH-251F2643C9CD46A196B62569F4FAA63F`。
+- **native C4 已补跑（2026-09-23，pinned akcli 0.21.0 @ `toolchain/py311`，Python 3.11.15）**：
+  原 `NOT_RUN` 解除 —— 原生回归（NativeQualification / NativePerturbation / NativeP3）**12 OK**；
+  本卡新增 `NativeRotationPresenceTests`（两个 mismatch 方向写前拒绝、draw 0 次、字节不变）**2 OK**；
+  angle probe 实测：冻结 DC-04（rotation absent）写出 `+3V3 angle=90 / BOOT angle=270`，
+  同一 op-list 显式 `rotation: 0` 写出 `angle=0 / 0` ⇒ presence 在原生层即执行语义。
+  证据：`notes/gh-86/NATIVE-EVIDENCE.md` + `probe_native_rotation_presence.txt`。
+  dev_gate 中原生用例仍是 opt-in SKIP（skipped=15），故正式回执不包含 native。
+- 状态：`PENDING_HUMAN_REVIEW`；未 push、未开 PR。
+- **change_budget 说明（如实）**：envelope 原写 `expected_files: 7`，本 candidate 实际 **12** 个文件。
+  增量全部来自 Owner 直接指示的两项（C1 integration finding 记录、native C4 证据），且全部落在既有
+  7 条 allowed path 条目内（`notes/gh-86/**`、`docs/compliance/ai-usage/**` 为 glob）——
+  **无越界路径、无额外代码路径**（唯一代码改动仍是 `tools/akcli_adapter.py`）。按 AGENTS.md §2.2，
+  此增量属人类指示的扩量，已如实登记，未静默扩大。
+
+- **Owner 决策（2026-09-23 工作会话）**：
+  1. **#86 不吸收 C1 finding** —— GH-86 授权只覆盖 C4，且明确 forbid `tools/repair_pipeline.py`；
+     C1 另开窄域 contract erratum，不把 #86 重新膨胀。
+  2. **C5 恢复条件更正（治理纠偏）**：旧的 `#86 closed → resume C5` 指令**作废**。新口径 =
+     **`#86 closed → C4 blocker removed；C5 remains BLOCKED by the newly discovered C1`**
+     **`presence-binding defect（PR1-C1-ROTATION-PRESENCE）`**。在 C1 erratum merge 前 C5 继续 `BLOCKED`。
+  3. **C1 方案选 1（presence-preserving parse）**，不选方案 2（C5 从 raw proposer bytes 执行）；
+     理由是方案 2 并未省掉 contract change，只是把第二套 proposal identity 藏到更难审计处。
+     C1 卡 `contract_change: true`：JSON schema 不加字段，但 canonical Proposal representation /
+     `proposal_sha256` 的等价关系改变。
+- **benchmark census（第一轮，未落盘）**：DC-01..05 重新定位为 **C6 qualification set**，不是效果
+  benchmark；修复动作驱动 ΔScore ≈ 2/5（DC-01/DC-02），其余主考 B（不过度定性）；SchGen 旧数据
+  10/10 ABSTAINED、mean ΔJ=0、5 个低 J 但 0 个有支持性自动修复。**不扩规则救 ΔScore**；census 暂不写仓库
+  （不越 GH-86 scope），待 C1 卡建立后再决定是否给独立只读 evaluation note。
