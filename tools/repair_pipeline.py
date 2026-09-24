@@ -2197,3 +2197,205 @@ def _feedback_reason(outcome: str, receipt: Mapping) -> str:
         if candidate in mapped:
             return candidate
     return "EXECUTION_UNAVAILABLE"
+
+# ===========================================================================
+# PR1-C5 S1b step 4 -- expected engineering semantics (checkpoint 1)
+# ===========================================================================
+#
+# Compatibility semantics for pinned akcli-kicad 0.21.0.
+#
+# The kernel below replicates the geometry of the pinned writer
+# (akcli/geometry/transform.py:65-142, upstream commit
+# 68c2df5e43db2f822ab8dbfea36f777396897d8d).  It is a behavioural replica,
+# never a runtime dependency: the production path must not import akcli,
+# because the main suite runs on an interpreter without the pinned toolchain.
+#
+# It is qualified for akcli-kicad 0.21.0 ONLY.  Do not generalize it to another
+# toolchain version without re-qualifying it against that version's geometry and
+# native observations.
+
+PINNED_AKCLI_VERSION = "0.21.0"
+_PINNED_PIN_DIR = {0: (1, 0), 90: (0, 1), 180: (-1, 0), 270: (0, -1)}
+
+
+def _pinned_akcli_0210_transform_point(pt, rot=0, mirror="none", origin=(0, 0)):
+    """akcli 0.21.0 transform_point: rotate-then-mirror, integer nm, +Y down."""
+    x = int(pt[0])
+    y = int(pt[1])
+    r = int(rot) % 360
+    if r == 0:
+        pass
+    elif r == 90:
+        x, y = y, -x
+    elif r == 180:
+        x, y = -x, -y
+    elif r == 270:
+        x, y = -y, x
+    else:
+        raise HostContextError([_host_finding(
+            "unsupported component rotation %r" % (rot,))])
+    if mirror == "x":
+        y = -y
+    elif mirror == "y":
+        x = -x
+    elif mirror not in ("none", "", None):
+        raise HostContextError([_host_finding(
+            "unsupported component mirror %r" % (mirror,))])
+    return (x + int(origin[0]), y + int(origin[1]))
+
+
+def _pinned_akcli_0210_pin_world(pin_local_nm_yup, rot=0, mirror="none", origin=(0, 0)):
+    """akcli 0.21.0 pin_world: library +Y-up local nm -> world nm (+Y down)."""
+    local = (int(pin_local_nm_yup[0]), -int(pin_local_nm_yup[1]))
+    return _pinned_akcli_0210_transform_point(local, rot, mirror, origin)
+
+
+def _pinned_akcli_0210_label_angle_away(pin_orientation, rot=0, mirror="none"):
+    """akcli 0.21.0 label_angle_away: the angle whose text leaves the body."""
+    dx, dy = _PINNED_PIN_DIR.get(int(pin_orientation) % 360, (1, 0))
+    wx, wy = _pinned_akcli_0210_transform_point((-dx, dy), rot, mirror)
+    if wx > 0:
+        return 0
+    if wx < 0:
+        return 180
+    return 90 if wy < 0 else 270
+
+
+def _lib_symbols_ast(observation):
+    """The BEFORE observation's single lib_symbols AST (C2 source semantics)."""
+    matches = [obj for obj in observation["source_objects"]
+               if isinstance(obj, Mapping) and obj.get("kind") == "lib_symbols"]
+    if len(matches) != 1:
+        raise HostContextError([_host_finding(
+            "the BEFORE observation must carry exactly one lib_symbols source "
+            "object, found %d" % len(matches))])
+    descriptor = matches[0].get("descriptor")
+    if not isinstance(descriptor, Mapping) or "ast" not in descriptor:
+        raise HostContextError([_host_finding("lib_symbols carries no source AST")])
+    return descriptor["ast"]
+
+
+def _source_scalar_string(node, name):
+    """Quoted text of a scalar child, read with C2's own semantics."""
+    child = _c2_source_one(node, name)
+    if len(child) < 2:
+        raise HostContextError([_host_finding("invalid %s scalar" % name)])
+    return _c2_source_text(child[1])
+
+
+def _pin_local_geometry(lib_symbols, lib_id, pin_number):
+    """(local_nm_yup, orientation) of one library pin.
+
+    A KiCad symbol keeps its pins inside unit sub-symbols such as
+    '(symbol "R_1_1" ...)', so the search descends exactly one nesting level.
+    Missing, duplicated or unreadable geometry is a binding failure, never a
+    default.
+    """
+    symbols = [node for node in _c2_source_children(lib_symbols, "symbol")
+               if len(node) >= 2 and isinstance(node[1], dict)
+               and node[1].get("string") == lib_id]
+    if len(symbols) != 1:
+        raise HostContextError([_host_finding(
+            "library symbol %r resolves to %d definitions, expected exactly one"
+            % (lib_id, len(symbols)))])
+    matches = []
+    for unit in _c2_source_children(symbols[0], "symbol"):
+        for pin in _c2_source_children(unit, "pin"):
+            if _source_scalar_string(pin, "number") == pin_number:
+                matches.append(pin)
+    if len(matches) != 1:
+        raise HostContextError([_host_finding(
+            "pin %s.%s resolves to %d library definitions, expected exactly one"
+            % (lib_id, pin_number, len(matches)))])
+    point, angle = _c2_source_at(matches[0])
+    return point, angle
+
+
+def _anchor_component(observation, proposal, reference):
+    """(lib_id, rotation, mirror, origin_nm) for a label anchor's owner.
+
+    The owner is either a component that already exists in the BEFORE
+    observation or one placed by this very proposal (DC-04's R9 and DC-05's C5
+    are both new).  No match, several matches, a multi-unit part or a second
+    placement of the same reference are all binding failures.
+    """
+    existing = [row for row in observation["components"] if row["reference"] == reference]
+    if len(existing) > 1:
+        raise HostContextError([_host_finding(
+            "reference %r appears %d times in the BEFORE observation"
+            % (reference, len(existing)))])
+    if existing:
+        row = existing[0]
+        if int(row.get("unit", 1)) != 1:
+            raise HostContextError([_host_finding(
+                "reference %r is a multi-unit part; v1 binds unit 1 only" % reference)])
+        return (row["lib_id"], int(row["rotation"]), str(row["mirror"]),
+                tuple(int(value) for value in row["position_nm"]))
+    placements = [op for op in proposal.ops
+                  if op["op"] == "place_component" and op["designator"] == reference]
+    if len(placements) != 1:
+        raise HostContextError([_host_finding(
+            "label anchor %r is neither an existing component nor exactly one "
+            "place_component in this proposal (placements=%d)"
+            % (reference, len(placements)))])
+    op = placements[0]
+    origin = (int(op["x_mil"]) * 25400, int(op["y_mil"]) * 25400)
+    return op["lib_id"], int(op["rotation"]), str(op["mirror"]), origin
+
+
+def build_expected_after(observation, proposal, rule=None, runtime=None):
+    """Pure: the expected engineering semantics this round may create.
+
+    observation is the host native BEFORE read.  Every label geometry is derived
+    live from the observation's library AST plus the owning component's
+    placement -- never from a static policy default and never from a hard-coded
+    angle.  The pinned writer branches on the presence of rotation, so an
+    omitted rotation means derive-from-pin while an explicit 0 stays 0; the two
+    produce different semantics and are reported as such.
+
+    rule and runtime are carried so the policy layer can bind the result, and
+    are deliberately NOT used as a source of geometry: copying a rotation
+    default out of the static policy is exactly the defect this checkpoint
+    exists to prevent.
+    """
+    lib_symbols = _lib_symbols_ast(observation)
+    additions = {"version": 1, "new_components": [], "new_labels": []}
+    roles = set()
+    slot = 0
+    for op in proposal.ops:
+        if op["op"] == "place_component":
+            role = "new:" + op["designator"]
+            if role in roles:
+                raise HostContextError([_host_finding(
+                    "duplicate new component role %r" % role)])
+            roles.add(role)
+            additions["new_components"].append({
+                "role": role, "reference": op["designator"], "lib_id": op["lib_id"],
+                "position_nm": [int(op["x_mil"]) * 25400, int(op["y_mil"]) * 25400],
+                "rotation": int(op["rotation"]), "mirror": str(op["mirror"]),
+                "unit": int(op["unit"]),
+            })
+        elif op["op"] == "add_net_label":
+            reference, separator, pin_number = op["at"].partition(".")
+            if not separator:
+                raise HostContextError([_host_finding(
+                    "label anchor %r is not a REF.PIN token" % op["at"])])
+            lib_id, rot, mirror, origin = _anchor_component(observation, proposal, reference)
+            local, orientation = _pin_local_geometry(lib_symbols, lib_id, pin_number)
+            point = _pinned_akcli_0210_pin_world(local, rot, mirror, origin)
+            if "rotation" in op:
+                angle = int(op["rotation"])
+                source = "explicit"
+            else:
+                angle = _pinned_akcli_0210_label_angle_away(orientation, rot, mirror)
+                source = "derived"
+            additions["new_labels"].append({
+                "slot": slot, "role": "new:label:%d" % slot,
+                "name": op["name"], "anchor": op["at"],
+                "owner": reference, "lib_id": lib_id, "pin_number": pin_number,
+                "point_nm": [point[0], point[1]], "rotation": angle,
+                "rotation_source": source,
+            })
+            slot += 1
+    additions["new_labels"].sort(key=lambda row: row["slot"])
+    return additions

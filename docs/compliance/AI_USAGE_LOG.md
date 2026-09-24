@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 114 条。完整正文在各自条目文件中；本索引只做导航。
+共 115 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -169,3 +169,4 @@
 ## 2026-09-24
 
 - [`AI-20260924-DSH-5214132684B03A9C290A20056371AAB6`](ai-usage/AI-20260924-DSH-5214132684B03A9C290A20056371AAB6.md) — PR1-C1-ROTATION-PRESENCE 实施：presence-preserving parse + schema/合同 erratum
+- [`AI-20260924-DSH-C4920BB580052303A78C150644BAA290`](ai-usage/AI-20260924-DSH-C4920BB580052303A78C150644BAA290.md) — PR1-C5 S1b 第 4 步 checkpoint 1 —— `build_expected_after` + pinned geometry compatibility kernel

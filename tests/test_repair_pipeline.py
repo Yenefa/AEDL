@@ -8,13 +8,16 @@ must block before any write.
 """
 
 import copy
+import json
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 from tests.test_host_toolchain import base_binding
 from tests.test_repair_verification import circuit, mini
+from tools import akcli_adapter as adapter
 from tools import repair_pipeline as pipeline
 
 
@@ -672,6 +675,233 @@ class BinderInvariantTests(unittest.TestCase):
         self.assertEqual(
             pipeline.validate_captured_partitions(captured, self.captured_rule(["one"])),
             captured)
+
+
+class ExpectedAfterGeometryTests(unittest.TestCase):
+    """Checkpoint 1: build_expected_after derives label geometry from bytes.
+
+    The pinned writer branches on the presence of the rotation key, so an omitted
+    rotation (native pin-derived orientation) and an explicit 0 are different
+    expected semantics.  The DC-04/DC-05 literals below are native oracles
+    measured from pinned akcli-kicad 0.21.0, not assumptions; the kernel that
+    reproduces them is a behavioural replica of that toolchain's geometry.
+    """
+
+    FIXTURES = Path(__file__).resolve().parent / "fixtures" / "repair_pr1" / "native"
+
+    def _observation(self, case, components=()):
+        raw = (self.FIXTURES / case / "fault.kicad_sch").read_bytes()
+        return {"version": 1, "source_sha256": pipeline.hash_bytes(raw),
+                "partitions": [], "components": list(components), "pins": [],
+                "source_objects": adapter.source_objects(raw)}
+
+    def _proposal(self, ops):
+        document = {"schema_version": 1, "context_id": "ctx-1",
+                    "target": "design/fault.kicad_sch",
+                    "base_source_sha256": "a" * 64, "decision": "PATCH",
+                    "diagnosis": [],
+                    "oplist": {"protocol_version": 2, "target_format": "kicad",
+                               "ops": ops}}
+        return pipeline.parse_proposal(json.dumps(document).encode("utf-8"))
+
+    def _fixture_ops(self, case):
+        return json.loads((self.FIXTURES / case / "repair_ops.json")
+                          .read_text(encoding="utf-8"))["ops"]
+
+    def _labels(self, additions):
+        return {row["name"]: row for row in additions["new_labels"]}
+
+    def _component(self, reference, lib_id, position_nm, rotation=0, mirror="none"):
+        return {"identity": {"reference": reference, "component_uuid": "uuid-" + reference,
+                             "sheet_path": "/s", "unit": 1},
+                "reference": reference, "lib_id": lib_id,
+                "position_nm": list(position_nm), "rotation": rotation,
+                "mirror": mirror, "unit": 1}
+
+    def _lib_symbols(self, observation):
+        return [obj for obj in observation["source_objects"]
+                if obj["kind"] == "lib_symbols"][0]["descriptor"]["ast"]
+
+    # --- new-component anchors (DC-04 / DC-05 native oracles) --------------
+    def test_dc04_new_component_absent_rotation_derives_native_oracle(self):
+        additions = pipeline.build_expected_after(
+            self._observation("DC-04"), self._proposal(self._fixture_ops("DC-04")))
+        labels = self._labels(additions)
+        self.assertEqual(labels["+3V3"]["point_nm"], [34290000, 254000000])
+        self.assertEqual(labels["+3V3"]["rotation"], 90)
+        self.assertEqual(labels["BOOT"]["point_nm"], [34290000, 261620000])
+        self.assertEqual(labels["BOOT"]["rotation"], 270)
+        self.assertEqual(labels["+3V3"]["rotation_source"], "derived")
+        self.assertEqual([row["role"] for row in additions["new_components"]], ["new:R9"])
+
+    def test_dc04_explicit_zero_keeps_the_point_and_zeroes_the_angle(self):
+        ops = self._fixture_ops("DC-04")
+        for op in ops:
+            if op["op"] == "add_net_label":
+                op["rotation"] = 0
+        labels = self._labels(pipeline.build_expected_after(
+            self._observation("DC-04"), self._proposal(ops)))
+        self.assertEqual(labels["+3V3"]["point_nm"], [34290000, 254000000])
+        self.assertEqual(labels["+3V3"]["rotation"], 0)
+        self.assertEqual(labels["BOOT"]["point_nm"], [34290000, 261620000])
+        self.assertEqual(labels["BOOT"]["rotation"], 0)
+        self.assertEqual(labels["+3V3"]["rotation_source"], "explicit")
+
+    def test_absent_and_explicit_zero_are_different_expected_semantics(self):
+        explicit_ops = self._fixture_ops("DC-04")
+        for op in explicit_ops:
+            if op["op"] == "add_net_label":
+                op["rotation"] = 0
+        absent = self._labels(pipeline.build_expected_after(
+            self._observation("DC-04"), self._proposal(self._fixture_ops("DC-04"))))
+        explicit = self._labels(pipeline.build_expected_after(
+            self._observation("DC-04"), self._proposal(explicit_ops)))
+        self.assertEqual(absent["+3V3"]["point_nm"], explicit["+3V3"]["point_nm"])
+        self.assertNotEqual(absent["+3V3"]["rotation"], explicit["+3V3"]["rotation"])
+        self.assertNotEqual(absent["BOOT"]["rotation"], explicit["BOOT"]["rotation"])
+
+    def test_dc05_new_component_absent_rotation_derives_native_oracle(self):
+        labels = self._labels(pipeline.build_expected_after(
+            self._observation("DC-05"), self._proposal(self._fixture_ops("DC-05"))))
+        self.assertEqual(labels["EN"]["point_nm"], [267970000, 33020000])
+        self.assertEqual(labels["EN"]["rotation"], 90)
+        self.assertEqual(labels["GND"]["point_nm"], [267970000, 40640000])
+        self.assertEqual(labels["GND"]["rotation"], 270)
+
+    # --- existing-component anchors ----------------------------------------
+    def test_existing_component_anchor_derives_point_and_angle(self):
+        observation = self._observation(
+            "DC-04", [self._component("R3", "Device:R", (10_000_000, 20_000_000))])
+        ops = [{"op": "add_net_label", "name": "NET", "at": "R3.1"}]
+        labels = self._labels(pipeline.build_expected_after(observation, self._proposal(ops)))
+        self.assertEqual(labels["NET"]["point_nm"], [10_000_000, 16_190_000])
+        self.assertEqual(labels["NET"]["rotation"], 90)
+        self.assertEqual(labels["NET"]["rotation_source"], "derived")
+
+    def test_existing_component_anchor_explicit_zero_keeps_the_point(self):
+        observation = self._observation(
+            "DC-04", [self._component("R3", "Device:R", (10_000_000, 20_000_000))])
+        ops = [{"op": "add_net_label", "name": "NET", "at": "R3.2", "rotation": 0}]
+        labels = self._labels(pipeline.build_expected_after(observation, self._proposal(ops)))
+        self.assertEqual(labels["NET"]["point_nm"], [10_000_000, 23_810_000])
+        self.assertEqual(labels["NET"]["rotation"], 0)
+        self.assertEqual(labels["NET"]["rotation_source"], "explicit")
+
+    # --- fail-closed negatives ---------------------------------------------
+    def test_an_anchor_with_no_owner_fails_closed(self):
+        ops = [{"op": "add_net_label", "name": "NET", "at": "R7.1"}]
+        with self.assertRaises(pipeline.HostContextError):
+            pipeline.build_expected_after(self._observation("DC-04"), self._proposal(ops))
+
+    def test_two_placements_of_one_reference_fail_closed(self):
+        ops = self._fixture_ops("DC-04")
+        ops.append(copy.deepcopy(ops[0]))
+        with self.assertRaises(pipeline.HostContextError):
+            pipeline.build_expected_after(self._observation("DC-04"), self._proposal(ops))
+
+    def test_a_missing_pin_number_fails_closed(self):
+        observation = self._observation(
+            "DC-04", [self._component("R3", "Device:R", (10_000_000, 20_000_000))])
+        ops = [{"op": "add_net_label", "name": "NET", "at": "R3.9"}]
+        with self.assertRaises(pipeline.HostContextError):
+            pipeline.build_expected_after(observation, self._proposal(ops))
+
+    def test_two_components_with_one_reference_fail_closed(self):
+        observation = self._observation("DC-04", [
+            self._component("R3", "Device:R", (10_000_000, 20_000_000)),
+            self._component("R3", "Device:R", (30_000_000, 40_000_000))])
+        ops = [{"op": "add_net_label", "name": "NET", "at": "R3.1"}]
+        with self.assertRaises(pipeline.HostContextError):
+            pipeline.build_expected_after(observation, self._proposal(ops))
+
+    def test_a_duplicate_library_symbol_fails_closed(self):
+        observation = self._observation("DC-04")
+        root = self._lib_symbols(observation)
+        for symbol in [child for child in root[1:]
+                       if isinstance(child, list) and child[0] == "symbol"]:
+            if symbol[1].get("string") == "Device:R":
+                root.append(copy.deepcopy(symbol))
+        with self.assertRaises(pipeline.HostContextError):
+            pipeline.build_expected_after(observation,
+                                          self._proposal(self._fixture_ops("DC-04")))
+
+    def test_a_duplicate_pin_number_fails_closed(self):
+        observation = self._observation("DC-04")
+        root = self._lib_symbols(observation)
+        for symbol in [child for child in root[1:]
+                       if isinstance(child, list) and child[0] == "symbol"]:
+            if symbol[1].get("string") != "Device:R":
+                continue
+            for unit in [child for child in symbol[1:]
+                         if isinstance(child, list) and child[0] == "symbol"]:
+                pins = [child for child in unit[1:]
+                        if isinstance(child, list) and child[0] == "pin"]
+                if pins:
+                    unit.append(copy.deepcopy(pins[0]))
+        with self.assertRaises(pipeline.HostContextError):
+            pipeline.build_expected_after(observation,
+                                          self._proposal(self._fixture_ops("DC-04")))
+
+    def test_a_missing_lib_symbols_object_fails_closed(self):
+        observation = self._observation("DC-04")
+        observation["source_objects"] = [obj for obj in observation["source_objects"]
+                                         if obj["kind"] != "lib_symbols"]
+        with self.assertRaises(pipeline.HostContextError):
+            pipeline.build_expected_after(observation,
+                                          self._proposal(self._fixture_ops("DC-04")))
+
+
+class PinnedGeometryDifferentialTests(unittest.TestCase):
+    """Differential proof: the C5 kernel equals pinned akcli 0.21.0 geometry.
+
+    Opt-in (AEDL_PR1_NATIVE=1 + AEDL_AKCLI_PYTHON) because the main suite runs on
+    an interpreter without the pinned toolchain installed.  This compares the
+    replica against the real upstream functions over a grid of inputs, which is
+    stronger than reading the upstream source and assuming they agree.  The
+    composed pin-world chain is separately pinned by the DC-04/DC-05 native
+    oracles in ExpectedAfterGeometryTests.
+    """
+
+    def setUp(self):
+        if os.environ.get("AEDL_PR1_NATIVE") != "1":
+            self.skipTest("native differential is not opted in (AEDL_PR1_NATIVE=1)")
+        python = os.environ.get("AEDL_AKCLI_PYTHON")
+        if not python or not os.path.isfile(python):
+            self.fail("AEDL_PR1_NATIVE=1 requires AEDL_AKCLI_PYTHON to point at the pinned interpreter")
+        site = os.path.join(os.path.dirname(os.path.dirname(python)), "Lib", "site-packages")
+        if not os.path.isdir(site):
+            self.fail("could not locate the pinned site-packages next to the interpreter")
+        if site not in sys.path:
+            sys.path.insert(0, site)
+        try:
+            from akcli.geometry import transform as pinned
+        except Exception as exc:  # noqa: BLE001 - the gate must classify, not crash
+            self.fail("the pinned akcli geometry is not importable: %s" % exc)
+        self.pinned = pinned
+
+    def test_transform_point_matches_the_pinned_toolchain(self):
+        points = [(0, 0), (1, -1), (3810000, -3810000), (-25400, 76200), (1234567, -7654321)]
+        origins = [(0, 0), (34290000, 257810000)]
+        for rot in (0, 90, 180, 270):
+            for mirror in ("none", "x", "y"):
+                for point in points:
+                    for origin in origins:
+                        self.assertEqual(
+                            pipeline._pinned_akcli_0210_transform_point(point, rot, mirror, origin),
+                            self.pinned.transform_point(point, rot, mirror, origin),
+                            (point, rot, mirror, origin))
+
+    def test_label_angle_away_matches_the_pinned_toolchain(self):
+        for orientation in (0, 90, 180, 270):
+            for rot in (0, 90, 180, 270):
+                for mirror in ("none", "x", "y"):
+                    self.assertEqual(
+                        pipeline._pinned_akcli_0210_label_angle_away(orientation, rot, mirror),
+                        self.pinned.label_angle_away(orientation, rot, mirror),
+                        (orientation, rot, mirror))
+
+    def test_the_replica_is_bound_to_the_pinned_version(self):
+        self.assertEqual(pipeline.PINNED_AKCLI_VERSION, "0.21.0")
 
 
 if __name__ == "__main__":

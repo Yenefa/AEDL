@@ -663,4 +663,30 @@ infrastructure exception **按各自条款失效**，且 Percy 必须在新 SHA 
   L230 `BoundPolicyResult={status, bound_policy|null, host_patch|null, reasons}`（无真实批准依据即 BLOCKED）；
   另有 C2 erratum §12 的强制义务：`build_expected_after` 必须按同一规则计算 expected label `rotation`
   （省略 → pin 派生；显式 0 → 0）——C1 修复后二者才可区分。
-- **下一步**：实现 S1b 第 4 步（`build_expected_after` / `_bound_policy` / `_host_patch` / `bind_policy`）。
+### Current state — 2026-09-24（S1b 第 4 步 checkpoint 1 完成：`build_expected_after`）
+
+- **Owner 裁决**：APPROVED —— C5 内实现**版本钉死**的纯几何 compatibility kernel（行为等价复刻 akcli 0.21.0），
+  生产路径**不 import akcli**；不扩合同；复用 C2 AST semantics；用 native differential evidence 证明等价。
+- **前置侦察（真 blocker，已拆）**：C4 的 `native_before` observation **不含 pin orientation**
+  （实测 pin row keys = `electrical_type/identity/name/no_connect/partition_key`；`definition_rows` 无角度），
+  而 pinned writer 的 `label_angle_away(pin.orientation, comp.rotation, comp.mirror)` 需要它。
+  解决：pin 几何从 `observation["source_objects"] → lib_symbols AST` 取，复用 C5 已 import 的 `_c2_source_*`。
+  **未改 C4、未扩合同、未自建第二套 parser。**
+- **实现**（`tools/repair_pipeline.py`）：`PINNED_AKCLI_VERSION="0.21.0"` +
+  `_pinned_akcli_0210_transform_point` / `_pinned_akcli_0210_pin_world` / `_pinned_akcli_0210_label_angle_away`；
+  AST 查找 `_lib_symbols_ast` / `_source_scalar_string` / `_pin_local_geometry` / `_anchor_component`；
+  纯函数 `build_expected_after(observation, proposal, rule=None, runtime=None)`。
+- **验收（真实运行）**：`ExpectedAfterGeometryTests` **13 OK**；`tests.test_repair_pipeline` **73 OK (skipped=3)**；
+  全量 `discover` **915 OK (skipped=19)**；`dev_gate` **pass / exit 0**（8/8，scope 2 files in scope）。
+- **native oracle（先测再钉，非假设）**：DC-04 absent → `+3V3 (34.29,254) 90` / `BOOT (34.29,261.62) 270`；
+  DC-05 absent → `EN (267.97,33.02) 90` / `GND (267.97,40.64) 270`；`build_expected_after` 派生值**逐项一致**。
+  explicit 0 → point 不变、rotation=0；absent 与 explicit 0 的 expected semantics **不同**。
+- **fail-closed 负例 6 条**：无 owner anchor / 同 reference 两次 placement / 缺失 pin number /
+  同 reference 两组件 / 重复 lib symbol / 重复 pin number / 缺 lib_symbols → 全部 `HostContextError`，
+  **无 fallback、无“取第一个”**。
+- **differential proof（opt-in）**：`transform_point` 120 组、`label_angle_away` 48 组，与 pinned
+  `akcli.geometry.transform` **逐项一致** → 3 OK。
+- **范围自查**：诊断探针曾写在未授权的 `notes/pr1-c5-s1b/`，`scope_check` 报出后已移出仓库到 host scratch
+  `_c5_s1b_probes/`；仓库内 clean，探针未入库（命令与结果见 AI 台账）。
+- **未做**：checkpoint 2 未开始（Owner 要求 checkpoint 1 认可后再进入）。
+- **下一步**：checkpoint 2 —— `_bound_policy`（只做 policy 专门化，不做授权；消费 `runtime_bindings` 14 项）。
