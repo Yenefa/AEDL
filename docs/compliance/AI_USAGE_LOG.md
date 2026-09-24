@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 111 条。完整正文在各自条目文件中；本索引只做导航。
+共 112 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -162,3 +162,6 @@
 ## 2026-09-20
 
 - [`AI-20260920-DSH-844E4242AFC36315121DAEBC2F0D0310`](ai-usage/AI-20260920-DSH-844E4242AFC36315121DAEBC2F0D0310.md) — PR1-C5-ERRATUM 开卡：C2 new-source-object expected semantics 函数级草案 + BLOCKED_CONTRACT 记录
+## 2026-09-23
+
+- [`AI-20260923-DSH-251F2643C9CD46A196B62569F4FAA63F`](ai-usage/AI-20260923-DSH-251F2643C9CD46A196B62569F4FAA63F.md) — GH-86 C4 add_net_label rotation presence fix + C1 integration probe
