@@ -1665,5 +1665,127 @@ class AuthorizationResolverTests(unittest.TestCase):
             self.assertNotIn(forbidden, code)
 
 
+class ToolchainQualificationTests(unittest.TestCase):
+    """CP4-B: the toolchain identity CP3 carried as metadata is now enforced."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.design = self.root / "cand" / "design"
+        self.design.mkdir(parents=True)
+        (self.design / TARGET).write_bytes(b"(kicad_sch)")
+        self.context = pipeline.validate_host_context(
+            host_context(design_root=str(self.root / "cand")))
+        self.observation = real_lib_symbols_observation()
+        self.rule = add_component_rule()
+        self.proposal = self._proposal(add_component_ops())
+        self.runtime = pipeline.runtime_bindings(
+            self.context, self.proposal, native_before(observation=self.observation),
+            policy_sha(), {self.rule["id"]}, rule=self.rule, removals={})
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _proposal(self, ops):
+        document = {"schema_version": 1, "context_id": CONTEXT, "target": TARGET,
+                    "base_source_sha256": "b" * 64, "decision": "PATCH",
+                    "diagnosis": [], "oplist": {"protocol_version": 2,
+                                                "target_format": "kicad", "ops": ops}}
+        return pipeline.parse_proposal(json.dumps(document).encode("utf-8"))
+
+    def _runtime_with_toolchain(self, mutate):
+        from tools import host_toolchain
+        manifest = json.loads(json.dumps(self.runtime["toolchain_manifest"]))
+        mutate(manifest)
+        return dict(self.runtime, toolchain_manifest=manifest,
+                    toolchain_sha256=None)
+
+    # --- the qualified toolchain passes -------------------------------------
+    def test_the_qualified_toolchain_passes(self):
+        result = pipeline.qualify_toolchain(self.context, self.runtime)
+        self.assertEqual(result["status"], pipeline.TOOLCHAIN_PASS)
+        self.assertEqual(result["findings"], [])
+        self.assertEqual(result["pinned_akcli_version"], pipeline.PINNED_AKCLI_VERSION)
+        self.assertEqual(result["observed"]["akcli_version"],
+                         pipeline.PINNED_AKCLI_VERSION)
+
+    def test_the_pinned_version_is_the_qualified_kernel(self):
+        self.assertEqual(pipeline.PINNED_AKCLI_VERSION, "0.21.0")
+
+    # --- the Owner's core obligation: a different akcli must not qualify ----
+    def test_a_different_akcli_version_is_blocked(self):
+        runtime = self._runtime_with_toolchain(
+            lambda m: m.__setitem__("akcli_version", "0.22.0"))
+        result = pipeline.qualify_toolchain(self.context, runtime)
+        self.assertEqual(result["status"], pipeline.TOOLCHAIN_BLOCKED)
+        self.assertIn("0.22.0", result["findings"][0].detail)
+        self.assertIn("0.21.0", result["findings"][0].detail)
+
+    def test_a_missing_akcli_version_is_blocked_not_assumed(self):
+        # An absent declared version must not be read as "whatever the host has".
+        # The slice digest would also catch this edit, so the assertion targets
+        # the version finding specifically -- otherwise tolerating None here
+        # would go unnoticed.
+        runtime = self._runtime_with_toolchain(
+            lambda m: m.pop("akcli_version", None))
+        result = pipeline.qualify_toolchain(self.context, runtime)
+        self.assertEqual(result["status"], pipeline.TOOLCHAIN_BLOCKED)
+        self.assertTrue(any("qualified version" in finding.detail
+                            for finding in result["findings"]),
+                        "the absent version must be reported in its own right")
+
+    def test_a_slice_from_another_binding_is_blocked(self):
+        # Same declared version, but the slice is not the one this host binding
+        # derives: the artifact digest is what catches it.
+        runtime = self._runtime_with_toolchain(
+            lambda m: m.__setitem__("akcli_artifact_sha256", "9" * 64))
+        result = pipeline.qualify_toolchain(self.context, runtime)
+        self.assertEqual(result["status"], pipeline.TOOLCHAIN_BLOCKED)
+        self.assertTrue(result["findings"])
+
+    def test_an_unqualified_binding_is_blocked(self):
+        # A binding that does not pin the qualified version never reaches a
+        # verdict of PASS; it is BLOCKED with the reason.
+        binding = base_binding()
+        binding["manifest"]["akcli"]["version"] = "0.20.0"
+        context = dict(self.context, toolchain_binding=binding)
+        result = pipeline.qualify_toolchain(context, self.runtime)
+        self.assertEqual(result["status"], pipeline.TOOLCHAIN_BLOCKED)
+        self.assertIn("not qualified", result["findings"][0].detail)
+
+    def test_a_malformed_binding_is_blocked_not_raised(self):
+        context = dict(self.context, toolchain_binding={"manifest": {}})
+        result = pipeline.qualify_toolchain(context, self.runtime)
+        self.assertEqual(result["status"], pipeline.TOOLCHAIN_BLOCKED)
+
+    def test_blocked_and_unknown_are_distinct(self):
+        self.assertEqual((pipeline.TOOLCHAIN_PASS, pipeline.TOOLCHAIN_BLOCKED,
+                          pipeline.TOOLCHAIN_UNKNOWN),
+                         ("PASS", "BLOCKED", "UNKNOWN"))
+        self.assertEqual(len({pipeline.TOOLCHAIN_PASS, pipeline.TOOLCHAIN_BLOCKED,
+                              pipeline.TOOLCHAIN_UNKNOWN}), 3)
+
+    # --- qualification is a precondition, not a substitute for the call ----
+    def test_qualification_never_invokes_the_tool(self):
+        import inspect
+        source = inspect.getsource(pipeline.qualify_toolchain)
+        body = source.split('"""', 2)[-1]
+        code = "\n".join(line.split("#", 1)[0] for line in body.splitlines())
+        for forbidden in ("apply_stage", "read_native", "subprocess", "worker_main",
+                          "os.system", "Popen", "check_output"):
+            self.assertNotIn(forbidden, code)
+
+    def test_qualification_does_not_install_or_resolve_anything(self):
+        import inspect
+        source = inspect.getsource(pipeline.qualify_toolchain)
+        # Code only: the docstring states the prohibition in prose ("it does not
+        # resolve, download or install anything"), so a raw scan would match the
+        # rule that describes it.
+        body = source.split('"""', 2)[-1]
+        code = "\n".join(line.split("#", 1)[0] for line in body.splitlines())
+        for forbidden in ("pip", "install", "download", "urllib", "requests"):
+            self.assertNotIn(forbidden, code)
+
+
 if __name__ == "__main__":
     unittest.main()

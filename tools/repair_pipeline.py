@@ -2942,3 +2942,65 @@ def resolve_authorization(host_context, policy, rule, required_paths=()):
         "rule_id": rule["id"],
         "authorization_refs": list(host_context["authority"]["resolved_authorization_refs"]),
     }
+
+
+# CP4-B states.  TOOLCHAIN_PASS means the host toolchain is the qualified one and
+# may be invoked.  A mismatch is BLOCKED: the host named a different toolchain
+# than the contract qualifies, and "different" is not "unverifiable".
+TOOLCHAIN_PASS = "PASS"
+TOOLCHAIN_BLOCKED = "BLOCKED"
+TOOLCHAIN_UNKNOWN = "UNKNOWN"
+
+
+def qualify_toolchain(host_context, runtime):
+    """Decide whether the host toolchain is the qualified one (CP4-B).
+
+    This is the obligation CP3 only recorded as metadata.  A HostPatch may carry
+    any toolchain slice, so until something checks it, "the toolchain identity
+    travels with the patch" is documentation rather than a control.  Here the
+    slice the transaction will actually use must trace back to THIS host binding
+    and to the pinned akcli, or the qualified kernel must not be invoked.
+
+    Deliberately small: this answers one question with the primitives the frozen
+    toolchain layer already provides (`validate_host_binding`,
+    `derive_akcli_slice`, `toolchain_slice_sha256`).  It is not a version
+    management system, it does not resolve, download or install anything, and it
+    never calls the tool.  Qualification is a precondition for the call, never a
+    substitute for it.
+
+    UNKNOWN is reserved for a state that cannot be established.  A declared
+    mismatch, or a binding that does not pin the qualified version, is BLOCKED --
+    the host said something definite and it was not the qualified thing.
+    """
+    binding = host_context["toolchain_binding"]
+    try:
+        normalized = host_toolchain.validate_host_binding(binding)
+    except host_toolchain.HostBindingError as exc:
+        return {"status": TOOLCHAIN_BLOCKED, "findings": [_host_finding(
+            "the host toolchain binding is not qualified: %s" % exc)],
+            "pinned_akcli_version": PINNED_AKCLI_VERSION, "observed": None}
+    result = {"status": TOOLCHAIN_BLOCKED, "findings": [],
+              "pinned_akcli_version": PINNED_AKCLI_VERSION, "observed": None}
+    result["host_binding_sha256"] = host_toolchain.host_binding_sha256(normalized)
+    slice_manifest = runtime["toolchain_manifest"]
+    result["expected_toolchain_sha256"] = host_toolchain.toolchain_slice_sha256(
+        host_toolchain.derive_akcli_slice(
+            normalized, host_context["candidate_symbol_digest"]))
+    result["observed"] = {
+        "toolchain_sha256": host_toolchain.toolchain_slice_sha256(slice_manifest),
+        "akcli_version": slice_manifest.get("akcli_version"),
+        "akcli_artifact_sha256": slice_manifest.get("akcli_artifact_sha256"),
+    }
+    if result["observed"]["akcli_version"] != PINNED_AKCLI_VERSION:
+        result["findings"].append(_host_finding(
+            "the transaction toolchain declares akcli %r, but the qualified "
+            "version is %s" % (result["observed"]["akcli_version"],
+                               PINNED_AKCLI_VERSION)))
+    if result["observed"]["toolchain_sha256"] != result["expected_toolchain_sha256"]:
+        result["findings"].append(_host_finding(
+            "the transaction toolchain slice is not the slice this host binding "
+            "derives for the before-candidate symbol digest"))
+    if result["findings"]:
+        return result
+    result["status"] = TOOLCHAIN_PASS
+    return result
