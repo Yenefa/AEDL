@@ -286,3 +286,109 @@ Evidence（其元数据冻结结论不受影响）。
 
 
 - 人工核验：PENDING_HUMAN_REVIEW。
+## EVID-20260927-001 — 第一笔真实 AEDL transaction 端到端闭环（DC-04）
+
+- 分类：**DEV_ONLY / 事务闭环记录**。本项是真实 transaction 的执行与验证记录，**不是** `gates/run_gates.py` 正式 Evidence，**不是**制造放行，**不**代表实体板验证。
+- 对应主张：AEDL 可以在受约束流程下，让 AI 提出的 KiCad 修改被**解析 → 预期化 → 策略绑定 → 授权 → 工具链资格化 → 真实执行 → 复验**，并证明**实际结果等于被授权的结果**（`compare_delta` PASS，protected projection 不变）。
+- 模块：`tools/repair_pipeline.py`（C5 CP1–CP4）、`tools/akcli_adapter.py`（C4 apply_stage）、`gates/repair_verification.py`（C2 compare_delta / _align_new）。三者均**只读消费**，本轮**未修改任何产品代码**。
+- 关联：PR #92（C5 CP1–CP4，已 MERGED `81f1b32`）、PR #93（验收入口防回归，Draft）、`tasks/PR1-C5.yaml`、`tasks/EVID-DC04.yaml`；AI-20260924-C4920BB580052303A78C150644BAA290（CP1）、AI-20260924-DB21DC5C630F2970A76BB763BEAE966E（CP2 + correction）、AI-20260927-OPENCODE-47A962EA618E12E790D73A2CFE6D66C5（CP3 / policy_id / CP4-A）。
+
+### 事务身份
+
+| 字段 | 值 |
+| --- | --- |
+| transaction | `aedl-txn-dc04-001` |
+| run / candidate / round / patch | `run-dc04-001` / `cand-dc04-001` / `round-1` / `patch-dc04-001` |
+| context | `ctx-dc04-first-real` |
+| rule | `DC-04`（route `STRICT`） |
+| fixture | `tests/fixtures/repair_pr1/native/DC-04/fault.kicad_sch`（冻结原生，61,911 B） |
+| policy_file_sha256 | `4b336ea9987f9b1668557788e1fa040cd01ec0fd35044534c068a1ddeb47eb73` |
+
+### 工具链身份（全部为本机实测）
+
+| 字段 | 值 | 来源 |
+| --- | --- | --- |
+| akcli 版本 | `0.21.0`（protocol 2） | `akcli --version` 实测 |
+| akcli-kicad sdist sha256 | `949ea4d51497ec5413ec19ad15454972d2c30b58f1447493b7b5d99031330df6` | PyPI 公布的 `akcli_kicad-0.21.0.tar.gz` 摘要 |
+| akcli 安装分发 manifest sha256 | `879d5bed294fe3bddc50e9ca30934b5df41167e2e3662568981fa418a838ae17` | `_distribution_manifest()` 实测 |
+| akcli.exe sha256 | `d71ba8040ed27efc7dcaa19dee5c522c8d78b20f86454e099585ed349964ab69` | 本机文件实测 |
+| worker Python | `3.11.16`（akcli 要求 ≥3.11） | 实测；主仓解释器仍为 3.9.13 |
+| candidate_symbol_digest | `9a0473ffba425f02c434832f427467365f24acfa5332b76b26ddd22bf23db49b` | 由 pinned reader 实测（9 个内嵌库符号） |
+| HostPatch toolchain_sha256 | `5651aff08f8d338d94d69d5d60f6c1e256d26931690a27db0208c5c1ce78d239` | 由 akcli slice 派生 |
+| **kicad-cli 10.0.5** | **未安装** | 本机无 `kicad-cli`；binding 中该 digest 为**合同声明**，非本机实测 |
+
+### Before / After
+
+| | Before | After |
+| --- | --- | --- |
+| source sha256 | `655f585df2e913a8aaade3d8a0a291591ec1e7e275920006a54aec8f75dde7a0` | `2f660180ab180009656da7d47e7b686a75ce42ce9084b610904e2b6d28db99c6` |
+| 字节数 | 61,911 | 62,825 |
+| components / pins | 22 / 84 | **23 / 86**（+R9 及其 2 脚） |
+| source_objects | 114 | 117 |
+| topology sha256 | `f11e5a699deb2bd39c1b680f026fb8810d571a1b02b0fccf9c80b409565857c1` | `0eb8368cfb7e48d0433ba49e49fd99874403b6e54052a6805506f00f17a2360b` |
+| coverage complete | true | true |
+
+### 真实写入回执（`apply_stage`）
+
+- status `APPLIED_TO_STAGE`；`tool.mode=CLI`；`tool.version=0.21.0`；**`exit_code=0`**；**`tool_applied=true`**；`changed=true`；`connectivity_findings=[]`
+- `op_results`（真实 writer 自报）：`place_component R9` → `e51b8115-84f9-5f14-a897-a0902a20c188`（ok）；`add_net_label +3V3` → `155cc533-d7ae-57fb-a42e-00f5671f5985`（ok）；`add_net_label BOOT` → `1eea0d78-e965-5e40-9ce8-e380a8fed01f`（ok）
+- 产物中 R9 物理存在（stage 输出第 2534 行）：`(symbol (lib_id "Device:R") (at 34.29 257.81 0) … (property "Reference" "R9" …))`
+
+### 验证（经 C2 冻结入口 `compare_delta`）
+
+- **authorized_delta_sha256 = actual_delta_sha256 = `69877d3e9a4be9133f0c31684b35952a9f9745596974eb1f1237c6b437ebc681`**
+- `status = PASS`；`missing = []`；`unexpected = []`；`coverage_complete = true`
+- **protected_projection**：expected `d14bca4abdd6b5eff186a9a46b4ebfa8c270af30c784560db6774d157fcb87e8` == actual **同值** → 新增 R9 与两个 label **未破坏**任何受保护的电气内容
+- bound_policy_sha256 `c22a653f6784a24fd0cfd8f8cb590f1b1b7b86885a3f512798e19…`；patch_sha256 `4345e5a97369b5d668e56196a2da649f9e38d29dfe6e965703c2d105aaa47cea`
+
+**C1 rotation presence 在真实链路中被验证**：frozen `repair_ops.json` 的 3 个 op **均不含 `rotation` 键**；CP1 派生 `+3V3 → 90°`、`BOOT → 270°`（`rotation_source: derived`），akcli 实际写出的 `at` 为 `(34.29, 254, 90)` 与 `(34.29, 261.62, 270)`，与 `point_nm [34290000, 254000000]` / `[34290000, 261620000]` **逐值相等**。absent 未被塌缩为显式 0。
+
+### 负控制（证明 PASS 非空洞）
+
+对**真实 after 字节**施加 5 个独立扰动，`compare_delta` 全部拒绝：
+
+| 扰动 | 结果 |
+| --- | --- |
+| `+3V3` rotation 90 → 0 | FAIL（missing 1 / unexpected 1） |
+| `BOOT` rotation 270 → 180 | FAIL（missing 1 / unexpected 1） |
+| R9 沿 x 移动 1 mm | FAIL（missing 1 / unexpected 1） |
+| R9 整件移除 | **UNKNOWN**（fail-closed，绝不为 PASS） |
+| `+3V3` 改名 `+5V5` | FAIL（missing 1 / unexpected 1） |
+
+### 一次被纠正的假阴性（如实记录，不隐去）
+
+首版验证脚本**绕过** C2 冻结入口，自行 `normalize` 后用底层 `observation_delta` 比较摘要，得到 `authorized 69877d3e…` vs `actual a9e87dea…` 的 **FAIL**，并据此得出「缺少 post-write identity reconciliation」。
+
+复核 C2 源码后确认该能力**早已存在**：`_align_new()`（`repair_verification.py:474`）在 `_prepare()`（:561）内被 `compare_delta()`（:660）调用，负责把 writer UUID 对齐到 `new:*` 角色。误判成因是**入口用错**，不是产品缺陷 —— 期望侧携带的是执行前合成身份（`new:R9`），writer 铸造的是执行后物理身份，两者是设计上的两个 identity domain。
+
+- **因此未撰写 ADR**：Owner 裁定该前提为假，不将不存在的架构缺陷固化为决策。
+- 该错误的防回归已落在 PR #93（`PostWriteVerificationContractTests`）：naive 路径与验收入口在**同一对数据**上必须给出不同结论，且 `tools/repair_pipeline.py` 中 `observation_delta()` 的调用函数集合必须精确等于 `{_bound_policy}`。
+- 旧 receipt 中若出现 `delta match=false / a9e87dea…`，那是**被取代的 naive 结果**；以本条 `compare_delta` 结果为准。
+
+### 环境与方法
+
+- 本机：Windows / `core.autocrlf=false` / 主仓 Python 3.9.13 / akcli worker Python 3.11.16 / uv 0.12.18。
+- 关键命令：
+  - `py -3 run_dc04_stage.py <ws>` → bind_policy PASS → `apply_stage` PASS → observe_after PASS
+  - C2 验收入口：`compare_delta(before, after, bound_policy)` → PASS
+  - 负控制脚本 → 5/5 拒绝
+  - `py -3 -m unittest discover -s tests` → **1007 OK (skipped=19)**（PR #93 分支）
+  - `py -3 -m tools.admit --envelope tasks/EVID-DC04.yaml --allow-dirty --allow-drift` → **ADMIT / exit 0**
+  - `py -3 -m tools.dev_gate --envelope tasks/EVID-DC04.yaml --admit-receipt …` → **pass / exit 0**
+- 原始证据路径（仓库外，未进本 PR）：`…\aedl-txn-dc04\transaction-receipt.json`、`stage-receipt.json`、`phase3-evidence.json`、`harness\`。
+
+### 可复现状态
+
+部分可复现。决策层与写入层可在具备 akcli 0.21.0 + Python ≥3.11 的主机上按上述命令重放；`compare_delta` 验证层**无需任何外部工具**（可用 `tests.test_repair_verification.five_case("DC-04")` 确定性复现，含 PR #93 的 naive-vs-acceptance 对照）。
+
+### 已知限制（NOT_RUN / 未完成，逐项列明）
+
+- **CI 双平台矩阵：NOT_RUN —— 被 GitHub Actions 计费阻断。** 失败注释原文：*“The job was not started because recent account payments have failed or your spending limit needs to be increased.”* 同一原因导致 master 上 PR #92 合并、PR #91、PR #89 的 CI 同样为红。**因此本记录不含任何 CI 证据**；本机 `dev_gate` exit 0 仅为单平台（Windows）开发回执，不能替代 ubuntu 侧。
+- **`COMMITTED` 从未声称。** 本轮止于 `APPLIED_TO_STAGE`；commit / snapshot / recheck_reports 阶段尚未实现。
+- **kicad-cli 10.0.5 未安装**：ERC、netlist 导出、render evidence 全部 **NOT_RUN**。binding 中 kicad 的 `executable_sha256` 是合同声明值，**不是**本机实测。
+- **native geometry differential：NOT_RUN**（3 条 skip，需 `AEDL_PR1_NATIVE=1` 与真实 akcli）。CP1 此前已完成 120 组 transform + 48 组 angle differential，但那是历史记录，本轮未重跑。
+- 本记录**不是**制造放行，**不**代表实体板已验证，**不**触碰 M2 物理冻结线。
+
+### 人工核验
+
+PENDING_HUMAN_REVIEW。

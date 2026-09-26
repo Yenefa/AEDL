@@ -1,0 +1,88 @@
+task: EVID-DC04
+
+base:
+  branch: docs/evidence-dc04-first-transaction
+  sha: 81f1b32f820e534ebde2ea2462ca17cf3cbb7b52  # origin/master, PR #92 merge
+    # base.branch is the TASK branch (tools/admit.py:205-209 compares it against
+    # the current branch; precedent tasks/GH-31.yaml).
+
+goal: |
+  Register the FIRST REAL end-to-end AEDL transaction as formal Evidence, so the
+  claim "AEDL can let an AI propose a KiCad change, verify it, authorize it,
+  execute it for real, and prove the result matches what was authorized" is
+  backed by an auditable record rather than a narrative.
+
+  Evidence ID: EVID-20260927-001 (fixture DC-04).
+
+scope: |
+  In scope (documentation only, no code):
+  - docs/evidence/EVIDENCE_INDEX.md: add EVID-20260927-001 with the real digests,
+    receipts, commands, and an explicit statement of what was NOT run.
+  - docs/compliance/THIRD_PARTY_RESOURCES.md: record that akcli-kicad 0.21.0 was
+    located, installed and its license VERIFIED as MIT, replacing TO_VERIFY.
+    Owner ruling 2026-09-27: this must be a SEPARATE compliance commit and must
+    not be mixed into the Evidence commit.
+  - docs/HANDOFF.md, docs/compliance/ai-usage/**: append-only bookkeeping.
+
+  Out of scope, explicitly:
+  - ANY code change. tools/**, gates/**, src/** are forbidden and untouched.
+  - No new Evidence schema, no new evidence_semantics, no change to how Evidence
+    is defined or gated.
+  - No claim that CI ran. CI is currently BLOCKED by a GitHub Actions billing /
+    spending-limit failure and is recorded as NOT_RUN.
+  - No claim of COMMITTED: the round stops at APPLIED. commit/snapshot/recheck are
+    not implemented.
+  - No kicad-cli claim: KiCad 10.0.5 is not installed, so ERC / netlist / render
+    are NOT_RUN.
+
+dependencies: []
+
+allowed_paths:
+  - docs/evidence/EVIDENCE_INDEX.md
+  - docs/compliance/THIRD_PARTY_RESOURCES.md
+  - docs/HANDOFF.md
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/compliance/ai-usage/**
+  - tasks/EVID-DC04.yaml
+
+forbidden_paths:
+  - tools/**
+  - gates/**
+  - src/**
+  - sandbox_runtime/**
+  - delivery/**
+  - notes/m2-*
+  - .github/**
+
+acceptance: |
+  - EVID-20260927-001 records only digests that were actually measured in this
+    session, each with how it was obtained; anything not run is marked NOT_RUN.
+  - The record states plainly that a first harness produced a FALSE "identity
+    delta FAIL" by bypassing compare_delta, that this was a harness error and
+    not a product gap, and that no ADR was written for it (Owner ruling).
+  - The record does NOT claim CI verification, COMMITTED status, or any
+    kicad-cli derived result.
+  - The akcli-kicad license update lands in its own commit, separate from the
+    Evidence commit.
+  - `py -3 -S -m unittest discover -s tests` stays green and
+    `py -3 -m tools.dev_gate --envelope tasks/EVID-DC04.yaml` exits 0.
+
+change_budget:
+  expected_files: 5
+  expected_modules: [docs, tasks]
+  cross_module: false
+  contract_change: false
+  evidence_semantics_change: false   # this task REGISTERS evidence, it does not change what evidence means
+
+exceptions:
+  # Agent cannot self-authorize. Owner instruction 2026-09-27: "② 然后做 P0 Evidence 包"
+  # and "akcli license ... 如果流程要求：单独 compliance commit。不要混进 Evidence。"
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "Yenefa 2026-09-27 会话裁定：执行 P0 Evidence 包（EVID-DC04-FIRST-TRANSACTION）"
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "Yenefa 2026-09-27 会话裁定同上；drift 仅由本任务的 envelope / rebaseline 提交产生"
+
+escalation:
+  owner: Yenefa
