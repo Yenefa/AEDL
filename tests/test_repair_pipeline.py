@@ -1292,11 +1292,12 @@ class HostPatchTests(unittest.TestCase):
                                                 "target_format": "kicad", "ops": ops}}
         return pipeline.parse_proposal(json.dumps(document).encode("utf-8"))
 
-    def _patch(self, runtime=None, bound=None, proposal=None, policy_id="AEDL_PR1_TOPOLOGY_V1"):
+    def _patch(self, runtime=None, bound=None, proposal=None, policy_document=None):
         return pipeline._host_patch(
             self.context, self.proposal if proposal is None else proposal,
             self.runtime if runtime is None else runtime,
-            self.bound if bound is None else bound, policy_id)
+            self.bound if bound is None else bound,
+            policy() if policy_document is None else policy_document)
 
     # --- 1: the canonical digest is deterministic ----------------------------
     def test_the_same_inputs_produce_a_byte_identical_host_patch(self):
@@ -1475,6 +1476,40 @@ class HostPatchTests(unittest.TestCase):
                          set(pipeline._HOST_PATCH_AUTHORITY_FIELDS))
         self.assertNotIn("approvals", patch["authority"])
         self.assertNotIn("approvals", json.dumps(patch["authority"]))
+
+    # --- policy identity: one transaction, one policy identity (CP4-A input) --
+    def test_the_policy_id_comes_from_the_loaded_policy_document(self):
+        patch = self._patch()
+        document = policy()
+        self.assertEqual(patch["policy"]["id"], document["policy_id"])
+        self.assertEqual(patch["policy"]["file_sha256"],
+                         pipeline._policy_document_sha256(document))
+
+    def test_the_policy_id_is_bound_by_the_policy_digest(self):
+        # policy_id lives inside the hashed document bytes, so a digest can only
+        # ever carry one policy identity. That is why CP4 may read the identity
+        # from the document instead of needing a second source.
+        document = policy()
+        self.assertIn(document["policy_id"].encode("utf-8"),
+                      pipeline.canonical_json_bytes(document))
+        self.assertNotEqual(pipeline._policy_document_sha256(document),
+                            pipeline._policy_document_sha256(
+                                dict(document, policy_id="SOME_OTHER_POLICY")))
+
+    def test_a_policy_document_from_another_transaction_fails_closed(self):
+        # A document that is internally valid but is not the one this
+        # transaction bound must not be able to name the policy.
+        foreign = dict(policy())
+        foreign["policy_id"] = "AEDL_PR1_TOPOLOGY_V1_OTHER"
+        with self.assertRaises(pipeline.HostContextError) as caught:
+            self._patch(policy_document=foreign)
+        self.assertIn("does not match this transaction's policy digest",
+                      caught.exception.findings[0].detail)
+
+    def test_a_policy_document_without_an_id_fails_closed(self):
+        stripped = {key: value for key, value in policy().items() if key != "policy_id"}
+        with self.assertRaises(pipeline.HostContextError):
+            self._patch(policy_document=stripped)
 
 
 if __name__ == "__main__":

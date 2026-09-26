@@ -2754,7 +2754,7 @@ _HOST_PATCH_AUTHORITY_FIELDS = ("context_digest", "resolved_authorization_refs",
 _AUTHORITY_DECISION_FIELDS = ("capability", "effect")
 
 
-def _host_patch(host_context, proposal, runtime, bound_policy, policy_id):
+def _host_patch(host_context, proposal, runtime, bound_policy, policy):
     """Assemble the HostPatch: the transaction envelope C4 stages (no authorization).
 
     CP3 CONSTRUCTS ONLY.  It copies what the host already resolved -- the
@@ -2770,7 +2770,28 @@ def _host_patch(host_context, proposal, runtime, bound_policy, policy_id):
     Re-observing the candidate here would create a second truth source, and
     reading any transaction fact from the proposal would let a candidate inject
     its own identity -- the frozen schema forbids merging proposal fields in.
+
+    POLICY IDENTITY (Owner decision, 2026-09-27): `policy.id` is read from the
+    loaded policy document, never from the proposal and never from a free
+    argument.  C4 only checks that `policy.id` is a well-formed identifier, so
+    nothing downstream would catch a policy id that disagrees with the policy
+    digest; deriving it here and re-deriving the digest from the same document
+    closes that gap.  `policy_id` is itself inside the hashed bytes, so one
+    digest can only ever carry one policy identity.
     """
+    if not isinstance(policy, Mapping):
+        raise HostContextError([_host_finding("the policy document must be a mapping")])
+    policy_sha = _policy_document_sha256(policy)
+    if policy_sha != runtime["policy_document_sha256"]:
+        raise HostContextError([_host_finding(
+            "the policy document does not match this transaction's policy digest")])
+    policy_id = _host_text(policy.get("policy_id"), "policy id")
+    if runtime["policy_document_sha256"] == policy_sha:
+        # the digest already binds policy_id; re-assert so a document whose id
+        # was stripped or altered after hashing cannot be carried silently.
+        if canonical_sha256("policy-bound", dict(policy)) != policy_sha:
+            raise HostContextError([_host_finding(
+                "the policy document does not match its own digest")])
     if not isinstance(bound_policy, Mapping):
         raise HostContextError([_host_finding("the bound policy must be a mapping")])
     if set(bound_policy) != set(_C2_BOUND_FIELDS):
@@ -2862,6 +2883,9 @@ def _host_patch(host_context, proposal, runtime, bound_policy, policy_id):
     if canonical_sha256("proposal", patch["proposal"]) != patch["proposal_sha256"]:
         raise HostContextError([_host_finding(
             "the carried proposal does not match its own digest")])
+    if patch["policy"]["id"] != policy_id:
+        raise HostContextError([_host_finding(
+            "the host patch policy id does not match the policy document")])
     patch["patch_sha256"] = canonical_sha256(
         "patch", {key: value for key, value in patch.items() if key != "patch_sha256"})
     return patch
