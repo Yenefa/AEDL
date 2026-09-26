@@ -2,7 +2,14 @@ task: GH-51
 
 base:
   branch: fix/sandbox-test-paths-junction-winerror183
-  sha: 5ade5b8d1090f9c08d5d63f032bc83afa83e56fd  # origin/master @ 2026-09-27 分支创建时的 HEAD
+  sha: bfdd980e39ec7f1e39d1a3e0b1d95ff2a0dd2ee9  # rebaseline (2026-09-27): 实现提交
+    # 基线沿革：5ade5b8d（origin/master @ 分支创建）→ bfdd980e（实现提交 + 验证终态）。
+    # rebaseline 理由与先例：dev_gate 的 binding_check 是 TOCTOU 二次校验，admission
+    # 记录的 head_sha 与 gate 时的 HEAD 必须一致；实现提交后 HEAD 前进 → 必须 re-admit
+    # （CONTROL_PLANE §3 binding_check）。照 tasks/GH-31.yaml amendment 2（44bcea9
+    # 「merge origin/master 后的验证终态 HEAD」）与 tasks/GH-49.yaml（「HEAD 位于本基线
+    # 之上是任务实现提交的正常状态」）的既有做法：把 base.sha 重锚到已验证的实现提交，
+    # 而不是靠反复漂移硬扛。
     # base.branch 写的是本任务分支名而非 master：tools/admit.py:205-209 把
     # envelope.base.branch 与当前分支做等值比较，写 master 会直接 BLOCKED
     # （沿用 tasks/GH-31.yaml 先例）。
@@ -70,7 +77,7 @@ exceptions:
     decision_ref: "Yenefa 2026-09-27 会话指令「你需要的授权都给你……然后开工 51」；脏树来源 = envelope 本体与实现未提交（定稿 run 必然状态），同 GH-31/R1/CPL/W1-Y1 先例"
   allow_drift:
     granted_by: Yenefa
-    decision_ref: "Yenefa 2026-09-27 会话指令「你需要的授权都给你……然后开工 51」；drift 仅由首个 envelope commit 产生，不覆盖任何实现提交（同 GH-31 先例）"
+    decision_ref: "Yenefa 2026-09-27 会话指令「你需要的授权都给你……然后开工 51」；drift 仅由本任务的实现提交与本 envelope 的 rebaseline 提交产生，不覆盖任何第三方或无关提交（同 GH-31 amendment 2 / GH-49 rebaseline 先例）"
 
 escalation:
   owner: Yenefa
