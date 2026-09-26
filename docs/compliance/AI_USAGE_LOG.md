@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 113 条。完整正文在各自条目文件中；本索引只做导航。
+共 114 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -168,3 +168,6 @@
 ## 2026-09-24
 
 - [`AI-20260924-DSH-5214132684B03A9C290A20056371AAB6`](ai-usage/AI-20260924-DSH-5214132684B03A9C290A20056371AAB6.md) — PR1-C1-ROTATION-PRESENCE 实施：presence-preserving parse + schema/合同 erratum
+## 2026-09-26
+
+- [`AI-20260926-OPENCODE-65018682D75AB30F6B0863D636B20EBC`](ai-usage/AI-20260926-OPENCODE-65018682D75AB30F6B0863D636B20EBC.md) — hydra 下载工具实测与 Agent 下载决策准则

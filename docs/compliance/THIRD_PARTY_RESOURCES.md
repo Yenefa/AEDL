@@ -230,3 +230,31 @@
 - 支持工具：KiCad 8.0.9 已在本 PR 的 DEV-only ingest smoke 中**实际调用**（`kicad-cli` 8.0.9，二进制 sha256 `8b7f4a889dc8cfb8c3eae1337d64ade2fe0cf1ec5daa87878cc709904378fb26`；每次 subprocess 前后都对同一 digest 复算，整轮绑定同一个 binary）。不涉及 repair / scorer / 正式实验。akcli 0.21.0 属 held 半，本 PR 不使用。
 - 合规状态：`TO_VERIFY`。
 - 关联：`notes/schgen-dev-chain/TASK.md`、EVID-20260918-001、AI-20260918-DSH-C7396AEC9D7DC7BCD22C6337E56A806E。
+
+## RES-012
+
+- 名称：hydra（多连接 / 多源下载器）
+- 类型：外部 CLI 工具（下载通道）；融合角色：**DEV_ONLY**。不参与任何门禁判定、评分或技术主张。
+- 版本：0.6.1（`hydra --version` 实测，2026-09-26）
+- 来源：上游 `ja7ad/hydra`；本机安装于
+  `C:\Users\<user>\AppData\Local\Programs\Hydra\`（`hydra.exe` 7042048 B 等，2026-09-22 更新），
+  `where.exe hydra` 命中，**不在 PATH 之外的任何仓库内**。
+- License / 授权类型：二进制本体 **GPL-3.0-or-later**（`--version` 输出原文）；其链接的
+  `hydra-core` / `hydra-net` 库为 **MIT OR Apache-2.0**（其 `THIRD-PARTY-NOTICES.md`，未独立复核原文 → `TO_VERIFY`）。
+- 用途：为 Agent 提供"服务端按连接限速"场景下的并行下载通道，并提供 `--checksum` / `--fail` /
+  `--json` 等适合自动化调用的能力。
+- 使用方式：**实测评估后**固化为机器级 OpenCode skill
+  `~/.config/opencode/skills/hydra-download/SKILL.md`（不入本仓库）。评估结论、测试矩阵与
+  复现命令见 `notes/hydra-download-tool-2026-09-26.md`。
+- 是否修改上游源码：否。是否随 AEDL 再分发：**否**（仅机器本地安装；仓库只留报告文本与准则摘要）。
+- 关键许可义务：GPL-3.0-or-later 的再分发义务在本场景**不触发**（不分发二进制）；若未来分发二进制
+  或链接其库，必须重新做许可评估。
+- AEDL 自研边界：Agent 下载决策准则（何时用 / 何时不用 / 失败如何处理）由本项目自行制定并经实测修正；
+  下载调度机制本身属第三方，**不得**表述为 AEDL 自研能力。
+- 实测要点（2026-09-26，10 项功能测试）：`--fail` / `--checksum` / `-c` 续传 / `--preview` 均符合预期；
+  服务端忽略 Range 时**硬失败 exit=1**（不自动退化为单流）；`--json` 失败原因在 stdout JSON 的
+  `ok`/`note` 字段而 stderr 为空。加速幅度 **未证明**（curl vs hydra 各 2 轮交错，数据重叠，
+  标记 `TO_VERIFY`，禁止引用百分比）。
+- 合规状态：`TO_VERIFY`（工具本体许可信息来自其自述输出，未审计源码与 notices 原文）。
+- 关联模块：无（DEV_ONLY；不与任何 `src/`、`gates/`、`tests/` 模块绑定）。
+- 关联 AI Usage：AI-20260926-OPENCODE-65018682D75AB30F6B0863D636B20EBC。
