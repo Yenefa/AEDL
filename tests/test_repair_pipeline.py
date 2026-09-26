@@ -1159,11 +1159,56 @@ class BoundPolicyTests(unittest.TestCase):
             pipeline._bound_policy(observation, rule, runtime, additions,
                                    pipeline.ROUTE_STRICT)
 
+    def test_an_ambiguous_removal_identity_fails_closed(self):
+        # Two removal slots naming the SAME uuid is the reachable ambiguity:
+        # _expected_observation must refuse rather than delete one object twice.
+        # runtime_bindings also rejects it, so the runtime here is built by hand
+        # to exercise the C2 layer's own guard (defence in depth, not a bypass).
+        observation, identity, digest = self._observation_with_removable_label()
+        rule = add_component_rule()
+        rule["object_delta"]["remove"] = [{"slot": "old"}, {"slot": "old_again"}]
+        entry = {"uuid": identity, "kind": "label", "descriptor_sha256": digest}
+        runtime = dict(self.runtime)
+        runtime["object_identity_map"] = {"old": dict(entry),
+                                          "old_again": dict(entry)}
+        additions = pipeline.build_expected_after(observation, self.proposal)
+        with self.assertRaises(pipeline.HostContextError) as caught:
+            pipeline._bound_policy(observation, rule, runtime, additions,
+                                   pipeline.ROUTE_STRICT)
+        self.assertIn("two removal declarations", caught.exception.findings[0].detail)
+
+    def test_a_duplicated_before_object_identity_fails_closed_upstream(self):
+        # The other half of the ambiguity question: two source objects with one
+        # uuid cannot even reach C2, because normalize_observation refuses a
+        # duplicate identity. Documented here so the len(matches) != 1 branch is
+        # not mistaken for the only defence.
+        observation = real_lib_symbols_observation()
+        identity = "bbbbbbbb-1111-2222-3333-444444444444"
+        ast = ["label", {"string": "OLD"},
+               ["at", {"number": "1"}, {"number": "2"}, {"number": "0"}],
+               ["uuid", {"string": identity}]]
+        duplicate = {"identity": identity, "kind": "label",
+                     "semantic_ast_sha256": pipeline.canonical_sha256("protected", ast),
+                     "descriptor": {"ast": ast}}
+        observation["source_objects"].append(dict(duplicate))
+        observation["source_objects"].append(dict(duplicate))
+        with self.assertRaises(Exception) as caught:
+            pipeline.normalize_observation(observation)
+        self.assertIn("duplicate source object", str(caught.exception))
+
     # --- B2: the frozen expected-source sentinel ---------------------------
     def test_the_expected_source_sentinel_is_the_frozen_value(self):
         self.assertEqual(
             pipeline._EXPECTED_SOURCE_SHA256,
             pipeline.canonical_sha256("context", {"role": "EXPECTED_AFTER_NOT_YET_WRITTEN"}))
+
+    def test_the_expected_source_sentinel_is_the_frozen_literal(self):
+        # Pins the exact byte value so a future edit to the role string, the hash
+        # domain or the domain separator cannot silently change the sentinel
+        # while the derived-form assertion above still passes.
+        self.assertEqual(
+            pipeline._EXPECTED_SOURCE_SHA256,
+            "fff0e440cb44467f19b71b82145e64cf86585a37c334c091bb6769f806479771")
 
     # --- B3: operation_constraints is a real specialization -----------------
     def test_operation_constraints_carry_the_canonical_authorized_ops(self):
