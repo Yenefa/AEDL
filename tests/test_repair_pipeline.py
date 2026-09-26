@@ -7,6 +7,7 @@ symbol digest is a host input cross-checked against the native read, and a misma
 must block before any write.
 """
 
+import ast
 import copy
 import json
 import os
@@ -15,8 +16,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from gates import repair_verification as c2
 from tests.test_host_toolchain import base_binding
-from tests.test_repair_verification import circuit, mini
+from tests.test_repair_verification import circuit, five_case, mini
 from tools import akcli_adapter as adapter
 from tools import repair_pipeline as pipeline
 
@@ -2033,6 +2035,166 @@ class BindPolicyOrchestrationTests(unittest.TestCase):
         for forbidden in ("apply_stage", "verify_stage", "commit", "recheck_reports",
                           "write_bytes", "shutil"):
             self.assertNotIn(forbidden, code)
+
+
+class PostWriteVerificationContractTests(unittest.TestCase):
+    """The post-write acceptance boundary.
+
+    The first real DC-04 transaction nearly produced a false architectural
+    finding. A harness compared digests through the low-level observation_delta()
+    and concluded "identity delta FAIL", because an expectation carries pre-write
+    synthetic identities (new:R9) while the writer mints real UUIDs.
+
+    That verdict was wrong, and the reason matters: C2 already reconciles the two
+    identity worlds inside _align_new(), which compare_delta() calls through
+    _prepare(). The capability was never missing -- the wrong ENTRY POINT was used.
+    compare_delta() is the acceptance protocol; observation_delta() is an internal
+    primitive whose output is not an acceptance verdict.
+
+    These tests use the deterministic DC-04 quadruple, so the trap reproduces
+    with no external tool and no network.
+    """
+
+    def setUp(self):
+        self.before, self.expected, self.bound, self.after = five_case("DC-04")
+
+    # --- the acceptance entry point works on a writer-realized repair --------
+    def test_the_frozen_entry_point_accepts_a_writer_realized_repair(self):
+        # `after` carries writer identities (stable UUIDs), `expected` carries the
+        # synthetic new:* roles. This is exactly the state a real write produces.
+        result = c2.compare_delta(self.before, self.after, self.bound)
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["authorized_delta_sha256"],
+                         result["actual_delta_sha256"])
+        self.assertEqual(result["missing"], [])
+        self.assertEqual(result["unexpected"], [])
+        self.assertTrue(result["coverage_complete"])
+
+    def test_the_two_identity_worlds_really_do_differ(self):
+        # Guard the premise of this whole class: if the expectation already used
+        # the writer's identities there would be nothing to reconcile, and the
+        # tests below would be proving nothing.
+        synthetic = {obj["identity"] for obj in self.expected["source_objects"]
+                     if str(obj["identity"]).startswith("new:")}
+        before_ids = {obj["identity"] for obj in self.before["source_objects"]}
+        written = {obj["identity"] for obj in self.after["source_objects"]} - before_ids
+        self.assertTrue(synthetic, "the expectation must carry synthetic identities")
+        self.assertTrue(written, "the realized repair must carry writer identities")
+        self.assertFalse(synthetic & written,
+                         "the two identity worlds must not already coincide")
+
+    # --- the trap, executable ------------------------------------------------
+    def test_a_naive_digest_comparison_is_not_the_acceptance_protocol(self):
+        # Precisely the mistake: normalize both sides by hand, diff them with the
+        # internal primitive, and compare the digest against the authorized one.
+        naive = c2.canonical_sha256("delta", c2.observation_delta(
+            c2.normalize_observation(self.before),
+            c2.normalize_observation(self.after)))
+        authorized = c2.compare_delta(
+            self.before, self.after, self.bound)["authorized_delta_sha256"]
+        self.assertNotEqual(
+            naive, authorized,
+            "the naive path diverged from the acceptance path, which is the whole "
+            "reason compare_delta is the only valid entry; if this ever becomes "
+            "equal, the bypass this test forbids has silently become legitimate")
+        self.assertEqual(
+            naive,
+            c2.canonical_sha256("delta", c2.observation_delta(
+                c2.normalize_observation(self.before),
+                c2.normalize_observation(self.after))),
+            "the naive path must be deterministic so this comparison is meaningful")
+
+    def test_the_naive_path_and_the_acceptance_path_disagree_on_verdict(self):
+        # The naive path reports a difference the acceptance path does not. This
+        # is the false FAIL that would have triggered unnecessary architecture.
+        naive = c2.canonical_sha256("delta", c2.observation_delta(
+            c2.normalize_observation(self.before),
+            c2.normalize_observation(self.after)))
+        accepted = c2.compare_delta(self.before, self.after, self.bound)
+        self.assertEqual(accepted["status"], "PASS")
+        self.assertNotEqual(naive, accepted["authorized_delta_sha256"],
+                            "the naive path must disagree, otherwise the bypass "
+                            "would be undetectable and unenforceable")
+
+    # --- the acceptance PASS is earned, not vacuous --------------------------
+    def test_a_perturbed_label_rotation_is_rejected(self):
+        # A rotation the expectation did not authorize must be refused. This
+        # fixture's new labels sit at rotation 0, so the perturbation moves them
+        # to 90: if label semantics were not enforced, this would pass silently.
+        mutated = copy.deepcopy(self.after)
+        before_ids = {o["identity"] for o in self.before["source_objects"]}
+        target = [obj for obj in mutated["source_objects"]
+                  if obj["kind"] == "label" and obj["identity"] not in before_ids]
+        self.assertTrue(target, "the realized repair must contain a new label")
+        for obj in target:
+            node = [c for c in obj["descriptor"]["ast"]
+                    if isinstance(c, list) and c[0] == "at"][0]
+            node[3] = {"number": "90"}
+            obj["semantic_ast_sha256"] = c2.canonical_sha256(
+                "protected", obj["descriptor"]["ast"])
+        result = c2.compare_delta(self.before, mutated, self.bound)
+        self.assertNotEqual(result["status"], "PASS",
+                            "an unauthorized label rotation must be refused")
+
+    def test_a_perturbed_component_position_is_rejected(self):
+        mutated = copy.deepcopy(self.after)
+        added = [c for c in mutated["components"] if c["reference"] == "R9"]
+        self.assertTrue(added, "the realized repair must contain R9")
+        added[0]["position_nm"] = [added[0]["position_nm"][0] + 25400,
+                                   added[0]["position_nm"][1]]
+        self.assertNotEqual(
+            c2.compare_delta(self.before, mutated, self.bound)["status"], "PASS")
+
+    def test_a_removed_component_is_never_accepted(self):
+        mutated = copy.deepcopy(self.after)
+        mutated["components"] = [c for c in mutated["components"]
+                                 if c["reference"] != "R9"]
+        # Removal is a fail-closed state, not a silent pass and not a verdict.
+        self.assertNotEqual(
+            c2.compare_delta(self.before, mutated, self.bound)["status"], "PASS")
+
+    # --- the boundary in the AEDL layer --------------------------------------
+    def test_c5_computes_a_delta_only_for_the_expected_side(self):
+        """tools/repair_pipeline.py may call observation_delta in ONE place only.
+
+        _bound_policy legitimately diffs before -> expected to produce the
+        authorized delta. That is not an acceptance verdict: it never sees the
+        writer's output. If a post-write acceptance were ever added by hand-rolling
+        observation_delta over before/after, this test fails -- which is the point.
+        """
+        source = Path(pipeline.__file__).read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        call_sites = {}
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for inner in ast.walk(node):
+                if not isinstance(inner, ast.Call):
+                    continue
+                func = inner.func
+                name = getattr(func, "attr", None) or getattr(func, "id", None)
+                if name == "observation_delta":
+                    call_sites.setdefault(node.name, []).append(inner.lineno)
+        self.assertEqual(
+            set(call_sites), {"_bound_policy"},
+            "observation_delta must be called from _bound_policy only; a call in "
+            "%s would be a hand-rolled post-write acceptance that bypasses "
+            "compare_delta" % sorted(set(call_sites) - {"_bound_policy"}))
+
+    def test_c5_does_not_shadow_the_acceptance_entry_point(self):
+        # C5 must not define its own compare_delta / _align_new: a second
+        # implementation of the acceptance protocol is how the two worlds drift.
+        shadowing = [name for name in dir(pipeline)
+                     if name in ("compare_delta", "_align_new", "_canonicalize_new_objects")]
+        self.assertEqual(shadowing, [],
+                         "C5 must consume C2's verification, not redefine it")
+
+    def test_the_acceptance_entry_point_is_c2_owned(self):
+        # Pin the ownership: the acceptance protocol lives in C2 and is read-only
+        # to the orchestration layer.
+        self.assertEqual(c2.compare_delta.__module__, "gates.repair_verification")
+        self.assertNotIn("compare_delta", vars(pipeline),
+                         "C5 must not rebind compare_delta")
 
 
 if __name__ == "__main__":

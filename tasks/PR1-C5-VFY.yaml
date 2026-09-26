@@ -1,0 +1,92 @@
+task: PR1-C5-VFY
+
+base:
+  branch: test/post-write-verification-entry
+  sha: 81f1b32f820e534ebde2ea2462ca17cf3cbb7b52  # origin/master, PR #92 merge
+    # base.branch is the TASK branch, not master: tools/admit.py:205-209 compares
+    # envelope.base.branch against the current branch (precedent: tasks/GH-31.yaml).
+
+goal: |
+  Freeze the architectural boundary that post-write acceptance MUST go through
+  C2's compare_delta(), and nothing else.
+
+  Context: the first real DC-04 transaction nearly produced a false architectural
+  finding. A harness compared digests via the low-level observation_delta() and
+  reported "identity delta FAIL", because the expectation carries pre-write
+  synthetic identities (new:R9) while the writer mints real UUIDs. That verdict
+  was wrong: C2 already reconciles the two inside _align_new(), which compare_delta()
+  calls via _prepare(). The capability was never missing; the wrong ENTRY POINT was
+  used. This task makes that mistake impossible to repeat silently.
+
+scope: |
+  In scope (tests only):
+  - tests/test_repair_pipeline.py: add PostWriteVerificationContractTests pinning
+      (a) compare_delta() accepts a writer-realized repair and its authorized and
+          actual digests are equal;
+      (b) the naive low-level digest comparison is NOT equivalent on the SAME pair
+          (this is the trap, executable);
+      (c) compare_delta() rejects perturbed repairs, so its PASS has teeth;
+      (d) tools/repair_pipeline.py calls observation_delta() in exactly one place,
+          _bound_policy, for the EXPECTED side only -- so no C5 post-write
+          acceptance can bypass the frozen entry.
+
+  Out of scope, explicitly:
+  - ANY product change. tools/repair_pipeline.py and gates/repair_verification.py
+    are READ-ONLY in this task and are listed as forbidden.
+  - No ADR. Owner ruled 2026-09-27 that the reconciliation premise was false and
+    that no decision record should be written for it.
+  - No new verification function, no reconciliation logic, no CP5, no C6.
+  - No schema, policy, authorization or Evidence-system change.
+
+dependencies: []
+
+allowed_paths:
+  - tests/test_repair_pipeline.py
+  - tasks/PR1-C5-VFY.yaml
+  - docs/HANDOFF.md
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/compliance/ai-usage/**
+
+forbidden_paths:
+  - gates/**          # C2 owns compare_delta/_align_new; read-only
+  - tools/repair_pipeline.py   # this task adds a test, it does not change the product
+  - tools/akcli_adapter.py
+  - tools/host_toolchain.py
+  - src/**
+  - sandbox_runtime/**
+  - docs/evidence/**
+  - delivery/**
+  - notes/m2-*
+
+acceptance: |
+  - PostWriteVerificationContractTests passes, and every assertion in it is
+    mutation-verified (each guard fails when the property it pins is removed).
+  - The naive-path test asserts the naive digest DIFFERS from the authorized
+    digest on the same writer-realized pair; if a future change ever made the two
+    paths equivalent, that test fails rather than silently permitting the bypass.
+  - The AST test resolves every observation_delta() call site in
+    tools/repair_pipeline.py to its enclosing function and requires that set to
+    be exactly {_bound_policy}.
+  - tests.test_repair_pipeline and `discover -s tests` both stay green.
+  - py -3 -m tools.dev_gate --envelope tasks/PR1-C5-VFY.yaml exits 0.
+
+change_budget:
+  expected_files: 3
+  expected_modules: [tests, tasks, docs]
+  cross_module: false
+  contract_change: false
+  evidence_semantics_change: false
+
+exceptions:
+  # Agent cannot self-authorize. Owner instruction 2026-09-27: "选 2（推荐）...
+  # 加防回归测试" and "你需要的授权都给你" for this workstream. The dirty tree is
+  # the envelope itself plus the test, which is the normal end state of a run.
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "Yenefa 2026-09-27 会话裁定：选方案 2，增加 compare_delta 作为唯一验收入口的防回归测试"
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "Yenefa 2026-09-27 会话裁定同上；drift 仅由本任务的 envelope / rebaseline 提交产生（同 GH-31 amendment 2 / GH-49 rebaseline 先例）"
+
+escalation:
+  owner: Yenefa
