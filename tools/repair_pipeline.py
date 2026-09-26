@@ -2889,3 +2889,56 @@ def _host_patch(host_context, proposal, runtime, bound_policy, policy):
     patch["patch_sha256"] = canonical_sha256(
         "patch", {key: value for key, value in patch.items() if key != "patch_sha256"})
     return patch
+
+
+# CP4-A result states.  UNKNOWN is not BLOCKED: an authority that cannot be
+# resolved is not a denial, and the two must never be collapsed into one value.
+AUTH_PASS = "PASS"
+AUTH_BLOCKED = "BLOCKED"
+AUTH_UNKNOWN = "UNKNOWN"
+
+
+def resolve_authorization(host_context, policy, rule, required_paths=()):
+    """Resolve whether this transaction is authorized to act (CP4-A).
+
+    The decision is a function of the HOST state only: the policy document, the
+    host-resolved authority block and the run/candidate binding.  The proposal
+    is NOT an input and cannot appear anywhere in it -- an AI-authored candidate
+    that could grant its own permission would make the whole safety loop
+    decorative.  A proposal-supplied `authorized` / `file_write` / `tool_execute`
+    field has no reader here and therefore no effect.
+
+    Denials are BLOCKED (the host said no).  A state that cannot be resolved --
+    a missing or non-identifying authority -- is UNKNOWN, never BLOCKED and
+    never silently allowed.  An exception is never swallowed into a decision:
+    a malformed authority raises, because "we could not tell" is not a verdict.
+    """
+    if not isinstance(rule, Mapping) or not rule.get("id"):
+        raise HostContextError([_host_finding(
+            "authorization needs the bound rule, not an unnamed one")])
+    findings = authority_findings(host_context, required_paths=required_paths)
+    if findings:
+        return {"status": AUTH_BLOCKED, "findings": list(findings),
+                "capabilities": {}}
+    # The approval that authorizes this rule must bind THIS policy document,
+    # THIS run and THIS candidate.  approved_rule_ids applies exactly that
+    # filter, so a grant for another policy or another candidate cannot carry.
+    policy_sha = _policy_document_sha256(policy)
+    if rule["id"] not in approved_rule_ids(host_context, policy_sha):
+        return {"status": AUTH_BLOCKED,
+                "findings": [_finding(
+                    REASON_AUTH_DENIED,
+                    "no host approval binds rule %s to this policy digest, run and "
+                    "candidate" % rule["id"])],
+                "capabilities": {}}
+    effects = {row["capability"]: row["effect"]
+               for row in host_context["authority"]["decisions"]}
+    return {
+        "status": AUTH_PASS,
+        "findings": [],
+        "capabilities": {capability: effects[capability]
+                         for capability in REQUIRED_CAPABILITIES},
+        "policy_sha256": policy_sha,
+        "rule_id": rule["id"],
+        "authorization_refs": list(host_context["authority"]["resolved_authorization_refs"]),
+    }

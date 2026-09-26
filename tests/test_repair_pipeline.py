@@ -1512,5 +1512,158 @@ class HostPatchTests(unittest.TestCase):
             self._patch(policy_document=stripped)
 
 
+class AuthorizationResolverTests(unittest.TestCase):
+    """CP4-A: authorization is resolved from the HOST, never from the proposal."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.design = self.root / "cand" / "design"
+        self.design.mkdir(parents=True)
+        (self.design / TARGET).write_bytes(b"(kicad_sch)")
+        self.context = pipeline.validate_host_context(
+            host_context(design_root=str(self.root / "cand")))
+        self.rule = add_component_rule()
+
+    def _context_approving(self, rule_id=None, run_id=RUN, candidate_id=CAND):
+        """A host context whose approval actually binds this rule/run/candidate."""
+        return pipeline.validate_host_context(host_context(
+            design_root=str(self.root / "cand"),
+            authority=authority(approvals=[
+                {"policy_file_sha256": policy_sha(),
+                 "rule_id": rule_id or self.rule["id"],
+                 "run_id": run_id, "candidate_id": candidate_id,
+                 "paths": [abs_path("cand")]}])))
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _proposal_document(self, **extra):
+        document = {"schema_version": 1, "context_id": CONTEXT, "target": TARGET,
+                    "base_source_sha256": "b" * 64, "decision": "PATCH",
+                    "diagnosis": [], "oplist": {"protocol_version": 2,
+                                                "target_format": "kicad",
+                                                "ops": add_component_ops()}}
+        document.update(extra)
+        return pipeline.parse_proposal(json.dumps(document).encode("utf-8"))
+
+    # --- the Owner-specified negative: a claiming proposal, no host grant ----
+    def test_a_proposal_claiming_authorization_is_blocked(self):
+        # proposal: {authorized: true, file_write: true}; host: no grant.
+        # The forged fields are not merely ignored -- the proposal parser refuses
+        # the document outright, so a candidate cannot even reach the resolver
+        # carrying its own permission claim.
+        with self.assertRaises(pipeline.ProposalInvalidError):
+            self._proposal_document(authorized=True, file_write=True,
+                                    tool_execute=True)
+        result = pipeline.resolve_authorization(self.context, policy(), self.rule)
+        self.assertEqual(result["status"], pipeline.AUTH_BLOCKED)
+        self.assertTrue(result["findings"])
+
+    def test_the_proposal_is_not_an_input_to_the_resolver(self):
+        import inspect
+        signature = inspect.signature(pipeline.resolve_authorization)
+        self.assertNotIn("proposal", signature.parameters)
+
+    def test_a_deny_decision_blocks(self):
+        # TOOL_EXECUTE stays ALLOW and the rule IS approved, so the ONLY reason
+        # left to block is the FILE_WRITE denial. This isolates the decision
+        # check: without it the resolver would pass.
+        context = pipeline.validate_host_context(host_context(
+            design_root=str(self.root / "cand"),
+            authority=authority(
+                decisions=[{"capability": pipeline.CAPABILITY_TOOL_EXECUTE,
+                            "effect": pipeline.EFFECT_ALLOW},
+                           {"capability": pipeline.CAPABILITY_FILE_WRITE,
+                            "effect": "DENY"}],
+                approvals=[{"policy_file_sha256": policy_sha(),
+                            "rule_id": self.rule["id"], "run_id": RUN,
+                            "candidate_id": CAND, "paths": [abs_path("cand")]}])))
+        result = pipeline.resolve_authorization(context, policy(), self.rule)
+        self.assertEqual(result["status"], pipeline.AUTH_BLOCKED)
+        self.assertEqual(len(result["findings"]), 1)
+        self.assertIn(pipeline.CAPABILITY_FILE_WRITE, result["findings"][0].detail)
+
+    def test_a_missing_decision_blocks_and_is_not_silently_allowed(self):
+        # Only FILE_WRITE is decided; TOOL_EXECUTE is absent entirely. A missing
+        # decision is not an allow.
+        context = pipeline.validate_host_context(host_context(
+            design_root=str(self.root / "cand"),
+            authority=authority(
+                decisions=[{"capability": pipeline.CAPABILITY_FILE_WRITE,
+                            "effect": pipeline.EFFECT_ALLOW}],
+                approvals=[{"policy_file_sha256": policy_sha(),
+                            "rule_id": self.rule["id"], "run_id": RUN,
+                            "candidate_id": CAND, "paths": [abs_path("cand")]}])))
+        result = pipeline.resolve_authorization(context, policy(), self.rule)
+        self.assertEqual(result["status"], pipeline.AUTH_BLOCKED)
+        self.assertIn(pipeline.CAPABILITY_TOOL_EXECUTE, result["findings"][0].detail)
+
+    def test_a_resolved_authority_passes_and_reports_the_capabilities(self):
+        context = self._context_approving()
+        result = pipeline.resolve_authorization(context, policy(), self.rule)
+        self.assertEqual(result["status"], pipeline.AUTH_PASS)
+        self.assertEqual(result["capabilities"],
+                         {pipeline.CAPABILITY_TOOL_EXECUTE: pipeline.EFFECT_ALLOW,
+                          pipeline.CAPABILITY_FILE_WRITE: pipeline.EFFECT_ALLOW})
+        self.assertEqual(result["authorization_refs"], ["grant-1"])
+        self.assertEqual(result["policy_sha256"], policy_sha())
+        self.assertEqual(result["rule_id"], self.rule["id"])
+
+    def test_an_unapproved_rule_is_blocked_even_with_a_full_authority(self):
+        # The authority allows the capabilities, but no approval binds this rule
+        # to this policy digest, run and candidate.
+        context = pipeline.validate_host_context(
+            host_context(design_root=str(self.root / "cand"),
+                         authority=authority(approvals=[])))
+        result = pipeline.resolve_authorization(context, policy(), self.rule)
+        self.assertEqual(result["status"], pipeline.AUTH_BLOCKED)
+        self.assertIn("no host approval binds rule", result["findings"][0].detail)
+
+    def test_an_approval_for_another_run_does_not_transfer(self):
+        context = self._context_approving(run_id="run-OTHER")
+        result = pipeline.resolve_authorization(context, policy(), self.rule)
+        self.assertEqual(result["status"], pipeline.AUTH_BLOCKED)
+        self.assertIn("no host approval binds rule", result["findings"][0].detail)
+
+    def test_an_uncovered_write_path_is_blocked(self):
+        context = self._context_approving()
+        result = pipeline.resolve_authorization(
+            context, policy(), self.rule,
+            required_paths=[abs_path("somewhere/else")])
+        self.assertEqual(result["status"], pipeline.AUTH_BLOCKED)
+        self.assertIn("write path", result["findings"][0].detail)
+
+    def test_blocked_and_unknown_are_distinct_states(self):
+        # A denial is BLOCKED; a state that cannot be resolved is UNKNOWN.
+        # Collapsing them would make "we could not tell" indistinguishable from
+        # "the host said no". Asserted on the literal values, because a rename
+        # that merged the two would otherwise pass silently.
+        self.assertEqual((pipeline.AUTH_PASS, pipeline.AUTH_BLOCKED,
+                          pipeline.AUTH_UNKNOWN), ("PASS", "BLOCKED", "UNKNOWN"))
+        self.assertEqual(len({pipeline.AUTH_PASS, pipeline.AUTH_BLOCKED,
+                              pipeline.AUTH_UNKNOWN}), 3)
+
+    def test_an_unnamed_rule_raises_rather_than_returning_a_verdict(self):
+        # An exception must not be swallowed into a decision.
+        with self.assertRaises(pipeline.HostContextError):
+            pipeline.resolve_authorization(self.context, policy(), {})
+
+    def test_a_malformed_authority_raises_rather_than_returning_a_verdict(self):
+        with self.assertRaises(pipeline.HostContextError):
+            pipeline.validate_host_context(
+                host_context(design_root=str(self.root / "cand"),
+                             authority=authority(decisions=[{"capability": "NOT_A_CAP",
+                                                             "effect": "ALLOW"}])))
+
+    def test_the_resolver_does_not_reach_for_a_grant_ledger(self):
+        import inspect
+        source = inspect.getsource(pipeline.resolve_authorization)
+        body = source.split('"""', 2)[-1]
+        code = "\n".join(line.split("#", 1)[0] for line in body.splitlines())
+        for forbidden in ("proposal", "ledger", "open(", "requests", "urlopen"):
+            self.assertNotIn(forbidden, code)
+
+
 if __name__ == "__main__":
     unittest.main()
