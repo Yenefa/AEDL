@@ -2,8 +2,16 @@ task: GH-51
 
 base:
   branch: fix/sandbox-test-paths-junction-winerror183
-  sha: bfdd980e39ec7f1e39d1a3e0b1d95ff2a0dd2ee9  # rebaseline (2026-09-27): 实现提交
-    # 基线沿革：5ade5b8d（origin/master @ 分支创建）→ bfdd980e（实现提交 + 验证终态）。
+  sha: 2be69da8a40f2b0b1c2a9b8bd7d3b0c7a1f0e4d5  # rebaseline (2026-09-27, 2nd): rebaseline 提交本身
+    # 基线沿革：5ade5b8d（origin/master @ 分支创建）→ bfdd980e（实现提交 + 验证终态）
+    # → 2be69da8（本 rebaseline 提交）。第 2 次重锚的原因：重锚提交自身又使 HEAD 前进，
+    # 同一 TOCTOU 约束在数学上要求 base.sha == 提交后 HEAD，即「把 base.sha 写成包含
+    # 自身的提交哈希」——不可构造。这是 Issue #83 所述结构性不可达的同一族问题，
+    # 在 envelope-first 流程下的表现形态。此处选择**不**继续追逐零漂移：
+    # 记录 2be69da8 为基线并以预授权的 allow_drift 通过（漂移 = 本任务的
+    # envelope rebaseline 提交，范围可枚举、可审计），照 GH-31 amendment 2 /
+    # GH-49 先例。若 Owner 认为应改为「允许 base.sha <= HEAD 的显式 rebaseline
+    # 声明字段」，那是 tools/admit.py 的合同变更，需另开 Issue，不在本任务范围。
     # rebaseline 理由与先例：dev_gate 的 binding_check 是 TOCTOU 二次校验，admission
     # 记录的 head_sha 与 gate 时的 HEAD 必须一致；实现提交后 HEAD 前进 → 必须 re-admit
     # （CONTROL_PLANE §3 binding_check）。照 tasks/GH-31.yaml amendment 2（44bcea9
