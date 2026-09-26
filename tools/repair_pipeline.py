@@ -2737,3 +2737,131 @@ def _bound_policy(observation, rule, runtime, additions, route):
         raise HostContextError([_host_finding(
             "the specialized policy does not match the frozen bound-policy field set")])
     return bound
+
+
+# The frozen HostPatch field set.  Mirrors src/repair/patch_schema_v1.json
+# #/$defs/HostPatch and tools/akcli_adapter.py::_HOST_PATCH_FIELDS; it is restated
+# here so CP3 can prove the shape it assembles before C4 ever sees it.  The
+# schema itself stays read-only (C5 must not edit the contract it implements).
+_HOST_PATCH_FIELDS = frozenset({
+    "schema_version", "run_id", "candidate_id", "round_id", "patch_id", "context_id",
+    "proposal", "proposal_sha256", "target", "base", "policy", "authority",
+    "toolchain_manifest", "toolchain_sha256", "route", "bound_policy", "patch_sha256",
+})
+# The schema's three-field authority view, and the decision row it carries.
+_HOST_PATCH_AUTHORITY_FIELDS = ("context_digest", "resolved_authorization_refs",
+                                "decisions")
+_AUTHORITY_DECISION_FIELDS = ("capability", "effect")
+
+
+def _host_patch(host_context, proposal, runtime, bound_policy, policy_id):
+    """Assemble the HostPatch: the transaction envelope C4 stages (no authorization).
+
+    CP3 CONSTRUCTS ONLY.  It copies what the host already resolved -- the
+    transaction identity, the candidate byte manifest, the toolchain slice and
+    the authority context -- binds the CP2 BoundPolicy to it, and stops.  It
+    never evaluates a policy port, never looks up a grant, never consults a
+    ledger and never decides whether a stage may run: `authority` is carried
+    from the host-resolved runtime bindings, so the decision stays exactly where
+    the host already made it, and the toolchain identity enters as metadata that
+    CP4 re-derives and cross-checks before it may act.
+
+    The runtime bindings are the only runtime-value source, exactly as in CP2.
+    Re-observing the candidate here would create a second truth source, and
+    reading any transaction fact from the proposal would let a candidate inject
+    its own identity -- the frozen schema forbids merging proposal fields in.
+    """
+    if not isinstance(bound_policy, Mapping):
+        raise HostContextError([_host_finding("the bound policy must be a mapping")])
+    if set(bound_policy) != set(_C2_BOUND_FIELDS):
+        raise HostContextError([_host_finding(
+            "the host patch may only carry a bound policy from the frozen field set")])
+    unknown = sorted(set(runtime) - set(_RUNTIME_BINDING_FIELDS))
+    missing = sorted(field for field in _RUNTIME_BINDING_FIELDS if field not in runtime)
+    if unknown or missing:
+        raise HostContextError([_host_finding(
+            "the host patch runtime bindings are not the frozen set "
+            "(unknown=%s missing=%s)" % (", ".join(unknown) or "none",
+                                         ", ".join(missing) or "none"))])
+    # The BoundPolicy must be THIS transaction's, not a foreign or stale one.
+    for label, actual, expected in (
+            ("policy digest", bound_policy["policy_file_sha256"],
+             runtime["policy_document_sha256"]),
+            ("authority context", bound_policy["authority_context_digest"],
+             runtime["authority_context"]["context_digest"]),
+            ("before topology", bound_policy["before_topology_sha256"],
+             runtime["base_topology_sha256"])):
+        if actual != expected:
+            raise HostContextError([_host_finding(
+                "the bound policy does not carry this transaction's %s" % label)])
+    if bound_policy["rule_id"] not in runtime["approved_rule_ids"]:
+        raise HostContextError([_host_finding(
+            "the bound rule %r is not among the host-approved rule ids"
+            % bound_policy["rule_id"])])
+    # The authority block is HOST-resolved and carried, never decided here.
+    # `_host_closed` proves no extra capability or decision could ride along; the
+    # host's `approvals` stay in the host context and are deliberately NOT
+    # re-exported, so the patch cannot be read as carrying an approval surface.
+    authority = _host_closed(runtime["authority_context"],
+                             _AUTHORITY_FIELDS, "host authority")
+    references = authority["resolved_authorization_refs"]
+    if not isinstance(references, list) or not references or any(
+            not isinstance(item, str) or not item for item in references):
+        raise HostContextError([_host_finding(
+            "the host authority carries no resolved authorization reference")])
+    decisions = authority["decisions"]
+    if not isinstance(decisions, list) or any(
+            not isinstance(row, Mapping) for row in decisions):
+        raise HostContextError([_host_finding(
+            "the host authority decisions must be a list of mappings")])
+    for row in decisions:
+        _host_closed(row, _AUTHORITY_DECISION_FIELDS, "authority decision")
+    authority_view = {
+        "context_digest": authority["context_digest"],
+        "resolved_authorization_refs": list(references),
+        "decisions": [{key: row[key] for key in _AUTHORITY_DECISION_FIELDS}
+                      for row in decisions],
+    }
+    toolchain = runtime["toolchain_manifest"]
+    patch = {
+        "schema_version": SCHEMA_VERSION,
+        "run_id": runtime["run_id"],
+        "candidate_id": runtime["candidate_id"],
+        "round_id": runtime["round_id"],
+        "patch_id": runtime["patch_id"],
+        "context_id": host_context["context_id"],
+        "proposal": proposal.to_dict(),
+        "proposal_sha256": runtime["proposal_sha256"],
+        "target": host_context["target"],
+        "base": {"files": runtime["base_file_manifest"],
+                 "topology_sha256": runtime["base_topology_sha256"]},
+        "policy": {
+            "id": policy_id,
+            "file_sha256": runtime["policy_document_sha256"],
+            "bound_rule_id": bound_policy["rule_id"],
+            "bound_policy_sha256": canonical_sha256("policy-bound", bound_policy),
+        },
+        "authority": authority_view,
+        "toolchain_manifest": toolchain,
+        "toolchain_sha256": host_toolchain.toolchain_slice_sha256(toolchain),
+        "route": bound_policy["route"],
+        "bound_policy": bound_policy,
+    }
+    if set(patch) | {"patch_sha256"} != set(_HOST_PATCH_FIELDS):
+        raise HostContextError([_host_finding(
+            "the assembled host patch does not match the frozen field set")])
+    if set(patch["authority"]) != set(_HOST_PATCH_AUTHORITY_FIELDS):
+        raise HostContextError([_host_finding(
+            "the host patch authority view does not match the frozen field set")])
+    if patch["proposal"]["context_id"] != patch["context_id"]:
+        raise HostContextError([_host_finding(
+            "the proposal context does not match the host context")])
+    if patch["proposal"]["target"] != patch["target"]:
+        raise HostContextError([_host_finding(
+            "the proposal target does not match the host target")])
+    if canonical_sha256("proposal", patch["proposal"]) != patch["proposal_sha256"]:
+        raise HostContextError([_host_finding(
+            "the carried proposal does not match its own digest")])
+    patch["patch_sha256"] = canonical_sha256(
+        "patch", {key: value for key, value in patch.items() if key != "patch_sha256"})
+    return patch

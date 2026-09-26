@@ -1260,5 +1260,222 @@ class BoundPolicyTests(unittest.TestCase):
             pipeline.protected_projection_sha256(self.observation, bound))
 
 
+class HostPatchTests(unittest.TestCase):
+    """Checkpoint 3: _host_patch assembles the transaction envelope, authorizes nothing."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.design = self.root / "cand" / "design"
+        self.design.mkdir(parents=True)
+        (self.design / TARGET).write_bytes(b"(kicad_sch)")
+        self.context = pipeline.validate_host_context(
+            host_context(design_root=str(self.root / "cand")))
+        self.observation = real_lib_symbols_observation()
+        self.rule = add_component_rule()
+        self.proposal = self._proposal(add_component_ops())
+        self.additions = pipeline.build_expected_after(self.observation, self.proposal)
+        self.runtime = pipeline.runtime_bindings(
+            self.context, self.proposal, native_before(observation=self.observation),
+            policy_sha(), {self.rule["id"]}, rule=self.rule, removals={})
+        self.bound = pipeline._bound_policy(
+            self.observation, self.rule, self.runtime, self.additions,
+            pipeline.ROUTE_STRICT)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _proposal(self, ops):
+        document = {"schema_version": 1, "context_id": CONTEXT, "target": TARGET,
+                    "base_source_sha256": "b" * 64, "decision": "PATCH",
+                    "diagnosis": [], "oplist": {"protocol_version": 2,
+                                                "target_format": "kicad", "ops": ops}}
+        return pipeline.parse_proposal(json.dumps(document).encode("utf-8"))
+
+    def _patch(self, runtime=None, bound=None, proposal=None, policy_id="AEDL_PR1_TOPOLOGY_V1"):
+        return pipeline._host_patch(
+            self.context, self.proposal if proposal is None else proposal,
+            self.runtime if runtime is None else runtime,
+            self.bound if bound is None else bound, policy_id)
+
+    # --- 1: the canonical digest is deterministic ----------------------------
+    def test_the_same_inputs_produce_a_byte_identical_host_patch(self):
+        first = pipeline.canonical_json_bytes(self._patch())
+        second = pipeline.canonical_json_bytes(self._patch())
+        self.assertEqual(first, second)
+
+    def test_the_patch_digest_covers_every_field_but_itself(self):
+        patch = self._patch()
+        body = {key: value for key, value in patch.items() if key != "patch_sha256"}
+        self.assertEqual(patch["patch_sha256"], pipeline.canonical_sha256("patch", body))
+        tampered = dict(patch, run_id="run-OTHER")
+        self.assertNotEqual(patch["patch_sha256"],
+                            pipeline.canonical_sha256(
+                                "patch", {k: v for k, v in tampered.items()
+                                          if k != "patch_sha256"}))
+
+    def test_the_patch_field_set_matches_the_frozen_schema(self):
+        # The three independent statements of the contract must agree: the frozen
+        # schema, C4's reader, and what CP3 assembles.  Drift here would mean C5
+        # emits a patch C4 silently refuses.
+        import json as _json
+        schema = _json.loads(
+            (Path(pipeline.PATCH_SCHEMA_PATH)).read_text(encoding="utf-8"))
+        definition = schema["$defs"]["HostPatch"]
+        self.assertEqual(set(patch_fields := set(self._patch())),
+                         set(definition["required"]))
+        self.assertEqual(set(patch_fields), set(definition["properties"]))
+        self.assertEqual(set(patch_fields), set(adapter._HOST_PATCH_FIELDS))
+        self.assertIs(definition.get("additionalProperties"), False)
+
+    # --- 2: the transaction identity is complete and host-derived ------------
+    def test_the_transaction_identity_is_complete(self):
+        patch = self._patch()
+        for field in ("run_id", "candidate_id", "round_id", "patch_id", "context_id"):
+            self.assertIn(patch[field], (RUN, CAND, ROUND, PATCH, CONTEXT))
+        self.assertEqual(patch["run_id"], self.runtime["run_id"])
+        self.assertEqual(patch["candidate_id"], self.runtime["candidate_id"])
+        self.assertEqual(patch["round_id"], self.runtime["round_id"])
+        self.assertEqual(patch["patch_id"], self.runtime["patch_id"])
+        self.assertEqual(patch["context_id"], self.context["context_id"])
+
+    def test_the_proposal_cannot_inject_its_own_identity(self):
+        # The proposal is a candidate: the identity comes from the host runtime.
+        # A proposal whose context/target disagree is refused, not repaired.
+        other = self._proposal(add_component_ops())
+        document = {"schema_version": 1, "context_id": "ctx-OTHER", "target": TARGET,
+                    "base_source_sha256": "b" * 64, "decision": "PATCH",
+                    "diagnosis": [], "oplist": {"protocol_version": 2,
+                                                "target_format": "kicad",
+                                                "ops": add_component_ops()}}
+        foreign = pipeline.parse_proposal(json.dumps(document).encode("utf-8"))
+        with self.assertRaises(pipeline.HostContextError) as caught:
+            self._patch(proposal=foreign)
+        self.assertIn("context", caught.exception.findings[0].detail)
+        self.assertIsNotNone(other)
+
+    # --- 3: the bound policy digest binds THIS bound policy -----------------
+    def test_the_bound_policy_digest_binds_the_exact_bound_policy(self):
+        patch = self._patch()
+        # "policy-bound" is the frozen digest kind the C3/C4 consumer already
+        # uses for a bound policy (repair_verification), not a new one: an
+        # invented kind would still be accepted by canonical_sha256 only if it
+        # were added to DIGEST_KINDS, and would then disagree with C4.
+        self.assertEqual(patch["policy"]["bound_policy_sha256"],
+                         pipeline.canonical_sha256("policy-bound", patch["bound_policy"]))
+        self.assertEqual(patch["policy"]["bound_rule_id"], self.bound["rule_id"])
+        self.assertEqual(patch["bound_policy"], self.bound)
+
+    def test_the_digest_kind_is_one_the_contract_already_freezes(self):
+        from gates.repair_verification import DIGEST_KINDS
+        for kind in ("policy-bound", "proposal", "patch"):
+            self.assertIn(kind, DIGEST_KINDS)
+
+    def test_a_bound_policy_from_another_transaction_fails_closed(self):
+        foreign = dict(self.bound, policy_file_sha256="9" * 64)
+        with self.assertRaises(pipeline.HostContextError) as caught:
+            self._patch(bound=foreign)
+        self.assertIn("policy digest", caught.exception.findings[0].detail)
+
+    def test_a_bound_policy_for_an_unapproved_rule_fails_closed(self):
+        foreign = dict(self.bound, rule_id="E9")
+        with self.assertRaises(pipeline.HostContextError) as caught:
+            self._patch(bound=foreign)
+        self.assertIn("not among the host-approved", caught.exception.findings[0].detail)
+
+    # --- 4: expected_after is bound into the patch -------------------------
+    def test_the_expected_after_is_carried_and_bounded(self):
+        patch = self._patch()
+        expected = patch["bound_policy"]["expected_after"]
+        self.assertEqual(expected, self.bound["expected_after"])
+        self.assertEqual(expected["source_sha256"], pipeline._EXPECTED_SOURCE_SHA256)
+        # The expectation still answers C2 on its own, inside the patch.
+        normalized = pipeline.normalize_observation(expected, expected=True)
+        self.assertTrue(normalized["coverage"]["complete"])
+
+    # --- 5: host context comes from the host, never from the proposal -------
+    def test_the_base_manifest_and_topology_come_from_the_runtime(self):
+        patch = self._patch()
+        self.assertEqual(patch["base"]["files"], self.runtime["base_file_manifest"])
+        self.assertEqual(patch["base"]["topology_sha256"],
+                         self.runtime["base_topology_sha256"])
+        self.assertEqual(patch["proposal_sha256"], self.runtime["proposal_sha256"])
+        self.assertEqual(patch["policy"]["file_sha256"],
+                         self.runtime["policy_document_sha256"])
+
+    def test_incomplete_runtime_bindings_fail_closed(self):
+        broken = dict(self.runtime)
+        broken.pop("base_file_manifest")
+        with self.assertRaises(pipeline.HostContextError) as caught:
+            self._patch(runtime=broken)
+        self.assertIn("frozen set", caught.exception.findings[0].detail)
+
+    def test_the_authority_without_a_resolved_reference_fails_closed(self):
+        runtime = dict(self.runtime)
+        runtime["authority_context"] = authority(resolved_authorization_refs=[])
+        with self.assertRaises(pipeline.HostContextError) as caught:
+            self._patch(runtime=runtime)
+        self.assertIn("no resolved authorization", caught.exception.findings[0].detail)
+
+    # --- 6: the fake authorization fields are refused ------------------------
+    def test_a_forged_capability_decision_is_refused(self):
+        # A decision row carrying anything beyond {capability, effect} -- e.g. an
+        # `authorized` flag or a `file_write` switch -- is not a decision this
+        # contract knows how to carry.
+        runtime = dict(self.runtime)
+        runtime["authority_context"] = authority(decisions=[
+            {"capability": pipeline.CAPABILITY_FILE_WRITE,
+             "effect": pipeline.EFFECT_ALLOW, "authorized": True}])
+        with self.assertRaises(pipeline.HostContextError):
+            self._patch(runtime=runtime)
+
+    def test_forged_fields_on_the_patch_itself_are_refused_by_the_frozen_reader(self):
+        # CP3 cannot emit them (the field set is closed). Prove the C4 reader also
+        # refuses, so a hand-built patch cannot smuggle an authorization in.
+        # C4 reports a refused stage as a BLOCKED result, not an exception, so the
+        # rejection is asserted on the receipt -- the artifact a caller sees.
+        patch = self._patch()
+        for forged in ({"authorized": True}, {"file_write": True}, {"tool_execute": True}):
+            name, value = next(iter(forged.items()))
+            result = adapter.apply_stage(
+                {"host_patch": dict(patch, **forged), "txn_id": "TXN-1",
+                 "stage_root": str(self.root), "stage_target": TARGET,
+                 "oplist_path": str(self.root / "ops.json"),
+                 "native_artifact_root": str(self.root / "art")})
+            self.assertEqual(result["status"], "BLOCKED", forged)
+            detail = " ".join(reason["detail"] for reason in result["reasons"])
+            self.assertIn("unknown fields", detail)
+            self.assertIn(name, detail)
+
+    # --- 7: the toolchain identity is metadata, never a decision ------------
+    def test_the_toolchain_identity_is_carried_as_metadata(self):
+        patch = self._patch()
+        self.assertEqual(patch["toolchain_manifest"], self.runtime["toolchain_manifest"])
+        from tools import host_toolchain
+        self.assertEqual(patch["toolchain_sha256"],
+                         host_toolchain.toolchain_slice_sha256(patch["toolchain_manifest"]))
+
+    def test_the_host_patch_contains_no_authorization_call(self):
+        import inspect
+        source = inspect.getsource(pipeline._host_patch)
+        # Scan executable code only. The docstring states the prohibition in
+        # prose and a comment explains it, so a raw substring scan would match
+        # the very rule it is meant to enforce. Strip the docstring, then the
+        # comments, and keep only code.
+        body = source.split('"""', 2)[-1]
+        code = "\n".join(line.split("#", 1)[0] for line in body.splitlines())
+        for forbidden in ("PolicyPort", "evaluate", "EFFECT_ALLOW", "CAPABILITY_",
+                          "authorized=True", "file_write", "tool_execute"):
+            self.assertNotIn(forbidden, code)
+
+    def test_the_authority_view_does_not_re_export_the_host_approvals(self):
+        # CP3 carries the host's decision, not the host's approval surface.
+        patch = self._patch()
+        self.assertEqual(set(patch["authority"]),
+                         set(pipeline._HOST_PATCH_AUTHORITY_FIELDS))
+        self.assertNotIn("approvals", patch["authority"])
+        self.assertNotIn("approvals", json.dumps(patch["authority"]))
+
+
 if __name__ == "__main__":
     unittest.main()
