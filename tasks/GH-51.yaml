@@ -2,7 +2,7 @@ task: GH-51
 
 base:
   branch: fix/sandbox-test-paths-junction-winerror183
-  sha: 2be69da8a40f2b0b1c2a9b8bd7d3b0c7a1f0e4d5  # rebaseline (2026-09-27, 2nd): rebaseline 提交本身
+  sha: 2be69da8a40dbfd8d4318d0a220d6bfc384512da  # rebaseline (2026-09-27, 2nd): rebaseline 提交本身
     # 基线沿革：5ade5b8d（origin/master @ 分支创建）→ bfdd980e（实现提交 + 验证终态）
     # → 2be69da8（本 rebaseline 提交）。第 2 次重锚的原因：重锚提交自身又使 HEAD 前进，
     # 同一 TOCTOU 约束在数学上要求 base.sha == 提交后 HEAD，即「把 base.sha 写成包含
