@@ -1787,5 +1787,253 @@ class ToolchainQualificationTests(unittest.TestCase):
             self.assertNotIn(forbidden, code)
 
 
+class BindPolicyOrchestrationTests(unittest.TestCase):
+    """CP4-C: compose the proven stages into one BoundPolicyResult.
+
+    Driven by the REAL frozen DC-04 native fixture, not a synthetic rule:
+    select_rule matches against the loaded policy, so an invented rule id would
+    never be selected and the composition would not be exercised at all.
+    """
+
+    FIXTURES = Path(__file__).resolve().parent / "fixtures" / "repair_pr1" / "native"
+    CASE = "DC-04"
+    RULE_ID = "DC-04"
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.design = self.root / "cand" / "design"
+        self.design.mkdir(parents=True)
+        # design_root is <cand>/design and the target is relative to it.
+        (self.design / TARGET).write_bytes(self._raw())
+        self.observation = self._observation()
+        self.proposal = self._proposal()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _raw(self):
+        return (self.FIXTURES / self.CASE / "fault.kicad_sch").read_bytes()
+
+    def _observation(self):
+        # The real DC-04 BEFORE observation, derived from the frozen native
+        # fixture with C2's own observe_source -- 22 components, 84 pins, 114
+        # source objects, real library/pin digests, coverage complete, and every
+        # pin DC-04 names (SW2.1/2, U1.8, R3.1/2) present.
+        #
+        # This is fixture construction from frozen bytes, NOT a native read: the
+        # pinned akcli reader is not installed on this host, so no native parity
+        # is claimed here. The native differential tests remain the authority for
+        # that and stay skipped (AEDL_PR1_NATIVE=1).
+        observation = pipeline._c2_observe_source(self._raw())
+        have = {"%s.%s" % (row["identity"]["reference"], row["identity"]["number"])
+                for row in observation["pins"]}
+        for required in ("SW2.1", "SW2.2", "U1.8", "R3.1", "R3.2"):
+            if required not in have:
+                raise AssertionError("the DC-04 fixture no longer carries %s" % required)
+        return observation
+
+    def test_the_fixture_carries_everything_dc04_needs(self):
+        observation = self._observation()
+        self.assertTrue(observation["coverage"]["complete"])
+        self.assertTrue(any(obj["kind"] == "lib_symbols"
+                            for obj in observation["source_objects"]))
+        self.assertGreaterEqual(len(observation["components"]), 8)
+        # every component carries the real library digests CP2 requires
+        for component in observation["components"]:
+            self.assertEqual(len(component["lib_definition_sha256"]), 64)
+            self.assertEqual(len(component["pin_definition_sha256"]), 64)
+
+    def _proposal(self):
+        ops = json.loads((self.FIXTURES / self.CASE / "repair_ops.json")
+                         .read_text(encoding="utf-8"))["ops"]
+        document = {"schema_version": 1, "context_id": CONTEXT,
+                    "target": TARGET, "base_source_sha256": "b" * 64,
+                    "decision": "PATCH",
+                    "diagnosis": [{"rule_id": self.RULE_ID,
+                                   "observed": "R9 is absent from the boot/vdd nets",
+                                   "fact_ids": ["F1"],
+                                   "requirement_level": "MANDATORY",
+                                   "rationale": "observed against the public fact set"}],
+                    "oplist": {"protocol_version": 2, "target_format": "kicad",
+                               "ops": ops}}
+        return pipeline.parse_proposal(json.dumps(document).encode("utf-8"))
+
+    def _native(self, status="PASS", symbol=SYMBOL):
+        return {"status": status, "observation": self.observation,
+                "tool": {"symbol_digest": symbol}}
+
+    def _approving(self, rule_id=None, **overrides):
+        return pipeline.validate_host_context(host_context(
+            design_root=str(self.root / "cand"),
+            authority=authority(approvals=[
+                {"policy_file_sha256": policy_sha(),
+                 "rule_id": rule_id or self.RULE_ID, "run_id": RUN,
+                 "candidate_id": CAND, "paths": [abs_path("cand")]}]),
+            **overrides))
+
+    # --- the happy path composes every stage -------------------------------
+    def test_a_bound_and_qualified_transaction_produces_a_result(self):
+        result = pipeline.bind_policy(self._approving(), self.proposal, self._native())
+        self.assertEqual(result["status"], pipeline.STATUS_NO_CHANGE)
+        self.assertEqual(result["last_phase"], pipeline.PHASE_PRECHECK)
+        self.assertIsNone(result["cause_status"])
+        self.assertEqual(result["reasons"], [])
+        self.assertEqual(result["rule_id"], self.RULE_ID)
+        self.assertEqual(result["authorization"]["status"], pipeline.AUTH_PASS)
+        self.assertEqual(result["toolchain"]["status"], pipeline.TOOLCHAIN_PASS)
+        self.assertEqual(result["toolchain"]["pinned_akcli_version"], "0.21.0")
+
+    def test_the_result_carries_the_frozen_digests(self):
+        result = pipeline.bind_policy(self._approving(), self.proposal, self._native())
+        patch = result["host_patch"]
+        self.assertEqual(result["patch_sha256"], patch["patch_sha256"])
+        self.assertEqual(result["bound_policy_sha256"],
+                         patch["policy"]["bound_policy_sha256"])
+        self.assertEqual(result["authorized_delta_sha256"],
+                         patch["bound_policy"]["authorized_delta_sha256"])
+        self.assertEqual(result["expected_after_source_sha256"],
+                         pipeline._EXPECTED_SOURCE_SHA256)
+
+    def test_the_status_is_one_of_the_frozen_transaction_states(self):
+        result = pipeline.bind_policy(self._approving(), self.proposal, self._native())
+        self.assertIn(result["status"], pipeline.TRANSACTION_STATUSES)
+        self.assertNotEqual(result["status"], pipeline.STATUS_COMMITTED)
+
+    # --- ordering: authorization is resolved before the toolchain matters ---
+    def test_an_unauthorized_transaction_stops_at_authorization(self):
+        # The rule IS approved (so select_rule passes) and the toolchain IS
+        # qualified, but FILE_WRITE is DENIED. The only remaining reason to
+        # block is the authorization stage, so skipping resolve_authorization
+        # would let this through -- which is exactly what this test must catch.
+        context = pipeline.validate_host_context(host_context(
+            design_root=str(self.root / "cand"),
+            authority=authority(
+                decisions=[{"capability": pipeline.CAPABILITY_TOOL_EXECUTE,
+                            "effect": pipeline.EFFECT_ALLOW},
+                           {"capability": pipeline.CAPABILITY_FILE_WRITE,
+                            "effect": "DENY"}],
+                approvals=[{"policy_file_sha256": policy_sha(),
+                            "rule_id": self.RULE_ID, "run_id": RUN,
+                            "candidate_id": CAND, "paths": [abs_path("cand")]}])))
+        result = pipeline.bind_policy(context, self.proposal, self._native())
+        self.assertEqual(result["status"], pipeline.STATUS_BLOCKED)
+        self.assertEqual(result["last_phase"], pipeline.PHASE_PRECHECK)
+        self.assertIn(pipeline.CAPABILITY_FILE_WRITE,
+                      result["reasons"][0].detail)
+        self.assertNotIn("toolchain", result)
+
+    def test_an_unqualified_toolchain_is_refused_before_binding(self):
+        # The host context validator already refuses a binding that does not pin
+        # the qualified akcli, so an unqualified toolchain cannot reach
+        # bind_policy at all. Asserted at the real boundary: the refusal happens
+        # in validate_host_context, not later as a verdict.
+        binding = base_binding()
+        binding["manifest"]["akcli"]["version"] = "0.20.0"
+        with self.assertRaises(pipeline.HostContextError):
+            pipeline.validate_host_context(host_context(
+                design_root=str(self.root / "cand"),
+                authority=authority(approvals=[
+                    {"policy_file_sha256": policy_sha(), "rule_id": self.RULE_ID,
+                     "run_id": RUN, "candidate_id": CAND,
+                     "paths": [abs_path("cand")]}]),
+                toolchain_binding=binding))
+
+    def test_a_qualified_binding_is_accepted_and_reaches_binding(self):
+        result = pipeline.bind_policy(self._approving(), self.proposal, self._native())
+        self.assertEqual(result["toolchain"]["status"], pipeline.TOOLCHAIN_PASS)
+
+    def test_the_toolchain_gate_refuses_a_tampered_runtime_slice(self):
+        # For a validated host context the runtime slice is always derived from
+        # the same binding, so CP4-C's toolchain gate cannot fire on its own
+        # inputs. It is a defence against the slice being substituted AFTER
+        # binding -- which is exactly the case a HostPatch with an arbitrary
+        # toolchain_manifest would produce. This test injects that substitution
+        # directly, so the gate is proven load-bearing rather than incidental.
+        import tools.repair_pipeline as pipeline_module
+        original = pipeline_module.runtime_bindings
+
+        def tampered(host_context, proposal, native_before, policy_sha, approved,
+                     rule=None, removals=None):
+            runtime = original(host_context, proposal, native_before, policy_sha,
+                               approved, rule=rule, removals=removals)
+            manifest = json.loads(json.dumps(runtime["toolchain_manifest"]))
+            manifest["akcli_version"] = "0.22.0"
+            return dict(runtime, toolchain_manifest=manifest)
+
+        pipeline_module.runtime_bindings = tampered
+        try:
+            result = pipeline.bind_policy(self._approving(), self.proposal,
+                                          self._native())
+        finally:
+            pipeline_module.runtime_bindings = original
+        self.assertEqual(result["status"], pipeline.STATUS_BLOCKED)
+        self.assertIn("0.22.0", result["reasons"][0].detail)
+        self.assertNotIn("host_patch", result)
+
+    # --- failures are reported, never swallowed ----------------------------
+    def test_an_unapproved_rule_is_reported_with_its_own_reason(self):
+        # The capability decisions are ALLOW, so the only reason to block is
+        # that no approval binds DC-04. Both the rule-selection stage and the
+        # resolver would refuse; the assertion is on the reason being about the
+        # rule, and that the receipt still names a cause.
+        context = pipeline.validate_host_context(host_context(
+            design_root=str(self.root / "cand"),
+            authority=authority(approvals=[
+                {"policy_file_sha256": policy_sha(), "rule_id": "E1",
+                 "run_id": RUN, "candidate_id": CAND,
+                 "paths": [abs_path("cand")]}])))
+        result = pipeline.bind_policy(context, self.proposal, self._native())
+        self.assertEqual(result["status"], pipeline.STATUS_BLOCKED)
+        self.assertIn("DC-04", result["reasons"][0].detail)
+        self.assertIsNotNone(result["cause_status"])
+
+    def test_a_non_pass_native_read_is_never_bound(self):
+        result = pipeline.bind_policy(self._approving(), self.proposal,
+                                      self._native(status="FAIL"))
+        self.assertEqual(result["status"], pipeline.STATUS_BLOCKED)
+        self.assertNotIn("host_patch", result)
+
+    def test_a_false_authorization_is_not_reported_as_a_tool_error(self):
+        # 'False == error' must not happen: a refusal is BLOCKED, and a stage
+        # that could not run is TOOL_ERROR or UNKNOWN, never silently PASS.
+        context = pipeline.validate_host_context(
+            host_context(design_root=str(self.root / "cand"),
+                         authority=authority(decisions=[
+                             {"capability": pipeline.CAPABILITY_FILE_WRITE,
+                              "effect": "DENY"}])))
+        result = pipeline.bind_policy(context, self.proposal, self._native())
+        self.assertEqual(result["status"], pipeline.STATUS_BLOCKED)
+        self.assertNotEqual(result["status"], pipeline.STATUS_TOOL_ERROR)
+        self.assertNotEqual(result["status"], pipeline.STATUS_COMMITTED)
+
+    def test_an_unexpected_exception_is_not_converted_into_a_verdict(self):
+        import inspect
+        source = inspect.getsource(pipeline.bind_policy)
+        body = source.split('"""', 2)[-1]
+        code = "\n".join(line.split("#", 1)[0] for line in body.splitlines())
+        # a bare `except Exception` would swallow a defect into a clean verdict
+        for forbidden in ("except Exception", "except:", "pass  #"):
+            self.assertNotIn(forbidden, code)
+
+    def test_binding_is_deterministic(self):
+        context = self._approving()
+        first = pipeline.canonical_json_bytes(
+            pipeline.bind_policy(context, self.proposal, self._native()))
+        second = pipeline.canonical_json_bytes(
+            pipeline.bind_policy(context, self.proposal, self._native()))
+        self.assertEqual(first, second)
+
+    # --- CP4-C executes nothing --------------------------------------------
+    def test_binding_never_stages_or_commits(self):
+        import inspect
+        source = inspect.getsource(pipeline.bind_policy)
+        body = source.split('"""', 2)[-1]
+        code = "\n".join(line.split("#", 1)[0] for line in body.splitlines())
+        for forbidden in ("apply_stage", "verify_stage", "commit", "recheck_reports",
+                          "write_bytes", "shutil"):
+            self.assertNotIn(forbidden, code)
+
+
 if __name__ == "__main__":
     unittest.main()

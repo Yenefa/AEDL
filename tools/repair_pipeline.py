@@ -3004,3 +3004,94 @@ def qualify_toolchain(host_context, runtime):
         return result
     result["status"] = TOOLCHAIN_PASS
     return result
+
+
+def bind_policy(host_context, proposal, native_before, policy=None,
+                required_paths=()):
+    """Bind one transaction into a BoundPolicyResult (CP4-C, orchestration only).
+
+    Composition, nothing new.  This orders the four already-proven stages and
+    stops at the first one that refuses:
+
+        validate host -> CP1 expected_after -> CP4-A authorization
+                     -> CP4-B toolchain -> CP3 HostPatch
+
+    Authorization is resolved BEFORE the toolchain is qualified, so a
+    transaction that is not permitted never reaches the point where its
+    toolchain matters, and a permitted one still cannot act on an unqualified
+    toolchain.  The order is the safety order, not a preference.
+
+    A refusal from any stage is a BLOCKED result carrying that stage's own
+    findings -- the reason is never replaced with a generic message and never
+    swallowed.  TOOL_ERROR is reserved for a stage that could not run (the host
+    toolchain is absent or the native read failed); UNKNOWN is reserved for a
+    state that could not be established.  Neither is ever reported as PASS, and
+    a False is never treated as an error: each stage returns a status, and an
+    unexpected exception propagates rather than being converted into a verdict.
+
+    No stage is executed here.  A PASS means the transaction is bound and
+    qualified, NOT that anything was written; committing it is a later phase.
+    """
+    receipt = {
+        "status": STATUS_BLOCKED,
+        "last_phase": PHASE_PRECHECK,
+        "cause_status": None,
+        "reasons": [],
+    }
+
+    def refuse(phase, status, findings):
+        receipt.update(status=status, last_phase=phase, cause_status=status,
+                       reasons=list(findings))
+        return receipt
+
+    try:
+        validate_host_context(host_context)
+    except HostContextError as exc:
+        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, exc.findings)
+    if policy is None:
+        policy = load_topology_policy()
+    policy_sha = _policy_document_sha256(policy)
+    try:
+        approved = approved_rule_ids(host_context, policy_sha)
+        rule, findings = select_rule(policy, proposal, approved)
+        if findings:
+            return refuse(PHASE_PRECHECK, STATUS_BLOCKED, findings)
+        authorization = resolve_authorization(host_context, policy, rule,
+                                              required_paths=required_paths)
+        if authorization["status"] != AUTH_PASS:
+            return refuse(PHASE_PRECHECK, STATUS_BLOCKED, authorization["findings"])
+        runtime = runtime_bindings(host_context, proposal, native_before,
+                                   policy_sha, approved, rule=rule, removals={})
+        toolchain = qualify_toolchain(host_context, runtime)
+        if toolchain["status"] != TOOLCHAIN_PASS:
+            return refuse(PHASE_PRECHECK, STATUS_BLOCKED, toolchain["findings"])
+        additions = build_expected_after(native_before["observation"], proposal)
+        bound = _bound_policy(native_before["observation"], rule, runtime, additions,
+                              rule["route"])
+        host_patch = _host_patch(host_context, proposal, runtime, bound, policy)
+    except HostContextError as exc:
+        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, exc.findings)
+    except RepairContractError as exc:
+        return refuse(PHASE_PRECHECK, STATUS_UNKNOWN, [_finding(
+            REASON_INPUT_DRIFT, "the transaction could not be established: %s" % exc)])
+    receipt.update(
+        status=STATUS_NO_CHANGE,
+        last_phase=PHASE_PRECHECK,
+        cause_status=None,
+        reasons=[],
+        rule_id=rule["id"],
+        route=rule["route"],
+        policy_sha256=policy_sha,
+        authorization={"status": authorization["status"],
+                       "capabilities": authorization["capabilities"],
+                       "authorization_refs": authorization["authorization_refs"]},
+        toolchain={"status": toolchain["status"],
+                   "pinned_akcli_version": toolchain["pinned_akcli_version"],
+                   "toolchain_sha256": toolchain["observed"]["toolchain_sha256"]},
+        bound_policy_sha256=host_patch["policy"]["bound_policy_sha256"],
+        patch_sha256=host_patch["patch_sha256"],
+        authorized_delta_sha256=bound["authorized_delta_sha256"],
+        expected_after_source_sha256=bound["expected_after"]["source_sha256"],
+        host_patch=host_patch,
+    )
+    return receipt
