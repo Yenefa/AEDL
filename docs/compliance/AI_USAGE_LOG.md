@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 113 条。完整正文在各自条目文件中；本索引只做导航。
+共 117 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -161,6 +161,7 @@
 - [`AI-20260919-DSH-D522EAA442AF6B11D8E26D7626CBD3A7`](ai-usage/AI-20260919-DSH-D522EAA442AF6B11D8E26D7626CBD3A7.md) — PR1-C5-PRE HostToolchainBinding：C3/C4 工具链 slice 的统一宿主身份与跨层 equality
 ## 2026-09-20
 
+- [`AI-20260920-DSH-775A6CF5F202F7BE61CFBCE6346CFA41`](ai-usage/AI-20260920-DSH-775A6CF5F202F7BE61CFBCE6346CFA41.md) — PR1-C5 单轮事务闭环（S1：host 契约 + runtime bindings + policy rule binding）
 - [`AI-20260920-DSH-844E4242AFC36315121DAEBC2F0D0310`](ai-usage/AI-20260920-DSH-844E4242AFC36315121DAEBC2F0D0310.md) — PR1-C5-ERRATUM 开卡：C2 new-source-object expected semantics 函数级草案 + BLOCKED_CONTRACT 记录
 ## 2026-09-23
 
@@ -168,3 +169,8 @@
 ## 2026-09-24
 
 - [`AI-20260924-DSH-5214132684B03A9C290A20056371AAB6`](ai-usage/AI-20260924-DSH-5214132684B03A9C290A20056371AAB6.md) — PR1-C1-ROTATION-PRESENCE 实施：presence-preserving parse + schema/合同 erratum
+- [`AI-20260924-DSH-C4920BB580052303A78C150644BAA290`](ai-usage/AI-20260924-DSH-C4920BB580052303A78C150644BAA290.md) — PR1-C5 S1b 第 4 步 checkpoint 1 —— `build_expected_after` + pinned geometry compatibility kernel
+- [`AI-20260924-DSH-DB21DC5C630F2970A76BB763BEAE966E`](ai-usage/AI-20260924-DSH-DB21DC5C630F2970A76BB763BEAE966E.md) — PR1-C5 S1b 第 4 步 checkpoint 2 —— `_bound_policy`（policy specialization，不做授权）
+## 2026-09-27
+
+- [`AI-20260927-OPENCODE-47A962EA618E12E790D73A2CFE6D66C5`](ai-usage/AI-20260927-OPENCODE-47A962EA618E12E790D73A2CFE6D66C5.md) — C5 CP2 correction + CP3 `_host_patch` + `policy_id` 收口 + CP4-A authorization resolver

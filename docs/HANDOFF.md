@@ -640,3 +640,97 @@ infrastructure exception **按各自条款失效**，且 Percy 必须在新 SHA 
   PR #89 OPEN**（base `master`，MERGEABLE；remote HEAD == local HEAD 已核）。
   后续 state-sync commit 会推进 HEAD，最新值以 `git ls-remote` / PR #89 为准。
 - C5：**继续 `BLOCKED`**，直到本卡 merge；旧 C5 receipts/evidence 视为 **stale**。
+
+### Current state — 2026-09-24（C5 恢复：rebase → 重锚 → fresh admission）
+
+- **PR #89 已 merge**：`state=MERGED`，`mergedAt=2026-09-24T03:58:46Z`，
+  `mergeCommit=5ade5b8d1090f9c08d5d63f032bc83afa83e56fd`（= 当时的 origin/master，已重新 fetch 核实）。
+- **C5 已 rebase 到 5ade5b8**：7 个 C5 commit 重放成功，master 落后数 = 0。
+  唯一冲突是**生成物** `docs/compliance/AI_USAGE_LOG.md`（ADR-012 已知类别）→ 未手工合并，
+  改为 rebase 后 `build_ai_usage_index build` 重新生成（114 entries / check OK）。
+- **重新吸收确认（逐处核对）**：C1 presence-preserving `_parse_op`（`tools/repair_pipeline.py:853-868`）、
+  C4 `rotation_mode`（`tools/akcli_adapter.py:981-984`）、C5 `runtime_bindings`（`repair_pipeline.py:1818`）
+  三者同时存在，无残留冲突标记。
+- **base 重锚**：`tasks/PR1-C5.yaml` 的 `base.sha` 由 `669aa16` → `5ade5b8`。
+- **旧 C5 receipts / evidence 全部作废（stale）**：rebase 前的 `_admit_PR1-C5*.json`、dev_gate 回执与
+  任何绑定到 `669aa16`/`2460d5d` 的结论，一律不得作为恢复依据。
+- **fresh admission：ADMIT / exit 0**（`--allow-drift`；envelope_sha256 `26745131c252…`；HEAD `39c5808`）。
+- **dev_gate：pass / exit 0**（8/8，excluded=[]）：main **899 OK (skipped=16)**；sandbox 283 OK；
+  secret 528；ledger 114 in sync；scope 0 files（clean）；binding bound（HEAD `39c5808`）。
+- **S1b 第 4 步状态（尚未开始）**：`tools/repair_pipeline.py` 中
+  `bind_policy` / `_bound_policy` / `_host_patch` / `build_expected_after` / `PolicyPort` = **0 处**。
+  冻结合同接口：§8 L209 `bind_policy(host_context, proposal, native_before) -> BoundPolicyResult`、
+  L230 `BoundPolicyResult={status, bound_policy|null, host_patch|null, reasons}`（无真实批准依据即 BLOCKED）；
+  另有 C2 erratum §12 的强制义务：`build_expected_after` 必须按同一规则计算 expected label `rotation`
+  （省略 → pin 派生；显式 0 → 0）——C1 修复后二者才可区分。
+### Current state — 2026-09-24（S1b 第 4 步 checkpoint 1 完成：`build_expected_after`）
+
+- **Owner 裁决**：APPROVED —— C5 内实现**版本钉死**的纯几何 compatibility kernel（行为等价复刻 akcli 0.21.0），
+  生产路径**不 import akcli**；不扩合同；复用 C2 AST semantics；用 native differential evidence 证明等价。
+- **前置侦察（真 blocker，已拆）**：C4 的 `native_before` observation **不含 pin orientation**
+  （实测 pin row keys = `electrical_type/identity/name/no_connect/partition_key`；`definition_rows` 无角度），
+  而 pinned writer 的 `label_angle_away(pin.orientation, comp.rotation, comp.mirror)` 需要它。
+  解决：pin 几何从 `observation["source_objects"] → lib_symbols AST` 取，复用 C5 已 import 的 `_c2_source_*`。
+  **未改 C4、未扩合同、未自建第二套 parser。**
+- **实现**（`tools/repair_pipeline.py`）：`PINNED_AKCLI_VERSION="0.21.0"` +
+  `_pinned_akcli_0210_transform_point` / `_pinned_akcli_0210_pin_world` / `_pinned_akcli_0210_label_angle_away`；
+  AST 查找 `_lib_symbols_ast` / `_source_scalar_string` / `_pin_local_geometry` / `_anchor_component`；
+  纯函数 `build_expected_after(observation, proposal, rule=None, runtime=None)`。
+- **验收（真实运行）**：`ExpectedAfterGeometryTests` **13 OK**；`tests.test_repair_pipeline` **73 OK (skipped=3)**；
+  全量 `discover` **915 OK (skipped=19)**；`dev_gate` **pass / exit 0**（8/8，scope 2 files in scope）。
+- **native oracle（先测再钉，非假设）**：DC-04 absent → `+3V3 (34.29,254) 90` / `BOOT (34.29,261.62) 270`；
+  DC-05 absent → `EN (267.97,33.02) 90` / `GND (267.97,40.64) 270`；`build_expected_after` 派生值**逐项一致**。
+  explicit 0 → point 不变、rotation=0；absent 与 explicit 0 的 expected semantics **不同**。
+- **fail-closed 负例 6 条**：无 owner anchor / 同 reference 两次 placement / 缺失 pin number /
+  同 reference 两组件 / 重复 lib symbol / 重复 pin number / 缺 lib_symbols → 全部 `HostContextError`，
+  **无 fallback、无“取第一个”**。
+- **differential proof（opt-in）**：`transform_point` 120 组、`label_angle_away` 48 组，与 pinned
+  `akcli.geometry.transform` **逐项一致** → 3 OK。
+- **范围自查**：诊断探针曾写在未授权的 `notes/pr1-c5-s1b/`，`scope_check` 报出后已移出仓库到 host scratch
+  `_c5_s1b_probes/`；仓库内 clean，探针未入库（命令与结果见 AI 台账）。
+- **未做**：checkpoint 2 未开始（Owner 要求 checkpoint 1 认可后再进入）。
+### Current state — 2026-09-24（S1b 第 4 步 checkpoint 2 完成：`_bound_policy`）
+
+- **Owner 裁定**：APPROVED —— expected_after observation 组装归 CP2（不回补 CP1）；
+  CP2 只做 policy specialization，**不做 authorization**；transaction identity 不泄漏进 BoundPolicy；
+  同 lib_id 定义摘要必须存在且全体一致。
+- **职责边界**：CP1 = 计算新增工程语义；CP2 = 把 before + CP1 additions + runtime bindings + 冻结规则
+  投影成 C2 可验证的完整 16 项 BoundPolicy。
+- **实现**（`tools/repair_pipeline.py`）：`_expected_observation` / `_refresh_expected_bookkeeping` /
+  `_library_definition_digests` / `_pin_node` / `_pin_electrical_type` / `_bound_policy`；
+  依赖 C2 **公开** helper `normalize_observation` / `observation_delta` / `protected_projection_sha256`
+  （**未复制** `_delta()` / `_projection()`）。
+- **单一真源**：runtime bindings = 唯一 runtime-value source；CP1 additions = 唯一 label 几何来源；
+  新组件行的 library 摘要取自同 lib_id 既有实例（全体一致才用），assembly 布尔取自冻结规则。
+- **验收（10 条，真实运行）**：`BoundPolicyTests` **13 OK**；`tests.test_repair_pipeline` **86 OK (skipped=3)**；
+  全量 `discover` **928 OK (skipped=19)**；`dev_gate` **pass / exit 0**（8/8，scope 2 files in scope）。
+  - 字段集精确 = frozen 16 项；无 `run/candidate/round/patch/proposal_sha256` 泄漏；
+  - `rotation_source` 已剥掉，semantics 精确 `{name, scope, point_nm, rotation}`；absent → 90/270；
+  - identity maps `is` runtime bindings 原对象；缺 binding / 未知 binding 均 fail-closed；
+  - 无 grant/ALLOW；`_bound_policy` 源码不含授权调用（inspect 断言）；
+  - expected_after 直接通过 `normalize_observation(expected=True)`；delta/protected digest 与 C2 复算一致。
+- **未做**：CP3 `_host_patch`、CP4 `bind_policy` 均未开始（按 Owner 要求停在 CP2 gate）。
+- **CP4 必须验收项（已登记）**：0.21.0 运行时闭环 —— actual host toolchain identity != pinned 0.21.0 →
+  BLOCKED/UNKNOWN，**绝不调用 qualified kernel**。
+### Current state — 2026-09-24（CP2 correction pass 完成，Owner `CHANGES_REQUIRED` 三项已修）
+
+- **B1 删除绑定 slot ≠ UUID（功能 bug）**：原实现拿 `object_identity_map` 的 **slot key** 去过滤 source objects，
+  而冻结语义是 `slot → {uuid, kind, descriptor_sha256}`（C2 消费 `.values()` 并按 `entry["uuid"]` 匹配）——
+  E1/E3 的删除路径**一个也删不掉**，且原测试用 `removals={}` 完全没覆盖。
+  现改为逐条 declaration fail-closed：uuid 恰好命中 1 个 before source object、kind 一致、
+  `canonical_sha256("protected", obj["descriptor"])` 一致、两条不得绑同一对象；
+  **每条声明都必须真的删掉一个对象**。
+- **B2 sentinel 写错**：`"0"*64` → 冻结值 `canonical_sha256("context", {"role": "EXPECTED_AFTER_NOT_YET_WRITTEN"})`
+  （C2 erratum §10，STRUCTURAL PLACEHOLDER ONLY）。
+- **B3 `operation_constraints` 为空**：新增 `_canonical_authorized_ops` + `_operation_constraints`：
+  counts / 准确删除对象（uuid+kind+descriptor）/ 新组件与新 label 属性 / stage_order
+  （`delete_object → place_component → add_net_label`）/ `canonical_authorized_ops`。
+  ops 由冻结规则声明**经 C1 自己的 `_parse_op`** 生成（形状不漂移）；label op **刻意不带 rotation 键**，
+  presence-sensitive —— 绝不把静态 policy 的 `rotation: 0` 翻成 proposal 的显式 0；
+  并与 CP1 additions 数量交叉校验。**比较留给 CP4 `bind_policy`**（CP2 只生成许可）。
+- **验证**：`BoundPolicyTests` **21 OK**（13 → +8）；`tests.test_repair_pipeline` **94 OK (skipped=3)**；
+  全量 `discover` **936 OK (skipped=19)**；`dev_gate` **pass / exit 0**（8/8，scope 2 files in scope）。
+  新增测试含 E1/E3 风格 removal 正例（UUID 消失、delta `after == {"absent": True}`、C2 复算一致）、
+  wrong UUID / wrong descriptor / wrong kind 三负例、sentinel exact-value 回归、canonical ops 快照、
+  frozen proposal 有序相等、explicit-rotation proposal **不相等**。
+- **下一步**：checkpoint 3 —— `_host_patch`（纯构造器；任何 ALLOW 不得来自 Proposal 字段）。

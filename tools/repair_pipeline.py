@@ -18,7 +18,9 @@ gates.repair_verification.  Since C2 landed, that module is the single home and
 this module imports from it (digest semantics verified identical 74/74).
 """
 
+import copy
 import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,7 +30,25 @@ from gates.repair_verification import (  # single home for digests since C2
     canonical_json_bytes,
     canonical_sha256,
     hash_bytes,
+    normalize_observation,
+    observation_delta,
+    protected_projection_sha256,
+    topology_sha256,
+    _BOUND_FIELDS as _C2_BOUND_FIELDS,
+    # C5 reuses verifier-private source helpers because selector binding must use the
+    # exact same source semantics as C2.  Publicising this interface is deferred; C5
+    # must not fork or reinterpret the parser, so the geometry stays defined in C2.
+    observe_source as _c2_observe_source,
+    _source_ast as _c2_source_ast,
+    _source_at as _c2_source_at,
+    _source_children as _c2_source_children,
+    _source_components as _c2_source_components,
+    _source_integer as _c2_source_integer,
+    _source_one as _c2_source_one,
+    _source_text as _c2_source_text,
+    _source_value as _c2_source_value,
 )
+from tools import host_toolchain  # PR1-C5-PRE: the host toolchain identity
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PATCH_SCHEMA_PATH = REPO_ROOT / "src" / "repair" / "patch_schema_v1.json"
@@ -1470,6 +1490,703 @@ def _feedback_outcome(status: Any, cause_status: Any) -> str:
     return OUTCOME_UNAVAILABLE
 
 
+# ---------------------------------------------------------------------------
+# C5 stage 1: the host context contract, runtime bindings and rule binding
+# ---------------------------------------------------------------------------
+#
+# Two different closed sets live here and must not be conflated:
+#
+#   _HOST_CONTEXT_FIELDS          what the HOST must provide: identities, the
+#                                 candidate workspace, the toolchain binding, the
+#                                 static policy path, the resolved authority and
+#                                 the native execution binding (contract section 8).
+#   _RUNTIME_BINDING_FIELDS       what the policy's binding_contract requires a
+#                                 BoundPolicy to BIND.  Most of these are derived
+#                                 by C5 -- from the parsed proposal, from the host
+#                                 native read, or from C5's own observation of the
+#                                 candidate's current bytes -- precisely so that a
+#                                 caller cannot inject a second truth source for
+#                                 the pin/object identity maps, the symbol hashes,
+#                                 the before topology or the base file manifest.
+#
+# A value being in _RUNTIME_BINDING_FIELDS does NOT make it a host_context field.
+
+_HOST_CONTEXT_FIELDS = (
+    "run_id", "candidate_id", "round_id", "patch_id",
+    "context_id", "target", "base_source_sha256", "initial_context_digest",
+    "limits", "workspace", "toolchain_binding", "candidate_symbol_digest",
+    "policy_path", "authority", "native",
+)
+# candidate_symbol_digest is a BEFORE-candidate binding supplied by the host, not a
+# host-level toolchain property and not a transaction-after property: the C4 writer
+# resolves place_component against the current document's embedded library, so the
+# after-digest may legitimately change once a symbol is written.  It is therefore a
+# host_context input that PRECHECK cross-checks against the native BEFORE observation.
+_WORKSPACE_FIELDS = ("candidate_root", "design_root", "repair_root", "lock_path")
+_AUTHORITY_FIELDS = ("context_digest", "resolved_authorization_refs", "decisions",
+                     "approvals")
+_AUTHORITY_DECISION_FIELDS = ("capability", "effect")
+_APPROVAL_FIELDS = ("policy_file_sha256", "rule_id", "run_id", "candidate_id", "paths")
+_NATIVE_BINDING_FIELDS = ("read_root", "artifact_root")
+
+CAPABILITY_TOOL_EXECUTE = "TOOL_EXECUTE"
+CAPABILITY_FILE_WRITE = "FILE_WRITE"
+REQUIRED_CAPABILITIES = (CAPABILITY_TOOL_EXECUTE, CAPABILITY_FILE_WRITE)
+EFFECT_ALLOW = "ALLOW"
+
+# policy binding_contract.required_runtime_values (14 items), in contract order.
+_RUNTIME_BINDING_FIELDS = (
+    "run_id", "candidate_id", "round_id", "patch_id", "proposal_sha256",
+    "base_file_manifest", "base_topology_sha256", "toolchain_manifest",
+    "policy_document_sha256", "authority_context", "approved_rule_ids",
+    "pin_identity_map", "object_identity_map", "embedded_symbol_hashes",
+)
+
+
+class HostContextError(RepairContractError):
+    """The host context violates the C5 host contract.  Never a PASS."""
+
+
+def _host_finding(detail, code=REASON_INPUT_DRIFT, object_id=None):
+    return _finding(code, detail, object_id)
+
+
+def _host_closed(value, allowed, label):
+    if not isinstance(value, Mapping):
+        raise HostContextError([_host_finding("%s must be a mapping" % label)])
+    unknown = sorted(set(value) - set(allowed))
+    missing = sorted(set(allowed) - set(value))
+    if unknown or missing:
+        raise HostContextError([
+            _host_finding("%s has missing or unknown fields (missing=%s unknown=%s)"
+                          % (label, missing, unknown))
+        ])
+    return value
+
+
+def _host_text(value, label, allow_empty=False):
+    if not isinstance(value, str) or (not value and not allow_empty):
+        raise HostContextError([_host_finding("invalid %s" % label)])
+    return value
+
+
+def _host_identifier(value, label):
+    text = _host_text(value, label)
+    if not _ID_RE.match(text):
+        raise HostContextError([_host_finding("invalid %s" % label)])
+    return text
+
+
+def _host_sha(value, label):
+    text = _host_text(value, label)
+    if not _SHA256_RE.match(text):
+        raise HostContextError([_host_finding("invalid %s" % label)])
+    return text
+
+
+def _host_absolute(value, label):
+    text = _host_text(value, label)
+    if not os.path.isabs(text):
+        raise HostContextError([_host_finding("%s must be an absolute host path" % label)])
+    return os.path.normpath(text)
+
+
+def _host_sequence(value, label):
+    if not isinstance(value, (list, tuple)):
+        raise HostContextError([_host_finding("%s must be a sequence" % label)])
+    return list(value)
+
+
+def validate_host_context(host_context):
+    """Validate the closed host contract and return a normalized copy.
+
+    Every field here is something only the host can supply.  Anything the policy
+    requires but C5 can derive is deliberately absent: accepting it from the
+    caller would create the second truth source the binding contract forbids.
+    """
+    _host_closed(host_context, _HOST_CONTEXT_FIELDS, "host_context")
+    normalized = {
+        "run_id": _host_identifier(host_context["run_id"], "run_id"),
+        "candidate_id": _host_identifier(host_context["candidate_id"], "candidate_id"),
+        "round_id": _host_identifier(host_context["round_id"], "round_id"),
+        "patch_id": _host_identifier(host_context["patch_id"], "patch_id"),
+        "context_id": _host_identifier(host_context["context_id"], "context_id"),
+        "target": _candidate_path(host_context["target"], "host_context.target"),
+        "base_source_sha256": _host_sha(host_context["base_source_sha256"],
+                                        "base_source_sha256"),
+        "initial_context_digest": _host_sha(host_context["initial_context_digest"],
+                                            "initial_context_digest"),
+        "limits": _host_closed_mapping(host_context["limits"], "limits"),
+        "workspace": _validate_workspace(host_context["workspace"]),
+        "toolchain_binding": _validate_toolchain_binding(host_context["toolchain_binding"]),
+        "candidate_symbol_digest": _host_sha(host_context["candidate_symbol_digest"],
+                                             "candidate_symbol_digest"),
+        "policy_path": _host_absolute(host_context["policy_path"], "policy_path"),
+        "authority": _validate_authority(host_context["authority"]),
+        "native": _validate_native_binding(host_context["native"]),
+    }
+    return normalized
+
+
+def _host_closed_mapping(value, label):
+    if not isinstance(value, Mapping):
+        raise HostContextError([_host_finding("%s must be a mapping" % label)])
+    return dict(value)
+
+
+def _validate_workspace(workspace):
+    _host_closed(workspace, _WORKSPACE_FIELDS, "workspace")
+    return {
+        "candidate_root": _host_absolute(workspace["candidate_root"], "candidate_root"),
+        "design_root": _host_absolute(workspace["design_root"], "design_root"),
+        "repair_root": _host_absolute(workspace["repair_root"], "repair_root"),
+        "lock_path": _host_absolute(workspace["lock_path"], "lock_path"),
+    }
+
+
+def _validate_toolchain_binding(binding):
+    """The PR1-C5-PRE host toolchain identity, validated by its own module."""
+    try:
+        return host_toolchain.validate_host_binding(binding)
+    except host_toolchain.HostBindingError as exc:
+        raise HostContextError([_host_finding("invalid toolchain_binding: %s" % exc)]) from exc
+
+
+def _validate_native_binding(native):
+    _host_closed(native, _NATIVE_BINDING_FIELDS, "native")
+    return {
+        "read_root": _host_absolute(native["read_root"], "native.read_root"),
+        "artifact_root": _host_absolute(native["artifact_root"], "native.artifact_root"),
+    }
+
+
+def _validate_authority(authority):
+    _host_closed(authority, _AUTHORITY_FIELDS, "authority")
+    decisions = []
+    for index, row in enumerate(_host_sequence(authority["decisions"], "authority.decisions")):
+        _host_closed(row, _AUTHORITY_DECISION_FIELDS, "authority.decisions[%d]" % index)
+        capability = _host_text(row["capability"], "capability")
+        effect = _host_text(row["effect"], "effect")
+        if capability not in REQUIRED_CAPABILITIES:
+            raise HostContextError([_host_finding("unknown capability %r" % capability)])
+        if effect not in (EFFECT_ALLOW, "DENY"):
+            raise HostContextError([_host_finding("unknown effect %r" % effect)])
+        decisions.append({"capability": capability, "effect": effect})
+    approvals = []
+    for index, row in enumerate(_host_sequence(authority["approvals"], "authority.approvals")):
+        _host_closed(row, _APPROVAL_FIELDS, "authority.approvals[%d]" % index)
+        approvals.append({
+            "policy_file_sha256": _host_sha(row["policy_file_sha256"], "approval policy digest"),
+            "rule_id": _host_identifier(row["rule_id"], "approval rule id"),
+            "run_id": _host_identifier(row["run_id"], "approval run id"),
+            "candidate_id": _host_identifier(row["candidate_id"], "approval candidate id"),
+            "paths": [_host_absolute(item, "approval path")
+                      for item in _host_sequence(row["paths"], "approval paths")],
+        })
+    return {
+        "context_digest": _host_sha(authority["context_digest"], "authority context digest"),
+        "resolved_authorization_refs": [
+            _host_identifier(item, "authorization ref")
+            for item in _host_sequence(authority["resolved_authorization_refs"],
+                                       "resolved_authorization_refs")
+        ],
+        "decisions": decisions,
+        "approvals": approvals,
+    }
+
+
+def _policy_document_sha256(policy):
+    return canonical_sha256("policy-bound", policy)
+
+
+def approved_rule_ids(host_context, policy_sha):
+    """Host-resolved approvals filtered to this policy digest, run and candidate.
+
+    Contract section 8: an approval must bind this policy digest, the rule and the
+    run/candidate.  Nothing here can come from the proposal.
+    """
+    approved = set()
+    for row in host_context["authority"]["approvals"]:
+        if row["policy_file_sha256"] != policy_sha:
+            continue
+        if row["run_id"] != host_context["run_id"]:
+            continue
+        if row["candidate_id"] != host_context["candidate_id"]:
+            continue
+        approved.add(row["rule_id"])
+    return approved
+
+
+def authority_findings(host_context, required_paths=()):
+    """A missing or DENY decision on a required capability is a hard BLOCK."""
+    effects = {}
+    for row in host_context["authority"]["decisions"]:
+        effects[row["capability"]] = row["effect"]
+    findings = []
+    for capability in REQUIRED_CAPABILITIES:
+        if effects.get(capability) != EFFECT_ALLOW:
+            findings.append(_finding(
+                REASON_AUTH_DENIED,
+                "the resolved host authority does not allow %s for this round"
+                % capability))
+    if findings:
+        return findings
+    for path in required_paths:
+        covered = any(path in row["paths"] for row in host_context["authority"]["approvals"])
+        if not covered:
+            findings.append(_finding(
+                REASON_AUTH_DENIED,
+                "no host approval binds the write path %s" % path))
+    return findings
+
+
+def proposal_rule_ids(proposal):
+    ordered = []
+    for entry in proposal.diagnosis:
+        rule_id = entry.get("rule_id")
+        if rule_id not in ordered:
+            ordered.append(rule_id)
+    return ordered
+
+
+def select_rule(policy, proposal, approved):
+    """Exactly one approved rule, taken from the host policy and nowhere else."""
+    rules = {rule["id"]: rule for rule in policy["rules"]}
+    matched = [rules[rule_id] for rule_id in proposal_rule_ids(proposal)
+               if rule_id in rules]
+    if not matched:
+        return None, [_finding(REASON_INPUT_DRIFT,
+                               "no policy rule matches the proposal diagnosis")]
+    ids = sorted({rule["id"] for rule in matched})
+    if len(ids) > 1:
+        return None, [_finding(REASON_INPUT_DRIFT,
+                               "multiple policy rules match: %s" % ids)]
+    rule = matched[0]
+    if rule["id"] not in approved:
+        return None, [_finding(REASON_AUTH_DENIED,
+                               "rule %s is not host-approved for this policy digest"
+                               % rule["id"])]
+    if not any(rule["route"] == route for route in ROUTES):
+        return None, [_finding(REASON_SCHEMA_INVALID,
+                               "unknown route %r" % rule["route"])]
+    return rule, []
+
+
+def refusal_verdict(policy, proposal):
+    """A legal REFUSE terminates at PRECHECK: no tool call, no stage write.
+
+    The bytes-must-remain-unchanged half of the refusal boundary is a
+    transaction property and is asserted by the round, not here.
+    """
+    boundary = policy.get("refusal_boundary") or {}
+    if proposal.decision != DECISION_REFUSE:
+        return [_finding(REASON_SCHEMA_INVALID, "not a REFUSE proposal")]
+    findings = []
+    if boundary.get("valid_proposal_decision") not in (None, DECISION_REFUSE):
+        findings.append(_finding(REASON_SCHEMA_INVALID,
+                                 "the policy refusal boundary does not admit REFUSE"))
+    if proposal.oplist is not None or proposal.refusal is None:
+        findings.append(_finding(REASON_SCHEMA_INVALID,
+                                 "a REFUSE proposal carries a refusal and no oplist"))
+    return findings
+
+
+def observe_candidate_manifest(host_context):
+    """C5's own observation of the candidate design bytes (contract section 9).
+
+    The base file manifest is observed here rather than accepted from the caller:
+    a declaration handed in by the caller is not evidence about the bytes that are
+    about to be repaired.
+    """
+    root = Path(host_context["workspace"]["design_root"])
+    target = host_context["target"]
+    if not root.is_dir():
+        raise HostContextError([_host_finding("design root is not a directory")])
+    rows = []
+    for path in sorted(root.rglob("*")):
+        if path.is_symlink():
+            raise HostContextError([_host_finding("the candidate design contains a link")])
+        if not path.is_file():
+            continue
+        relative = path.relative_to(root).as_posix()
+        raw = path.read_bytes()
+        rows.append({"path": relative, "sha256": hash_bytes(raw),
+                     "size_bytes": len(raw),
+                     "role": "TARGET" if relative == target else "READONLY_DEPENDENCY"})
+    targets = [row for row in rows if row["role"] == "TARGET"]
+    if len(targets) != 1:
+        raise HostContextError([_host_finding(
+            "the candidate design must carry exactly one target, found %d" % len(targets))])
+    return {"version": 1, "files": rows}
+
+
+def runtime_bindings(host_context, proposal, native_before, policy_sha, approved,
+                     rule=None, removals=None):
+    """Derive the policy's 14 required runtime values.
+
+    Values the proposal, the host native read or C5's own observation already
+    determine are derived here and are never accepted from the caller: a second
+    caller-supplied truth source for the identity maps, the symbol hashes, the
+    before topology or the base manifest is exactly what the policy's
+    binding_contract.never_bind_from forbids.
+    """
+    if not isinstance(native_before, Mapping):
+        raise HostContextError([_host_finding("native_before must be a mapping")])
+    if native_before.get("status") != "PASS":
+        raise HostContextError([_host_finding(
+            "native_before is not a PASS; there is no current fault observation to bind")])
+    observation = native_before.get("observation")
+    if not isinstance(observation, Mapping):
+        raise HostContextError([_host_finding("native_before carries no observation")])
+    tool = native_before.get("tool") or {}
+    symbol_digest = tool.get("symbol_digest")
+    # The host supplied the before-candidate symbol digest at PRECHECK.  Cross-check
+    # it against what the native read actually measured: a mismatch means the writer
+    # would resolve against a different symbol environment than the one that was
+    # bound, and this must block BEFORE anything is written.
+    if host_context["candidate_symbol_digest"] != symbol_digest:
+        raise HostContextError([_host_finding(
+            "the host candidate_symbol_digest does not match the native BEFORE symbol "
+            "digest (%s != %s)" % (host_context["candidate_symbol_digest"], symbol_digest))])
+    binding = host_context["toolchain_binding"]
+    try:
+        slice_manifest = host_toolchain.derive_akcli_slice(binding, symbol_digest)
+    except host_toolchain.HostBindingError as exc:
+        raise HostContextError([_host_finding("toolchain slice is not derivable: %s" % exc)]) from exc
+
+    # object_identity_map is NOT a component identity index.  C2 _prepare() L498-504
+    # reads it as the declarations of the source objects this round is authorized to
+    # REMOVE, keyed by {uuid, kind, descriptor_sha256}.  Component identity belongs to
+    # the BEFORE observation; the removal declarations belong to the selected rule.
+    # The two have different lifecycles, so this is resolved here -- after rule
+    # selection -- and never before it.
+    removals = dict(removals or {})
+    declared = ((rule or {}).get("object_delta") or {}).get("remove") or []
+    declared_slots = [entry["slot"] for entry in declared]
+    if declared and not removals:
+        raise HostContextError([_host_finding(
+            "the selected rule removes %d source object(s); object_identity_map must be "
+            "resolved from the current fault bytes, not left empty" % len(declared))])
+    if sorted(removals) != sorted(declared_slots):
+        raise HostContextError([_host_finding(
+            "object_identity_map must bind exactly the selected rule's removal slots: "
+            "declared=%s resolved=%s" % (sorted(declared_slots), sorted(removals)))])
+    for slot, entry in removals.items():
+        _host_closed(entry, ("uuid", "kind", "descriptor_sha256"), "removal %r" % slot)
+        _host_sha(entry["descriptor_sha256"], "removal descriptor digest")
+        _host_text(entry["uuid"], "removal uuid")
+        if entry["kind"] not in ("wire", "label"):
+            raise HostContextError([_host_finding(
+                "removal %r has unsupported kind %r" % (slot, entry["kind"]))])
+    # C2 only consumes values(), so the slot keys carry no weight there.  The binder
+    # has to make them mean something: one slot, one object, and no two slots may
+    # silently bind the same UUID.
+    by_uuid = {}
+    for slot, entry in removals.items():
+        if entry["uuid"] in by_uuid:
+            raise HostContextError([_host_finding(
+                "removal slots %r and %r bind the same object %s"
+                % (by_uuid[entry["uuid"]], slot, entry["uuid"]))])
+        by_uuid[entry["uuid"]] = slot
+
+    pin_identity_map = {}
+    embedded_symbol_hashes = {}
+    for comp in observation["components"]:
+        embedded_symbol_hashes[comp["lib_id"]] = comp["lib_definition_sha256"]
+    for row in observation["pins"]:
+        ident = row["identity"]
+        pin_identity_map["%s.%s" % (ident["reference"], ident["number"])] = ident
+
+    values = {
+        "run_id": host_context["run_id"],
+        "candidate_id": host_context["candidate_id"],
+        "round_id": host_context["round_id"],
+        "patch_id": host_context["patch_id"],
+        "proposal_sha256": proposal.proposal_sha256,
+        "base_file_manifest": observe_candidate_manifest(host_context),
+        "base_topology_sha256": topology_sha256(observation),
+        "toolchain_manifest": slice_manifest,
+        "policy_document_sha256": policy_sha,
+        "authority_context": host_context["authority"],
+        "approved_rule_ids": sorted(approved),
+        "pin_identity_map": pin_identity_map,
+        "object_identity_map": removals,
+        "embedded_symbol_hashes": embedded_symbol_hashes,
+    }
+    missing = [field for field in _RUNTIME_BINDING_FIELDS if field not in values]
+    if missing:
+        raise HostContextError([_host_finding("runtime bindings are incomplete: %s" % missing)])
+    return values
+
+def resolve_pin_identity(token, observation):
+    """Resolve one REFERENCE.PIN token against the host BEFORE observation.
+
+    Member selection is exact: zero matches or more than one match is a binding
+    failure, never a guess.  Nothing here reads the proposal or a fixture.
+    """
+    text = _host_text(token, "member token")
+    reference, separator, number = text.partition(".")
+    if not separator or not reference or not number:
+        raise HostContextError([_host_finding("invalid member token %r" % text)])
+    matches = [row["identity"] for row in observation["pins"]
+               if row["identity"]["reference"] == reference
+               and row["identity"]["number"] == number]
+    if len(matches) != 1:
+        raise HostContextError([_host_finding(
+            "member token %r resolves to %d pin identities, expected exactly one"
+            % (text, len(matches)))])
+    return matches[0]
+
+
+def _member_keys(members):
+    return sorted({canonical_json_bytes(identity) for identity in members})
+
+
+def capture_before_partitions(observation, declarations):
+    """Capture the BEFORE partitions a policy rule names, once and completely.
+
+    binding_contract.capture_rule: CAPTURE ENTIRE BEFORE PARTITION ONCE; NO
+    REBIND AFTER APPLY.  So a captured slot holds the observed before members, and
+    a later stage can never re-derive them from the applied result.
+    """
+    captured = {}
+    partitions = observation["partitions"]
+    for declaration in declarations:
+        slot = _host_identifier(declaration["slot"], "partition slot")
+        if slot in captured:
+            raise HostContextError([_host_finding("duplicate partition slot %r" % slot)])
+        names = sorted(declaration.get("names_exact") or [])
+        if declaration.get("capture_all_members"):
+            contains = _member_keys(resolve_pin_identity(token, observation)
+                                    for token in declaration.get("contains") or [])
+            excludes = _member_keys(resolve_pin_identity(token, observation)
+                                    for token in declaration.get("excludes") or [])
+            candidates = []
+            for partition in partitions:
+                observed = _member_keys(partition["members"])
+                if sorted(partition["names"]) != names:
+                    continue
+                if not set(contains) <= set(observed):
+                    continue
+                if set(excludes) & set(observed):
+                    continue
+                candidates.append(partition)
+            if len(candidates) != 1:
+                raise HostContextError([_host_finding(
+                    "capture_all_members slot %r matches %d before partitions, expected one"
+                    % (slot, len(candidates)))])
+            members = sorted(candidates[0]["members"], key=canonical_json_bytes)
+        else:
+            members = sorted((resolve_pin_identity(token, observation)
+                              for token in declaration.get("members_exact") or []),
+                             key=canonical_json_bytes)
+            matches = [partition for partition in partitions
+                       if _member_keys(partition["members"]) == _member_keys(members)
+                       and sorted(partition["names"]) == names]
+            if len(matches) != 1:
+                raise HostContextError([_host_finding(
+                    "slot %r members/names match %d before partitions, expected one"
+                    % (slot, len(matches)))])
+        if not members:
+            raise HostContextError([_host_finding("slot %r captured no members" % slot)])
+        captured[slot] = {"key": canonical_sha256("topology", members),
+                          "names": names, "members": members}
+    return captured
+
+
+def project_expected_partitions(observation, rule, captured, new_pins):
+    """Frozen policy transformation: replace the named slots, keep every other
+    before partition byte-identical.
+
+    Members come from the CAPTURED before partition plus the rule's exact
+    additions; the policy never lets a later stage re-derive them.
+    """
+    replace = set(rule["after"].get("replace_partitions") or [])
+    unknown = replace - set(captured)
+    if unknown:
+        raise HostContextError([_host_finding(
+            "replace_partitions names uncaptured slots %s" % sorted(unknown))])
+    replacement = {}
+    for entry in rule["after"].get("partitions") or []:
+        names = sorted(entry.get("names_exact") or [])
+        members = []
+        source = entry.get("members_from")
+        if source is not None:
+            if source not in captured:
+                raise HostContextError([_host_finding(
+                    "members_from names uncaptured slot %r" % source)])
+            members.extend(captured[source]["members"])
+        for token in entry.get("members_exact") or []:
+            members.append(resolve_pin_identity(token, observation))
+        for token in entry.get("add_exact") or []:
+            members.append(new_pins.get(token) or resolve_pin_identity(token, observation))
+        key = canonical_sha256("topology", sorted(members, key=canonical_json_bytes))
+        if key in replacement:
+            raise HostContextError([_host_finding("two expected partitions share a member set")])
+        replacement[key] = {"key": key, "names": names,
+                            "members": sorted(members, key=canonical_json_bytes)}
+    kept = [partition for partition in observation["partitions"]
+            if not any(name in replace and sorted(partition["names"]) == captured[name]["names"]
+                       and _member_keys(partition["members"]) == _member_keys(captured[name]["members"])
+                       for name in replace)]
+    if len(kept) != len(observation["partitions"]) - len(replace):
+        raise HostContextError([_host_finding(
+            "replace_partitions does not name whole before partitions")])
+    return kept + list(replacement.values())
+
+def selector_source_index(raw_bytes):
+    """Rebuild the geometry a removal selector needs from the SAME candidate bytes.
+
+    C2's full observer validates the input first, so this index can only ever
+    describe bytes inside the qualified M2 subset.  Pin anchors come from C2's own
+    _source_components(); this layer must never fork or reinterpret that geometry.
+    """
+    try:
+        observation = _c2_observe_source(raw_bytes)
+        root = _c2_source_ast(raw_bytes)
+        sheet = "/" + _c2_source_value(root, "uuid")
+        _components, _pins, positions = _c2_source_components(root, sheet)
+    except (ValueError, TypeError, KeyError, IndexError) as exc:
+        raise HostContextError([_host_finding(
+            "the candidate bytes are outside the qualified source subset: %s" % exc)]) from exc
+
+    pin_anchor = {}
+    for point, items in positions.items():
+        for item in items:
+            pin_anchor[canonical_json_bytes(item["identity"])] = point
+
+    labels = []
+    for node in _c2_source_children(root, "label"):
+        point, _rotation = _c2_source_at(node)
+        labels.append({"uuid": _c2_source_value(node, "uuid"),
+                       "name": _c2_source_text(node[1]), "point": point, "node": node})
+    wires = []
+    for node in _c2_source_children(root, "wire"):
+        pts = _c2_source_one(node, "pts")
+        start, end = [tuple(_c2_source_integer(value, 1000000) for value in item[1:])
+                      for item in pts[1:]]
+        # A wire's identity does not depend on which endpoint is drawn first.
+        wires.append({"uuid": _c2_source_value(node, "uuid"),
+                      "endpoints": frozenset((start, end)), "node": node})
+    return {"observation": observation, "pin_anchor": pin_anchor,
+            "labels": labels, "wires": wires,
+            "objects": {obj["identity"]: obj for obj in observation["source_objects"]}}
+
+
+def _selector_finding(status, code, detail):
+    return status, _finding(code, detail)
+
+
+def resolve_removal_selector(index, selector):
+    """Resolve one policy removal selector to its unique source object.
+
+    The chain is: policy selector -> C2 AST over the current bytes -> one UUID ->
+    the same UUID in the BEFORE observation -> the frozen descriptor digest.  The
+    digest is taken from what C2/C4 already observed, never re-invented here.
+    """
+    kind = selector.get("kind")
+    if kind not in ("label", "wire"):
+        return _selector_finding("BLOCKED", REASON_SCHEMA_INVALID,
+                                 "unsupported removal selector kind %r" % kind)
+    if kind == "label":
+        if selector.get("scope") != "local":
+            return _selector_finding("BLOCKED", REASON_SCHEMA_INVALID,
+                                     "only root-local label selectors are supported")
+        try:
+            identity = resolve_pin_identity(selector.get("at_pin"), index["observation"])
+        except HostContextError as exc:
+            return _selector_finding("BLOCKED", REASON_SCHEMA_INVALID,
+                                     "invalid at_pin selector: %s" % exc.findings[0].detail)
+        anchor = index["pin_anchor"].get(canonical_json_bytes(identity))
+        if anchor is None:
+            return _selector_finding("UNKNOWN", REASON_COVERAGE_INCOMPLETE,
+                                     "the pinned pin has no observed anchor")
+        matches = [row for row in index["labels"]
+                   if row["name"] == selector.get("name") and row["point"] == anchor]
+        detail = "local label %r at %s" % (selector.get("name"), selector.get("at_pin"))
+    else:
+        endpoints = selector.get("endpoints_nm")
+        if not isinstance(endpoints, (list, tuple)) or len(endpoints) != 2:
+            return _selector_finding("BLOCKED", REASON_SCHEMA_INVALID,
+                                     "a wire selector needs exactly two endpoints_nm")
+        wanted = frozenset(tuple(int(value) for value in point) for point in endpoints)
+        matches = [row for row in index["wires"] if row["endpoints"] == wanted]
+        detail = "wire %s" % sorted(sorted(point) for point in wanted)
+
+    if not matches:
+        # The source observation and the AST are both complete here; what failed is
+        # that the CURRENT fault bytes can no longer be bound to the object the frozen
+        # selector requires.  That is input drift (status stays UNKNOWN, per
+        # policy defaults.unresolved_binding), not incomplete coverage.
+        return _selector_finding("UNKNOWN", REASON_INPUT_DRIFT,
+                                 "%s matches no source object in the current bytes" % detail)
+    if len(matches) > 1:
+        return _selector_finding("UNKNOWN", REASON_SELECTOR_AMBIGUOUS,
+                                 "%s matches %d source objects" % (detail, len(matches)))
+    matched = matches[0]
+    observed = index["objects"].get(matched["uuid"])
+    if observed is None or observed["kind"] != kind:
+        return _selector_finding("UNKNOWN", REASON_PARSER_DISAGREEMENT,
+                                 "%s resolved to %s, which the BEFORE observation does not "
+                                 "carry as a %s" % (detail, matched["uuid"], kind))
+    if observed["descriptor"]["ast"] != matched["node"]:
+        return _selector_finding("UNKNOWN", REASON_PARSER_DISAGREEMENT,
+                                 "%s: the selector AST and the observed descriptor disagree"
+                                 % detail)
+    # C2 _prepare() requires canonical_sha256("protected", obj["descriptor"]), i.e. the
+    # digest of {"ast": node} -- NOT semantic_ast_sha256, which is the digest of the
+    # bare node.  hash(node) != hash({"ast": node}); the two are different domains.
+    return "PASS", {"uuid": matched["uuid"], "kind": kind,
+                    "descriptor_sha256": canonical_sha256("protected",
+                                                          observed["descriptor"])}
+
+
+def resolve_removals(index, selectors):
+    """Resolve every removal selector; the first failure decides the outcome.
+
+    Selector failures are deliberately NOT collapsed into one class: not being able
+    to determine identity is UNKNOWN, while an illegal selector field is BLOCKED.
+    """
+    declarations = {}
+    for selector in selectors:
+        slot = _host_identifier(selector["slot"], "removal slot")
+        if slot in declarations:
+            return "BLOCKED", None, [_finding(REASON_SCHEMA_INVALID,
+                                              "duplicate removal slot %r" % slot)]
+        status, payload = resolve_removal_selector(index, selector)
+        if status != "PASS":
+            return status, None, [payload]
+        declarations[slot] = payload
+    return "PASS", declarations, []
+
+def validate_captured_partitions(captured, rule):
+    """C5 freezes the capture invariants; C2 only checks that this is a mapping.
+
+    captured_partitions is a capture-once AUDIT record, not a selector cache that a
+    later stage may rebind: the slot set, the names, the members and the partition
+    key all have to be re-derivable from what was observed BEFORE the write.
+    """
+    declared = [entry["slot"] for entry in (rule.get("before") or {}).get("partitions") or []]
+    if sorted(captured) != sorted(declared):
+        raise HostContextError([_host_finding(
+            "captured slot set must equal the rule's before.partitions slots: "
+            "declared=%s captured=%s" % (sorted(declared), sorted(captured)))])
+    for slot, entry in captured.items():
+        _host_closed(entry, ("key", "names", "members"), "captured partition %r" % slot)
+        members = entry["members"]
+        if not members:
+            raise HostContextError([_host_finding(
+                "captured partition %r holds no members" % slot)])
+        if entry["names"] != sorted(entry["names"]):
+            raise HostContextError([_host_finding(
+                "captured partition %r names are not canonically ordered" % slot)])
+        if entry["key"] != canonical_sha256("topology",
+                                            sorted(members, key=canonical_json_bytes)):
+            raise HostContextError([_host_finding(
+                "captured partition %r key is not the digest of its members" % slot)])
+    return captured
+
+
 def _feedback_reason(outcome: str, receipt: Mapping) -> str:
     if outcome in (OUTCOME_APPLIED, OUTCOME_NO_CHANGE, OUTCOME_REFUSED):
         return "OK"
@@ -1485,3 +2202,896 @@ def _feedback_reason(outcome: str, receipt: Mapping) -> str:
         if candidate in mapped:
             return candidate
     return "EXECUTION_UNAVAILABLE"
+
+# ===========================================================================
+# PR1-C5 S1b step 4 -- expected engineering semantics (checkpoint 1)
+# ===========================================================================
+#
+# Compatibility semantics for pinned akcli-kicad 0.21.0.
+#
+# The kernel below replicates the geometry of the pinned writer
+# (akcli/geometry/transform.py:65-142, upstream commit
+# 68c2df5e43db2f822ab8dbfea36f777396897d8d).  It is a behavioural replica,
+# never a runtime dependency: the production path must not import akcli,
+# because the main suite runs on an interpreter without the pinned toolchain.
+#
+# It is qualified for akcli-kicad 0.21.0 ONLY.  Do not generalize it to another
+# toolchain version without re-qualifying it against that version's geometry and
+# native observations.
+
+PINNED_AKCLI_VERSION = "0.21.0"
+_PINNED_PIN_DIR = {0: (1, 0), 90: (0, 1), 180: (-1, 0), 270: (0, -1)}
+
+
+def _pinned_akcli_0210_transform_point(pt, rot=0, mirror="none", origin=(0, 0)):
+    """akcli 0.21.0 transform_point: rotate-then-mirror, integer nm, +Y down."""
+    x = int(pt[0])
+    y = int(pt[1])
+    r = int(rot) % 360
+    if r == 0:
+        pass
+    elif r == 90:
+        x, y = y, -x
+    elif r == 180:
+        x, y = -x, -y
+    elif r == 270:
+        x, y = -y, x
+    else:
+        raise HostContextError([_host_finding(
+            "unsupported component rotation %r" % (rot,))])
+    if mirror == "x":
+        y = -y
+    elif mirror == "y":
+        x = -x
+    elif mirror not in ("none", "", None):
+        raise HostContextError([_host_finding(
+            "unsupported component mirror %r" % (mirror,))])
+    return (x + int(origin[0]), y + int(origin[1]))
+
+
+def _pinned_akcli_0210_pin_world(pin_local_nm_yup, rot=0, mirror="none", origin=(0, 0)):
+    """akcli 0.21.0 pin_world: library +Y-up local nm -> world nm (+Y down)."""
+    local = (int(pin_local_nm_yup[0]), -int(pin_local_nm_yup[1]))
+    return _pinned_akcli_0210_transform_point(local, rot, mirror, origin)
+
+
+def _pinned_akcli_0210_label_angle_away(pin_orientation, rot=0, mirror="none"):
+    """akcli 0.21.0 label_angle_away: the angle whose text leaves the body."""
+    dx, dy = _PINNED_PIN_DIR.get(int(pin_orientation) % 360, (1, 0))
+    wx, wy = _pinned_akcli_0210_transform_point((-dx, dy), rot, mirror)
+    if wx > 0:
+        return 0
+    if wx < 0:
+        return 180
+    return 90 if wy < 0 else 270
+
+
+def _lib_symbols_ast(observation):
+    """The BEFORE observation's single lib_symbols AST (C2 source semantics)."""
+    matches = [obj for obj in observation["source_objects"]
+               if isinstance(obj, Mapping) and obj.get("kind") == "lib_symbols"]
+    if len(matches) != 1:
+        raise HostContextError([_host_finding(
+            "the BEFORE observation must carry exactly one lib_symbols source "
+            "object, found %d" % len(matches))])
+    descriptor = matches[0].get("descriptor")
+    if not isinstance(descriptor, Mapping) or "ast" not in descriptor:
+        raise HostContextError([_host_finding("lib_symbols carries no source AST")])
+    return descriptor["ast"]
+
+
+def _source_scalar_string(node, name):
+    """Quoted text of a scalar child, read with C2's own semantics."""
+    child = _c2_source_one(node, name)
+    if len(child) < 2:
+        raise HostContextError([_host_finding("invalid %s scalar" % name)])
+    return _c2_source_text(child[1])
+
+
+def _pin_node(lib_symbols, lib_id, pin_number):
+    """The unique library pin node for (lib_id, pin_number).
+
+    A KiCad symbol keeps its pins inside unit sub-symbols such as
+    '(symbol "R_1_1" ...)', so the search descends exactly one nesting level.
+    A missing or duplicated definition is a binding failure, never a guess.
+    """
+    symbols = [node for node in _c2_source_children(lib_symbols, "symbol")
+               if len(node) >= 2 and isinstance(node[1], dict)
+               and node[1].get("string") == lib_id]
+    if len(symbols) != 1:
+        raise HostContextError([_host_finding(
+            "library symbol %r resolves to %d definitions, expected exactly one"
+            % (lib_id, len(symbols)))])
+    matches = []
+    for unit in _c2_source_children(symbols[0], "symbol"):
+        for pin in _c2_source_children(unit, "pin"):
+            if _source_scalar_string(pin, "number") == pin_number:
+                matches.append(pin)
+    if len(matches) != 1:
+        raise HostContextError([_host_finding(
+            "pin %s.%s resolves to %d library definitions, expected exactly one"
+            % (lib_id, pin_number, len(matches)))])
+    return matches[0]
+
+
+def _pin_local_geometry(lib_symbols, lib_id, pin_number):
+    """(local_nm_yup, orientation) of one library pin (see _pin_node)."""
+    return _c2_source_at(_pin_node(lib_symbols, lib_id, pin_number))
+
+
+def _pin_electrical_type(pin_node):
+    """The pin's electrical type token, read exactly as the reader reports it."""
+    if len(pin_node) < 2 or not isinstance(pin_node[1], str):
+        raise HostContextError([_host_finding("library pin lacks an electrical type")])
+    return pin_node[1]
+
+
+def _library_definition_digests(observation, lib_id):
+    """The unanimous library definition digests for one lib_id.
+
+    Every existing component of that lib_id must report the same
+    lib_definition_sha256 and pin_definition_sha256: the definition belongs to
+    the embedded library, not to an instance, so a disagreement means the
+    observation is internally inconsistent.  No instance, or a disagreement, is
+    a binding failure -- never a first-match guess.
+    """
+    rows = [row for row in observation["components"] if row["lib_id"] == lib_id]
+    if not rows:
+        raise HostContextError([_host_finding(
+            "the BEFORE observation carries no %r component, so the library "
+            "definition digests of a new %r cannot be established" % (lib_id, lib_id))])
+    lib_digests = {row["lib_definition_sha256"] for row in rows}
+    pin_digests = {row["pin_definition_sha256"] for row in rows}
+    if len(lib_digests) != 1 or len(pin_digests) != 1:
+        raise HostContextError([_host_finding(
+            "existing %r components disagree on their library definition digests "
+            "(%d lib, %d pin)" % (lib_id, len(lib_digests), len(pin_digests)))])
+    return lib_digests.pop(), pin_digests.pop()
+
+
+def _anchor_component(observation, proposal, reference):
+    """(lib_id, rotation, mirror, origin_nm) for a label anchor's owner.
+
+    The owner is either a component that already exists in the BEFORE
+    observation or one placed by this very proposal (DC-04's R9 and DC-05's C5
+    are both new).  No match, several matches, a multi-unit part or a second
+    placement of the same reference are all binding failures.
+    """
+    existing = [row for row in observation["components"] if row["reference"] == reference]
+    if len(existing) > 1:
+        raise HostContextError([_host_finding(
+            "reference %r appears %d times in the BEFORE observation"
+            % (reference, len(existing)))])
+    if existing:
+        row = existing[0]
+        if int(row.get("unit", 1)) != 1:
+            raise HostContextError([_host_finding(
+                "reference %r is a multi-unit part; v1 binds unit 1 only" % reference)])
+        return (row["lib_id"], int(row["rotation"]), str(row["mirror"]),
+                tuple(int(value) for value in row["position_nm"]))
+    placements = [op for op in proposal.ops
+                  if op["op"] == "place_component" and op["designator"] == reference]
+    if len(placements) != 1:
+        raise HostContextError([_host_finding(
+            "label anchor %r is neither an existing component nor exactly one "
+            "place_component in this proposal (placements=%d)"
+            % (reference, len(placements)))])
+    op = placements[0]
+    origin = (int(op["x_mil"]) * 25400, int(op["y_mil"]) * 25400)
+    return op["lib_id"], int(op["rotation"]), str(op["mirror"]), origin
+
+
+def build_expected_after(observation, proposal, rule=None, runtime=None):
+    """Pure: the expected engineering semantics this round may create.
+
+    observation is the host native BEFORE read.  Every label geometry is derived
+    live from the observation's library AST plus the owning component's
+    placement -- never from a static policy default and never from a hard-coded
+    angle.  The pinned writer branches on the presence of rotation, so an
+    omitted rotation means derive-from-pin while an explicit 0 stays 0; the two
+    produce different semantics and are reported as such.
+
+    rule and runtime are carried so the policy layer can bind the result, and
+    are deliberately NOT used as a source of geometry: copying a rotation
+    default out of the static policy is exactly the defect this checkpoint
+    exists to prevent.
+    """
+    lib_symbols = _lib_symbols_ast(observation)
+    additions = {"version": 1, "new_components": [], "new_labels": []}
+    roles = set()
+    slot = 0
+    for op in proposal.ops:
+        if op["op"] == "place_component":
+            role = "new:" + op["designator"]
+            if role in roles:
+                raise HostContextError([_host_finding(
+                    "duplicate new component role %r" % role)])
+            roles.add(role)
+            additions["new_components"].append({
+                "role": role, "reference": op["designator"], "lib_id": op["lib_id"],
+                "position_nm": [int(op["x_mil"]) * 25400, int(op["y_mil"]) * 25400],
+                "rotation": int(op["rotation"]), "mirror": str(op["mirror"]),
+                "unit": int(op["unit"]),
+            })
+        elif op["op"] == "add_net_label":
+            reference, separator, pin_number = op["at"].partition(".")
+            if not separator:
+                raise HostContextError([_host_finding(
+                    "label anchor %r is not a REF.PIN token" % op["at"])])
+            lib_id, rot, mirror, origin = _anchor_component(observation, proposal, reference)
+            local, orientation = _pin_local_geometry(lib_symbols, lib_id, pin_number)
+            point = _pinned_akcli_0210_pin_world(local, rot, mirror, origin)
+            if "rotation" in op:
+                angle = int(op["rotation"])
+                source = "explicit"
+            else:
+                angle = _pinned_akcli_0210_label_angle_away(orientation, rot, mirror)
+                source = "derived"
+            additions["new_labels"].append({
+                "slot": slot, "role": "new:label:%d" % slot,
+                "name": op["name"], "anchor": op["at"],
+                "owner": reference, "lib_id": lib_id, "pin_number": pin_number,
+                "point_nm": [point[0], point[1]], "rotation": angle,
+                "rotation_source": source,
+            })
+            slot += 1
+    additions["new_labels"].sort(key=lambda row: row["slot"])
+    return additions
+
+# ---------------------------------------------------------------------------
+# PR1-C5 S1b step 4 -- policy specialization (checkpoint 2)
+# ---------------------------------------------------------------------------
+#
+# _bound_policy answers exactly one question: if this round is authorized, what
+# precisely may change?  It performs NO authorization -- no policy port
+# evaluation, no TOOL_EXECUTE/FILE_WRITE decision, no ledger lookup, no default
+# allow.  Those belong to bind_policy().
+#
+# It consumes two single sources of truth and re-derives neither: the runtime
+# bindings (the only runtime-value source) and build_expected_after (the only
+# source of new label geometry).
+
+# The expected AFTER bytes do not exist yet, so an expectation cannot carry their
+# hash.  C2 excludes source_sha256 from the electrical topology, so a fixed
+# placeholder is the honest value; it is never compared with applied bytes.
+# C2 erratum section 10 freezes the exact sentinel for the not-yet-written
+# expected AFTER bytes.  It is a STRUCTURAL PLACEHOLDER ONLY: it must never be
+# compared with the BEFORE hash, with a staged/AFTER hash, or used in a commit
+# byte-equality predicate.  The only fact source for real AFTER bytes is C4's
+# fresh native_after plus C3's fresh staged read.
+_EXPECTED_SOURCE_SHA256 = canonical_sha256(
+    "context", {"role": "EXPECTED_AFTER_NOT_YET_WRITTEN"})
+
+
+def _refresh_expected_bookkeeping(observation):
+    """Recompute partition keys, per-pin partition_key and coverage.
+
+    The expectation is a complete observation, so its bookkeeping must be
+    internally consistent before C2 ever normalizes it.  Every pin must belong to
+    exactly one partition.
+    """
+    for partition in observation["partitions"]:
+        members = sorted(partition["members"], key=canonical_json_bytes)
+        partition["members"] = members
+        partition["key"] = canonical_sha256("topology", members)
+    owner = {}
+    for partition in observation["partitions"]:
+        for member in partition["members"]:
+            key = canonical_json_bytes(member)
+            if key in owner:
+                raise HostContextError([_host_finding(
+                    "an expected pin appears in two partitions")])
+            owner[key] = partition["key"]
+    for row in observation["pins"]:
+        key = owner.get(canonical_json_bytes(row["identity"]))
+        if key is None:
+            raise HostContextError([_host_finding(
+                "an expected pin belongs to no partition")])
+        row["partition_key"] = key
+    pin_ids = sorted([row["identity"] for row in observation["pins"]],
+                     key=canonical_json_bytes)
+    comp_ids = sorted([row["identity"] for row in observation["components"]],
+                      key=canonical_json_bytes)
+    observation["coverage"] = {
+        "expected_pin_keys_sha256": canonical_sha256("topology", pin_ids),
+        "observed_pin_keys_sha256": canonical_sha256("topology", pin_ids),
+        "expected_component_keys_sha256": canonical_sha256("topology", comp_ids),
+        "observed_component_keys_sha256": canonical_sha256("topology", comp_ids),
+        "expected_pin_count": len(pin_ids),
+        "observed_pin_count": len(pin_ids),
+        "complete": True,
+    }
+    return observation
+
+
+def _expected_observation(observation, rule, runtime, additions):
+    """Materialize the full expected observation from the CP1 additions.
+
+    This does not recompute any label geometry: it wraps the single CP1 result
+    into the observation shape C2 verifies.  New component rows take their
+    library definition digests from the unanimous same-lib_id instance set, their
+    assembly booleans from the frozen rule, and everything else from the
+    placement op; new label semantics are the exact C2 four-tuple.
+
+    Returns (expected_observation, captured_partitions).
+    """
+    expected = copy.deepcopy(observation)
+    expected["source_sha256"] = _EXPECTED_SOURCE_SHA256
+    # object_identity_map is slot -> {uuid, kind, descriptor_sha256}; C2 consumes
+    # its VALUES and matches entry["uuid"] against a source-object identity.  Every
+    # declaration must bind exactly one BEFORE object whose kind and descriptor
+    # digest agree, and every declaration must actually remove something -- a
+    # declared removal that removes nothing is a binding failure, not a no-op.
+    removed_ids = set()
+    for slot, entry in sorted(runtime["object_identity_map"].items()):
+        matches = [obj for obj in expected["source_objects"]
+                   if obj["identity"] == entry["uuid"]]
+        if len(matches) != 1:
+            raise HostContextError([_host_finding(
+                "removal %r names %s, which matches %d source objects in the BEFORE "
+                "observation, expected exactly one" % (slot, entry["uuid"], len(matches)))])
+        obj = matches[0]
+        if obj["kind"] != entry["kind"]:
+            raise HostContextError([_host_finding(
+                "removal %r declares kind %r but %s is a %r"
+                % (slot, entry["kind"], entry["uuid"], obj["kind"]))])
+        digest = canonical_sha256("protected", obj["descriptor"])
+        if digest != entry["descriptor_sha256"]:
+            raise HostContextError([_host_finding(
+                "removal %r descriptor digest does not match the observed object" % slot)])
+        if obj["identity"] in removed_ids:
+            raise HostContextError([_host_finding(
+                "two removal declarations bind the same source object %s" % obj["identity"])])
+        removed_ids.add(obj["identity"])
+    expected["source_objects"] = [obj for obj in expected["source_objects"]
+                                  if obj["identity"] not in removed_ids]
+    if not observation["components"]:
+        raise HostContextError([_host_finding(
+            "the BEFORE observation carries no component, so a new component "
+            "cannot inherit its sheet path")])
+    sheet_path = observation["components"][0]["identity"]["sheet_path"]
+    lib_symbols = _lib_symbols_ast(observation)
+    declared = {row["reference"]: row
+                for row in (rule.get("after") or {}).get("add_components") or []}
+    new_pins = {}
+    for row in additions["new_components"]:
+        reference = row["reference"]
+        declaration = declared.get(reference)
+        if declaration is None:
+            raise HostContextError([_host_finding(
+                "the frozen rule does not declare the new component %r" % reference)])
+        lib_digest, pin_digest = _library_definition_digests(observation, row["lib_id"])
+        identity = {"sheet_path": sheet_path, "component_uuid": row["role"],
+                    "reference": reference, "unit": row["unit"]}
+        expected["components"].append({
+            "identity": identity, "reference": reference, "lib_id": row["lib_id"],
+            "lib_definition_sha256": lib_digest, "value": declaration["value"],
+            "footprint": declaration["footprint"], "unit": row["unit"],
+            "position_nm": [row["position_nm"][0], row["position_nm"][1]],
+            "rotation": row["rotation"], "mirror": row["mirror"],
+            "dnp": declaration["dnp"], "in_bom": declaration["in_bom"],
+            "on_board": declaration["on_board"],
+            "pin_definition_sha256": pin_digest})
+        for number in ("1", "2"):
+            pin_node = _pin_node(lib_symbols, row["lib_id"], number)
+            pin_identity = {"sheet_path": sheet_path, "component_uuid": row["role"],
+                            "reference": reference, "unit": row["unit"],
+                            "number": number,
+                            "pin_uuid": "new:%s.%s" % (reference, number)}
+            expected["pins"].append({
+                "identity": pin_identity, "name": _source_scalar_string(pin_node, "name"),
+                "electrical_type": _pin_electrical_type(pin_node),
+                "no_connect": False, "partition_key": ""})
+            new_pins["%s.%s" % (reference, number)] = pin_identity
+        expected["source_objects"].append({
+            "identity": row["role"], "kind": "symbol",
+            "semantics": {"reference": reference}})
+    for label in additions["new_labels"]:
+        expected["source_objects"].append({
+            "identity": label["role"], "kind": "label",
+            "semantics": {"name": label["name"], "scope": "local",
+                          "point_nm": [label["point_nm"][0], label["point_nm"][1]],
+                          "rotation": label["rotation"]}})
+    captured = capture_before_partitions(
+        observation, (rule.get("before") or {}).get("partitions") or [])
+    expected["partitions"] = project_expected_partitions(
+        observation, rule, captured, new_pins)
+    return _refresh_expected_bookkeeping(expected), captured
+
+
+def _canonical_authorized_ops(rule, runtime):
+    """The ordered op-list this round is authorized to execute.
+
+    Frozen order: remove -> add_components -> add_labels.  Every op is built by
+    running the frozen rule's declaration through C1's own parser, so the
+    canonical shape cannot drift from what the proposal parser produces.
+
+    The label ops are built WITHOUT the rotation key on purpose.  The pinned
+    writer branches on that key's presence, so the policy's expected semantic
+    rotation must never be translated into an explicit rotation:0 that the
+    proposer did not write.  Presence sensitivity is what keeps the C4/C1
+    rotation binding intact at the C5 layer.
+    """
+    delta = rule.get("object_delta") or {}
+    removals = runtime["object_identity_map"]
+    ops = []
+    try:
+        for declaration in delta.get("remove") or []:
+            slot = declaration["slot"]
+            entry = removals.get(slot)
+            if entry is None:
+                raise HostContextError([_host_finding(
+                    "removal slot %r has no resolved object binding" % slot)])
+            ops.append(_parse_op({"op": "delete_object", "uuid": entry["uuid"]}, "$.ops"))
+        for row in (rule.get("after") or {}).get("add_components") or []:
+            position = row["position_mil"]
+            ops.append(_parse_op({
+                "op": "place_component", "lib_id": row["lib_id"],
+                "designator": row["reference"], "x_mil": position[0],
+                "y_mil": position[1], "value": row["value"],
+                "footprint": row["footprint"]}, "$.ops"))
+        for row in delta.get("add_labels") or []:
+            ops.append(_parse_op({"op": "add_net_label", "name": row["name"],
+                                  "at": row["at_pin"]}, "$.ops"))
+    except ProposalInvalidError as exc:
+        raise HostContextError([_host_finding(
+            "the frozen rule cannot be projected into an authorized op-list: %s" % exc)])
+    return ops
+
+
+def _operation_constraints(rule, runtime, additions):
+    """The transaction's operation snapshot.
+
+    Holds the counts, the exactly resolved removal objects, the new component and
+    label attributes, the frozen stage order and the canonical authorized op-list.
+    It is a snapshot, never a lazy binding: the later comparison against the
+    proposal happens in bind_policy, not here.
+    """
+    delta = rule.get("object_delta") or {}
+    removals = runtime["object_identity_map"]
+    removed = []
+    for declaration in delta.get("remove") or []:
+        entry = removals.get(declaration["slot"])
+        if entry is None:
+            raise HostContextError([_host_finding(
+                "removal slot %r has no resolved object binding" % declaration["slot"])])
+        removed.append({"slot": declaration["slot"], "uuid": entry["uuid"],
+                        "kind": entry["kind"],
+                        "descriptor_sha256": entry["descriptor_sha256"]})
+    components = []
+    for row in (rule.get("after") or {}).get("add_components") or []:
+        components.append({"reference": row["reference"], "lib_id": row["lib_id"],
+                           "value": row["value"], "footprint": row["footprint"],
+                           "position_mil": list(row["position_mil"]),
+                           "rotation": row["rotation"], "mirror": row["mirror"],
+                           "unit": row["unit"]})
+    labels = []
+    for row in delta.get("add_labels") or []:
+        labels.append({"name": row["name"], "at_pin": row["at_pin"],
+                       "scope": row.get("scope", "local"), "rotation_key": "ABSENT"})
+    ops = _canonical_authorized_ops(rule, runtime)
+    # The snapshot and the CP1 semantics must describe the same round.
+    if (len(components) != len(additions["new_components"])
+            or len(labels) != len(additions["new_labels"])):
+        raise HostContextError([_host_finding(
+            "the authorized op snapshot and the expected additions disagree")])
+    return {
+        "counts": {"delete_object": len(removed), "place_component": len(components),
+                   "add_net_label": len(labels)},
+        "removed": removed,
+        "new_components": components,
+        "new_labels": labels,
+        "stage_order": ["delete_object", "place_component", "add_net_label"],
+        "canonical_authorized_ops": ops,
+    }
+
+
+def _bound_policy(observation, rule, runtime, additions, route):
+    """Specialize the frozen policy for this transaction (no authorization).
+
+    Consumes the runtime bindings as the only runtime-value source and the CP1
+    additions as the only source of new label geometry.  The transaction identity
+    (run / candidate / round / patch / proposal_sha256) stays in the runtime
+    bindings and is bound by the HostPatch, never here.
+    """
+    if not isinstance(runtime, Mapping):
+        raise HostContextError([_host_finding("runtime bindings must be a mapping")])
+    unknown = sorted(set(runtime) - set(_RUNTIME_BINDING_FIELDS))
+    if unknown:
+        raise HostContextError([_host_finding(
+            "runtime bindings carry fields outside the frozen set: %s"
+            % ", ".join(unknown))])
+    missing = sorted(field for field in _RUNTIME_BINDING_FIELDS if field not in runtime)
+    if missing:
+        raise HostContextError([_host_finding(
+            "runtime bindings are incomplete: %s" % ", ".join(missing))])
+    if route not in (ROUTE_STRICT, ROUTE_EXCEPTION):
+        raise HostContextError([_host_finding("unsupported route %r" % (route,))])
+    expected, captured = _expected_observation(observation, rule, runtime, additions)
+    normalized = normalize_observation(expected, expected=True)
+    authorized = observation_delta(normalize_observation(observation), normalized,
+                                   expected=True)
+    roles = {"new:" + row["reference"]: {"reference": row["reference"],
+                                         "pin_numbers": ["1", "2"]}
+             for row in additions["new_components"]}
+    bound = {
+        "version": 1,
+        "rule_id": rule["id"],
+        "route": route,
+        "policy_file_sha256": runtime["policy_document_sha256"],
+        "authority_context_digest": runtime["authority_context"]["context_digest"],
+        "before_source_sha256": observation["source_sha256"],
+        "before_topology_sha256": runtime["base_topology_sha256"],
+        "pin_identity_map": runtime["pin_identity_map"],
+        "object_identity_map": runtime["object_identity_map"],
+        "captured_partitions": captured,
+        "new_component_roles": roles,
+        "expected_after": expected,
+        "authorized_delta": authorized,
+        "authorized_delta_sha256": canonical_sha256("delta", authorized),
+        "protected_projection_sha256": None,
+        "operation_constraints": _operation_constraints(rule, runtime, additions),
+    }
+    bound["protected_projection_sha256"] = protected_projection_sha256(observation, bound)
+    if set(bound) != set(_C2_BOUND_FIELDS):
+        raise HostContextError([_host_finding(
+            "the specialized policy does not match the frozen bound-policy field set")])
+    return bound
+
+
+# The frozen HostPatch field set.  Mirrors src/repair/patch_schema_v1.json
+# #/$defs/HostPatch and tools/akcli_adapter.py::_HOST_PATCH_FIELDS; it is restated
+# here so CP3 can prove the shape it assembles before C4 ever sees it.  The
+# schema itself stays read-only (C5 must not edit the contract it implements).
+_HOST_PATCH_FIELDS = frozenset({
+    "schema_version", "run_id", "candidate_id", "round_id", "patch_id", "context_id",
+    "proposal", "proposal_sha256", "target", "base", "policy", "authority",
+    "toolchain_manifest", "toolchain_sha256", "route", "bound_policy", "patch_sha256",
+})
+# The schema's three-field authority view, and the decision row it carries.
+_HOST_PATCH_AUTHORITY_FIELDS = ("context_digest", "resolved_authorization_refs",
+                                "decisions")
+_AUTHORITY_DECISION_FIELDS = ("capability", "effect")
+
+
+def _host_patch(host_context, proposal, runtime, bound_policy, policy):
+    """Assemble the HostPatch: the transaction envelope C4 stages (no authorization).
+
+    CP3 CONSTRUCTS ONLY.  It copies what the host already resolved -- the
+    transaction identity, the candidate byte manifest, the toolchain slice and
+    the authority context -- binds the CP2 BoundPolicy to it, and stops.  It
+    never evaluates a policy port, never looks up a grant, never consults a
+    ledger and never decides whether a stage may run: `authority` is carried
+    from the host-resolved runtime bindings, so the decision stays exactly where
+    the host already made it, and the toolchain identity enters as metadata that
+    CP4 re-derives and cross-checks before it may act.
+
+    The runtime bindings are the only runtime-value source, exactly as in CP2.
+    Re-observing the candidate here would create a second truth source, and
+    reading any transaction fact from the proposal would let a candidate inject
+    its own identity -- the frozen schema forbids merging proposal fields in.
+
+    POLICY IDENTITY (Owner decision, 2026-09-27): `policy.id` is read from the
+    loaded policy document, never from the proposal and never from a free
+    argument.  C4 only checks that `policy.id` is a well-formed identifier, so
+    nothing downstream would catch a policy id that disagrees with the policy
+    digest; deriving it here and re-deriving the digest from the same document
+    closes that gap.  `policy_id` is itself inside the hashed bytes, so one
+    digest can only ever carry one policy identity.
+    """
+    if not isinstance(policy, Mapping):
+        raise HostContextError([_host_finding("the policy document must be a mapping")])
+    policy_sha = _policy_document_sha256(policy)
+    if policy_sha != runtime["policy_document_sha256"]:
+        raise HostContextError([_host_finding(
+            "the policy document does not match this transaction's policy digest")])
+    policy_id = _host_text(policy.get("policy_id"), "policy id")
+    if runtime["policy_document_sha256"] == policy_sha:
+        # the digest already binds policy_id; re-assert so a document whose id
+        # was stripped or altered after hashing cannot be carried silently.
+        if canonical_sha256("policy-bound", dict(policy)) != policy_sha:
+            raise HostContextError([_host_finding(
+                "the policy document does not match its own digest")])
+    if not isinstance(bound_policy, Mapping):
+        raise HostContextError([_host_finding("the bound policy must be a mapping")])
+    if set(bound_policy) != set(_C2_BOUND_FIELDS):
+        raise HostContextError([_host_finding(
+            "the host patch may only carry a bound policy from the frozen field set")])
+    unknown = sorted(set(runtime) - set(_RUNTIME_BINDING_FIELDS))
+    missing = sorted(field for field in _RUNTIME_BINDING_FIELDS if field not in runtime)
+    if unknown or missing:
+        raise HostContextError([_host_finding(
+            "the host patch runtime bindings are not the frozen set "
+            "(unknown=%s missing=%s)" % (", ".join(unknown) or "none",
+                                         ", ".join(missing) or "none"))])
+    # The BoundPolicy must be THIS transaction's, not a foreign or stale one.
+    for label, actual, expected in (
+            ("policy digest", bound_policy["policy_file_sha256"],
+             runtime["policy_document_sha256"]),
+            ("authority context", bound_policy["authority_context_digest"],
+             runtime["authority_context"]["context_digest"]),
+            ("before topology", bound_policy["before_topology_sha256"],
+             runtime["base_topology_sha256"])):
+        if actual != expected:
+            raise HostContextError([_host_finding(
+                "the bound policy does not carry this transaction's %s" % label)])
+    if bound_policy["rule_id"] not in runtime["approved_rule_ids"]:
+        raise HostContextError([_host_finding(
+            "the bound rule %r is not among the host-approved rule ids"
+            % bound_policy["rule_id"])])
+    # The authority block is HOST-resolved and carried, never decided here.
+    # `_host_closed` proves no extra capability or decision could ride along; the
+    # host's `approvals` stay in the host context and are deliberately NOT
+    # re-exported, so the patch cannot be read as carrying an approval surface.
+    authority = _host_closed(runtime["authority_context"],
+                             _AUTHORITY_FIELDS, "host authority")
+    references = authority["resolved_authorization_refs"]
+    if not isinstance(references, list) or not references or any(
+            not isinstance(item, str) or not item for item in references):
+        raise HostContextError([_host_finding(
+            "the host authority carries no resolved authorization reference")])
+    decisions = authority["decisions"]
+    if not isinstance(decisions, list) or any(
+            not isinstance(row, Mapping) for row in decisions):
+        raise HostContextError([_host_finding(
+            "the host authority decisions must be a list of mappings")])
+    for row in decisions:
+        _host_closed(row, _AUTHORITY_DECISION_FIELDS, "authority decision")
+    authority_view = {
+        "context_digest": authority["context_digest"],
+        "resolved_authorization_refs": list(references),
+        "decisions": [{key: row[key] for key in _AUTHORITY_DECISION_FIELDS}
+                      for row in decisions],
+    }
+    toolchain = runtime["toolchain_manifest"]
+    patch = {
+        "schema_version": SCHEMA_VERSION,
+        "run_id": runtime["run_id"],
+        "candidate_id": runtime["candidate_id"],
+        "round_id": runtime["round_id"],
+        "patch_id": runtime["patch_id"],
+        "context_id": host_context["context_id"],
+        "proposal": proposal.to_dict(),
+        "proposal_sha256": runtime["proposal_sha256"],
+        "target": host_context["target"],
+        "base": {"files": runtime["base_file_manifest"],
+                 "topology_sha256": runtime["base_topology_sha256"]},
+        "policy": {
+            "id": policy_id,
+            "file_sha256": runtime["policy_document_sha256"],
+            "bound_rule_id": bound_policy["rule_id"],
+            "bound_policy_sha256": canonical_sha256("policy-bound", bound_policy),
+        },
+        "authority": authority_view,
+        "toolchain_manifest": toolchain,
+        "toolchain_sha256": host_toolchain.toolchain_slice_sha256(toolchain),
+        "route": bound_policy["route"],
+        "bound_policy": bound_policy,
+    }
+    if set(patch) | {"patch_sha256"} != set(_HOST_PATCH_FIELDS):
+        raise HostContextError([_host_finding(
+            "the assembled host patch does not match the frozen field set")])
+    if set(patch["authority"]) != set(_HOST_PATCH_AUTHORITY_FIELDS):
+        raise HostContextError([_host_finding(
+            "the host patch authority view does not match the frozen field set")])
+    if patch["proposal"]["context_id"] != patch["context_id"]:
+        raise HostContextError([_host_finding(
+            "the proposal context does not match the host context")])
+    if patch["proposal"]["target"] != patch["target"]:
+        raise HostContextError([_host_finding(
+            "the proposal target does not match the host target")])
+    if canonical_sha256("proposal", patch["proposal"]) != patch["proposal_sha256"]:
+        raise HostContextError([_host_finding(
+            "the carried proposal does not match its own digest")])
+    if patch["policy"]["id"] != policy_id:
+        raise HostContextError([_host_finding(
+            "the host patch policy id does not match the policy document")])
+    patch["patch_sha256"] = canonical_sha256(
+        "patch", {key: value for key, value in patch.items() if key != "patch_sha256"})
+    return patch
+
+
+# CP4-A result states.  UNKNOWN is not BLOCKED: an authority that cannot be
+# resolved is not a denial, and the two must never be collapsed into one value.
+AUTH_PASS = "PASS"
+AUTH_BLOCKED = "BLOCKED"
+AUTH_UNKNOWN = "UNKNOWN"
+
+
+def resolve_authorization(host_context, policy, rule, required_paths=()):
+    """Resolve whether this transaction is authorized to act (CP4-A).
+
+    The decision is a function of the HOST state only: the policy document, the
+    host-resolved authority block and the run/candidate binding.  The proposal
+    is NOT an input and cannot appear anywhere in it -- an AI-authored candidate
+    that could grant its own permission would make the whole safety loop
+    decorative.  A proposal-supplied `authorized` / `file_write` / `tool_execute`
+    field has no reader here and therefore no effect.
+
+    Denials are BLOCKED (the host said no).  A state that cannot be resolved --
+    a missing or non-identifying authority -- is UNKNOWN, never BLOCKED and
+    never silently allowed.  An exception is never swallowed into a decision:
+    a malformed authority raises, because "we could not tell" is not a verdict.
+    """
+    if not isinstance(rule, Mapping) or not rule.get("id"):
+        raise HostContextError([_host_finding(
+            "authorization needs the bound rule, not an unnamed one")])
+    findings = authority_findings(host_context, required_paths=required_paths)
+    if findings:
+        return {"status": AUTH_BLOCKED, "findings": list(findings),
+                "capabilities": {}}
+    # The approval that authorizes this rule must bind THIS policy document,
+    # THIS run and THIS candidate.  approved_rule_ids applies exactly that
+    # filter, so a grant for another policy or another candidate cannot carry.
+    policy_sha = _policy_document_sha256(policy)
+    if rule["id"] not in approved_rule_ids(host_context, policy_sha):
+        return {"status": AUTH_BLOCKED,
+                "findings": [_finding(
+                    REASON_AUTH_DENIED,
+                    "no host approval binds rule %s to this policy digest, run and "
+                    "candidate" % rule["id"])],
+                "capabilities": {}}
+    effects = {row["capability"]: row["effect"]
+               for row in host_context["authority"]["decisions"]}
+    return {
+        "status": AUTH_PASS,
+        "findings": [],
+        "capabilities": {capability: effects[capability]
+                         for capability in REQUIRED_CAPABILITIES},
+        "policy_sha256": policy_sha,
+        "rule_id": rule["id"],
+        "authorization_refs": list(host_context["authority"]["resolved_authorization_refs"]),
+    }
+
+
+# CP4-B states.  TOOLCHAIN_PASS means the host toolchain is the qualified one and
+# may be invoked.  A mismatch is BLOCKED: the host named a different toolchain
+# than the contract qualifies, and "different" is not "unverifiable".
+TOOLCHAIN_PASS = "PASS"
+TOOLCHAIN_BLOCKED = "BLOCKED"
+TOOLCHAIN_UNKNOWN = "UNKNOWN"
+
+
+def qualify_toolchain(host_context, runtime):
+    """Decide whether the host toolchain is the qualified one (CP4-B).
+
+    This is the obligation CP3 only recorded as metadata.  A HostPatch may carry
+    any toolchain slice, so until something checks it, "the toolchain identity
+    travels with the patch" is documentation rather than a control.  Here the
+    slice the transaction will actually use must trace back to THIS host binding
+    and to the pinned akcli, or the qualified kernel must not be invoked.
+
+    Deliberately small: this answers one question with the primitives the frozen
+    toolchain layer already provides (`validate_host_binding`,
+    `derive_akcli_slice`, `toolchain_slice_sha256`).  It is not a version
+    management system, it does not resolve, download or install anything, and it
+    never calls the tool.  Qualification is a precondition for the call, never a
+    substitute for it.
+
+    UNKNOWN is reserved for a state that cannot be established.  A declared
+    mismatch, or a binding that does not pin the qualified version, is BLOCKED --
+    the host said something definite and it was not the qualified thing.
+    """
+    binding = host_context["toolchain_binding"]
+    try:
+        normalized = host_toolchain.validate_host_binding(binding)
+    except host_toolchain.HostBindingError as exc:
+        return {"status": TOOLCHAIN_BLOCKED, "findings": [_host_finding(
+            "the host toolchain binding is not qualified: %s" % exc)],
+            "pinned_akcli_version": PINNED_AKCLI_VERSION, "observed": None}
+    result = {"status": TOOLCHAIN_BLOCKED, "findings": [],
+              "pinned_akcli_version": PINNED_AKCLI_VERSION, "observed": None}
+    result["host_binding_sha256"] = host_toolchain.host_binding_sha256(normalized)
+    slice_manifest = runtime["toolchain_manifest"]
+    result["expected_toolchain_sha256"] = host_toolchain.toolchain_slice_sha256(
+        host_toolchain.derive_akcli_slice(
+            normalized, host_context["candidate_symbol_digest"]))
+    result["observed"] = {
+        "toolchain_sha256": host_toolchain.toolchain_slice_sha256(slice_manifest),
+        "akcli_version": slice_manifest.get("akcli_version"),
+        "akcli_artifact_sha256": slice_manifest.get("akcli_artifact_sha256"),
+    }
+    if result["observed"]["akcli_version"] != PINNED_AKCLI_VERSION:
+        result["findings"].append(_host_finding(
+            "the transaction toolchain declares akcli %r, but the qualified "
+            "version is %s" % (result["observed"]["akcli_version"],
+                               PINNED_AKCLI_VERSION)))
+    if result["observed"]["toolchain_sha256"] != result["expected_toolchain_sha256"]:
+        result["findings"].append(_host_finding(
+            "the transaction toolchain slice is not the slice this host binding "
+            "derives for the before-candidate symbol digest"))
+    if result["findings"]:
+        return result
+    result["status"] = TOOLCHAIN_PASS
+    return result
+
+
+def bind_policy(host_context, proposal, native_before, policy=None,
+                required_paths=()):
+    """Bind one transaction into a BoundPolicyResult (CP4-C, orchestration only).
+
+    Composition, nothing new.  This orders the four already-proven stages and
+    stops at the first one that refuses:
+
+        validate host -> CP1 expected_after -> CP4-A authorization
+                     -> CP4-B toolchain -> CP3 HostPatch
+
+    Authorization is resolved BEFORE the toolchain is qualified, so a
+    transaction that is not permitted never reaches the point where its
+    toolchain matters, and a permitted one still cannot act on an unqualified
+    toolchain.  The order is the safety order, not a preference.
+
+    A refusal from any stage is a BLOCKED result carrying that stage's own
+    findings -- the reason is never replaced with a generic message and never
+    swallowed.  TOOL_ERROR is reserved for a stage that could not run (the host
+    toolchain is absent or the native read failed); UNKNOWN is reserved for a
+    state that could not be established.  Neither is ever reported as PASS, and
+    a False is never treated as an error: each stage returns a status, and an
+    unexpected exception propagates rather than being converted into a verdict.
+
+    No stage is executed here.  A PASS means the transaction is bound and
+    qualified, NOT that anything was written; committing it is a later phase.
+    """
+    receipt = {
+        "status": STATUS_BLOCKED,
+        "last_phase": PHASE_PRECHECK,
+        "cause_status": None,
+        "reasons": [],
+    }
+
+    def refuse(phase, status, findings):
+        receipt.update(status=status, last_phase=phase, cause_status=status,
+                       reasons=list(findings))
+        return receipt
+
+    try:
+        validate_host_context(host_context)
+    except HostContextError as exc:
+        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, exc.findings)
+    if policy is None:
+        policy = load_topology_policy()
+    policy_sha = _policy_document_sha256(policy)
+    try:
+        approved = approved_rule_ids(host_context, policy_sha)
+        rule, findings = select_rule(policy, proposal, approved)
+        if findings:
+            return refuse(PHASE_PRECHECK, STATUS_BLOCKED, findings)
+        authorization = resolve_authorization(host_context, policy, rule,
+                                              required_paths=required_paths)
+        if authorization["status"] != AUTH_PASS:
+            return refuse(PHASE_PRECHECK, STATUS_BLOCKED, authorization["findings"])
+        runtime = runtime_bindings(host_context, proposal, native_before,
+                                   policy_sha, approved, rule=rule, removals={})
+        toolchain = qualify_toolchain(host_context, runtime)
+        if toolchain["status"] != TOOLCHAIN_PASS:
+            return refuse(PHASE_PRECHECK, STATUS_BLOCKED, toolchain["findings"])
+        additions = build_expected_after(native_before["observation"], proposal)
+        bound = _bound_policy(native_before["observation"], rule, runtime, additions,
+                              rule["route"])
+        host_patch = _host_patch(host_context, proposal, runtime, bound, policy)
+    except HostContextError as exc:
+        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, exc.findings)
+    except RepairContractError as exc:
+        return refuse(PHASE_PRECHECK, STATUS_UNKNOWN, [_finding(
+            REASON_INPUT_DRIFT, "the transaction could not be established: %s" % exc)])
+    receipt.update(
+        status=STATUS_NO_CHANGE,
+        last_phase=PHASE_PRECHECK,
+        cause_status=None,
+        reasons=[],
+        rule_id=rule["id"],
+        route=rule["route"],
+        policy_sha256=policy_sha,
+        authorization={"status": authorization["status"],
+                       "capabilities": authorization["capabilities"],
+                       "authorization_refs": authorization["authorization_refs"]},
+        toolchain={"status": toolchain["status"],
+                   "pinned_akcli_version": toolchain["pinned_akcli_version"],
+                   "toolchain_sha256": toolchain["observed"]["toolchain_sha256"]},
+        bound_policy_sha256=host_patch["policy"]["bound_policy_sha256"],
+        patch_sha256=host_patch["patch_sha256"],
+        authorized_delta_sha256=bound["authorized_delta_sha256"],
+        expected_after_source_sha256=bound["expected_after"]["source_sha256"],
+        host_patch=host_patch,
+    )
+    return receipt
