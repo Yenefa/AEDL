@@ -84,17 +84,17 @@
 
 - 名称：akcli-kicad
 - 类型：第三方 EDA 自动化 CLI
-- 版本：0.21.0；protocol 2
-- 来源：本机 Hermes venv 中的 `akcli.exe`；项目记录指向 `https://pypi.org/project/akcli-kicad/`，安装来源链仍为 `TO_VERIFY`
-- License / 授权类型：`TO_VERIFY`
-- 用途：从当前 M2 intent 生成并验证 109 条 KiCad ops
+- 版本：0.21.0；protocol 2（EVID-20260927-001 真实 transaction 实测使用；上游 0.22.0 于 2026-08-25 发布，本项目**仍钉在 0.21.0**，未升级）
+- 来源：**已核实** —— PyPI 官方分发 `akcli-kicad`（发布者 `tipoli5890`，Trusted Publishing 签名，仓库 `https://github.com/tipoLi5890/akcli`）。本机 2026-09-27 实测安装 `akcli-kicad==0.21.0`（`akcli --version` → `akcli 0.21.0 (protocol 2)`），Python 3.11.16 venv，249 个安装文件。此前记录的「本机 Hermes venv」来源链在当前主机**不存在**，已由官方分发取代。
+- License / 授权类型：**MIT**（PyPI `license_expression: MIT`；`LICENSE` © 2026 Li, ching yu）—— 2026-09-27 核实，取代原 `TO_VERIFY`
+- 用途：从当前 M2 intent 生成并验证 109 条 KiCad ops；并作为 EVID-20260927-001 的 pinned 写入工具链
 - 使用方式：仅作为设计生成/验证工具；最终原理图仍由 KiCad ERC、独立语义合同与人工审核约束
 - 是否修改上游源码：否
 - 是否随 AEDL 再分发：NO
-- 关键许可义务：`TO_VERIFY`
+- 关键许可义务：MIT 需保留版权与许可声明；本仓库**不**随附 akcli 源码或二进制、**不**再分发，故无附加分发义务。**仍 `TO_VERIFY`**：akcli 内含 vendored 第三方（JLC2KiCadLib / jlcsearch / jlcparts，均 MIT；EasyEDA / LCSC / JLCPCB 为数据源），其再分发条款未逐项复核。
 - 使用限制：`akcli check --intent` 只能证明派生物符合 intent，不能证明 intent 符合数据手册
 - AEDL 自主开发边界：AEDL 自研的是独立语义合同、故障注入与制造门禁；akcli 是 SUPPORT 工具
-- 合规状态：`TO_VERIFY`
+- 合规状态：**License 已核实为 MIT（2026-09-27）**；来源链已由「Hermes venv」更正为 PyPI 官方分发；vendored 第三方义务仍 `TO_VERIFY`
 - 最终开放方式：不随仓库分发本机安装
 - 对应模块：`tools/generate_m2_ops.py`、`src/hardware/m2-board/ops_gen.json`
 - 备注：实际可执行路径属于本机环境，不作为跨机器固定路径。
