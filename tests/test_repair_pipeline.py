@@ -5375,6 +5375,33 @@ class CommitWriterFailureTests(CommitReceiptTests):
                          "a failed replace left no intent, so recovery could "
                          "not classify the candidate")
 
+    def test_a_primitive_that_reports_no_replace_is_not_claimed_as_one(self):
+        """X8. The round must read what the primitive REPORTED.
+
+        The first version hard-coded `replaced = True`, which was unreachable only
+        because the primitive had a single exit path.
+
+        Note what is NOT asserted: that the round refuses. It does not, and it
+        should not -- `verified` is the real gate, because a commit is proven by
+        the design on disk equalling the verified staged bytes, whichever
+        primitive happened to put them there. `replaced` is provenance, not
+        proof. The receipt is therefore expected to say `replaced: False` AND
+        `verified: True`, and that combination is coherent rather than a
+        contradiction -- asserting a refusal here would be asserting that the
+        pipeline cares about HOW the bytes arrived rather than WHETHER they are
+        right, which is backwards.
+        """
+        with mock.patch.object(
+                pipeline, "_atomic_replace_file",
+                return_value={"replaced": False, "sha256": "a" * 64}):
+            receipt = self._pass_receipt()
+        self.assertIs(receipt["commit"]["replaced"], False,
+                      "the round claimed a replace the primitive disowned")
+        self.assertIs(receipt["commit"]["verified"], True,
+                      "the live bytes really do equal the staged bytes here, so "
+                      "verified is true regardless of who wrote them")
+        self.assertEqual(receipt["status"], pipeline.STATUS_COMMITTED)
+
     def test_bytes_that_drift_between_replace_and_verify_are_caught(self):
         """X9. 逐字节和 hash 核验最终 design.
 
@@ -5453,15 +5480,42 @@ class RoundLevelLockAndIdentityTests(CommitReceiptTests):
         self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED)
 
     def test_a_completed_round_does_not_leave_the_lock_held(self):
-        """X2. Two rounds over one candidate, in one process.
+        """X2. Two rounds over ONE candidate, in one process.
 
         A leaked lock would make the second round refuse -- and the failure would
-        look like a lock conflict with a phantom writer, which is the kind of
-        report that costs an afternoon.
+        look like a conflict with a phantom writer, which is the kind of report
+        that costs an afternoon.
+
+        ONE request for both. The first version called `_pass_receipt()` and then
+        `_run_with(...)`, and each builds its own request from a fresh temp root,
+        so the two rounds took DIFFERENT lock paths and the leak could not block
+        anything -- which is why X2 survived twice.
         """
-        first = self._pass_receipt()
-        self.assertEqual(first["status"], pipeline.STATUS_COMMITTED)
-        second = self._run_with(verify_stage=lambda request: self._thin("PASS"))
+        request = self._request()
+        with mock.patch("tools.akcli_adapter.apply_stage", return_value={
+                "status": "APPLIED_TO_STAGE",
+                "tool": {"tool_applied": True, "exit_code": 0, "changed": True},
+                "changed": True, "before_source_sha256": "0" * 64,
+                "after_source_sha256": "1" * 64, "reasons": []}), \
+                mock.patch.object(pipeline, "compare_delta", return_value={
+                    "status": "PASS", "authorized_delta_sha256": "2" * 64,
+                    "actual_delta_sha256": "2" * 64, "missing": [],
+                    "unexpected": [], "coverage_complete": True,
+                    "reasons": []}), \
+                mock.patch.object(pipeline, "_c2_verify_stage",
+                                  side_effect=lambda r: self._thin("PASS")), \
+                mock.patch.object(pipeline, "_c2_write_thin",
+                                  return_value=("frozen.json", "a" * 64)), \
+                mock.patch.object(pipeline, "_c2_recheck_reports",
+                                  return_value={"status": "PASS", "checked": 2,
+                                                "reasons": []}):
+            first = pipeline.run_round(request)
+            self.assertEqual(first["status"], pipeline.STATUS_COMMITTED)
+            second = pipeline.run_round(request)
+        self.assertEqual(
+            second["status"], pipeline.STATUS_COMMITTED,
+            "the second round was blocked by its own predecessor: %s"
+            % " ".join(getattr(r, "detail", "") for r in second["reasons"]))
         self.assertEqual(
             second["status"], pipeline.STATUS_COMMITTED,
             "the second round was blocked: %s"

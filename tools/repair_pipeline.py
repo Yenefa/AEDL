@@ -5084,7 +5084,8 @@ def _run_round_body(round_request, lock_held, recovery_notes):
 
     # --- 3. the atomic replace, then 4. its verification ------------------
     try:
-        _atomic_replace_file(Path(design_root) / stage_target, stage_bytes)
+        replace_report = _atomic_replace_file(
+            Path(design_root) / stage_target, stage_bytes)
     except RepairContractError as exc:
         # Line 374: replace/post-read/journal 错误 -> 依恢复规则处理. The INTENT is
         # durable and there is no TERMINAL, so _recover_incomplete will classify
@@ -5097,7 +5098,11 @@ def _run_round_body(round_request, lock_held, recovery_notes):
                      "restore them; the design has not been left in an "
                      "undecidable state." % (intent_sha[:12], journal),
                      stage=PHASE_COMMIT)])
-    receipt["commit"]["replaced"] = True
+    # Read what the primitive REPORTED rather than hard-coding True. X8 found the
+    # hard-coded form: unreachable today only because the primitive has a single
+    # exit path, which is exactly the coupling that rots -- a second path would
+    # silently publish a claim nobody checked.
+    receipt["commit"]["replaced"] = bool(replace_report.get("replaced"))
 
     # 逐字节和 hash 核验最终 design
     try:
