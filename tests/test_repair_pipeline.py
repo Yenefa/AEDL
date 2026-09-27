@@ -2071,6 +2071,19 @@ class RunRoundTests(unittest.TestCase):
             ensure_ascii=False, indent=2), encoding="utf-8")
         self.artifacts = self.root / "artifacts"
         self.artifacts.mkdir(parents=True)
+        # The stage is a scratch copy that is genuinely DISJOINT from the
+        # candidate's design root.  It used to be self.design -- the very
+        # directory the host context declares as workspace.design_root -- which
+        # meant these tests exercised the configuration in which the writer
+        # modifies the candidate directly.  StageCandidateSeparationTests now
+        # refuses that shape, and rightly so.
+        self.stage = self.root / "stage"
+        self.stage.mkdir(parents=True)
+        (self.stage / self.STAGE_TARGET).write_bytes(self.raw)
+        self.oplist = self.stage / "repair_ops.json"
+        self.oplist.write_text(json.dumps(
+            {"protocol_version": 2, "target_format": "kicad", "ops": self.ops},
+            ensure_ascii=False, indent=2), encoding="utf-8")
 
     def tearDown(self):
         self._tmp.cleanup()
@@ -2108,7 +2121,7 @@ class RunRoundTests(unittest.TestCase):
             "host_context": self._context(),
             "proposal_raw": self._proposal_raw(),
             "txn_id": "txn-run-round-1",
-            "stage_root": str(self.design),
+            "stage_root": str(self.stage),
             "stage_target": self.STAGE_TARGET,
             "oplist_path": str(self.oplist),
             "native_artifact_root": str(self.artifacts),
@@ -2745,6 +2758,175 @@ class RunRoundRejectionTests(unittest.TestCase):
         self.assertIn("'999R'", visible)
         # and it is not merely a generic error string
         self.assertNotEqual(visible.strip(), "")
+
+
+class StageCandidateSeparationTests(unittest.TestCase):
+    """The writer's stage must be provably disjoint from the candidate.
+
+    Motivation is measured, not theoretical.  ``_WORKSPACE_FIELDS`` declares no
+    stage at all, and neither run_round nor akcli_adapter knew where the candidate
+    was, so the separation was conventional and enforced by nothing.  Both the M6
+    and the M7 demonstration pointed ``stage_root`` at the host's declared
+    ``workspace.design_root``; the M7 round was REJECTED and its unauthorized
+    bytes were left sitting in the candidate design directory.
+
+    So these tests exist to make "the round stopped before COMMIT" mean "the
+    candidate was not modified" rather than merely "no commit phase ran".
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.design = self.root / "cand" / "design"
+        self.design.mkdir(parents=True)
+        (self.design / "fault.kicad_sch").write_bytes(b"(kicad_sch)\n")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    # --- the classification, in all three overlap shapes ------------------
+    def test_an_equal_stage_and_design_root_is_an_overlap(self):
+        self.assertEqual(
+            pipeline._stage_candidate_overlap(self.design, self.design),
+            "equal")
+
+    def test_a_stage_containing_the_design_root_is_an_overlap(self):
+        """stage is a descendant of design.
+
+        The direction matters: if the stage merely CONTAINS the design root, the
+        adapter's own _resolve_within containment check would still let an
+        op-list path reach into the candidate's design.  These two directions
+        were once swapped in the implementation and only a run caught it.
+        """
+        self.assertEqual(
+            pipeline._stage_candidate_overlap(self.design / "sub", self.design),
+            "design_contains_stage")
+
+    def test_a_design_root_containing_the_stage_is_an_overlap(self):
+        self.assertEqual(
+            pipeline._stage_candidate_overlap(self.root / "cand", self.design),
+            "stage_contains_design")
+
+    def test_a_genuinely_disjoint_stage_is_not_an_overlap(self):
+        for stage in (self.root / "scratch",
+                      self.root / "a" / "b" / "c",
+                      self.design.parent / "repair" / "stage"):
+            with self.subTest(stage=str(stage)):
+                self.assertIsNone(
+                    pipeline._stage_candidate_overlap(stage, self.design))
+
+    def test_a_sibling_with_a_shared_prefix_is_not_an_overlap(self):
+        """'design' and 'design-backup' must not be confused for containment."""
+        sibling = self.design.parent / "design-backup"
+        sibling.mkdir()
+        self.assertIsNone(
+            pipeline._stage_candidate_overlap(sibling, self.design))
+
+    # --- the guard as run_round applies it -------------------------------
+    def _request(self, stage_root, design_root=None, **overrides):
+        cand = self.root / "cand"
+        (cand / "design").mkdir(parents=True, exist_ok=True)
+        (cand / "design" / "fault.kicad_sch").write_bytes(b"(kicad_sch)\n")
+        stage = Path(stage_root)
+        stage.mkdir(parents=True, exist_ok=True)
+        (stage / "fault.kicad_sch").write_bytes(b"(kicad_sch)\n")
+        oplist = stage / "repair_ops.json"
+        oplist.write_text(json.dumps(
+            {"protocol_version": 2, "target_format": "kicad", "ops": []}),
+            encoding="utf-8")
+        request = {
+            "host_context": {
+                "candidate_symbol_digest": fixtures_symbol(),
+                "context_id": CONTEXT,
+                "workspace": {
+                    "candidate_root": str(cand),
+                    "design_root": str(design_root or (cand / "design")),
+                    "repair_root": str(cand / ".repair"),
+                    "lock_path": str(cand / ".repair.lock"),
+                },
+            },
+            "proposal_raw": b"{}",
+            "txn_id": "txn-separation-1",
+            "stage_root": str(stage),
+            "stage_target": "fault.kicad_sch",
+            "oplist_path": str(oplist),
+            "native_artifact_root": str(stage),
+        }
+        request.update(overrides)
+        return request
+
+    def test_run_round_refuses_a_stage_that_is_the_candidate(self):
+        receipt = pipeline.run_round(self._request(self.design))
+        self.assertEqual(receipt["status"], pipeline.STATUS_BLOCKED)
+        self.assertTrue(receipt["terminal"])
+        self.assertEqual(receipt["phase"], pipeline.PHASE_PRECHECK)
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("disjoint", detail)
+        self.assertIn("IS the candidate design root", detail)
+        # and it names BOTH paths
+        self.assertIn(str(self.design.resolve()), detail)
+
+    def test_run_round_refuses_a_stage_nested_inside_the_candidate(self):
+        receipt = pipeline.run_round(self._request(self.design / "scratch"))
+        self.assertEqual(receipt["status"], pipeline.STATUS_BLOCKED)
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("INSIDE the candidate design root", detail)
+
+    def test_run_round_refuses_a_stage_that_contains_the_candidate(self):
+        receipt = pipeline.run_round(self._request(self.design.parent))
+        self.assertEqual(receipt["status"], pipeline.STATUS_BLOCKED)
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("CONTAINS the candidate design root", detail)
+
+    def test_the_refusal_happens_before_any_byte_is_read_from_the_stage(self):
+        """A rejected stage must not even be observed.
+
+        Proven behaviourally rather than by reading the source: the stage is BOTH
+        overlapping AND missing its target file.  If the guard runs first the
+        finding is the separation one; if the read ran first the finding would be
+        "could not be read for observation" instead.  The two are
+        distinguishable, so the ordering is actually observed.
+        """
+        request = self._request(self.design)
+        (self.design / "fault.kicad_sch").unlink()
+        receipt = pipeline.run_round(request)
+        self.assertEqual(receipt["status"], pipeline.STATUS_BLOCKED)
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("disjoint", detail)
+        self.assertNotIn("could not be read for observation", detail)
+
+    def test_the_receipt_records_both_roots_for_a_disjoint_stage(self):
+        scratch = self.root / "scratch"
+        receipt = pipeline.run_round(self._request(scratch))
+        # it gets past the guard (and fails later, for an unrelated reason)
+        self.assertNotEqual(
+            " ".join(getattr(r, "detail", "") for r in receipt["reasons"]),
+            "")
+        self.assertEqual(receipt["candidate_design_root"],
+                         str((self.root / "cand" / "design").resolve()))
+
+    def test_a_context_without_a_design_root_is_refused_fail_closed(self):
+        """Disjointness that cannot be proven must not be assumed."""
+        request = self._request(self.root / "scratch")
+        del request["host_context"]["workspace"]["design_root"]
+        receipt = pipeline.run_round(request)
+        self.assertEqual(receipt["status"], pipeline.STATUS_BLOCKED)
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("cannot be proven disjoint", detail)
+
+    # --- existing behaviour must be untouched ----------------------------
+    def test_the_pre_existing_round_tests_are_unaffected(self):
+        """The 25 RunRoundTests must keep passing; the guard adds no new field."""
+        self.assertNotIn("design_root", pipeline.ROUND_FIELDS)
+        self.assertNotIn("candidate_root", pipeline.ROUND_FIELDS)
+        for name in ("stage_root", "candidate_design_root"):
+            self.assertIn(name, pipeline._round_receipt(
+                pipeline.STATUS_BLOCKED, pipeline.PHASE_PRECHECK, [], False))
+
+
+def fixtures_symbol():
+    from tests.test_repair_pipeline import SYMBOL
+    return SYMBOL
 
 
 if __name__ == "__main__":
