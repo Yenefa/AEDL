@@ -1,0 +1,138 @@
+task: PR1-C5-SNAPSHOT
+
+base:
+  branch: feat/c5-snapshot-phase
+  sha: 9000ce5
+
+goal: |
+  Make the SNAPSHOT phase real, and feed the C3 verifier the snapshot side it
+  already requires but can never be given.
+
+  C3 already specifies snapshot semantics that nothing implements on the
+  producing side:
+
+    * ``gates/repair_verification.py:1182-1185`` -- ``_BINDING_REQUEST_FIELDS``
+      already declares ``snapshot_root`` and ``before_manifest`` alongside
+      ``stage_root`` and ``staged_manifest``;
+    * ``bind_inputs()`` (:1539) already RECOMPUTES both manifests from real
+      bytes and refuses a mismatch;
+    * ``_manifest()`` (:684) already validates
+      ``{version: 1, files: [{path, sha256, size_bytes, role}]}`` with exactly
+      one ``TARGET``;
+    * ``akcli_adapter.py:1354`` already fixes the order as
+      PRECHECK -> SNAPSHOT -> STAGE_APPLY.
+
+  What does not exist is the PRODUCER.  There is a validator and a verifier and
+  no builder, so the snapshot side of C3 cannot be fed at all.  ``run_round``
+  never calls ``bind_inputs`` and never mentions a snapshot.
+
+  This task adds the producer, materialises a real snapshot, drives SNAPSHOT as
+  a real phase, and hands both roots to the repository's own ``bind_inputs``.
+
+  It is explicitly NOT motivated by a hole.  An earlier hypothesis -- that
+  nothing bound the stage's before-bytes to the candidate's declared
+  ``base_source_sha256`` -- was TESTED AND REFUTED: a stage holding a valid
+  DC-04-applicable design with different bytes is refused by the adapter at
+  STAGE_APPLY with "the stage bytes are not the proposal base source".  See the
+  AI usage entry; the refutation is recorded because the hypothesis sounded
+  plausible and the probe script's own hardcoded conclusion had to be corrected.
+
+scope: |
+  In scope:
+  - tools/repair_pipeline.py:
+      * a manifest BUILDER that walks a real root and emits a manifest the
+        repository's own ``_manifest`` accepts -- real digests, real sizes,
+        candidate-relative safe paths, exactly one TARGET, everything else
+        READONLY_DEPENDENCY;
+      * snapshot materialisation: copy the candidate's design tree into a
+        snapshot root, then build that root's manifest from the real bytes;
+      * run_round drives SNAPSHOT between PRECHECK and STAGE_APPLY, and takes
+        the round's BEFORE observation from the SNAPSHOT root rather than from
+        the stage.  This is a deliberate contract change to run_round's data
+        flow and is the reason the change is not split in two (see below);
+      * run_round calls the repository's own ``bind_inputs`` to prove that both
+        roots match their manifests.
+  - tests/test_repair_pipeline.py: `SnapshotPhaseTests`.
+  - docs/compliance/ai-usage/**, docs/compliance/AI_USAGE_LOG.md.
+
+  Why the data-flow change is NOT split out: building a snapshot that nothing
+  reads would be exactly the "narrative and configuration disagree" failure this
+  repository has now documented twice (PRs #95 and #96 claimed a scratch stage
+  that was in fact the candidate).  A snapshot nothing reads is a third instance
+  of the same shape.
+
+  Out of scope, explicitly:
+  - **No COMMIT phase and no promotion.** The snapshot establishes the restore
+    point; it does not promote anything.  COMMIT remains unimplemented.
+  - **No KICAD_VERIFY.**
+  - **No change to `gates/**`.** `bind_inputs`, `_manifest` and `_tree_digest`
+    are consumed exactly as they are.  If they cannot express what SNAPSHOT
+    needs, that is reported, not edited.
+  - **No new status token, no new digest kind, no change to any acceptance
+    contract.**
+  - **No qualify_toolchain fix, no recover_incomplete, no feedback learning, no
+    planner** -- frozen by Owner direction.
+  - **No Evidence-index work.** docs/evidence/** is forbidden.
+  - Do NOT touch PR #91 / GH-51.
+
+dependencies: []
+  # run_round and the separation guard are merged (PR #95 = c203346, #96 = 5861fc7,
+  # #97 = 9000ce5), all ancestors of this base.sha, so the prerequisite is the
+  # baseline rather than a ref.  A task-id ref must not be declared here:
+  # tools/admit.py:88 resolves refs by TRAILING DIGITS, so "EVID-DC04" silently
+  # became GitHub issue #4.
+
+allowed_paths:
+  - tools/repair_pipeline.py
+  - tests/test_repair_pipeline.py
+  - tasks/PR1-C5-SNAPSHOT.yaml
+  - docs/compliance/ai-usage/**
+  - docs/compliance/AI_USAGE_LOG.md
+
+forbidden_paths:
+  - gates/**
+  - src/**
+  - .github/**
+  - docs/evidence/**
+  - delivery/**
+  - sandbox_runtime/**
+  - notes/m2-*
+
+acceptance: |
+  - The manifest builder's output is accepted by the repository's OWN
+    ``_manifest`` validator.  The test calls the validator; it does not
+    re-implement the rules.
+  - A manifest built from a real tree names every file with its real sha256 and
+    size, carries exactly one TARGET, and marks the rest READONLY_DEPENDENCY.
+  - Snapshot materialisation copies the candidate's design tree, and the
+    snapshot's bytes are independently verified to equal the candidate's.
+  - **The snapshot root and the stage root are both disjoint from the candidate
+    design root**, satisfying the guard merged in PR #97.  A test asserts the
+    guard still refuses an overlapping configuration.
+  - run_round records a SNAPSHOT phase between PRECHECK and STAGE_APPLY, and the
+    BEFORE observation is read from the snapshot root.  A test proves the BEFORE
+    digest equals the snapshot's digest, and NOT the stage's.
+  - run_round calls the repository's own ``bind_inputs`` and refuses when it
+    does not PASS.  A test tampers with a byte after the snapshot is taken and
+    shows the round refuses rather than proceeding.
+  - Tampering with the SNAPSHOT is detected; tampering with the STAGE is
+    detected.  Both are tested, not one.
+  - The full suite stays green, and every new test is mutation-verified.
+  - `py -3 -S -m unittest discover -s tests` stays green and
+    `py -3 -m tools.dev_gate --envelope tasks/PR1-C5-SNAPSHOT.yaml` exits 0.
+
+change_budget:
+  expected_files: 5
+  expected_modules: [tools, tests, tasks, docs]
+  cross_module: false          # one module in tools/; gates/ consumed read-only
+  contract_change: true        # run_round's BEFORE source moves from stage to snapshot
+  evidence_semantics_change: false
+
+exceptions:
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "Yenefa 2026-09-27 会话指令「Step 3 从 snapshot 开始」（在 #97 合并、且 bind_inputs 无调用者与无 manifest 构造器两项查实之后）"
+  # allow_dirty is NOT claimed.
+
+escalation:
+  owner: Yenefa
