@@ -50,9 +50,30 @@ scope: |
     NOT installed.
   - Do NOT touch PR #91 / GH-51.
 
-dependencies:
-  - ref: EVID-DC04
-    required_state: open   # the record this task amends
+dependencies: []
+  # Deliberately EMPTY, not an oversight.
+  #
+  # This task amends the record produced by tasks/EVID-DC04.yaml, and that
+  # relationship IS real -- but it is NOT declared as a machine dependency on
+  # purpose. tools/admit.py:88 resolves a dependency ref with
+  #     re.search(r"(\d+)$", ref)
+  # i.e. by its TRAILING DIGITS. The ref "EVID-DC04" therefore does not fail to
+  # resolve -- it silently binds to GitHub **issue #4**, an unrelated issue that
+  # happens to be CLOSED, and admit blocks on a dependency that was never meant
+  # to exist. Observed verbatim:
+  #     dependency not satisfied: EVID-DC04
+  #     {"ref": "EVID-DC04", "status": "blocked", "detail": "issue state=CLOSED"}
+  #
+  # The real prerequisite is the EXISTENCE of the record, and that is already
+  # bound by base.sha (0572472 contains ebc50d9, which created
+  # EVID-20260927-001) and is verifiable by commit, not by an issue-state
+  # lookup. So the correct machine-readable statement of "EVID-DC04's record
+  # must exist first" is the baseline, not a dependency ref.
+  #
+  # Tooling note for a future task (NOT fixed here -- tools/** is forbidden in
+  # this envelope): ref_number should reject a ref whose trailing digits are
+  # not a bare number, e.g. require r"^#?(\d+)$" or r"(?:^|[^0-9A-Za-z])(\d+)$",
+  # so a task id can never be silently reinterpreted as an issue number.
 
 allowed_paths:
   - docs/evidence/EVIDENCE_INDEX.md
