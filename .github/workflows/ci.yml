@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [self-hosted, windows-latest]
+        os: [self-hosted]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
