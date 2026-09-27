@@ -4916,8 +4916,6 @@ class Contract378Tests(unittest.TestCase):
             self.root / "absent", "fault.kicad_sch")
         self.assertTrue(reasons)
         self.assertIn("not a directory", " ".join(r.detail for r in reasons))
-
-
 class CommitReceiptTests(unittest.TestCase):
     """Drives a real round to a thin PASS and inspects what it publishes.
 
@@ -5333,3 +5331,99 @@ class CommitReceiptTests(unittest.TestCase):
         self.assertIsNone(receipt["rollback"]["byte_equal"])
         self.assertIsNone(receipt["commit_predicate"],
                           "the predicate was never evaluated on this path")
+
+
+
+
+
+class CommitWriterFailureTests(CommitReceiptTests):
+    """Fault injection at the round level: a commit that FAILS must not claim to
+    have succeeded.
+
+    Three mutations -- `replaced` reported true without replacing, the
+    post-replace verification skipped, and the predicate bypassed -- cannot be
+    observed from any primitive, because each is a statement the ROUND makes about
+    itself. So they are tested here, by breaking the thing and reading the
+    receipt.
+    """
+
+    def test_a_failed_replace_is_not_reported_as_replaced(self):
+        """X8. Contract 374 reports three booleans; they must reflect what
+        HAPPENED, not what was intended."""
+        real = pipeline._atomic_replace_file
+
+        def explode(target, payload):
+            raise pipeline.RepairContractError([pipeline._finding(
+                pipeline.REASON_TOOL_UNAVAILABLE,
+                "the atomic replace failed (injected)", stage=pipeline.PHASE_COMMIT)])
+
+        with mock.patch.object(pipeline, "_atomic_replace_file", explode):
+            receipt = self._pass_receipt()
+        self.assertIsNotNone(receipt["commit_predicate"],
+                             "the round stopped before COMMIT")
+        self.assertFalse(receipt["commit"]["replaced"],
+                         "a replace that never happened was reported as done")
+        self.assertFalse(receipt["commit"]["verified"])
+        self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED)
+        # and the intent IS durable, so the next round can classify the bytes
+        journal = pipeline._journal_file(self._request()["host_context"])
+        records, corrupt = pipeline._read_journal(journal)
+        self.assertEqual(corrupt, [])
+        self.assertEqual([r["kind"] for r in records
+                          if r["txn_id"] == receipt["txn_id"]],
+                         [pipeline.JOURNAL_COMMIT_INTENT],
+                         "a failed replace left no intent, so recovery could "
+                         "not classify the candidate")
+
+    def test_bytes_that_drift_between_replace_and_verify_are_caught(self):
+        """X9. 逐字节和 hash 核验最终 design.
+
+        The corruption is injected AFTER the atomic replace, which is the only
+        window where the design on disk and the bytes that were verified can
+        differ. A round that skipped the re-read would report COMMITTED over
+        bytes it never checked.
+        """
+        real = pipeline._atomic_replace_file
+
+        def replace_then_corrupt(target, payload):
+            result = real(target, payload)
+            Path(target).write_bytes(b"corrupted after the replace\n")
+            return result
+
+        with mock.patch.object(pipeline, "_atomic_replace_file",
+                               replace_then_corrupt):
+            receipt = self._pass_receipt()
+        self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED,
+                            "COMMITTED reported over bytes nobody verified")
+        self.assertTrue(receipt["terminal"])
+        self.assertFalse(receipt["commit"]["verified"])
+        detail = " ".join(receipt["commit_predicate"]["reasons"]
+                          + [getattr(r, "detail", "")
+                             for r in receipt["reasons"]])
+        self.assertTrue("does not match the verified staged bytes" in detail
+                        or "NOT" in detail, detail)
+
+    def test_a_broken_conjunct_refuses_the_commit(self):
+        """X14. Line 349: 这是合取 -- no partial credit, no threshold.
+
+        The lock is the conjunct that PR #101 could not satisfy, so it is the one
+        removed here: with it unsatisfiable the round must refuse, write no
+        intent, and leave the candidate alone.
+        """
+        real = pipeline._commit_predicate
+
+        def without_the_lock(*args, **kwargs):
+            kwargs["lock_held"] = False
+            return real(*args, **kwargs)
+
+        with mock.patch.object(pipeline, "_commit_predicate", without_the_lock):
+            receipt = self._pass_receipt()
+        self.assertEqual(receipt["status"], pipeline.STATUS_ROLLBACK)
+        self.assertEqual(receipt["cause_status"], pipeline.STATUS_BLOCKED)
+        self.assertIn("single_writer_lock_held",
+                      receipt["commit_predicate"]["unsatisfied_conjuncts"])
+        self.assertFalse(receipt["commit"]["replaced"])
+        journal = pipeline._journal_file(self._request()["host_context"])
+        self.assertFalse(journal.is_file() and journal.read_text(
+            encoding="utf-8").strip(),
+            "a refused commit still wrote a durable intent")
