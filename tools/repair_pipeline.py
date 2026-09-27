@@ -3231,6 +3231,18 @@ def _round_receipt(status, phase, reasons, terminal):
         # able to read these without knowing which phase the round stopped in",
         # and every refusal before KICAD_VERIFY produced a KeyError.
         "kicad_verify": None,
+        # Contract 404/405. Present from the start with the values that mean
+        # "nothing was attempted", so a caller never has to distinguish an
+        # absent key from a false one. `rollback.status` starts NOT_NEEDED
+        # because contract 388: a failure BEFORE any write is not a rollback.
+        # Contract 404 gives `commit` exactly three keys. It is kept closed: the
+        # predicate verdict lives in its own key below rather than being added
+        # here, because this repository enforces closed shapes everywhere and a
+        # fourth key would break every consumer of contract 404.
+        "commit": {"attempted": False, "replaced": False, "verified": False},
+        "rollback": {"status": "NOT_NEEDED", "attempted": False,
+                     "byte_equal": None, "reasons": []},
+        "commit_predicate": None,
         "pending_phases": None,
         "feedback": None,
     }
@@ -3703,6 +3715,220 @@ def _thin_verification_refusal(result):
     return STATUS_ROLLBACK, cause, reasons
 
 
+# ===========================================================================
+# COMMIT -- contract section 9's commit predicate, and the durable journal it
+# will need.
+#
+# SCOPE, and it is narrower than it first looked. Contract 374 also requires
+# writing COMMIT_INTENT, atomically replacing the design, verifying it, and
+# writing a terminal record. That WRITING PATH IS NOT HERE, deliberately:
+#
+#   * contract 387 requires a RESTORE for a transaction that has an INTENT and
+#     no terminal record -- "无 COMMITTED terminal record 的事务，即使有
+#     COMMIT_INTENT 且 live=after，也按第2条恢复；不猜测这次已经成功" -- and
+#     385 makes that restore a write from the snapshot;
+#   * contract 346 makes the single-writer lock a conjunct of the predicate, and
+#     no lock primitive exists anywhere in this repository (Owner ruled
+#     2026-09-28 that the lock is its own PR).
+#
+# Shipping the writer without the restore or the lock would mean one I/O fault
+# leaves a candidate that needs a human forever, to satisfy a predicate that
+# could never be satisfied anyway. So this increment lands the two things that
+# are safe on their own: the predicate as a PURE function, and the journal READ
+# path, wired into PRECHECK so a stale INTENT fails closed.
+#
+# Measured before this was written: `os.replace`, `os.fsync`, `O_EXCL` and any
+# notion of a journal appeared ZERO times in tools/repair_pipeline.py,
+# tools/host_toolchain.py and gates/repair_verification.py.
+# ===========================================================================
+
+JOURNAL_COMMIT_INTENT = "COMMIT_INTENT"
+JOURNAL_TERMINAL = "TERMINAL"
+JOURNAL_FIELDS = ("kind", "txn_id", "run_id", "candidate_id", "patch_id",
+                  "stage_sha256", "before_sha256", "after_sha256",
+                  "target", "status")
+
+# The nine conjuncts of contract 337-347, in the contract's own order. Named so a
+# reason can say WHICH conjunct failed -- a predicate that reports one generic
+# failure is indistinguishable from a predicate that checks one thing.
+COMMIT_CONJUNCTS = (
+    "stage_applied_to_stage",
+    "route_and_effect_checks",
+    "thin_scope_is_candidate_bytes",
+    "thin_pass_invariants",
+    "bindings_equal",
+    "recomputed_hashes_match",
+    "live_design_still_equals_snapshot",
+    "policy_and_dependencies_undrifted",
+    "single_writer_lock_held",
+)
+
+# The routes the policy document actually uses. Read from
+# src/repair/topology_policy_v1.json: E1/E2/E3 are CONSTRAINED_EXCEPTION and
+# DC-04/DC-05 are STRICT. The first version of this check listed "SAFE", which
+# exists nowhere, so three rules could never have committed.
+COMMIT_ROUTES = ("STRICT", "CONSTRAINED_EXCEPTION")
+
+
+def _journal_file(host_context: Mapping) -> Path:
+    """The candidate's durable journal: `<repair_root>/journal.jsonl`.
+
+    One append-only file per candidate rather than one per transaction, because
+    contract 387 says recovery starts by reading THE durable journal -- and
+    because PRECHECK has to find a PREVIOUS transaction's records, which a
+    per-transaction file inside this round's own directory could not reveal.
+    """
+    workspace = host_context.get("workspace") if isinstance(host_context, Mapping) \
+        else None
+    repair_root = workspace.get("repair_root") if isinstance(workspace, Mapping) \
+        else None
+    if not isinstance(repair_root, str) or not repair_root.strip():
+        raise HostContextError([_finding(
+            REASON_INPUT_DRIFT,
+            "the host context declares no repair root, so there is nowhere to "
+            "keep the durable journal", stage=PHASE_PRECHECK)])
+    return Path(repair_root).resolve() / "journal.jsonl"
+
+
+def _read_journal(path: Path) -> Tuple[List[dict], List[str]]:
+    """Read the journal WITHOUT skipping bad lines. Returns (records, corrupt).
+
+    Contract 387 is explicit: "不用会跳过坏行的历史 `get_recorded_action` 作为
+    唯一恢复依据" -- a history reader that skips unparseable lines must not be
+    the sole basis of recovery, because a truncated record then reads as "no
+    record" and the round concludes it never committed. That is the exact
+    inversion recovery exists to prevent.
+
+    So a corrupt line is REPORTED, never dropped, and a caller that sees one must
+    fail closed. A torn FINAL line is not a hypothetical: it is the normal
+    artefact of a process dying mid-append, which is the state rule 4 addresses.
+    """
+    if not Path(path).is_file():
+        return [], []
+    records, corrupt = [], []
+    lines = Path(path).read_text(encoding="utf-8").splitlines()
+    for number, line in enumerate(lines, 1):
+        if not line.strip():
+            continue
+        torn = number == len(lines)
+        try:
+            parsed = json.loads(line)
+        except ValueError:
+            corrupt.append(
+                "journal %s line %d is not valid JSON%s"
+                % (path, number,
+                   " and is the LAST line, so the record was torn by a crash"
+                   if torn else ""))
+            continue
+        if not isinstance(parsed, dict):
+            corrupt.append("journal %s line %d is not a JSON object" % (path, number))
+            continue
+        absent = [name for name in JOURNAL_FIELDS if name not in parsed]
+        if absent:
+            corrupt.append("journal %s line %d is missing %s"
+                           % (path, number, ", ".join(absent)))
+            continue
+        records.append(parsed)
+    return records, corrupt
+
+
+def _unresolved_intents(journal: Path, txn_id: str) -> Tuple[List[dict], List[str]]:
+    """Transactions with a COMMIT_INTENT and no TERMINAL record.
+
+    Contract 387: "无 COMMITTED terminal record 的事务，即使有 COMMIT_INTENT
+    且 live=after ... 不猜测这次已经成功." This is what makes that checkable.
+
+    It REFUSES rather than cleaning up. The restore of contract 385 is not
+    implemented, and rule 3 (386) requires that a live design which is neither
+    the recorded before nor after bytes be QUARANTINED -- "隔离现场，不覆盖可能
+    的人类/其他进程修改" -- not overwritten by a repair round. So the honest
+    response to an unresolved INTENT is to stop and name the file.
+    """
+    records, corrupt = _read_journal(journal)
+    if corrupt:
+        return [], corrupt
+    terminal = {row.get("txn_id") for row in records
+                if row.get("kind") == JOURNAL_TERMINAL}
+    pending = [row for row in records
+               if row.get("kind") == JOURNAL_COMMIT_INTENT
+               and row.get("txn_id") != txn_id
+               and row.get("txn_id") not in terminal]
+    return pending, []
+
+
+def _commit_predicate(receipt: Mapping, thin: Mapping, *,
+                      live_equals_snapshot: bool,
+                      hashes_recomputed: bool,
+                      binding_drift: Sequence[str],
+                      permission_drift: Sequence[str],
+                      lock_held: bool) -> Tuple[bool, List[Finding], List[str]]:
+    """Contract 335-347, the pipeline's ONLY commit predicate, as a pure function.
+
+    Line 349: "这是合取，没有'置信度高''仅 warning''多数 checks PASS'的例外."
+    So every conjunct is evaluated, every failure is named, and there is no
+    partial credit and no threshold.
+
+    PURE: no filesystem, no clock, no mutation, everything an argument. That is
+    what lets each conjunct be driven to failure in isolation, which is the only
+    way to know all nine are checked -- the KICAD_VERIFY review found a guard
+    whose tests could not fail, and this is the defence against repeating it.
+
+    Conjunct 4 (line 341, "满足上段所有 PASS 不变量") is NOT re-derived here.
+    gates/repair_verification.py:2006-2019 already evaluates the whole of line
+    333 -- two completed exports with equal keysets, equal delta hashes, three
+    empty diff lists, dependencies unchanged, exactly four checks all PASS, every
+    deferred check NOT_RUN -- and collapses it to `result["status"]`. Re-deriving
+    it would fork a frozen gate, which is what PR #99 did with the evidence path
+    and what the removed `_export_toolchain` did with the toolchain slice. The
+    first version of this file DID re-derive it, read three fields in the wrong
+    shape, and was therefore False for every real PASS.
+    """
+    stage = receipt.get("stage") or {}
+    verdicts = {
+        # 338 StageApplyResult.status == APPLIED_TO_STAGE
+        "stage_applied_to_stage": stage.get("status") == "APPLIED_TO_STAGE",
+        # 339 route / tool-result / one-write-call / effect checks. "one write
+        # call" is NOT checkable: `apply_stage`'s receipt carries no call
+        # counter, and inventing one would be asserting a fact nobody measured.
+        # The conjunct is therefore reported as not satisfied rather than
+        # partially assumed -- 349 forbids treating UNKNOWN as satisfied.
+        "route_and_effect_checks": all([
+            receipt.get("route") in COMMIT_ROUTES,
+            stage.get("tool_applied") is True,
+            stage.get("changed") is True,
+            stage.get("one_write_call") is True,
+        ]),
+        # 340 ThinVerificationResult.scope == PR1_CANDIDATE_BYTES
+        "thin_scope_is_candidate_bytes":
+            thin.get("scope") == "PR1_CANDIDATE_BYTES",
+        # 341 the PASS invariants, as evaluated by the verifier itself
+        "thin_pass_invariants": thin.get("status") == "PASS",
+        # 342 txn / run / candidate / patch / policy / toolchain bindings equal
+        "bindings_equal": not binding_drift,
+        # 343 after the verifier returned, recomputed stage source and report
+        #     hashes match the receipt
+        "recomputed_hashes_match": hashes_recomputed,
+        # 344 live design still equals the round snapshot's whole manifest
+        "live_design_still_equals_snapshot": live_equals_snapshot,
+        # 345 policy / execution permission / facts / dependencies undrifted
+        "policy_and_dependencies_undrifted": not permission_drift,
+        # 346 the single-writer lock is still held by THIS transaction
+        "single_writer_lock_held": lock_held,
+    }
+    reasons = []
+    for name in COMMIT_CONJUNCTS:
+        if verdicts[name]:
+            continue
+        reasons.append(_finding(
+            REASON_INPUT_DRIFT,
+            "the commit predicate is not satisfied: %s" % name,
+            stage=PHASE_COMMIT))
+    for note in list(binding_drift) + list(permission_drift):
+        reasons.append(_finding(REASON_INPUT_DRIFT, note, stage=PHASE_COMMIT))
+    return (not reasons), reasons, [name for name in COMMIT_CONJUNCTS
+                                    if not verdicts[name]]
+
+
 def run_round(round_request):
     """Drive one repair round: PRECHECK -> SNAPSHOT -> STAGE_APPLY ->
     DELTA_CHECK.
@@ -3830,6 +4056,44 @@ def run_round(round_request):
                Path(design_root).resolve()))])
     receipt["stage_root"] = str(Path(stage_root).resolve())
     receipt["candidate_design_root"] = str(Path(design_root).resolve())
+
+    # Contract 369, PRECHECK's first duty: "先处理未完成事务". A previous
+    # transaction that wrote a COMMIT_INTENT and never wrote a terminal record
+    # must be dealt with BEFORE this round writes anything -- contract 387: "无
+    # COMMITTED terminal record 的事务，即使有 COMMIT_INTENT 且 live=after ...
+    # 不猜测这次已经成功."
+    #
+    # We REFUSE rather than clean up. The restore of contract 385 is not
+    # implemented, and rule 3 (386) requires that a live design which is neither
+    # the recorded before nor the after bytes be quarantined -- "隔离现场，不覆盖
+    # 可能的人类/其他进程修改" -- not overwritten by a repair round. Guessing
+    # here could overwrite a human's edit, which is a worse failure than a round
+    # that stops.
+    try:
+        pending, journal_corrupt = _unresolved_intents(
+            _journal_file(host_context), txn_id)
+    except (HostContextError, OSError) as exc:
+        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
+            REASON_INPUT_DRIFT,
+            "the durable journal could not be read, so an earlier transaction "
+            "cannot be ruled out: %s" % exc, stage=PHASE_PRECHECK)])
+    if journal_corrupt:
+        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
+            REASON_RECOVERY_AMBIGUOUS,
+            "the durable journal has a record this reader cannot trust, and a "
+            "skipped line reads as 'never committed' -- which is the inversion "
+            "contract 387 forbids: %s" % "; ".join(journal_corrupt),
+            stage=PHASE_PRECHECK)])
+    if pending:
+        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
+            REASON_RECOVERY_AMBIGUOUS,
+            "transaction %s left a COMMIT_INTENT with no terminal record, so its "
+            "outcome is unknown. The restore of contract 385 is NOT implemented "
+            "and rule 3 requires quarantining rather than overwriting, so this "
+            "round refuses. The intent is at %s"
+            % (", ".join(sorted({row.get("txn_id") or "?" for row in pending})),
+               _journal_file(host_context)),
+            stage=PHASE_PRECHECK)])
 
     # The op-list must already live inside the stage: the stage is re-seeded from
     # the snapshot below, so an op-list from elsewhere would not survive it.
@@ -4222,8 +4486,104 @@ def run_round(round_request):
         return refuse(PHASE_KICAD_VERIFY, STATUS_TOOL_ERROR, [_finding(
             REASON_TOOL_UNAVAILABLE, freeze_error, stage=PHASE_KICAD_VERIFY)])
 
-    # A thin PASS is not a commit and not a candidate-level PASS (line 349).  The
-    # round stays unpromoted and awaits COMMIT, which does not exist yet.
+    # ===================================================================
+    # COMMIT -- contract line 374's PREDICODE, evaluated. Not its write.
+    #
+    # Reached only on a thin PASS. Line 349 forbids publishing a thin PASS as a
+    # whole-candidate VerifierPort PASS, and the bytes are NOT written here: see
+    # the block comment above `_commit_predicate` for why the writer must ship
+    # together with the restore and the lock, and what is missing.
+    #
+    # So the round stays exactly as unpromoted as it was -- status None,
+    # terminal False, COMMIT still pending -- but the receipt now says WHICH
+    # conjuncts are unsatisfied, so a reader is not left to guess, and the
+    # predicate is exercised in production rather than being a test-only
+    # function.
+    # ===================================================================
+    receipt["commit"] = {"attempted": False, "replaced": False, "verified": False}
+
+    # 344: the live design measured NOW, not taken from the seed-time manifest.
+    # build_file_manifest takes (root, target_relative) and nothing else; an
+    # earlier version passed a `roles` keyword that does not exist, and the
+    # TypeError was swallowed into "could not be re-measured" -- blaming the
+    # measurement instead of the call.
+    try:
+        live_now = build_file_manifest(design_root, stage_target)
+    except (OSError, ValueError) as exc:
+        live_equals_snapshot = False
+        live_error = "the live candidate design could not be re-measured: %s" % exc
+    else:
+        live_error = None
+        live_equals_snapshot = (live_now == receipt["snapshot"]["manifest"])
+
+    # 342 / 345: drift is measured against the receipt's OWN bound values, and
+    # the two kinds are kept apart. The first version aliased both conjuncts to
+    # one `not drift` check and compared a name that was never bound against a
+    # host-context field that does not exist -- a NameError plus a permanent
+    # false.
+    binding_drift, permission_drift = [], []
+    thin_block = receipt.get("kicad_verify") or {}
+    for name, held, expected in (
+            ("run_id", receipt.get("txn_id"), thin_block.get("run_id")),
+            ("policy", receipt.get("bound_policy_sha256"),
+             thin_block.get("bound_policy_sha256")),
+            ("toolchain", thin_block.get("toolchain_sha256"),
+             thin_block.get("toolchain_sha256")),
+    ):
+        if expected is not None and held != expected:
+            binding_drift.append("the %s binding differs: round %r, verifier %r"
+                                 % (name, held, expected))
+    if thin_block.get("dependencies_unchanged") is not True:
+        permission_drift.append("the verifier did not report the dependencies "
+                                "as unchanged")
+    if live_error:
+        permission_drift.append(live_error)
+
+    # 343: the stage source re-measured here rather than trusting the receipt's
+    # own after_sha256, and the reports already re-read above.
+    try:
+        stage_sha = hash_bytes((Path(stage_root) / stage_target).read_bytes())
+    except OSError as exc:
+        stage_sha = None
+        hashes_recomputed = False
+        permission_drift.append("the staged bytes could not be re-measured: %s"
+                                % exc)
+    else:
+        hashes_recomputed = (stage_sha == receipt["after_source_sha256"]
+                             and recheck is not None
+                             and recheck.get("status") == "PASS")
+
+    # 346 and the "one write call" half of 339: no lock primitive exists in this
+    # repository, and `apply_stage` records no call count. Both are reported
+    # unsatisfied rather than assumed -- omitting a conjunct of a nine-way
+    # conjunction is exactly how line 349's "没有例外" would come to be false.
+    ok, predicate_reasons, unsatisfied = _commit_predicate(
+        receipt, thin,
+        live_equals_snapshot=live_equals_snapshot,
+        hashes_recomputed=hashes_recomputed,
+        binding_drift=binding_drift,
+        permission_drift=permission_drift,
+        lock_held=False)
+    receipt["commit_predicate"] = {
+        "satisfied": ok,
+        "unsatisfied_conjuncts": unsatisfied,
+        "reasons": [r.detail for r in predicate_reasons],
+        "writer_available": False,
+        "not_implemented": ["single_writer_lock", "commit_intent_and_restore",
+                            "atomic_design_replace", "stage_write_call_count"],
+    }
+    # Contract 384: `rollback.status=VERIFIED` is EARNED by comparing live bytes
+    # to the snapshot -- "逐 bytes/manifest 核对后 rollback.status=VERIFIED". The
+    # first version published VERIFIED and byte_equal=True on EVERY predicate
+    # failure, including the failure of the very conjunct that would have proved
+    # it, which is a fabricated evidence field.
+    receipt["rollback"] = {
+        "status": "VERIFIED" if live_equals_snapshot and live_error is None
+        else "UNKNOWN",
+        "attempted": False,
+        "byte_equal": True if live_equals_snapshot and live_error is None else None,
+        "reasons": [r.detail for r in predicate_reasons],
+    }
     receipt.update(status=None, phase=PHASE_KICAD_VERIFY, cause_status=None,
                    terminal=False, reasons=[])
     receipt["pending_phases"] = list(ROUND_PENDING_PHASES)

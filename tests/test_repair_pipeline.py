@@ -3548,6 +3548,371 @@ class ThinVerificationMappingTests(unittest.TestCase):
              "KICAD_VERIFY", "COMMIT"))
 
 
+class CommitPredicateTests(unittest.TestCase):
+    """Contract 335-347, the pipeline's ONLY commit predicate (line 349: a
+    conjunction, with no "high confidence" / "warning only" / "most checks PASS"
+    exception)."""
+
+    def _thin(self, **overrides):
+        """A thin result in the SHAPE the real verifier produces.
+
+        That shape is the point. The first version of the predicate read
+        `checks` values as strings, `coverage` as {before: True} and
+        `parser_agreement` values as strings; the real producer emits dicts for
+        checks and agreement, and `coverage` carries `complete`. So the predicate
+        was False for every genuine PASS and no test noticed, because the round
+        refused for a different reason. `test_a_real_pass_satisfies_the_invariant
+        _conjunct` below is the test that would have caught it.
+        """
+        thin = {
+            "status": "PASS",
+            "scope": "PR1_CANDIDATE_BYTES",
+            "txn_id": "txn-1", "run_id": "run-1", "candidate_id": "cand-1",
+            "bound_policy_sha256": "b" * 64, "toolchain_sha256": "c" * 64,
+            "dependencies_unchanged": True,
+            "checks": {name: {"status": "PASS", "reason_codes": [],
+                              "artifact_paths": []}
+                       for name in ("fresh_export", "source_hash_binding",
+                                    "exact_topology_delta", "protected_diff")},
+            "coverage": {"before": {"complete": True, "keys": ["a"],
+                                    "expected_sha256": "d" * 64,
+                                    "observed_sha256": "d" * 64},
+                         "after": {"complete": True, "keys": ["a"],
+                                   "expected_sha256": "d" * 64,
+                                   "observed_sha256": "d" * 64}},
+            "parser_agreement": {"before": {"status": "PASS", "reason_codes": []},
+                                 "after": {"status": "PASS", "reason_codes": []}},
+            "exports": [{"role": "BEFORE", "completed": True},
+                        {"role": "AFTER", "completed": True}],
+            "missing_delta": [], "unexpected_delta": [],
+            "protected_changes": [],
+            "deferred": {"erc": "NOT_RUN", "semantic_runner": "NOT_RUN",
+                         "formal_evidence": "NOT_RUN"},
+            "reasons": [],
+        }
+        thin.update(overrides)
+        return thin
+
+    def _receipt(self, **overrides):
+        receipt = {
+            "txn_id": "txn-1", "route": "STRICT",
+            "stage": {"status": "APPLIED_TO_STAGE", "tool_applied": True,
+                      "changed": True, "one_write_call": True},
+            "kicad_verify": {"run_id": "run-1", "bound_policy_sha256": "b" * 64,
+                             "toolchain_sha256": "c" * 64,
+                             "dependencies_unchanged": True},
+        }
+        receipt.update(overrides)
+        return receipt
+
+    def _ok(self, receipt=None, thin=None, **overrides):
+        args = {"live_equals_snapshot": True, "hashes_recomputed": True,
+                "binding_drift": [], "permission_drift": [], "lock_held": True}
+        args.update(overrides)
+        return pipeline._commit_predicate(
+            receipt or self._receipt(), thin or self._thin(), **args)
+
+    def test_it_is_pure_and_reports_each_failure(self):
+        ok, reasons, unsatisfied = self._ok()
+        self.assertTrue(ok)
+        self.assertEqual(reasons, [])
+        self.assertEqual(unsatisfied, [])
+        # calling it again with the same arguments gives the same answer
+        self.assertEqual(self._ok()[:3], (ok, reasons, unsatisfied))
+
+    def test_every_conjunct_is_independently_observable(self):
+        """Each of the nine, driven to failure with the other eight satisfied.
+
+        This is the test the aliasing bug could not survive. A conjunct that is
+        checked twice under two names, or checked against a constant that never
+        varies, cannot produce this table.
+        """
+        # Every row is (receipt_overrides, thin_overrides, call_overrides) --
+        # all three, even when two are empty. The first version mixed 2-tuples
+        # and 3-tuples and the unpacking raised ValueError.
+        cases = {
+            # contract 338
+            "stage_applied_to_stage": (
+                {"stage": {"status": "REFUSED", "tool_applied": True,
+                           "changed": True, "one_write_call": True}}, {}, {}),
+            # contract 339 -- route, tool result, ONE WRITE CALL, effect. This
+            # row breaks `tool_applied`, NOT the route: the first version set
+            # the route to CONSTRAINED_EXCEPTION expecting a failure, but that
+            # is one of the two routes the policy document really defines, so
+            # the conjunct correctly held. The route half has its own test.
+            "route_and_effect_checks": (
+                {"stage": {"status": "APPLIED_TO_STAGE", "tool_applied": False,
+                           "changed": True, "one_write_call": True}}, {}, {}),
+            # contract 340
+            "thin_scope_is_candidate_bytes": (
+                {}, {"scope": "SOMETHING_ELSE"}, {}),
+            # contract 341
+            "thin_pass_invariants": ({}, {"status": "UNKNOWN"}, {}),
+            # contract 342
+            "bindings_equal": (None, None, {"binding_drift": ["run_id differs"]}),
+            # contract 343
+            "recomputed_hashes_match": (None, None, {"hashes_recomputed": False}),
+            # contract 344
+            "live_design_still_equals_snapshot": (
+                None, None, {"live_equals_snapshot": False}),
+            # contract 345
+            "policy_and_dependencies_undrifted": (
+                None, None, {"permission_drift": ["dependencies changed"]}),
+            # contract 346
+            "single_writer_lock_held": (None, None, {"lock_held": False}),
+        }
+        self.assertEqual(sorted(cases), sorted(pipeline.COMMIT_CONJUNCTS),
+                         "the table and the contract's nine conjuncts disagree")
+        for name, (receipt_over, thin_over, call_over) in sorted(cases.items()):
+            ok, reasons, unsatisfied = self._ok(
+                receipt=self._receipt(**receipt_over) if receipt_over else None,
+                thin=self._thin(**thin_over) if thin_over else None,
+                **call_over)
+            self.assertFalse(ok, "%s was not observable" % name)
+            self.assertEqual(unsatisfied, [name],
+                             "%s did not fail alone: %r" % (name, unsatisfied))
+            # The conjunct is named FIRST and always. A drift conjunct carries a
+            # SECOND reason naming what differs -- "bindings_equal" alone tells a
+            # reader nothing actionable. So the count is 2 for the two drift
+            # conjuncts and 1 for the rest; the first version asserted 1 for all
+            # nine, which was wrong about the implementation, not strict.
+            self.assertIn(name, reasons[0].detail,
+                          "the first reason must name the conjunct")
+            carries_note = bool(call_over.get("binding_drift")
+                                or call_over.get("permission_drift"))
+            self.assertEqual(
+                len(reasons), 2 if carries_note else 1,
+                "%s produced %d reasons" % (name, len(reasons)))
+            if carries_note:
+                note = (call_over.get("binding_drift")
+                        or call_over.get("permission_drift"))[0]
+                self.assertIn(note, reasons[1].detail,
+                              "the drift note was not carried through")
+
+    def test_the_write_call_half_of_the_effect_check_is_not_assumed(self):
+        """Contract 339 says "one-write-call". No call counter exists.
+
+        `apply_stage` records no call count, so the conjunct cannot be checked.
+        Line 349 forbids treating UNKNOWN as satisfied, so it is reported
+        unsatisfied rather than quietly reduced to three of its four halves.
+        """
+        receipt = self._receipt()
+        del receipt["stage"]["one_write_call"]
+        ok, _, unsatisfied = self._ok(receipt=receipt)
+        self.assertFalse(ok)
+        self.assertIn("route_and_effect_checks", unsatisfied)
+
+    def test_a_real_pass_satisfies_the_invariant_conjunct(self):
+        """Conjunct 4 must accept the SHAPE the real verifier emits.
+
+        This is the test the wrong-shape bug could not survive: it hands the
+        predicate a dict-shaped `checks` and a dict-shaped `parser_agreement`
+        with the real `coverage` keys, which is what gates/repair_verification.py
+        produces. The first version read all three as strings and was False for
+        every genuine PASS.
+
+        It also asserts the invariant is the VERIFIER's, not a local copy: a
+        result whose four checks are not all PASS cannot be status PASS, because
+        gates:2014-2019 would not have produced that status.
+        """
+        ok, reasons, unsatisfied = self._ok()
+        self.assertTrue(ok, "a real-shaped thin PASS was rejected: %s"
+                        % [r.detail for r in reasons])
+        for name, check in self._thin()["checks"].items():
+            self.assertIsInstance(check, dict,
+                                  "%s is a dict in the real result" % name)
+        # a FAIL check is not reachable as a PASS status, so the conjunct holds
+        ok, _, _ = self._ok(thin=self._thin(status="FAIL"))
+        self.assertFalse(ok)
+
+    def test_the_routes_are_the_policy_document_s_own(self):
+        """M3: the first version listed a route that exists nowhere.
+
+        Read from the policy document rather than restated, because a test that
+        builds its expectation from a constant in the module under test is the
+        pattern `test_each_row_of_the_contract_mapping` already documents.
+        """
+        import json
+        policy = json.loads(
+            (Path(pipeline.__file__).resolve().parents[1]
+             / "src" / "repair" / "topology_policy_v1.json").read_text(
+                 encoding="utf-8"))
+        found = set()
+
+        def walk(node):
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    if key == "route" and isinstance(value, str):
+                        found.add(value)
+                    walk(value)
+            elif isinstance(node, list):
+                for value in node:
+                    walk(value)
+
+        walk(policy)
+        self.assertTrue(found, "no route found in the policy document")
+        self.assertEqual(set(pipeline.COMMIT_ROUTES), found)
+        for route in found:
+            ok, _, unsatisfied = self._ok(receipt=self._receipt(route=route))
+            self.assertTrue(ok, "route %r can never commit: %s"
+                            % (route, unsatisfied))
+        ok, _, unsatisfied = self._ok(receipt=self._receipt(route="SAFE"))
+        self.assertFalse(ok, "a route the policy does not define was accepted")
+        self.assertIn("route_and_effect_checks", unsatisfied)
+
+
+class CommitJournalTests(unittest.TestCase):
+    """Contract 387: recovery reads the durable journal, and a history reader
+    that skips bad lines must not be its sole basis."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="aedl-journal-")
+        self.journal = Path(self.root) / "journal.jsonl"
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _record(self, **overrides):
+        row = {"kind": pipeline.JOURNAL_COMMIT_INTENT, "txn_id": "old-txn",
+               "run_id": "run-1", "candidate_id": "cand-1", "patch_id": "p-1",
+               "stage_sha256": "a" * 64, "before_sha256": "b" * 64,
+               "after_sha256": "c" * 64, "target": "x", "status": None}
+        row.update(overrides)
+        return row
+
+    def test_a_torn_final_line_fails_closed_rather_than_reading_as_absent(self):
+        """The normal artefact of a crash mid-append is a torn LAST line.
+
+        A reader that skips it concludes "no COMMIT_INTENT", i.e. "the round
+        never committed" -- the exact inversion contract 387 forbids.
+        """
+        import json
+        good = json.dumps(self._record(), sort_keys=True)
+        with open(str(self.journal), "w", encoding="utf-8") as handle:
+            handle.write(good + "\n")
+            handle.write('{"kind": "COMMIT_INTENT", "txn_id": "torn"')  # no newline
+
+        records, corrupt = pipeline._read_journal(self.journal)
+        self.assertEqual(len(records), 1, "the intact line should still read")
+        self.assertEqual(len(corrupt), 1)
+        self.assertIn("LAST line", corrupt[0],
+                      "the tear was not identified as the final line")
+        self.assertIn("torn by a crash", corrupt[0])
+
+        pending, corrupt_out = pipeline._unresolved_intents(self.journal, "new")
+        self.assertEqual(pending, [], "nothing may be reported as pending here")
+        self.assertEqual(len(corrupt_out), 1,
+                         "a corrupt journal must NOT come back as clean")
+
+    def test_a_corrupt_interior_line_is_also_reported(self):
+        import json
+        with open(str(self.journal), "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(self._record(), sort_keys=True) + "\n")
+            handle.write("not json at all\n")
+            handle.write(json.dumps(
+                self._record(txn_id="later"), sort_keys=True) + "\n")
+        records, corrupt = pipeline._read_journal(self.journal)
+        self.assertEqual(len(records), 2)
+        self.assertEqual(len(corrupt), 1)
+        self.assertNotIn("LAST line", corrupt[0],
+                         "an interior line is not a torn final line")
+
+    def test_a_record_missing_a_field_is_reported_not_accepted(self):
+        import json
+        row = self._record()
+        del row["patch_id"]
+        with open(str(self.journal), "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(row, sort_keys=True) + "\n")
+        records, corrupt = pipeline._read_journal(self.journal)
+        self.assertEqual(records, [])
+        self.assertEqual(len(corrupt), 1)
+        self.assertIn("patch_id", corrupt[0])
+
+    def test_an_unresolved_intent_is_found_and_a_terminal_one_is_not(self):
+        import json
+        with open(str(self.journal), "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(self._record(txn_id="open-1"),
+                                    sort_keys=True) + "\n")
+            handle.write(json.dumps(self._record(txn_id="closed-1"),
+                                    sort_keys=True) + "\n")
+            handle.write(json.dumps(
+                self._record(txn_id="closed-1", kind=pipeline.JOURNAL_TERMINAL,
+                             status=pipeline.STATUS_COMMITTED),
+                sort_keys=True) + "\n")
+        pending, corrupt = pipeline._unresolved_intents(self.journal, "new-txn")
+        self.assertEqual(corrupt, [])
+        self.assertEqual([row["txn_id"] for row in pending], ["open-1"],
+                         "a terminalised transaction must not be pending")
+
+    def test_this_rounds_own_intent_is_not_pending(self):
+        import json
+        with open(str(self.journal), "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(self._record(txn_id="mine"),
+                                    sort_keys=True) + "\n")
+        pending, _ = pipeline._unresolved_intents(self.journal, "mine")
+        self.assertEqual(pending, [])
+
+    def test_a_missing_journal_is_empty_not_an_error(self):
+        self.assertEqual(pipeline._read_journal(
+            Path(self.root) / "absent.jsonl"), ([], []))
+        self.assertEqual(pipeline._unresolved_intents(
+            Path(self.root) / "absent.jsonl", "new"), ([], []))
+
+    def test_a_corrupt_journal_refuses_at_precheck(self):
+        """Contract 369: 先处理未完成事务. A journal this reader cannot trust
+        means an earlier transaction cannot be ruled out."""
+        with open(str(self.journal), "w", encoding="utf-8") as handle:
+            handle.write("{ this is not json\n")
+        request = self._request(repair_root=self.root)
+        receipt = pipeline.run_round(request)
+        self.assertTrue(receipt["terminal"])
+        self.assertEqual(receipt["status"], pipeline.STATUS_BLOCKED)
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("never committed", detail)
+        self.assertIn("cannot trust", detail)
+
+    def test_an_unresolved_intent_refuses_at_precheck_and_names_the_file(self):
+        import json
+        with open(str(self.journal), "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(self._record(txn_id="stuck"),
+                                    sort_keys=True) + "\n")
+        request = self._request(repair_root=self.root)
+        receipt = pipeline.run_round(request)
+        self.assertTrue(receipt["terminal"])
+        self.assertEqual(receipt["status"], pipeline.STATUS_BLOCKED)
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("stuck", detail, "the unresolved txn was not named")
+        self.assertIn("journal.jsonl", detail,
+                      "the reason must name the file a human has to read")
+        self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED)
+
+    def _request(self, repair_root=None):
+        """RunRoundTests' real fixture, with its setUp actually run.
+
+        Reusing the repository's own builder rather than hand-rolling a second
+        copy: the first version called `_request` on a bare instance, which has
+        no `self.cand`, and raised AttributeError.
+
+        `repair_root` is nested inside `host_context.workspace`, not passed flat.
+        Passing it flat added an unknown top-level field and the round refused
+        with REPAIR_SCHEMA_INVALID before ever reaching the journal -- which
+        would have made the test pass for entirely the wrong reason, since an
+        absent journal also reports "no pending intents".
+        """
+        from tests.test_repair_pipeline import RunRoundTests
+        case = RunRoundTests("test_the_request_must_be_a_mapping")
+        case.setUp()
+        self.addCleanup(case.tearDown)
+        request = case._request()
+        if repair_root is not None:
+            request["host_context"]["workspace"]["repair_root"] = str(repair_root)
+            # and prove the round reads the journal from exactly there, so a
+            # path typo cannot make a refusal test pass vacuously
+            self.assertEqual(pipeline._journal_file(request["host_context"]),
+                             Path(repair_root).resolve() / "journal.jsonl")
+        return request
+
+
 class VerifyStageWiringTests(unittest.TestCase):
     """PR1-C5-VERIFY-STAGE: run_round calls the contract's own verifier.
 
@@ -4139,3 +4504,300 @@ class VerifyStageWiringTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
+
+
+class CommitReceiptTests(unittest.TestCase):
+    """Drives a real round to a thin PASS and inspects what it publishes.
+
+    COMPOSITION, not inheritance. The first version subclassed
+    VerifyStageWiringTests to reuse its fixture, which re-ran all 19 of the
+    parent's tests inside this class: 27 tests where 8 were mine, the wiring
+    runtime doubled, and any parent failure would be reported twice.
+
+    Composition keeps what actually mattered -- the parent's real thin-PASS
+    fixture, its stubbed collaborators and its request builder, rather than a
+    hand-rolled second copy that drifts -- without re-executing its suite.
+    `__getattr__` forwards, so the test bodies are unchanged.
+    """
+
+    def setUp(self):
+        self._wiring = VerifyStageWiringTests(
+            "test_a_thin_pass_leaves_the_round_unpromoted")
+        self._wiring.setUp()
+
+    def tearDown(self):
+        self._wiring.tearDown()
+
+    def __getattr__(self, name):
+        # Only reached for attributes this class does not define, so there is no
+        # recursion risk with the unittest internals. The `_wiring` guard matters:
+        # unittest touches attributes before setUp runs, and indexing
+        # self.__dict__["_wiring"] then raised KeyError. Dunder and private
+        # names are never forwarded -- unittest's own machinery must see its
+        # real values.
+        delegate = self.__dict__.get("_wiring")
+        if delegate is None or (name.startswith("__") and name.endswith("__")):
+            raise AttributeError(name)
+        return getattr(delegate, name)
+
+    def _pass_receipt(self):
+        return self._run_with(verify_stage=lambda request: self._thin("PASS"))
+
+    def test_commit_keeps_the_contracts_closed_shape(self):
+        """Contract 404: commit:{attempted, replaced, verified}. Three keys.
+
+        The first version added a fourth (`predicate`) and this repository
+        enforces closed shapes everywhere, so every consumer of contract 404
+        would have broken. The verdict lives in its own receipt key instead.
+        """
+        receipt = self._pass_receipt()
+        self.assertEqual(set(receipt["commit"]),
+                         {"attempted", "replaced", "verified"})
+        for key in ("attempted", "replaced", "verified"):
+            self.assertIsInstance(receipt["commit"][key], bool)
+
+    def test_a_thin_pass_still_does_not_commit(self):
+        """The writer is absent, so the round must not claim to have written."""
+        receipt = self._pass_receipt()
+        self.assertIsNone(receipt["status"])
+        self.assertFalse(receipt["terminal"])
+        self.assertEqual(receipt["commit"],
+                         {"attempted": False, "replaced": False, "verified": False})
+        self.assertEqual(receipt["pending_phases"], [pipeline.PHASE_COMMIT])
+        self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED)
+        # and the candidate design really was left alone.
+        #
+        # Asserted against the SNAPSHOT's own recorded digest rather than a
+        # fixture attribute: `raw` is created in RunRoundTests.setUp, so it is
+        # not reachable through the class, and comparing to the snapshot is a
+        # stronger statement anyway -- it is the same comparison contract 384
+        # requires for `rollback.status = VERIFIED`.
+        live = (self.root / "cand" / "design" / RunRoundTests.STAGE_TARGET)
+        recorded = {row["path"]: row["sha256"]
+                    for row in receipt["snapshot"]["manifest"]["files"]}
+        self.assertEqual(
+            pipeline.hash_bytes(live.read_bytes()),
+            recorded[RunRoundTests.STAGE_TARGET],
+            "the candidate design was modified by a round that did not commit")
+
+    def test_the_receipt_says_structurally_that_the_writer_is_absent(self):
+        """A refusal reason that describes behaviour the process does not have
+        is worse than no reason. So the absence is a FIELD, and a test asserts
+        both that the field is there and that no commit was attempted."""
+        receipt = self._pass_receipt()
+        predicate = receipt["commit_predicate"]
+        self.assertIsNotNone(predicate)
+        self.assertFalse(predicate["writer_available"],
+                         "claiming a writer that does not exist")
+        for missing in ("single_writer_lock", "commit_intent_and_restore",
+                        "atomic_design_replace"):
+            self.assertIn(missing, predicate["not_implemented"],
+                          "%s is not declared missing" % missing)
+        self.assertFalse(predicate["satisfied"],
+                         "the predicate cannot be satisfied without the lock")
+
+    def test_the_unsatisfied_conjunct_is_named(self):
+        """A reader must not have to guess why the round did not promote."""
+        receipt = self._pass_receipt()
+        unsatisfied = receipt["commit_predicate"]["unsatisfied_conjuncts"]
+        self.assertIn("single_writer_lock_held", unsatisfied)
+        joined = " ".join(receipt["commit_predicate"]["reasons"])
+        self.assertIn("single_writer_lock_held", joined)
+
+    def test_the_conjuncts_that_hold_are_named_as_holding(self):
+        """The other direction, and the one a green suite let through.
+
+        Naming only the FAILURES means `live_equals_snapshot = True` hard-coded
+        would satisfy every test above -- the round refuses for the lock either
+        way. So the healthy path is asserted to satisfy 344 (the live design
+        really was compared with the snapshot) and 343 (the stage bytes were
+        really re-measured), which is what makes "always True" a detectable
+        mutation rather than an invisible one.
+        """
+        receipt = self._pass_receipt()
+        unsatisfied = receipt["commit_predicate"]["unsatisfied_conjuncts"]
+        for satisfied in ("live_design_still_equals_snapshot",
+                          "recomputed_hashes_match",
+                          "thin_pass_invariants",
+                          "thin_scope_is_candidate_bytes",
+                          "stage_applied_to_stage"):
+            self.assertNotIn(satisfied, unsatisfied,
+                             "%s should hold on the healthy path" % satisfied)
+
+    def test_rollback_is_not_verified_without_actually_comparing(self):
+        """C4. Contract 384: VERIFIED is earned by the byte/manifest compare."""
+        receipt = self._pass_receipt()
+        rollback = receipt["rollback"]
+        self.assertIn(rollback["status"], ("VERIFIED", "UNKNOWN", "NOT_NEEDED"))
+        # VERIFIED may only be published alongside a real comparison, which is
+        # exactly what byte_equal is for.
+        if rollback["status"] == "VERIFIED":
+            self.assertIs(rollback["byte_equal"], True)
+            self.assertFalse(rollback["attempted"],
+                             "nothing was rolled back, so VERIFIED must be a "
+                             "confirmation rather than a write")
+        else:
+            self.assertIsNone(rollback["byte_equal"],
+                              "byte_equal=True without a comparison is the "
+                              "fabricated field this test exists to prevent")
+
+    def test_an_uncomparable_live_design_is_unknown_never_verified(self):
+        """Force conjunct 344 false by making the live design unmeasurable.
+
+        `_staged_design_manifest` is not what is called here -- the round calls
+        `build_file_manifest(design_root, stage_target)` directly. Deleting the
+        design root makes that raise, which is the honest way to reach the
+        failure without contriving a manifest mismatch.
+        """
+        # Baseline first: prove the round DOES reach COMMIT on the happy path,
+        # so a pass/fail below cannot come from an earlier refusal.
+        healthy = self._pass_receipt()
+        self.assertIsNotNone(healthy["commit_predicate"],
+                             "the round did not reach the phase under test")
+
+        seen_roots = []
+
+        def explode(root, target):
+            """Fail ONLY the COMMIT-phase measurement.
+
+            Measured, not guessed: a thin-PASS round calls build_file_manifest
+            three times, with roots ending `/.repair/snapshot`, `/stage` and
+            `/cand/design`. The last is contract 344's live-design comparison.
+            Raising for ALL of them stopped the round at SNAPSHOT, so the test
+            measured a refusal two phases early and `NOT_NEEDED != UNKNOWN`
+            passed while exercising nothing.
+            """
+            seen_roots.append(str(root))
+            if str(root).rstrip("\\/").endswith("cand\\design"):
+                raise OSError("the design root is on a disconnected volume")
+            return real_build(root, target)
+
+        real_build = pipeline.build_file_manifest
+        with mock.patch.object(pipeline, "build_file_manifest", explode):
+            receipt = self._pass_receipt()
+
+        self.assertGreaterEqual(
+            len(seen_roots), 3,
+            "the round made fewer manifest calls than measured, so the targeted "
+            "failure may not have been reached: %r" % (seen_roots,))
+        self.assertIsNotNone(receipt["commit_predicate"],
+                             "the round stopped before COMMIT, so this test is "
+                             "measuring the wrong refusal")
+        self.assertEqual(receipt["rollback"]["status"], "UNKNOWN")
+        self.assertIsNone(receipt["rollback"]["byte_equal"],
+                          "byte_equal was set without any comparison")
+        self.assertIn("live_design_still_equals_snapshot",
+                      receipt["commit_predicate"]["unsatisfied_conjuncts"])
+        self.assertIn("could not be re-measured",
+                      " ".join(receipt["commit_predicate"]["reasons"]))
+        self.assertEqual(receipt["commit"],
+                         {"attempted": False, "replaced": False, "verified": False})
+
+    def test_the_round_never_raises_on_a_thin_pass(self):
+        """C1/C6/C7: a NameError, a missing import and a bad keyword argument
+        all escaped `run_round` in the first version of this phase.
+
+        `run_round` refuses by RETURNING a receipt; an exception escaping it is
+        a defect in our own wiring being reported as a crash rather than as a
+        refusal. The repository already has a test against that pattern for
+        `bind_policy`; this is the same guard for the COMMIT path.
+        """
+        for verdict in ("PASS", "FAIL", "BLOCKED", "TOOL_ERROR", "UNKNOWN"):
+            receipt = self._run_with(
+                verify_stage=lambda request, v=verdict: self._thin(v))
+            self.assertIsInstance(receipt.get("phase"), str,
+                                  "verdict %s produced no phase" % verdict)
+            self.assertIn("status", receipt)
+            self.assertIn("commit", receipt)
+            self.assertIn("rollback", receipt)
+            self.assertIn("commit_predicate", receipt)
+
+    def test_a_live_design_that_differs_from_the_snapshot_fails_the_conjunct(self):
+        """Contract 344, with a genuine MISMATCH rather than an exception.
+
+        The exception path is covered elsewhere. This is the case the conjunct
+        actually exists for: the manifest comparison completes and the two
+        documents disagree -- a human or another process edited the candidate
+        between SNAPSHOT and COMMIT.
+
+        Without this, `live_equals_snapshot = True` hard-coded survives,
+        because the only other test asserts the conjunct is NOT in the
+        unsatisfied list, which holds whether the comparison is real or faked.
+        """
+        real_build = pipeline.build_file_manifest
+        from tests.test_repair_pipeline import RunRoundTests
+
+        def tamper(root, target):
+            manifest = real_build(root, target)
+            if str(root).rstrip("\\/").endswith("cand\\design"):
+                # a valid manifest that simply does not describe what the
+                # snapshot recorded
+                rows = [dict(row) for row in manifest["files"]]
+                for row in rows:
+                    if row["path"] == RunRoundTests.STAGE_TARGET:
+                        row["sha256"] = "e" * 64
+                return {"version": manifest["version"], "files": rows}
+            return manifest
+
+        with mock.patch.object(pipeline, "build_file_manifest", tamper):
+            receipt = self._pass_receipt()
+
+        self.assertIsNotNone(receipt["commit_predicate"],
+                             "the round stopped before COMMIT")
+        self.assertIn("live_design_still_equals_snapshot",
+                      receipt["commit_predicate"]["unsatisfied_conjuncts"])
+        self.assertEqual(receipt["rollback"]["status"], "UNKNOWN",
+                         "a mismatched live design cannot be VERIFIED")
+        self.assertIsNone(receipt["rollback"]["byte_equal"])
+
+    def test_stage_bytes_that_moved_after_the_verifier_fail_the_conjunct(self):
+        """Contract 343: after the verifier returned, recompute the stage hashes.
+
+        The lever is real rather than contrived: the verifier request carries
+        `stage_root`, so the stub can modify the stage after the writer ran and
+        after the verifier read it. That is exactly the drift 343 guards
+        against, and it is why the stage is re-measured at COMMIT instead of the
+        receipt's own `after_source_sha256` being trusted.
+        """
+        from tests.test_repair_pipeline import RunRoundTests
+        stage = self.root / "stage" / RunRoundTests.STAGE_TARGET
+
+        def verifier(request):
+            # touch the stage, as a concurrent or misbehaving writer would
+            stage.write_bytes(stage.read_bytes() + b"\n; touched after verify\n")
+            return self._thin("PASS")
+
+        receipt = self._run_with(verify_stage=verifier)
+
+        self.assertIsNotNone(receipt["commit_predicate"],
+                             "the round stopped before COMMIT")
+        self.assertIn("recomputed_hashes_match",
+                      receipt["commit_predicate"]["unsatisfied_conjuncts"],
+                      "a stage that moved after the verifier was accepted")
+        self.assertEqual(receipt["commit"],
+                         {"attempted": False, "replaced": False, "verified": False})
+
+    def test_a_refusal_before_commit_reports_nothing_attempted(self):
+        """Contract 388: a failure before any write is BLOCKED, not a rollback."""
+        request = self._request()
+        request["stage_target"] = "../escapes.kicad_sch"
+        with mock.patch("tools.akcli_adapter.apply_stage", return_value={
+                "status": "APPLIED_TO_STAGE",
+                "tool": {"tool_applied": True, "exit_code": 0, "changed": True},
+                "changed": True, "before_source_sha256": "0" * 64,
+                "after_source_sha256": "1" * 64, "reasons": []}), \
+                mock.patch.object(pipeline, "compare_delta", return_value={
+                    "status": "PASS", "authorized_delta_sha256": "2" * 64,
+                    "actual_delta_sha256": "2" * 64, "missing": [],
+                    "unexpected": [], "coverage_complete": True, "reasons": []}):
+            receipt = pipeline.run_round(request)
+        self.assertTrue(receipt["terminal"])
+        self.assertEqual(receipt["commit"],
+                         {"attempted": False, "replaced": False, "verified": False})
+        self.assertEqual(receipt["rollback"]["status"], "NOT_NEEDED")
+        self.assertIsNone(receipt["rollback"]["byte_equal"])
+        self.assertIsNone(receipt["commit_predicate"],
+                          "the predicate was never evaluated on this path")

@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 123 条。完整正文在各自条目文件中；本索引只做导航。
+共 124 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -181,4 +181,5 @@
 ## 2026-09-28
 
 - [`AI-20260928-OPENCODE-260FFBD44D4C44DD609BF543455D8142`](ai-usage/AI-20260928-OPENCODE-260FFBD44D4C44DD609BF543455D8142.md) — PR1-C5-VERIFY-STAGE: wire the contract's own verify_stage into the phase machine
+- [`AI-20260928-OPENCODE-491235ACC61A23B74BD6158B824D15DF`](ai-usage/AI-20260928-OPENCODE-491235ACC61A23B74BD6158B824D15DF.md) — PR1-C5-COMMIT: land the commit predicate and the journal read path; declare the writer absent
 - [`AI-20260928-OPENCODE-76DB9B9EC4A1703B7C2C8B2B1C30969B`](ai-usage/AI-20260928-OPENCODE-76DB9B9EC4A1703B7C2C8B2B1C30969B.md) — 裁定 3 —— 把「`violations == []` 不构成 evidence；ERC/DRC 若落地必须绑定并记录 `ignored_checks`」落盘为 ADR-014
