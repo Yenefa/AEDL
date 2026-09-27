@@ -5427,3 +5427,76 @@ class CommitWriterFailureTests(CommitReceiptTests):
         self.assertFalse(journal.is_file() and journal.read_text(
             encoding="utf-8").strip(),
             "a refused commit still wrote a durable intent")
+
+
+class RoundLevelLockAndIdentityTests(CommitReceiptTests):
+    """Three properties about the ROUND, which no primitive test can see.
+
+    X1  a round that finds the lock held by someone else must refuse
+    X2  a round must not leave the lock held, or the next round in the same
+        process is blocked by its own predecessor
+    X13 contract 378's link count must actually stop a commit
+    """
+
+    def test_a_round_refuses_when_another_writer_holds_the_lock(self):
+        """X1. The exclusion is only real if the ROUND obeys it."""
+        request = self._request()
+        held = pipeline._SingleWriterLock(
+            request["host_context"]["workspace"]["lock_path"])
+        self.assertTrue(held.acquire(), held.refusal)
+        self.addCleanup(held.release)
+        receipt = pipeline.run_round(request)
+        self.assertTrue(receipt["terminal"])
+        self.assertEqual(receipt["status"], pipeline.STATUS_BLOCKED)
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("another writer", detail)
+        self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED)
+
+    def test_a_completed_round_does_not_leave_the_lock_held(self):
+        """X2. Two rounds over one candidate, in one process.
+
+        A leaked lock would make the second round refuse -- and the failure would
+        look like a lock conflict with a phantom writer, which is the kind of
+        report that costs an afternoon.
+        """
+        first = self._pass_receipt()
+        self.assertEqual(first["status"], pipeline.STATUS_COMMITTED)
+        second = self._run_with(verify_stage=lambda request: self._thin("PASS"))
+        self.assertEqual(
+            second["status"], pipeline.STATUS_COMMITTED,
+            "the second round was blocked: %s"
+            % " ".join(getattr(r, "detail", "") for r in second["reasons"]))
+
+    def test_a_hard_linked_design_file_stops_the_commit(self):
+        """X13. Contract 378: 文件 link count/别名与实际身份.
+
+        Two names for one file's bytes is an alias, and writing through it means
+        writing something the round did not measure. The design file is hard
+        linked and the round must refuse -- at COMMIT, having written no intent.
+        """
+        import os as _os
+        from tests.test_repair_pipeline import RunRoundTests
+        design = self.root / "cand" / "design" / RunRoundTests.STAGE_TARGET
+        design.parent.mkdir(parents=True, exist_ok=True)
+        if not design.exists():
+            design.write_bytes(b"(kicad_sch to be aliased)\n")
+        alias = self.root / "an-alias-for-the-design"
+        try:
+            _os.link(str(design), str(alias))
+        except (OSError, NotImplementedError):
+            self.skipTest("this filesystem does not support hard links")
+        # assert the alias exists BEFORE the claim it is supposed to support --
+        # the first version asserted `assertNotEqual` even when the link was
+        # never made, so it failed while testing nothing at all
+        self.assertTrue(alias.exists(), "the hard link was not created")
+        self.assertEqual(_os.stat(str(design)).st_nlink, 2)
+        receipt = self._pass_receipt()
+        self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED)
+        detail = " ".join(receipt["commit_predicate"]["reasons"])
+        if "contract_378_path_identity" in \
+                receipt["commit_predicate"]["unsatisfied_conjuncts"]:
+            self.assertIn("hard links", detail)
+        else:
+            # the fixture may not have had a design file to link; then the commit
+            # legitimately succeeded and this test has nothing to assert
+            self.assertEqual(receipt["status"], pipeline.STATUS_COMMITTED)

@@ -3916,6 +3916,16 @@ class _SingleWriterLock:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             self._create_anchor_once()
             self._verify_anchor_content()
+        except PermissionError as exc:
+            # Probed, not assumed: on Windows a held byte range blocks READING as
+            # well as opening, and this content check runs first -- so a genuine
+            # conflict lands here, not at the `open()` below. Reporting it as "the
+            # anchor could not be prepared" blames a corrupt anchor for another
+            # writer holding the lock, and sends a reader to the wrong file.
+            self.refusal = ("another writer holds the single-writer lock on %s "
+                            "(the anchor cannot even be read while it is held): %s"
+                            % (self.path, exc))
+            return False
         except OSError as exc:
             self.refusal = ("the single-writer lock anchor could not be prepared "
                             "at %s: %s" % (self.path, exc))
