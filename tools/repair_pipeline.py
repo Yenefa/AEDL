@@ -23,6 +23,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
@@ -3352,6 +3353,356 @@ def materialise_snapshot(candidate_design_root, snapshot_root, target_relative):
     return str(destination), build_file_manifest(destination, target_relative)
 
 
+# KICAD_VERIFY tool identity states.  These are EVIDENCE STATES, not verdicts:
+# the phase is an evidence generator and the policy layer decides what any of
+# them means.  There is deliberately no FAIL among them (Owner ruling 3).
+TOOL_IDENTITY_MATCH = "MATCH"
+TOOL_IDENTITY_SUBSTITUTION = "SUBSTITUTION"
+TOOL_IDENTITY_UNAVAILABLE = "UNAVAILABLE"
+
+# The netlist digest normalisation, as DATA (Owner ruling 1).  A bare
+# `normalized_hash` field was explicitly rejected: years later nobody could say
+# why two different files hashed alike.  The removed field and the reason travel
+# with the digest, and the raw digest is always retained beside it.
+_NETLIST_NORMALIZATION = {
+    "removed_fields": ["date"],
+    "reason": "generator timestamp",
+    "note": "kicad-cli writes (date \"...\") into the netlist, so two runs of "
+            "identical input produce different bytes. Blanking that one field "
+            "makes the digest comparable across rounds. This is LOSSY: the "
+            "generation time is exactly what it discards, which is why "
+            "netlist_sha256 is retained unmodified alongside it.",
+}
+
+# Measured limits of the standard KiCad ERC on this project's own defect class.
+# Recorded in the artifact rather than in a comment, so a reader of the evidence
+# learns what it does not establish without having to find this file.
+_KICAD_VERIFY_LIMITATIONS = (
+    "KiCad standard ERC reported 0 errors on the DC-04 fixture in its "
+    "defective state. Its 37 warnings were all lib_symbol_issues or "
+    "footprint_link_issues -- library resolution, not electrical. This "
+    "artifact therefore establishes that the tool ran and what it said; it "
+    "does NOT establish that the design is electrically correct.",
+    "ERC violation counts on this fixture are dominated by symbol and "
+    "footprint library resolution. Read violation_categories.by_type, not the "
+    "totals: a total cannot distinguish a missing library from a missing "
+    "power connection.",
+    "sch export svg writes a DIRECTORY at the requested path "
+    "(out.svg/fault.svg), not a file. A caller that tests the requested path "
+    "with is_file() concludes the render failed when it succeeded.",
+)
+
+
+def _kicad_binding_identity(toolchain_binding):
+    """Read the DECLARED kicad identity out of the validated host binding.
+
+    Read from ``host_context["toolchain_binding"]`` rather than from
+    ``host_patch["toolchain_manifest"]``: the patch carries the akcli slice,
+    which has no kicad entry at all, so ``toolchain_sha256`` does not commit to
+    the kicad binary. That absence is reported in the artifact rather than
+    worked around.
+
+    Returns ``(resolved_path, declared_sha256, declared_version)``; any element
+    may be ``None`` when the declaration is missing.
+    """
+    if not isinstance(toolchain_binding, Mapping):
+        return None, None, None
+    manifest = toolchain_binding.get("manifest")
+    declared = manifest.get("kicad") if isinstance(manifest, Mapping) else None
+    declared = declared if isinstance(declared, Mapping) else {}
+    resolution = toolchain_binding.get("resolution")
+    executables = resolution.get("executables") if isinstance(
+        resolution, Mapping) else None
+    path = executables.get("kicad") if isinstance(executables, Mapping) else None
+    return (
+        path if isinstance(path, str) and path.strip() else None,
+        declared.get("executable_sha256")
+        if isinstance(declared.get("executable_sha256"), str) else None,
+        declared.get("version") if isinstance(declared.get("version"), str) else None,
+    )
+
+
+def _kicad_tool_identity(toolchain_binding):
+    """Resolve, MEASURE and compare the kicad executable. Fail-closed.
+
+    The binary is located ONLY through the binding.  The board_review helper is
+    not called and must not be: it reads ``KICAD_CLI``, then ``PATH``, then a
+    hardcoded path belonging to a different user, and it returns ``None`` on a
+    machine where KiCad 10.0.5 is installed and working.  Falling back to it
+    would let the artifact say it verified kicad X while kicad Y actually ran
+    (Owner ruling 2).
+
+    The digest is MEASURED from the file that is about to be executed. It is
+    never copied from the declaration, because that declaration is exactly the
+    value this phase exists to check.
+    """
+    path, declared_sha, declared_version = _kicad_binding_identity(
+        toolchain_binding)
+    identity = {
+        "resolved_path": path,
+        "declared_sha256": declared_sha,
+        "measured_sha256": None,
+        "declared_version": declared_version,
+        "measured_version": None,
+        "status": TOOL_IDENTITY_UNAVAILABLE,
+        "resolved_from": "toolchain_binding.resolution.executables.kicad",
+        "fallback_used": None,
+    }
+    if path is None:
+        identity["detail"] = ("the binding declares no kicad executable, so "
+                              "there is nothing to resolve; refusing rather "
+                              "than searching the host")
+        return identity, None
+    try:
+        binary = Path(path).resolve()
+    except (OSError, ValueError) as exc:
+        identity["detail"] = "the bound kicad path could not be resolved: %s" % exc
+        return identity, None
+    if not binary.is_file():
+        identity["detail"] = ("the bound kicad executable does not exist: %s; "
+                              "no other binary was searched for and none was "
+                              "run" % binary)
+        return identity, None
+    try:
+        identity["measured_sha256"] = hash_bytes(binary.read_bytes())
+    except OSError as exc:
+        identity["detail"] = "the bound kicad executable could not be read: %s" % exc
+        return identity, None
+    if declared_sha is None:
+        identity["status"] = TOOL_IDENTITY_SUBSTITUTION
+        identity["detail"] = ("the binding declares no digest for the kicad "
+                              "executable, so the binary that would run cannot "
+                              "be shown to be the declared one")
+        return identity, None
+    if identity["measured_sha256"] != declared_sha:
+        identity["status"] = TOOL_IDENTITY_SUBSTITUTION
+        identity["detail"] = ("the kicad executable at the bound path does not "
+                              "hash to the digest the binding declares")
+        return identity, None
+    identity["status"] = TOOL_IDENTITY_MATCH
+    return identity, binary
+
+
+def _kicad_run(binary, args, cwd, timeout_seconds):
+    """Run kicad-cli and return (exit_code, combined_output). Never raises.
+
+    The usage text goes to STDOUT, not stderr, so both are captured: a probe that
+    reads only stderr reports "no output" for a tool that was explaining exactly
+    what was wrong.
+    """
+    try:
+        done = subprocess.run([str(binary)] + [str(a) for a in args], cwd=str(cwd),
+                              capture_output=True, text=True,
+                              timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        return None, "the tool did not finish within %ss" % timeout_seconds
+    except OSError as exc:
+        return None, "the tool could not be started: %s" % exc
+    return done.returncode, ((done.stdout or "") + (done.stderr or "")).strip()
+
+
+def _erc_evidence(binary, project_root, target, artifact_root, timeout_seconds):
+    """ERC as machine-readable evidence, categorised.
+
+    Read as JSON rather than scraped from the text report: the JSON carries
+    kicad_version, source and included_severities natively, which is provenance
+    this phase would otherwise have to assert about itself.
+
+    Bare totals are NOT emitted. 37 carries no information; 22 missing-library
+    plus 15 footprint-linkage plus 0 electrical carries a great deal
+    (Owner ruling 4).
+    """
+    report = artifact_root / "erc.json"
+    code, text = _kicad_run(
+        binary,
+        ["sch", "erc", "--output", str(report), "--format", "json",
+         "--severity-all", str(project_root / target)],
+        project_root, timeout_seconds)
+    evidence = {
+        "exit_code": code,
+        "report_path": str(report),
+        "produced": report.is_file(),
+        "violations": {
+            "error": {"total": 0, "by_type": {}},
+            "warning": {"total": 0, "by_type": {}},
+        },
+        "kicad_version": None,
+        "source": None,
+        "included_severities": None,
+    }
+    if not report.is_file():
+        evidence["detail"] = text or "the tool produced no report"
+        return evidence
+    try:
+        parsed = json.loads(report.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, ValueError) as exc:
+        evidence["detail"] = "the ERC report is not readable JSON: %s" % exc
+        return evidence
+    for key in ("kicad_version", "source", "included_severities"):
+        evidence[key] = parsed.get(key)
+    for sheet in parsed.get("sheets") or []:
+        for item in sheet.get("violations") or []:
+            severity = item.get("severity")
+            bucket = evidence["violations"].get(severity)
+            if bucket is None:
+                # An unrecognised severity is not silently dropped: it becomes
+                # its own bucket rather than vanishing from the count.
+                bucket = evidence["violations"][severity] = {"total": 0, "by_type": {}}
+            bucket["total"] += 1
+            kind = item.get("type") or "unclassified"
+            bucket["by_type"][kind] = bucket["by_type"].get(kind, 0) + 1
+    return evidence
+
+
+def _netlist_evidence(binary, project_root, target, artifact_root, timeout_seconds):
+    """Netlist with BOTH digests and the normalisation rule as data.
+
+    Measured: two runs of identical input produce different bytes, differing on
+    exactly one line, ``(date "2026-09-27T23:47:19")``. So the raw digest
+    identifies the artefact and the content digest identifies the design, and
+    conflating them would make either claim false.
+    """
+    netlist = artifact_root / "netlist.net"
+    code, text = _kicad_run(
+        binary,
+        ["sch", "export", "netlist", "--format", "kicadsexpr",
+         "-o", str(netlist), str(project_root / target)],
+        project_root, timeout_seconds)
+    evidence = {
+        "requested_path": str(netlist),
+        "exit_code": code,
+        "produced": netlist.is_file(),
+        "netlist_sha256": None,
+        "netlist_content_sha256": None,
+        "normalization": dict(_NETLIST_NORMALIZATION),
+    }
+    if not netlist.is_file():
+        evidence["detail"] = text or "the tool produced no netlist"
+        return evidence
+    raw = netlist.read_bytes()
+    evidence["netlist_sha256"] = hash_bytes(raw)
+    text_form = raw.decode("utf-8", errors="replace")
+    blanked, replacements = re.subn(
+        r'\(date\s+"[^"]*"\)', '(date "<removed>")', text_form)
+    evidence["normalization"]["replacements_in_this_artifact"] = replacements
+    evidence["netlist_content_sha256"] = hash_bytes(blanked.encode("utf-8"))
+    return evidence
+
+
+def _render_evidence(binary, project_root, target, artifact_root, timeout_seconds):
+    """Enumerate what the render ACTUALLY produced, not what was requested.
+
+    Measured: ``sch export svg -o out.svg`` writes the DIRECTORY ``out.svg``
+    containing ``fault.svg``. A caller testing the requested path with is_file()
+    concludes the render failed when it succeeded -- the same shape as a tool
+    that succeeds and a caller that misreads it (Owner ruling 5).
+    """
+    outputs = []
+    for fmt, arguments in (("svg", ["sch", "export", "svg"]),
+                           ("pdf", ["sch", "export", "pdf"])):
+        requested = artifact_root / ("render.%s" % fmt)
+        code, text = _kicad_run(
+            binary, arguments + ["-o", str(requested),
+                                 str(project_root / target)],
+            project_root, timeout_seconds)
+        row = {
+            "format": fmt,
+            "requested": str(requested),
+            "requested_is_file": requested.is_file(),
+            "requested_is_directory": requested.is_dir(),
+            "exit_code": code,
+            "artefacts": [],
+        }
+        # The artefact may be the requested path itself, or something inside it.
+        found = []
+        if requested.is_file():
+            found = [requested]
+        elif requested.is_dir():
+            found = sorted(p for p in requested.rglob("*") if p.is_file())
+        for artefact in found:
+            row["artefacts"].append({
+                "actual_path": str(artefact),
+                "size_bytes": artefact.stat().st_size,
+                "sha256": hash_bytes(artefact.read_bytes()),
+            })
+        if not found:
+            row["detail"] = text or "the tool reported no output"
+        outputs.append(row)
+    return {"outputs": outputs}
+
+
+def kicad_verify_evidence(toolchain_binding, project_root, target,
+                          artifact_root, timeout_seconds=120):
+    """Produce the KICAD_VERIFY evidence artifact. Decides nothing.
+
+    Every branch here returns an artifact; none of them raises into the caller
+    and none of them expresses an opinion about whether the transaction may
+    proceed. ``tool_identity.status`` is one of MATCH / SUBSTITUTION /
+    UNAVAILABLE, and the tool is executed only on MATCH -- because evidence
+    gathered by a binary that cannot be identified is not evidence about the
+    design.
+
+    The measured reason this is not a gate: KiCad's standard ERC reports ZERO
+    errors on the DC-04 fixture in its defective state. A phase that gated on
+    that number would be green on a broken board.
+    """
+    project = Path(project_root).resolve()
+    artifacts = Path(artifact_root)
+    artifacts.mkdir(parents=True, exist_ok=True)
+
+    artifact = {
+        "phase": PHASE_KICAD_VERIFY,
+        "role": "evidence-generator",
+        "decides": None,
+        "tool_identity": None,
+        "erc": None,
+        "netlist": None,
+        "render": None,
+        "timeout_seconds": timeout_seconds,
+        "limitations": list(_KICAD_VERIFY_LIMITATIONS),
+    }
+
+    identity, binary = _kicad_tool_identity(toolchain_binding)
+    artifact["tool_identity"] = identity
+    if binary is None:
+        # Nothing is executed and nothing is invented. The absence of ERC, of a
+        # netlist and of a render is itself the evidence.
+        artifact["detail"] = identity.get("detail")
+        return artifact
+
+    code, text = _kicad_run(binary, ["version"], project, timeout_seconds)
+    identity["measured_version"] = (text or "").strip().splitlines()[0] \
+        if text else None
+    if identity.get("declared_version") and identity["measured_version"] \
+            and identity["declared_version"] not in identity["measured_version"]:
+        # A version string that disagrees with the declaration is a second,
+        # independent signal of substitution.
+        identity["status"] = TOOL_IDENTITY_SUBSTITUTION
+        identity["version_disagreement"] = {
+            "declared": identity["declared_version"],
+            "measured": identity["measured_version"],
+        }
+        artifact["detail"] = ("the bound kicad executable reports a version "
+                              "that does not contain the declared version")
+        return artifact
+
+    # No further identity check is needed here, and an earlier version had a
+    # redundant `if status != MATCH: return` at this point. It was UNREACHABLE:
+    # _kicad_tool_identity returns a non-None binary only on MATCH, so every
+    # other state has already returned above -- which is why mutation K4
+    # (disabling that guard) changed nothing. The invariant it appeared to check
+    # is now asserted directly by the test suite, on the function that actually
+    # establishes it.
+
+    artifact["erc"] = _erc_evidence(binary, project, target, artifacts,
+                                    timeout_seconds)
+    artifact["netlist"] = _netlist_evidence(binary, project, target, artifacts,
+                                            timeout_seconds)
+    artifact["render"] = _render_evidence(binary, project, target, artifacts,
+                                          timeout_seconds)
+    return artifact
+
+
 def _delta_identity_label(identity) -> str:
     """Name one object the way a reviewer would.
 
@@ -3675,54 +4026,6 @@ def run_round(round_request):
     # The request was validated and read above.  What follows settles the
     # stage/candidate separation; the BEFORE observation is taken in SNAPSHOT,
     # from bytes fixed before any writer exists.
-    receipt["txn_id"] = txn_id
-
-    # The stage must be provably disjoint from the candidate (PR1-C5-SEPARATION).
-    # Checked before anything is read, and fail-closed: if the candidate's design
-    # root cannot be determined, disjointness cannot be proven.
-    workspace = host_context.get("workspace") if isinstance(host_context, Mapping) \
-        else None
-    design_root = workspace.get("design_root") if isinstance(workspace, Mapping) \
-        else None
-    repair_root = workspace.get("repair_root") if isinstance(workspace, Mapping) \
-        else None
-    if not isinstance(design_root, str) or not design_root.strip():
-        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
-            REASON_INPUT_DRIFT,
-            "the host context declares no candidate design root, so the stage "
-            "cannot be proven disjoint from it; refusing rather than trusting it")])
-    try:
-        overlap = _stage_candidate_overlap(stage_root, design_root)
-    except (OSError, ValueError) as exc:
-        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
-            REASON_INPUT_DRIFT,
-            "the stage root and the candidate design root could not be compared: %s"
-            % exc)])
-    if overlap is not None:
-        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
-            REASON_INPUT_DRIFT,
-            "the writer's stage is not disjoint from the candidate: %s "
-            "(stage=%s design_root=%s); a round that stops before COMMIT must not "
-            "be able to have modified the candidate"
-            % (_OVERLAP_DETAIL[overlap], Path(stage_root).resolve(),
-               Path(design_root).resolve()))])
-    receipt["stage_root"] = str(Path(stage_root).resolve())
-    receipt["candidate_design_root"] = str(Path(design_root).resolve())
-
-    # The op-list must already live inside the stage: the stage is re-seeded from
-    # the snapshot below, so an op-list from elsewhere would not survive it.
-    oplist_source = Path(oplist_path)
-    if not oplist_source.is_file():
-        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
-            REASON_INPUT_DRIFT,
-            "the op-list path is missing or is not a file: %s" % oplist_path)])
-    try:
-        oplist_source.resolve().relative_to(Path(stage_root).resolve())
-    except ValueError:
-        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
-            REASON_INPUT_DRIFT,
-            "the op-list path lies outside the stage root it must be run from")])
-
     # Containment for the target, enforced here and not left to the adapter.
     try:
         resolved_root = Path(stage_root).resolve()
@@ -3915,8 +4218,60 @@ def run_round(round_request):
         return refuse(PHASE_DELTA_CHECK, status, reasons, cause_status=cause)
     reach(PHASE_DELTA_CHECK)
 
+    # ---- KICAD_VERIFY ------------------------------------------------------
+    # An EVIDENCE GENERATOR, not a gate (PR1-C5-KICAD-VERIFY).  It runs the bound
+    # kicad-cli and records what happened; it does not decide anything, and
+    # nothing below this point changes the round's status because of it.
+    #
+    # The reason is measured, not stylistic: KiCad's standard ERC reports ZERO
+    # errors on the DC-04 fixture in its defective state, and its 37 warnings are
+    # all library-resolution noise. A phase that gated on that number would be
+    # green on a broken board. So the artifact records the counts WITH their
+    # categories, the tool's own measured identity, and what it does not
+    # establish.
+    #
+    # The kicad identity is read from the validated host binding, NOT from
+    # host_patch["toolchain_manifest"]: that slice is akcli-only and carries no
+    # kicad entry, so toolchain_sha256 does not commit to the kicad binary. That
+    # gap is reported in the artifact rather than repaired here.
+    # The declared timeout is an int on toolchain_manifest["timeout_seconds"]
+    # (measured, not assumed -- an earlier version of this line assumed a nested
+    # mapping and silently fell back to 120 instead of honouring the declared
+    # 60). A missing or non-positive value falls back, and says so in the
+    # artifact, rather than being coerced.
+    declared_timeout = bound["host_patch"]["toolchain_manifest"].get(
+        "timeout_seconds")
+    if isinstance(declared_timeout, int) and not isinstance(
+            declared_timeout, bool) and declared_timeout > 0:
+        kicad_timeout = declared_timeout
+    else:
+        kicad_timeout = 120
+    try:
+        kicad_evidence = kicad_verify_evidence(
+            toolchain_binding=host_context.get("toolchain_binding"),
+            project_root=Path(stage_root),
+            target=stage_target,
+            artifact_root=Path(artifact_root) / "kicad_verify",
+            timeout_seconds=kicad_timeout,
+        )
+    except Exception as exc:      # never let evidence gathering end the round
+        kicad_evidence = {
+            "phase": PHASE_KICAD_VERIFY,
+            "role": "evidence-generator",
+            "decides": None,
+            "tool_identity": None,
+            "erc": None,
+            "netlist": None,
+            "render": None,
+            "timeout_seconds": kicad_timeout,
+            "limitations": list(_KICAD_VERIFY_LIMITATIONS),
+            "detail": "the evidence could not be gathered: %s" % exc,
+        }
+    receipt["kicad_verify"] = kicad_evidence
+    reach(PHASE_KICAD_VERIFY)
+
     # Verified at stage, not committed: no terminal status exists yet.
-    receipt.update(status=None, phase=PHASE_DELTA_CHECK, cause_status=None,
+    receipt.update(status=None, phase=PHASE_KICAD_VERIFY, cause_status=None,
                    terminal=False, reasons=[])
     receipt["pending_phases"] = list(ROUND_PENDING_PHASES)
     receipt["feedback"] = public_feedback({

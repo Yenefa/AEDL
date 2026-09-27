@@ -8,6 +8,8 @@ must block before any write.
 """
 
 import copy
+import ast
+import inspect
 import json
 import os
 import shutil
@@ -3378,6 +3380,489 @@ class StageCandidateSeparationTests(unittest.TestCase):
 def fixtures_symbol():
     from tests.test_repair_pipeline import SYMBOL
     return SYMBOL
+
+
+# ---------------------------------------------------------------------------
+# A test double for the kicad-cli VERIFICATION tool (PR1-C5-KICAD-VERIFY).
+#
+# This stands in for a THIRD-PARTY command line program, not for this
+# repository's own logic. The double is a real file on disk, its digest is
+# really measured from its bytes and really compared with the declared value,
+# and it is really executed as a subprocess whose exit code, stdout and output
+# files are really parsed. Nothing in _kicad_tool_identity, _erc_evidence,
+# _netlist_evidence or _render_evidence is bypassed.
+#
+# It exists so these tests are deterministic and need no KiCad install, and so
+# the measured quirks can be reproduced on demand:
+#   * ERC JSON in kicad 10.0.5's shape, with violations of assorted types;
+#   * a netlist whose (date "...") differs between runs -- the property that
+#     makes the raw digest and the content digest diverge;
+#   * `sch export svg` writing a DIRECTORY at the requested path, which is what
+#     kicad-cli 10.0.5 actually does;
+#   * STUB_VERSION, to make the tool report a version the binding did not
+#     declare.
+_KICAD_STUB_SOURCE = r'''
+import json, os, sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+VERSION = os.environ.get("STUB_VERSION", "10.0.5")
+COUNTER = HERE / "runs.txt"
+args = sys.argv[1:]
+
+if args and args[0] == "version":
+    print(VERSION)
+    raise SystemExit(0)
+
+
+def flag(name):
+    for index, item in enumerate(args):
+        if item == name and index + 1 < len(args):
+            return args[index + 1]
+        if item.startswith(name + "="):
+            return item.split("=", 1)[1]
+    return None
+
+
+try:
+    run = int(COUNTER.read_text().strip() or "0") + 1
+except (OSError, ValueError):
+    run = 1
+COUNTER.write_text(str(run))
+
+if args[:2] == ["sch", "erc"]:
+    out = Path(flag("--output") or "erc.json")
+    # "none" is a SENTINEL for "no violations at all". An empty-string env var
+    # cannot be used: Windows does not pass empty variables to a child process
+    # (measured -- the child sees None), so os.environ.get returns the default
+    # and the test silently asserts against the default's contents instead.
+    raw = os.environ.get("STUB_ERC", "warning:lib_symbol_issues,"
+                                        "warning:footprint_link_issues,"
+                                        "error:power_pin_not_driven")
+    severities = "" if raw.strip().lower() == "none" else raw
+    violations = []
+    for index, item in enumerate(severities.split(",")):
+        if not item:
+            continue
+        severity, kind = item.split(":", 1)
+        violations.append({"severity": severity, "type": kind,
+                           "description": kind + " here",
+                           "items": [{"description": "sym%d" % index}]})
+    out.write_text(json.dumps({
+        "$schema": "https://dev.kicad.org/schema/erc.json",
+        "coordinate_units": "mm", "date": "2026-09-27T00:00:00",
+        "ignored_checks": [], "included_severities": ["error", "warning"],
+        "kicad_version": VERSION, "source": "fault.kicad_sch",
+        "sheets": [{"path": "/", "uuid": "u", "violations": violations}],
+    }), encoding="utf-8")
+    raise SystemExit(0)
+
+if args[:3] == ["sch", "export", "netlist"]:
+    out = Path(flag("-o") or flag("--output") or "net.net")
+    # The netlist must DEPEND ON ITS INPUT, or "two different designs produce
+    # different netlists" is untestable: the first version of this stub emitted a
+    # fixed string, so editing the schematic changed nothing and the
+    # normalisation test passed for the wrong reason.
+    source = Path(args[-1])
+    stamp = source.stat().st_size if source.is_file() else 0
+    out.write_text(
+        '(export (version "D")\n  (design\n'
+        '    (source "C:\\somewhere\\fault.kicad_sch")\n'
+        '    (date "2026-09-27T23:47:%02d")\n'
+        '    (tool "Eeschema %s")\n'
+        '    (comment "input_bytes=%d")\n  )\n'
+        '  (components)\n)\n' % (run % 60, VERSION, stamp), encoding="utf-8")
+    raise SystemExit(0)
+
+if args[:3] == ["sch", "export", "svg"]:
+    out = Path(flag("-o") or flag("--output") or "out.svg")
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "fault.svg").write_text("<svg>%d</svg>" % run, encoding="utf-8")
+    print("Drawn to '%s'." % (out / "fault.svg"))
+    raise SystemExit(0)
+
+if args[:3] == ["sch", "export", "pdf"]:
+    out = Path(flag("-o") or flag("--output") or "out.pdf")
+    # b"%PDF" is an INVALID bytes format spec, so "%" formatting raises. The
+    # first version of this stub did exactly that and the pdf row came back
+    # carrying a Python traceback instead of a file.
+    out.write_bytes(b"%%PDF-1.7\n%%EOF\nrun " + str(run).encode() + b"\n")
+    raise SystemExit(0)
+
+sys.stderr.write("stub: unsupported args %r\n" % (args,))
+raise SystemExit(2)
+'''
+
+
+def _install_kicad_stub(directory):
+    """Write the stub into ``directory``; return the launcher path to bind."""
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    script = directory / "kicad_stub.py"
+    script.write_text(_KICAD_STUB_SOURCE, encoding="utf-8")
+    launcher = directory / "kicad-cli.cmd"
+    # write_bytes, not write_text(newline=...): the latter is Python 3.10+ and
+    # this suite runs on 3.9. CRLF is explicit because cmd.exe needs it.
+    launcher.write_bytes(
+        '@echo off\r\n"{python}" "{script}" %*\r\n'.format(
+            python=sys.executable, script=script).encode("utf-8"))
+    return launcher
+
+
+class KicadVerifyEvidenceTests(unittest.TestCase):
+    """PR1-C5-KICAD-VERIFY: the phase is an evidence GENERATOR, not a gate.
+
+    The measured reason this matters: KiCad's standard ERC reports ZERO errors
+    on the DC-04 fixture in its defective state, and its 37 warnings are all
+    library-resolution noise. A phase that gated on that number would be green on
+    a broken board. So the tests here pin what the artifact must CONTAIN and,
+    just as importantly, that nothing in it can move the round's fate.
+    """
+
+    TARGET = "fault.kicad_sch"
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.project = self.root / "stage"
+        self.project.mkdir(parents=True)
+        (self.project / self.TARGET).write_bytes(b"(kicad_sch)\n")
+        self.artifacts = self.root / "artifacts"
+        self.stub = _install_kicad_stub(self.root / "tool")
+        self.stub_sha = pipeline.hash_bytes(self.stub.read_bytes())
+        self._env = mock.patch.dict(os.environ, {}, clear=False)
+        self._env.start()
+        self.addCleanup(self._env.stop)
+        self.addCleanup(self._tmp.cleanup)
+
+    # --- helpers ----------------------------------------------------------
+    def _binding(self, path=None, declared=None, version="10.0.5"):
+        binding = {
+            "manifest": {"kicad": {
+                "version": version,
+                "executable_sha256": self.stub_sha if declared is None else declared,
+            }},
+            "resolution": {"executables": {
+                "kicad": str(self.stub if path is None else path)}},
+            "version": 1,
+        }
+        return binding
+
+    def _evidence(self, binding=None, out=None):
+        out = out or (self.root / ("out%d" % len(list(self.root.iterdir()))))
+        return pipeline.kicad_verify_evidence(
+            toolchain_binding=self._binding() if binding is None else binding,
+            project_root=self.project, target=self.TARGET,
+            artifact_root=out, timeout_seconds=120)
+
+    # --- ToolIdentity -----------------------------------------------------
+    def test_the_identity_states_are_the_ruled_literals(self):
+        """Owner ruling 3 named three states and forbade a FAIL.
+
+        Compared against the LITERALS, not against the constants. Two earlier
+        tests compared `status` to `pipeline.TOOL_IDENTITY_*`, so renaming a
+        constant's value moved both sides together and mutation K5 -- changing
+        UNAVAILABLE to "FAIL" -- passed. A test that cannot fail is not a test.
+        """
+        self.assertEqual(pipeline.TOOL_IDENTITY_MATCH, "MATCH")
+        self.assertEqual(pipeline.TOOL_IDENTITY_SUBSTITUTION, "SUBSTITUTION")
+        self.assertEqual(pipeline.TOOL_IDENTITY_UNAVAILABLE, "UNAVAILABLE")
+        for name in ("MATCH", "SUBSTITUTION", "UNAVAILABLE"):
+            self.assertNotEqual(name, "FAIL")
+
+    def test_no_state_is_named_fail_in_any_artifact(self):
+        for binding in (self._binding(),
+                        self._binding(declared="0" * 64),
+                        self._binding(path=self.root / "gone.exe")):
+            evidence = self._evidence(binding=binding)
+            status = evidence["tool_identity"]["status"]
+            self.assertIn(status, ("MATCH", "SUBSTITUTION", "UNAVAILABLE"))
+            self.assertNotEqual(status, "FAIL")
+
+    def test_a_binary_is_returned_only_on_a_match(self):
+        """The invariant that made a redundant guard in the caller unreachable.
+
+        _kicad_tool_identity hands back a usable path only for MATCH, so every
+        other state has already returned before the caller could run anything.
+        Asserting it here makes the property load-bearing instead of implicit;
+        an earlier version relied on it via a guard that mutation K4 showed was
+        dead.
+        """
+        cases = (
+            (self._binding(), "MATCH"),
+            (self._binding(declared="0" * 64), "SUBSTITUTION"),
+            (self._binding(path=self.root / "gone.exe"), "UNAVAILABLE"),
+        )
+        for binding, expected in cases:
+            identity, binary = pipeline._kicad_tool_identity(binding)
+            self.assertEqual(identity["status"], expected)
+            self.assertEqual(binary is not None, expected == "MATCH",
+                             "a binary was returned for state %r" % expected)
+
+    def test_a_correctly_declared_binary_is_a_match(self):
+        evidence = self._evidence()
+        identity = evidence["tool_identity"]
+        self.assertEqual(identity["status"], "MATCH")
+        self.assertEqual(identity["measured_sha256"], self.stub_sha)
+        self.assertEqual(identity["declared_sha256"], self.stub_sha)
+        self.assertEqual(identity["measured_version"], "10.0.5")
+
+    def test_the_digest_is_measured_not_copied_from_the_declaration(self):
+        """A wrong declaration must be DETECTED, which it cannot be if the
+        declaration is simply echoed into the artifact."""
+        evidence = self._evidence(binding=self._binding(declared="0" * 64))
+        identity = evidence["tool_identity"]
+        self.assertEqual(identity["status"], "SUBSTITUTION")
+        self.assertEqual(identity["declared_sha256"], "0" * 64)
+        self.assertEqual(identity["measured_sha256"], self.stub_sha)
+        self.assertNotEqual(identity["measured_sha256"],
+                            identity["declared_sha256"])
+
+    def test_a_substitution_runs_no_tool_at_all(self):
+        """Evidence gathered by an unidentified binary is not evidence."""
+        out = self.root / "sub"
+        evidence = self._evidence(binding=self._binding(declared="0" * 64),
+                                  out=out)
+        self.assertIsNone(evidence["erc"])
+        self.assertIsNone(evidence["netlist"])
+        self.assertIsNone(evidence["render"])
+        # nothing was executed: no artefact directory content
+        self.assertEqual([p.name for p in out.iterdir()], [])
+
+    def test_a_missing_bound_executable_is_unavailable(self):
+        evidence = self._evidence(
+            binding=self._binding(path=self.root / "nowhere" / "kicad-cli.exe"))
+        identity = evidence["tool_identity"]
+        self.assertEqual(identity["status"],
+                         pipeline.TOOL_IDENTITY_UNAVAILABLE)
+        self.assertIsNone(identity["measured_sha256"])
+        self.assertIn("no other binary was searched for", identity["detail"])
+
+    def test_a_missing_bound_executable_does_not_fall_back(self):
+        """Owner ruling 2, and the whole reason the board_review helper is
+        forbidden.
+
+        Asserted STRUCTURALLY and SCOPED to the functions that resolve the tool.
+        Two earlier versions of this test were wrong in instructive ways:
+
+          * one monkeypatched find_kicad_cli with a recorder and asserted it was
+            never called. That passes trivially, because repair_pipeline never
+            imported the module, so the patch could not have been observed either
+            way. A test that cannot fail is not a test.
+          * one asserted the module's whole source lacks the string, and tripped
+            on its own explanatory docstring. Prose mentioning a module is not an
+            import of it.
+
+        So: no import statement may name it, and the tool-resolving functions may
+        not reference it or the host inputs it reads. A fallback cannot be added
+        without an import, so this bites.
+        """
+        source = Path(pipeline.__file__).read_text(encoding="utf-8")
+        for forbidden in ("import board_review",
+                          "from tools import board_review",
+                          "from tools.board_review import"):
+            self.assertNotIn(forbidden, source)
+
+        # the tool-resolving code itself, with docstrings removed by AST rather
+        # than by deleting quote characters -- two earlier attempts failed here,
+        # once because prose mentioning the module is not an import of it, and
+        # once because stripping the quotes leaves the prose behind
+        tree = ast.parse(inspect.getsource(pipeline))
+        wanted = {"_kicad_binding_identity", "_kicad_tool_identity",
+                  "_kicad_run", "kicad_verify_evidence"}
+        seen = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name in wanted:
+                seen.add(node.name)
+                if (node.body and isinstance(node.body[0], ast.Expr)
+                        and isinstance(node.body[0].value, ast.Constant)
+                        and isinstance(node.body[0].value.value, str)):
+                    node.body.pop(0)          # the docstring, gone entirely
+        self.assertEqual(seen, wanted, "a tool-resolving function was renamed")
+        code = ast.unparse(tree)
+        for forbidden in ("board_review", "KICAD_CLI", "which("):
+            self.assertNotIn(forbidden, code,
+                             "%r appears in the tool-resolving code" % forbidden)
+
+        # and the behaviour, on top of the structure
+        evidence = self._evidence(
+            binding=self._binding(path=self.root / "nowhere" / "k.exe"))
+        self.assertEqual(evidence["tool_identity"]["status"], "UNAVAILABLE")
+        self.assertIsNone(evidence["erc"])
+
+    def test_no_fallback_source_is_ever_named(self):
+        evidence = self._evidence(
+            binding=self._binding(path=self.root / "nowhere" / "k.exe"))
+        identity = evidence["tool_identity"]
+        self.assertEqual(identity["resolved_from"],
+                         "toolchain_binding.resolution.executables.kicad")
+        self.assertIsNone(identity["fallback_used"])
+
+    def test_a_version_disagreement_is_a_second_substitution_signal(self):
+        os.environ["STUB_VERSION"] = "7.9.9"
+        evidence = self._evidence()
+        identity = evidence["tool_identity"]
+        self.assertEqual(identity["status"], "SUBSTITUTION")
+        self.assertEqual(identity["version_disagreement"]["measured"], "7.9.9")
+        self.assertIsNone(evidence["erc"])
+
+    def test_a_binding_with_no_declared_digest_is_a_substitution(self):
+        binding = self._binding()
+        binding["manifest"]["kicad"]["executable_sha256"] = None
+        evidence = self._evidence(binding=binding)
+        self.assertEqual(evidence["tool_identity"]["status"], "SUBSTITUTION")
+        self.assertIn("no digest", evidence["tool_identity"]["detail"])
+
+    def test_a_binding_with_no_kicad_path_is_unavailable(self):
+        binding = self._binding()
+        binding["resolution"]["executables"]["kicad"] = None
+        evidence = self._evidence(binding=binding)
+        self.assertEqual(evidence["tool_identity"]["status"], "UNAVAILABLE")
+        self.assertIn("nothing to resolve", evidence["tool_identity"]["detail"])
+
+    # --- ERC --------------------------------------------------------------
+    def test_erc_is_categorised_by_type_not_only_totalled(self):
+        erc = self._evidence()["erc"]
+        self.assertTrue(erc["produced"])
+        self.assertEqual(erc["violations"]["error"]["total"], 1)
+        self.assertEqual(erc["violations"]["error"]["by_type"],
+                         {"power_pin_not_driven": 1})
+        self.assertEqual(erc["violations"]["warning"]["total"], 2)
+        self.assertEqual(erc["violations"]["warning"]["by_type"],
+                         {"lib_symbol_issues": 1, "footprint_link_issues": 1})
+
+    def test_erc_categories_survive_being_empty(self):
+        """by_type must be present even with nothing to put in it, or a reader
+        The sentinel is the string "none", not "": Windows does not pass an empty
+        environment variable to a child process, so the stub would have seen None,
+        fallen back to its default three violations, and this test would have
+        asserted against the default while appearing to test emptiness.
+        """
+        os.environ["STUB_ERC"] = "none"
+        erc = self._evidence()["erc"]
+        self.assertEqual(erc["violations"]["error"], {"total": 0, "by_type": {}})
+        self.assertEqual(erc["violations"]["warning"], {"total": 0, "by_type": {}})
+
+    def test_erc_version_comes_from_the_report_not_from_us(self):
+        os.environ["STUB_VERSION"] = "10.0.5"
+        erc = self._evidence()["erc"]
+        self.assertEqual(erc["kicad_version"], "10.0.5")
+        self.assertEqual(erc["source"], "fault.kicad_sch")
+        self.assertEqual(erc["included_severities"], ["error", "warning"])
+
+    def test_an_unexpected_severity_gets_its_own_bucket_not_vanishes(self):
+        os.environ["STUB_ERC"] = "info:something_new"
+        erc = self._evidence()["erc"]
+        self.assertEqual(erc["violations"]["info"]["total"], 1)
+        self.assertEqual(sum(b["total"] for b in erc["violations"].values()), 1)
+
+    def test_erc_is_read_as_json_not_scraped(self):
+        erc = self._evidence()["erc"]
+        self.assertTrue(erc["report_path"].endswith("erc.json"))
+        parsed = json.loads(Path(erc["report_path"]).read_text(encoding="utf-8"))
+        self.assertIn("sheets", parsed)
+
+    # --- Netlist ----------------------------------------------------------
+    def test_the_netlist_records_both_digests_and_the_rule(self):
+        net = self._evidence()["netlist"]
+        self.assertTrue(net["produced"])
+        self.assertTrue(net["netlist_sha256"])
+        self.assertTrue(net["netlist_content_sha256"])
+        self.assertEqual(net["normalization"]["removed_fields"], ["date"])
+        self.assertIn("timestamp", net["normalization"]["reason"])
+
+    def test_there_is_no_black_box_normalised_hash_field(self):
+        """Owner ruling 1: a bare normalized_hash was explicitly rejected,
+        because years later nobody could say why two files hashed alike."""
+        net = self._evidence()["netlist"]
+        for banned in ("normalized_hash", "normalised_hash", "hash_normalized"):
+            self.assertNotIn(banned, net)
+        self.assertIn("removed_fields", net["normalization"])
+        self.assertIn("reason", net["normalization"])
+
+    def test_the_raw_digest_differs_across_runs_and_the_content_digest_does_not(self):
+        """The property that makes the content digest comparable, and the raw
+        one an artefact identity rather than a design identity."""
+        first = self._evidence(out=self.root / "r1")["netlist"]
+        second = self._evidence(out=self.root / "r2")["netlist"]
+        self.assertNotEqual(first["netlist_sha256"], second["netlist_sha256"])
+        self.assertEqual(first["netlist_content_sha256"],
+                         second["netlist_content_sha256"])
+
+    def test_the_normalisation_count_is_reported(self):
+        net = self._evidence()["netlist"]
+        self.assertGreaterEqual(
+            net["normalization"]["replacements_in_this_artifact"], 1)
+
+    def test_the_normalisation_does_not_hide_other_differences(self):
+        """Blanking the date must not make two DIFFERENT designs compare equal."""
+        first = self._evidence(out=self.root / "d1")["netlist"]
+        (self.project / self.TARGET).write_bytes(b"(kicad_sch (edited))\n")
+        second = self._evidence(out=self.root / "d2")["netlist"]
+        self.assertNotEqual(first["netlist_content_sha256"],
+                            second["netlist_content_sha256"])
+
+    # --- Render -----------------------------------------------------------
+    def test_a_directory_written_at_the_requested_path_is_enumerated(self):
+        """Owner ruling 5, from the measured kicad-cli 10.0.5 behaviour:
+        `sch export svg -o out.svg` writes the DIRECTORY out.svg/fault.svg. A
+        caller testing the requested path with is_file() concludes failure."""
+        render = self._evidence()["render"]
+        svg = next(r for r in render["outputs"] if r["format"] == "svg")
+        self.assertFalse(svg["requested_is_file"])
+        self.assertTrue(svg["requested_is_directory"])
+        self.assertEqual(len(svg["artefacts"]), 1)
+        self.assertTrue(svg["artefacts"][0]["actual_path"].endswith("fault.svg"))
+        self.assertTrue(svg["artefacts"][0]["sha256"])
+
+    def test_a_file_written_at_the_requested_path_is_enumerated(self):
+        render = self._evidence()["render"]
+        pdf = next(r for r in render["outputs"] if r["format"] == "pdf")
+        self.assertTrue(pdf["requested_is_file"])
+        self.assertEqual(len(pdf["artefacts"]), 1)
+        self.assertTrue(pdf["artefacts"][0]["actual_path"].endswith("render.pdf"))
+
+    def test_each_render_row_names_what_was_requested_and_what_appeared(self):
+        for row in self._evidence()["render"]["outputs"]:
+            self.assertTrue(row["requested"])
+            for artefact in row["artefacts"]:
+                self.assertTrue(artefact["actual_path"])
+                self.assertGreater(artefact["size_bytes"], 0)
+
+    # --- the artifact as a whole -----------------------------------------
+    def test_the_artifact_says_outright_that_it_is_not_a_gate(self):
+        evidence = self._evidence()
+        self.assertEqual(evidence["role"], "evidence-generator")
+        self.assertIsNone(evidence["decides"])
+        self.assertNotIn("PASS", json.dumps(evidence["decides"]))
+
+    def test_the_measured_detection_limit_travels_in_the_artifact(self):
+        evidence = self._evidence()
+        self.assertTrue(evidence["limitations"])
+        blob = " ".join(evidence["limitations"])
+        self.assertIn("0 errors", blob)
+        self.assertIn("does NOT establish", blob)
+
+    def test_all_three_identity_states_still_return_an_artifact(self):
+        """Whatever the tool's state, the reader gets a document."""
+        for binding, expected in (
+                (self._binding(), pipeline.TOOL_IDENTITY_MATCH),
+                (self._binding(declared="0" * 64),
+                 pipeline.TOOL_IDENTITY_SUBSTITUTION),
+                (self._binding(path=self.root / "gone.exe"),
+                 pipeline.TOOL_IDENTITY_UNAVAILABLE)):
+            evidence = self._evidence(binding=binding)
+            self.assertEqual(evidence["tool_identity"]["status"], expected)
+            self.assertTrue(evidence["limitations"])
+            self.assertIsNone(evidence["decides"])
+
+    def test_evidence_is_gathered_only_on_a_match(self):
+        matched = self._evidence(binding=self._binding(),
+                                 out=self.root / "m")["erc"]
+        substituted = self._evidence(binding=self._binding(declared="0" * 64),
+                                     out=self.root / "s")
+        self.assertTrue(matched["produced"])
+        self.assertIsNone(substituted["erc"])
 
 
 if __name__ == "__main__":
