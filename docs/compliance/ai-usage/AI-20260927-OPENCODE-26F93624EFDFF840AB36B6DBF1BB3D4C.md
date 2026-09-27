@@ -51,10 +51,35 @@ DELTA_CHECK   gates.repair_verification.compare_delta
 `public_feedback()` 因此投影为 `EXECUTION_UNAVAILABLE` —— 这是**真话**（轮次未 commit，公开结论尚未成立），
 并作为**预期行为被断言**，而不是被容忍。
 
-这里有一个**需要 Owner 确认的设计选择**：DELTA_CHECK 失败时映射为
-`STATUS_ROLLBACK` + `cause_status=STATUS_BLOCKED`（投影为 `REJECTED`）。
-理由是「实际 stage 不是被授权的 stage，故被丢弃而非晋升」。
-这是本次唯一一处**语义映射判断**，可被推翻。
+**DELTA_CHECK 失败 → `STATUS_ROLLBACK` + `cause_status=STATUS_BLOCKED`（投影 `REJECTED`）的映射。**
+
+理由：DELTA_CHECK 的语义不是「工具失败」，而是「**实际状态不满足授权预期**」——
+因此它既不是 `TOOL_ERROR`（工具坏了），也不是 `UNKNOWN`（无法确定），
+而是 *attempted transition rejected*（被拒绝的尝试性状态转移）。
+
+**术语边界（Owner 裁定 2026-09-27，必须保持）：**
+
+> `STATUS_ROLLBACK` 意为**丢弃一个未被晋升的 stage 结果**，
+> **不是**恢复一个已提交的状态。
+
+`ROLLBACK` 一词容易被误读成「已经 commit，然后再回滚」。本系统中并非如此：
+轮次止于 `APPLIED_TO_STAGE`，**从未 commit**，因此不存在「恢复已提交状态」这回事 ——
+被丢弃的正是一个**尚未晋升**的临时结果。
+
+Owner 裁定：**保持现状，不扩状态词**。本轮据此未改动任何代码行为。
+
+### 调查中发现的一件事（未修，仅记录）
+
+`apply_stage` 会校验磁盘上的 op-list 与被授权 proposal **逐操作一致**
+（`akcli_adapter.py:1129-1132`：`_normalize_operations(on_disk["ops"], "op-list") != proposed` 即拒绝），
+所以「篡改 op-list」这条路径在**写入之前**就被拦住，到不了 DELTA_CHECK。
+
+而 `qualify_toolchain`（`repair_pipeline.py:2976-2994`）把 HostPatch 的 toolchain slice
+与**同一份 host binding 推导出的** slice 互相比；其中 `akcli_artifact_sha256` 是
+**声明值，不是对本机二进制的测量**。因此**替换实际执行的 writer 不会被 qualification 拦下**。
+
+含义：当前设计里，DELTA_CHECK 是替换 writer 的**最后一道防线**，而不是多余的重复检查。
+这一点已记录为待跟进项，本轮**未修**（`tools/**` 内属本任务范围但 YEN 裁定冻结 C5，不扩）。
 
 ### 变异检验：8/8 全部被捕获
 
