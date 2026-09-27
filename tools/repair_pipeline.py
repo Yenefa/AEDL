@@ -36,6 +36,12 @@ from gates.repair_verification import (  # single home for digests since C2
     observation_delta,
     protected_projection_sha256,
     topology_sha256,
+    # PR1-C5-VERIFY-STAGE: the contract's OWN thin verifier (contract line 292 /
+    # 373).  It had 25 test callers and zero production callers until this
+    # import; run_round is its first.  Imported from the same single home as the
+    # digests rather than reimplemented -- a previous attempt (PR #99) built a
+    # parallel evidence path instead of calling this and was closed.
+    verify_stage as _c2_verify_stage,
     _BOUND_FIELDS as _C2_BOUND_FIELDS,
     # C5 reuses verifier-private source helpers because selector binding must use the
     # exact same source semantics as C2.  Publicising this interface is deferred; C5
@@ -3168,8 +3174,20 @@ ROUND_FIELDS = ROUND_REQUIRED + ROUND_OPTIONAL
 # Phases this MVP drives, in order.  KICAD_VERIFY and COMMIT are deliberately
 # absent: they are not implemented, and naming them as driven would overstate
 # what a run actually proved.
-ROUND_PHASES = (PHASE_PRECHECK, PHASE_STAGE_APPLY, PHASE_DELTA_CHECK)
-ROUND_PENDING_PHASES = (PHASE_KICAD_VERIFY, PHASE_COMMIT)
+# REMOVED: ROUND_PHASES = (PRECHECK, STAGE_APPLY, DELTA_CHECK)
+#
+# It described the pipeline instead of being derived from it, and no production
+# code ever read it -- only a test, which asserted the constant against its own
+# definition and therefore could not fail. By this commit it claimed three phases
+# while the round drove five: SNAPSHOT was added in PR1-C5-SNAPSHOT without
+# touching it, and KICAD_VERIFY is driven now. The order a round actually records
+# is asserted from a real round's receipt in the test suite, not from a
+# hand-maintained tuple that can drift silently.
+# SUPERSEDED by the definition next to run_round: a round that reached
+# KICAD_VERIFY must not report it as still pending, which is exactly what this
+# tuple made it do.  Kept as a deleted-name marker rather than silently
+# overwritten so the reason survives in the diff.
+ROUND_PENDING_PHASES_SUPERSEDED = (PHASE_KICAD_VERIFY, PHASE_COMMIT)
 
 # apply_stage reports a stage-level refusal in its own vocabulary.  Each keeps
 # its own failure class; collapsing a refusal into UNKNOWN would hide the reason
@@ -3529,6 +3547,262 @@ _OVERLAP_DETAIL = {
     "stage_contains_design": "the stage root CONTAINS the candidate design root",
     "design_contains_stage": "the stage root sits INSIDE the candidate design root",
 }
+
+
+# Phases a round has not yet reached, in contract order (contract line 355:
+# PRECHECK -> SNAPSHOT -> STAGE_APPLY -> DELTA_CHECK -> KICAD_VERIFY -> COMMIT).
+# A round only ever withholds COMMIT, because KICAD_VERIFY now really runs.
+ROUND_PENDING_PHASES = (PHASE_COMMIT,)
+
+# How `verify_stage`'s vocabulary maps onto the round's, per contract line 373:
+#   "缺工具/超时/坏 XML      -> ROLLBACK(cause=TOOL_ERROR)"
+#   "旧报告/源漂移/真实回归   -> ROLLBACK(cause=BLOCKED)"
+#   "coverage/必需属性缺失/解析器分歧 -> ROLLBACK(cause=UNKNOWN)"
+#
+# A FAIL verdict is grouped with BLOCKED because a failed required check IS the
+# "真实回归" case: the delta is not the authorized delta, or a protected
+# projection moved.  It is not an execution problem, so cause=TOOL_ERROR would
+# publish a real regression as an unavailable tool.
+_THIN_REFUSAL_CAUSE = {
+    "FAIL": STATUS_BLOCKED,
+    "BLOCKED": STATUS_BLOCKED,
+    "TOOL_ERROR": STATUS_TOOL_ERROR,
+    "UNKNOWN": STATUS_UNKNOWN,
+}
+
+
+def _staged_design_manifest(stage_root, design_manifest, target):
+    """Describe the stage's DESIGN files, after the writer has run.
+
+    Two things make this different from the manifest SNAPSHOT builds:
+
+      * TIMING.  SNAPSHOT records what the stage was SEEDED with.  The verifier's
+        ``source_hash_binding`` checks the stage against the manifest it is
+        given, and the stage has been written since -- so passing the seed-time
+        manifest fails closed with "stage file does not match its declared
+        manifest".  The manifest the verifier needs is the one that describes the
+        stage as it now is.
+      * SCOPE.  The stage also holds ``repair_ops.json``, which is the writer's
+        input and not part of the design.  Including it would make the stage's
+        dependency key set differ from the snapshot's, and the verifier compares
+        those two sets -- so an extra row reads as an unexpected dependency.  The
+        rows are therefore restricted to the paths the snapshot declared, which
+        is exactly the candidate's design tree.
+
+    Every digest and size is measured from the stage's current bytes, so this
+    describes the real post-write state rather than restating a declaration.
+    """
+    stage = Path(stage_root).resolve()
+    wanted = [row.get("path") for row in (design_manifest.get("files") or [])
+              if isinstance(row, Mapping) and isinstance(row.get("path"), str)]
+    if target not in wanted:
+        wanted = list(wanted) + [target]
+    rows = []
+    for relative in wanted:
+        absolute = stage / relative
+        if not absolute.is_file():
+            raise ProposalInvalidError([_finding(
+                REASON_INPUT_DRIFT,
+                "the stage no longer carries %r, which the candidate declared; "
+                "the writer must not remove a design file" % relative,
+                stage=PHASE_KICAD_VERIFY)])
+        raw = absolute.read_bytes()
+        rows.append({
+            "path": relative,
+            "sha256": hash_bytes(raw),
+            "size_bytes": len(raw),
+            "role": "TARGET" if relative == target else "READONLY_DEPENDENCY",
+        })
+    if not any(row["role"] == "TARGET" for row in rows):
+        raise ProposalInvalidError([_finding(
+            REASON_INPUT_DRIFT,
+            "the stage carries no %r to mark as the TARGET" % target,
+            stage=PHASE_KICAD_VERIFY)])
+    return {"version": 1, "files": rows}
+
+
+def _export_toolchain(toolchain_binding):
+    """Translate the host's DECLARED toolchain binding into the export shape.
+
+    There are TWO distinct toolchain shapes in this system and they are not
+    interchangeable:
+
+      * ``host_patch.toolchain_manifest`` is the akcli slice -- it carries
+        akcli's executable, version, upstream commit and worker python, and NO
+        kicad entry at all;
+      * ``verify_stage`` wants the EXPORT toolchain, which is a different
+        closed set including ``kicad_cli``, its digest, the frozen arguments and
+        the declared child environment.
+
+    Passing the akcli slice is refused by ``toolchain_manifest()`` with "toolchain
+    manifest has missing or unknown fields".  That refusal is correct and
+    fail-closed; this function exists so the round supplies the shape the
+    verifier actually demands rather than the one that happens to be in hand.
+
+    Three integrity rules, each of which is the reason this is a translation and
+    not a passthrough:
+
+      * ``arguments`` comes from the verifier's own FROZEN constant, never from
+        the caller, so no host can vary the export command.  It already pins
+        ``--format kicadxml``, which is what keeps the export parseable as XML.
+      * ``environment`` is the host's DECLARED map and nothing else -- never an
+        ambient ``os.environ`` copy.  A child started with an empty environment
+        does not run on Windows at all, and that is the point: what the child
+        receives is what gets hashed into the toolchain digest.
+      * the kicad digest is carried across as DECLARED and is NOT re-measured
+        here.  ``fresh_export`` already digests the binary before and after every
+        run and halts if it changed, so a second measurement in this file would
+        be weaker duplication of a stricter check.
+
+    Raises ``HostContextError`` when the binding cannot supply a required value,
+    so the round refuses rather than exporting with a partly-invented toolchain.
+    """
+    from gates.repair_verification import EXPORT_ARGUMENTS
+    if not isinstance(toolchain_binding, Mapping):
+        raise HostContextError([_host_finding(
+            "the host context carries no toolchain binding, so the export "
+            "toolchain cannot be declared")])
+    manifest = toolchain_binding.get("manifest")
+    manifest = manifest if isinstance(manifest, Mapping) else {}
+    resolution = toolchain_binding.get("resolution")
+    resolution = resolution if isinstance(resolution, Mapping) else {}
+    executables = resolution.get("executables")
+    executables = executables if isinstance(executables, Mapping) else {}
+    environment = resolution.get("environment")
+    environment = environment if isinstance(environment, Mapping) else {}
+    kicad = manifest.get("kicad")
+    kicad = kicad if isinstance(kicad, Mapping) else {}
+    execution = manifest.get("execution")
+    execution = execution if isinstance(execution, Mapping) else {}
+
+    def declared(label, value, holder):
+        if value is None or (isinstance(value, str) and not value.strip()):
+            raise HostContextError([_host_finding(
+                "the toolchain binding declares no %s, so the export toolchain "
+                "cannot be built; refusing rather than inventing one" % label)])
+        return value
+
+    timeout = execution.get("kicad_timeout_seconds")
+    if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout <= 0:
+        raise HostContextError([_host_finding(
+            "the toolchain binding declares no usable kicad timeout")])
+    child_environment = environment.get("kicad")
+    if not isinstance(child_environment, Mapping) or not child_environment:
+        raise HostContextError([_host_finding(
+            "the toolchain binding declares no child environment for kicad, so "
+            "the export would inherit the host's ambient environment; refusing "
+            "rather than inheriting it")])
+
+    files = resolution.get("files")
+    files = files if isinstance(files, Mapping) else {}
+
+    def resolved_inputs(kind, declared_manifest):
+        """Rebuild a declared file manifest over ABSOLUTE paths.
+
+        The binding commits to symbol libraries and KiCad configs by a
+        host-relative key ("libs/Device.kicad_sym") plus a resolution map; the
+        export toolchain wants the same rows with the real absolute path, and
+        refuses a relative one ("a library path must be absolute").  The DECLARED
+        digest and size are carried across unchanged rather than re-measured here:
+        `fresh_export` digests these files itself before and after the run, so a
+        second measurement in this file would only duplicate a stricter check.
+        """
+        table = files.get(kind)
+        table = table if isinstance(table, Mapping) else {}
+        rows = []
+        declared_files = (declared_manifest or {}).get("files")
+        for row in declared_files or []:
+            if not isinstance(row, Mapping):
+                continue
+            key = row.get("path")
+            absolute = table.get(key) if isinstance(key, str) else None
+            if not isinstance(absolute, str) or not absolute.strip():
+                raise HostContextError([_host_finding(
+                    "the toolchain binding declares %r but resolves no absolute "
+                    "path for it, so the export could not bind it" % key)])
+            if not Path(absolute).is_absolute():
+                raise HostContextError([_host_finding(
+                    "the toolchain binding resolves %r to a relative path (%s); "
+                    "the export requires an absolute one"
+                    % (key, absolute))])
+            rows.append({"path": absolute,
+                         "sha256": row.get("sha256"),
+                         "size_bytes": row.get("size_bytes"),
+                         "role": row.get("role") or "READONLY_DEPENDENCY"})
+        return {"version": 1, "files": rows}
+
+    return {
+        "version": 1,
+        "kicad_cli": declared("kicad-cli path", executables.get("kicad"), executables),
+        "kicad_version": declared("kicad version", kicad.get("version"), kicad),
+        "kicad_cli_sha256": declared("kicad-cli digest",
+                                     kicad.get("executable_sha256"), kicad),
+        # The frozen command is kicad-cli itself, so a launcher would make the
+        # digested binary merely an argument to something else.
+        "launcher_argv": [],
+        "arguments": list(EXPORT_ARGUMENTS),
+        "timeout_seconds": timeout,
+        "environment": dict(child_environment),
+        "libraries": resolved_inputs("libraries", manifest.get("libraries")),
+        "configs": resolved_inputs("configs", manifest.get("configs")),
+    }
+
+
+def _thin_reasons(result):
+    """Convert the verifier's reason dicts into this module's `Finding` objects.
+
+    `verify_stage` reports its reasons as plain dicts --
+    ``{"code", "stage", "object_id", "detail"}`` -- because C2 owns that shape
+    (its `_reason_code`).  Everything downstream of `refuse()` expects
+    `Finding` instances: ``receipt["reasons"]`` is read with
+    ``getattr(r, "detail")`` by the public feedback path and by every test that
+    inspects a refusal.
+
+    Passing the dicts through unchanged would therefore be SILENT: a dict has no
+    ``.detail``, so ``getattr(..., "detail", "")`` yields the empty string and
+    the reason appears to carry no explanation at all.  This conversion is the
+    only thing standing between a real refusal and an unreadable one.
+    """
+    converted = []
+    for item in result.get("reasons") or []:
+        if isinstance(item, Finding):
+            converted.append(item)
+        elif isinstance(item, Mapping):
+            converted.append(_finding(
+                item.get("code") or REASON_INPUT_DRIFT,
+                item.get("detail") or "the thin verifier gave no detail",
+                object_id=item.get("object_id"),
+                stage=PHASE_KICAD_VERIFY))
+        else:
+            converted.append(_finding(REASON_INPUT_DRIFT, str(item),
+                                     stage=PHASE_KICAD_VERIFY))
+    return converted
+
+
+def _thin_verification_refusal(result):
+    """Map a non-PASS `verify_stage` result to (status, cause_status, reasons).
+
+    Split out from run_round so the whole table is testable without running the
+    verifier, following the `_delta_refusal` precedent that already exists for
+    the delta verdict.
+
+    A thin PASS is not a refusal and is not handled here.  Contract line 349 is
+    explicit that a thin PASS must never be published as a whole-candidate
+    VerifierPort PASS, so the caller leaves such a round unpromoted
+    (`status=None`, `terminal=False`) and awaits COMMIT.
+    """
+    thin_status = result.get("status")
+    cause = _THIN_REFUSAL_CAUSE.get(thin_status)
+    if cause is None:
+        # An unrecognised status is not treated as a pass.  It becomes UNKNOWN,
+        # which is the honest reading of "the verifier said something this
+        # pipeline does not know how to map".
+        cause = STATUS_UNKNOWN
+    reasons = _thin_reasons(result) or [_finding(
+        REASON_COVERAGE_INCOMPLETE,
+        "the thin verifier reported %r with no reason of its own" % thin_status,
+        stage=PHASE_KICAD_VERIFY)]
+    return STATUS_ROLLBACK, cause, reasons
 
 
 def run_round(round_request):
@@ -3915,8 +4189,95 @@ def run_round(round_request):
         return refuse(PHASE_DELTA_CHECK, status, reasons, cause_status=cause)
     reach(PHASE_DELTA_CHECK)
 
-    # Verified at stage, not committed: no terminal status exists yet.
-    receipt.update(status=None, phase=PHASE_DELTA_CHECK, cause_status=None,
+    # ---- KICAD_VERIFY ------------------------------------------------------
+    # The contract's OWN verifier, run for the first time.  Contract line 292:
+    # "对 snapshot before 和 stage after 各执行一次新的导出"; line 373: "执行第9节
+    # 两次 fresh 导出及四项检查，冻结所有报告和 staged manifest".
+    #
+    # `verify_stage` (gates/repair_verification.py:1792) has been implemented and
+    # tested -- 25 test callers -- and had ZERO production callers until here.
+    # Everything it needs was already in scope: PR1-C5-SNAPSHOT produces the
+    # snapshot_root and before_manifest, and 13 of the remaining fields come from
+    # this function's own locals.  Only report_root was missing.
+    #
+    # What this phase deliberately does NOT do, because a previous attempt at it
+    # (PR #99, closed) did and was wrong: it does not run ERC, does not drive
+    # kicad-cli itself, and does not re-implement export or tool identity.
+    # Contract line 21 and line 351 put ERC in PR-2; line 424 forbids writing a
+    # deferred ERC as PASS.  `fresh_export` already measures the kicad binary
+    # before and after the run and halts on mismatch, so a second tool-identity
+    # implementation here would have been weaker duplication.
+    report_root = Path(artifact_root) / "kicad_verify"
+    try:
+        report_root.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return refuse(PHASE_KICAD_VERIFY, STATUS_TOOL_ERROR, [_finding(
+            REASON_TOOL_UNAVAILABLE,
+            "the verification report root could not be created: %s" % exc)])
+    try:
+        export_toolchain = _export_toolchain(host_context.get("toolchain_binding"))
+    except HostContextError as exc:
+        return refuse(PHASE_KICAD_VERIFY, STATUS_BLOCKED, exc.findings)
+    try:
+        staged_design_manifest = _staged_design_manifest(
+            stage_root, receipt["snapshot"]["manifest"], stage_target)
+    except (RepairContractError, OSError) as exc:
+        findings = list(getattr(exc, "findings", None) or ()) or [
+            _finding(REASON_INPUT_DRIFT, str(exc), stage=PHASE_KICAD_VERIFY)]
+        return refuse(PHASE_KICAD_VERIFY, STATUS_UNKNOWN, findings)
+    try:
+        thin = _c2_verify_stage({
+            "txn_id": txn_id,
+            "run_id": host_context["run_id"],
+            "candidate_id": host_context["candidate_id"],
+            "patch_sha256": bound["host_patch"]["patch_sha256"],
+            "bound_policy_sha256": bound["host_patch"]["policy"][
+                "bound_policy_sha256"],
+            "snapshot_root": receipt["snapshot"]["root"],
+            "stage_root": str(Path(stage_root).resolve()),
+            "relative_target": stage_target,
+            "before_manifest": receipt["snapshot"]["manifest"],
+            "staged_manifest": staged_design_manifest,
+            "bound_policy": bound["host_patch"]["bound_policy"],
+            "toolchain_manifest": export_toolchain,
+            "native_before": before_observation,
+            "native_after": after_observation,
+            "report_root": str(report_root.resolve()),
+        })
+    except Exception as exc:
+        # The verifier is the repository's own, and an exception escaping it would
+        # otherwise escape run_round as an unhandled error rather than a refusal.
+        return refuse(PHASE_KICAD_VERIFY, STATUS_TOOL_ERROR, [_finding(
+            REASON_TOOL_UNAVAILABLE,
+            "the thin verifier could not be run: %s" % exc)])
+    receipt["kicad_verify"] = {
+        "scope": thin.get("scope"),
+        "status": thin.get("status"),
+        "checks": thin.get("checks"),
+        "coverage": thin.get("coverage"),
+        "parser_agreement": thin.get("parser_agreement"),
+        "authorized_delta_sha256": thin.get("authorized_delta_sha256"),
+        "actual_delta_sha256": thin.get("actual_delta_sha256"),
+        "missing_delta": thin.get("missing_delta"),
+        "unexpected_delta": thin.get("unexpected_delta"),
+        "protected_changes": thin.get("protected_changes"),
+        "dependencies_unchanged": thin.get("dependencies_unchanged"),
+        "exports": thin.get("exports"),
+        "reports": thin.get("reports"),
+        # carried through untouched.  Line 424: a deferred ERC must never be
+        # written as PASS, so it is copied verbatim and never recomputed.
+        "deferred": thin.get("deferred"),
+        "report_root": str(report_root.resolve()),
+    }
+    reach(PHASE_KICAD_VERIFY)
+
+    if thin.get("status") != "PASS":
+        status, cause, reasons = _thin_verification_refusal(thin)
+        return refuse(PHASE_KICAD_VERIFY, status, reasons, cause_status=cause)
+
+    # A thin PASS is not a commit and not a candidate-level PASS (line 349).  The
+    # round stays unpromoted and awaits COMMIT, which does not exist yet.
+    receipt.update(status=None, phase=PHASE_KICAD_VERIFY, cause_status=None,
                    terminal=False, reasons=[])
     receipt["pending_phases"] = list(ROUND_PENDING_PHASES)
     receipt["feedback"] = public_feedback({
