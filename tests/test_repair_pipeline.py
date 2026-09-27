@@ -16,8 +16,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from gates.repair_verification import compare_delta as c2_compare_delta
 from tests.test_host_toolchain import base_binding
-from tests.test_repair_verification import circuit, mini
+from tests.test_repair_verification import circuit, five_case, mini
 from tools import akcli_adapter as adapter
 from tools import repair_pipeline as pipeline
 
@@ -2450,6 +2451,300 @@ class RunRoundTests(unittest.TestCase):
         self.assertFalse(receipt["terminal"])
         self.assertEqual(receipt["pending_phases"],
                          list(pipeline.ROUND_PENDING_PHASES))
+
+
+class RunRoundRejectionTests(unittest.TestCase):
+    """M7: a round that was authorized one thing and delivered another is refused.
+
+    Owner's criterion 5 is the substantive one and is what this class exists for:
+    the failure evidence must let a reader state WHAT deviated, not merely THAT
+    something did.  "failed" versus "R9 resolved to 20k when 10k was authorized".
+
+    Everything here runs without the pinned writer, on the repository's own
+    fixture data, because rejection is decided by compare_delta on observations.
+    Criteria 1 and 2 additionally need the real writer and are opt-in.
+
+    The verdict uses two entry shapes and both must survive into the receipt:
+    a FIELD-level change (``field`` names it, before/after are the values) and an
+    OBJECT-level divergence (``field`` is "$", before/after are descriptors, the
+    authorized one in missing and the observed one in unexpected).  An earlier
+    draft of the implementation read only the second shape and silently lost the
+    field name and both values, which is precisely what criterion 5 forbids.
+    """
+
+    def setUp(self):
+        self.before, self.expected, self.bound, self.after = five_case("DC-04")
+
+    def _verdict(self, after):
+        return c2_compare_delta(self.before, after, self.bound)
+
+    def _perturb_value(self, after, reference, value):
+        deviated = copy.deepcopy(after)
+        for component in deviated["components"]:
+            if component["reference"] == reference:
+                component["value"] = value
+                return deviated
+        raise AssertionError("fixture carries no %s" % reference)
+
+    @staticmethod
+    def _blob(findings):
+        return " ".join("%s %s" % (item.detail, item.object_id)
+                        for item in findings)
+
+    # --- the control must actually pass, or the rest proves nothing ------
+    def test_the_undeviated_fixture_passes(self):
+        verdict = self._verdict(self.after)
+        self.assertEqual(verdict["status"], "PASS")
+        self.assertEqual(verdict["missing"], [])
+        self.assertEqual(verdict["unexpected"], [])
+
+    def test_a_passing_verdict_emits_no_findings(self):
+        self.assertEqual(pipeline._delta_findings(self._verdict(self.after)), [])
+
+    # --- criterion 5, field-level shape ----------------------------------
+    def test_a_field_level_deviation_names_the_field_and_both_values(self):
+        verdict = self._verdict(self._perturb_value(self.after, "R3", "999R"))
+        self.assertEqual(verdict["status"], "FAIL")
+        findings = pipeline._delta_findings(verdict)
+        self.assertTrue(findings)
+        blob = self._blob(findings)
+        self.assertIn("R3", blob)
+        self.assertIn("'value'", blob)
+        self.assertIn("'10k'", blob)
+        self.assertIn("'999R'", blob)
+        for item in findings:
+            self.assertEqual(item.code, pipeline.REASON_DELTA_MISMATCH)
+            self.assertEqual(item.stage, pipeline.PHASE_DELTA_CHECK)
+
+    def test_the_object_id_is_a_readable_handle_not_a_uuid(self):
+        """A raw UUID beside the reference is noise, not information."""
+        verdict = self._verdict(self._perturb_value(self.after, "R3", "999R"))
+        findings = pipeline._delta_findings(verdict)
+        for item in findings:
+            self.assertNotIn("-", str(item.object_id))
+            self.assertRegex(str(item.object_id), r"^[A-Za-z0-9_.:]+$")
+
+    # --- criterion 5, object-level shape ---------------------------------
+    def test_an_inconsistent_observation_is_refused_rather_than_judged(self):
+        """Deleting R9 but leaving the partitions referencing it is not a verdict.
+
+        This is not a FAIL and emphatically not a PASS: compare_delta reports
+        UNKNOWN / REPAIR_COVERAGE_INCOMPLETE, because an observation that does
+        not cover its own partitions cannot support any judgement.  Pinning it
+        because "refuse to judge" is a different and stronger property than
+        "detect the deviation", and it is easy to regress by accident.
+        """
+        deviated = copy.deepcopy(self.after)
+        deviated["components"] = [c for c in deviated["components"]
+                                  if c["reference"] != "R9"]
+        deviated["pins"] = [p for p in deviated["pins"]
+                            if p["identity"]["reference"] != "R9"]
+        verdict = self._verdict(deviated)
+        self.assertEqual(verdict["status"], "UNKNOWN")
+        self.assertNotEqual(verdict["status"], "PASS")
+        self.assertEqual([r["code"] for r in verdict["reasons"]],
+                         [pipeline.REASON_COVERAGE_INCOMPLETE])
+        self.assertEqual(pipeline._delta_findings(verdict), [])
+
+    def test_an_object_level_absence_is_rendered_named(self):
+        """The object-level shape, rendered from a real verdict row.
+
+        The row below is the shape compare_delta emits for an authorized object
+        that was never observed, captured from a real DC-04 run rather than
+        invented.  Producing it end-to-end would need the real writer, so the
+        RENDERING is pinned here and the end-to-end path is opt-in below.
+        """
+        verdict = {
+            "status": "FAIL",
+            "reasons": [{"code": pipeline.REASON_DELTA_MISMATCH,
+                         "detail": "actual and authorized deltas differ",
+                         "stage": pipeline.PHASE_DELTA_CHECK}],
+            "missing": [{
+                "field": "$",
+                "section": "components_added",
+                "identity": {"component_uuid": "new:R9", "reference": "R9",
+                             "sheet_path": "/s1", "unit": 1},
+                "before": {"absent": True},
+                "after": {"reference": "R9", "value": "10k", "rotation": 0,
+                          "footprint": "Resistor_SMD:R_0603_1608Metric",
+                          "identity": {"component_uuid": "new:R9",
+                                       "reference": "R9"}},
+            }],
+            "unexpected": [],
+        }
+        findings = pipeline._delta_findings(verdict)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("R9 (new:R9)", findings[0].detail)
+        self.assertIn("authorized but not observed", findings[0].detail)
+        self.assertEqual(findings[0].object_id, "new:R9")
+        self.assertEqual(findings[0].code, pipeline.REASON_DELTA_MISMATCH)
+        self.assertEqual(findings[0].stage, pipeline.PHASE_DELTA_CHECK)
+
+    def test_an_object_level_pair_reports_the_differing_fields(self):
+        verdict = {
+            "status": "FAIL",
+            "reasons": [{"code": pipeline.REASON_DELTA_MISMATCH,
+                         "detail": "actual and authorized deltas differ"}],
+            "missing": [{
+                "field": "$", "section": "components_added",
+                "identity": {"component_uuid": "new:R9", "reference": "R9"},
+                "before": {"absent": True},
+                "after": {"reference": "R9", "value": "10k", "rotation": 0},
+            }],
+            "unexpected": [{
+                "field": "$", "section": "components_added",
+                "identity": {"component_uuid": "new:R9", "reference": "R9"},
+                "before": {"absent": True},
+                "after": {"reference": "R9", "value": "20k", "rotation": 0},
+            }],
+        }
+        findings = pipeline._delta_findings(verdict)
+        self.assertEqual(len(findings), 1, "the pair must render as one finding")
+        detail = findings[0].detail
+        self.assertIn("R9 (new:R9)", detail)
+        self.assertIn("value", detail)
+        self.assertIn("'10k'", detail)
+        self.assertIn("'20k'", detail)
+        self.assertNotIn("rotation", detail, "only the differing field is reported")
+
+    def test_a_role_is_reported_as_a_role(self):
+        """A synthesized identity like new:R9 must keep that label visible."""
+        self.assertEqual(pipeline._delta_identity_label(
+            {"reference": "R9", "component_uuid": "new:R9"}), "R9 (new:R9)")
+        self.assertEqual(pipeline._delta_object_id(
+            {"reference": "R9", "component_uuid": "new:R9"}), "new:R9")
+
+    def test_a_plain_uuid_identity_collapses_to_the_reference(self):
+        identity = {"reference": "R3",
+                    "component_uuid": "2c5361b2-e942-5a48-9439-906dc5051432"}
+        self.assertEqual(pipeline._delta_identity_label(identity), "R3")
+        self.assertEqual(pipeline._delta_object_id(identity), "R3")
+
+    # --- the findings ADD information, they do not replace it ------------
+    def test_the_generic_reason_is_kept_and_the_findings_added(self):
+        verdict = self._verdict(self._perturb_value(self.after, "R3", "999R"))
+        generic = [r for r in verdict["reasons"]
+                   if r["code"] == pipeline.REASON_DELTA_MISMATCH]
+        self.assertTrue(generic)
+        combined = list(verdict["reasons"]) + pipeline._delta_findings(verdict)
+        self.assertGreater(len(combined), len(verdict["reasons"]))
+        self.assertIn(pipeline.REASON_DELTA_MISMATCH,
+                      [r["code"] for r in verdict["reasons"]])
+
+    def test_a_malformed_verdict_emits_nothing_rather_than_raising(self):
+        for verdict in ({}, {"missing": None, "unexpected": None},
+                        {"missing": [], "unexpected": []}):
+            with self.subTest(verdict=verdict):
+                self.assertEqual(pipeline._delta_findings(verdict), [])
+
+    # --- criteria 3 and 4, at the projection level ------------------------
+    def test_a_rejection_projects_as_rejected(self):
+        """Criterion 3: the public projection is REJECTED, not UNAVAILABLE.
+
+        Driven through _delta_refusal -- the mapping run_round actually calls --
+        rather than through _feedback_outcome in isolation.  An earlier version
+        of this test called _feedback_outcome directly, so it passed while
+        run_round was still refusing with cause_status=STATUS_ROLLBACK and
+        publishing a genuinely rejected round as EXECUTION_UNAVAILABLE.  Only the
+        end-to-end run against a real writer exposed that.
+        """
+        verdict = self._verdict(self._perturb_value(self.after, "R3", "999R"))
+        status, cause, reasons = pipeline._delta_refusal(verdict)
+        self.assertEqual(status, pipeline.STATUS_ROLLBACK)
+        self.assertEqual(cause, pipeline.STATUS_BLOCKED)
+        self.assertTrue(reasons)
+        feedback = pipeline.public_feedback({
+            "context_id": CONTEXT, "status": status, "cause_status": cause,
+            "reasons": [{"code": pipeline.REASON_DELTA_MISMATCH}]})
+        self.assertEqual(feedback["proposal_outcome"], pipeline.OUTCOME_REJECTED)
+
+    def test_the_wrong_cause_status_would_have_published_unavailable(self):
+        """Pin WHY the pairing matters, so the fix cannot be quietly undone."""
+        verdict = self._verdict(self._perturb_value(self.after, "R3", "999R"))
+        status, cause, _ = pipeline._delta_refusal(verdict)
+        wrong = pipeline.public_feedback({
+            "context_id": CONTEXT, "status": status, "cause_status": status,
+            "reasons": []})
+        self.assertEqual(wrong["proposal_outcome"], pipeline.OUTCOME_UNAVAILABLE)
+        self.assertNotEqual(cause, status)
+
+    def test_run_round_forwards_the_mapped_cause_status(self):
+        """The mapping must be wired in, not merely correct in isolation.
+
+        The match is on the full call, not a substring: ``cause_status=cause``
+        also occurs inside ``cause_status=cause_status or status`` in refuse()'s
+        own default, so a substring guard here passed even with the forwarding
+        removed.  That weakness was found by mutation, not by reading.
+        """
+        import inspect
+        import textwrap
+        body = textwrap.dedent(inspect.getsource(pipeline.run_round))
+        self.assertIn("_delta_refusal", body)
+        self.assertIn("status, cause, reasons = _delta_refusal(verdict)", body)
+        self.assertIn("refuse(PHASE_DELTA_CHECK, status, reasons, "
+                      "cause_status=cause)", body)
+
+    def test_the_rejection_reason_code_maps_to_a_public_reason(self):
+        feedback = pipeline.public_feedback({
+            "context_id": CONTEXT, "status": pipeline.STATUS_ROLLBACK,
+            "cause_status": pipeline.STATUS_BLOCKED,
+            "reasons": [{"code": pipeline.REASON_DELTA_MISMATCH}]})
+        self.assertNotEqual(feedback["reason_code"], "EXECUTION_UNAVAILABLE")
+
+    def test_a_rejection_can_never_report_committed(self):
+        """Criterion 4, structurally: no rejection path names COMMITTED."""
+        import inspect
+        import textwrap
+        body = textwrap.dedent(inspect.getsource(pipeline._delta_findings))
+        self.assertNotIn("STATUS_COMMITTED", body)
+        self.assertEqual(pipeline._feedback_outcome(
+            pipeline.STATUS_ROLLBACK, pipeline.STATUS_BLOCKED),
+            pipeline.OUTCOME_REJECTED)
+        # COMMITTED is the ONLY status that projects APPLIED_TO_CANDIDATE
+        applied = [status for status in (
+            pipeline.STATUS_COMMITTED, pipeline.STATUS_NO_CHANGE,
+            pipeline.STATUS_REFUSED, pipeline.STATUS_ROLLBACK,
+            pipeline.STATUS_BLOCKED, pipeline.STATUS_TOOL_ERROR,
+            pipeline.STATUS_UNKNOWN)
+            if pipeline._feedback_outcome(status, pipeline.STATUS_BLOCKED)
+            == pipeline.OUTCOME_APPLIED]
+        self.assertEqual(applied, [pipeline.STATUS_COMMITTED])
+
+    def test_run_round_actually_emits_these_findings(self):
+        """The renderer is worthless if the round does not reach it.
+
+        Criteria 5 is about the RECEIPT.  These tests pin the renderer, so the
+        wiring has to be pinned too.  run_round delegates to _delta_refusal,
+        which is what calls _delta_findings, so both links are asserted -- a
+        guard on only the inner name would pass if the delegation were removed
+        and the helper left unused.
+        """
+        import inspect
+        import textwrap
+        body = textwrap.dedent(inspect.getsource(pipeline.run_round))
+        self.assertIn("_delta_refusal", body)
+        delegate = textwrap.dedent(inspect.getsource(pipeline._delta_refusal))
+        self.assertIn("_delta_findings", delegate)
+        # additive, not replacing: the generic verdict reason is still forwarded
+        self.assertIn("verdict[\"reasons\"]", body)
+        self.assertIn("STATUS_ROLLBACK", delegate)
+
+    # --- the reader's view: criterion 5 stated as a sentence --------------
+    def test_a_reader_can_state_the_failure_without_internals(self):
+        verdict = self._verdict(self._perturb_value(self.after, "R3", "999R"))
+        receipt_reasons = list(verdict["reasons"]) + \
+            pipeline._delta_findings(verdict)
+        # everything a reviewer is allowed to read
+        visible = " ".join(
+            "%s %s" % (r["detail"] if isinstance(r, dict) else r.detail,
+                       r.get("object_id") if isinstance(r, dict) else r.object_id)
+            for r in receipt_reasons)
+        self.assertIn("R3", visible)
+        self.assertIn("'value'", visible)
+        self.assertIn("'10k'", visible)
+        self.assertIn("'999R'", visible)
+        # and it is not merely a generic error string
+        self.assertNotEqual(visible.strip(), "")
 
 
 if __name__ == "__main__":
