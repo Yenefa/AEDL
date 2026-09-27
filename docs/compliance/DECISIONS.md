@@ -479,3 +479,86 @@
   - 必须先处理仍追加旧式台账的开放 PR（含 #34），再对最终 master 迁移、build、check，并重跑全部测试与门禁。#50 已合入 master `4d5a8f4`，本轮已收编其两条旧记录；过程与当前计数见 `ai-usage/README.md`。旧提交计数不能用作后续 head 的证据。
   - 新增记录后忘记 build 会被 check 拦下，但 check 无法凭空发现没有导入的外部旧台账；最终迁移必须独立核对源条目集合。
   - 后续复查条件：若 per-entry 文件数量增长到使目录枚举显著变慢（>500 条），再评估按月分目录；当前规模不做。
+
+## ADR-014 — 「零违规」不构成证据：ERC/DRC 若落地必须绑定并记录 `ignored_checks`
+
+- 日期：2026-09-28
+- 状态：**Accepted**（Owner 2026-09-28 裁定「3.处理」，在 PR #99 被关闭的同一轮）
+
+- 问题：
+  - 一个验证器若只检查「违规数为零」，这个判据可以被**把规则设为 ignore** 轻易满足。
+  - 实测（KiCad 10.0.5，M2 板）给出直接证据：工程文件与板同名关联时，DRC 连续 12 次稳定报
+    `violations: []`，而该报告的 `ignored_checks` 列出了 5 类被禁用的规则
+    （`missing_courtyard`、`track_not_centered_on_via`、`tuning_profile_track_geometries`、
+    `footprint_filters_mismatch`、`footprint_type_mismatch`）。**一块真的存在 courtyard 缺失、
+    track 未对中 via、footprint 与符号不匹配的板，也会报 `violations: []`。**
+  - 这不是从形式验证论文推来的类比，而是**在本项目自己的板、自己的工具上直接演示出来的
+    空证明实例**。
+  - 同一轮实测的另一半：判定是「板 × 关联工程 × 规则严重度设置」的联合函数。工程未关联时
+    条数在 35/36/37 之间波动，关联后稳定为 0。**无论哪种配置，DRC 都不适合作为 `COMMIT` 门禁。**
+  - 另一会话（ZCODE）产出的设计评审独立得出同向结论，并把它标为 F11。
+
+- 本仓库已经犯过这个错：
+  - 被关闭的 PR #99 在自己的证据产物里报了 `error: {total: 0, by_type: {}}`，
+    而实测该 fixture 的 ERC 报告 `ignored_checks` **非空**，含 4 条：
+    `single_global_label`、`four_way_junction`、`simulation_model_issue`、`footprint_filter`。
+    **即：零错误这个数字，在不知道哪些规则被关掉的前提下是没有意义的。**
+  - 同一份产物还记录了一个恒为 0 的 `exit_code`：不传 `--exit-code-violations` 时，
+    即使有 37 条违规 ERC 也返回 0；带上该标志则返回 5。
+
+- 候选方案：
+  1. 维持「零违规即通过」——已被上述实测直接证伪。
+  2. 把 ERC/DRC 移出 `deferred` 并纳入门禁——与合同 §21/§351 冲突，且继承同一不确定性。
+  3. **保持 `deferred: NOT_RUN`，并把「零违规不是证据」写成一条对 PR-2 有约束力的硬约束。**
+
+- 决策：
+  - 采用方案 3。ERC / DRC / 语义 runner / 形式证据**继续永久保持 `deferred: NOT_RUN`**，
+    依合同 §21（属 PR-2）与 §424（deferred ERC 不得被伪写 PASS）。PR-1 的 thin verifier
+    只覆盖「变更局部功能等价性」一层（合同 §373 的四项检查），**不扩张**。
+  - **约束（对 PR-2 有约束力）**：任何以「违规数为零」为判据的检查，必须同时
+    (1) 绑定并记录 `ignored_checks`（键与描述）；
+    (2) 记录 `included_severities`；
+    (3) 把工程文件摘要纳入 toolchain（工程是否与板同名关联会改变判定）。
+    三者缺一即该判据无效，**不得**据此得出 PASS。
+  - 记录一条 ERC/DRC 判据时必须附**实测依据**（`stability_evidence`）：哪台机器、哪个工具版本、
+    哪块载体、几次重复、哪些字段会变。没有实测依据的 evidence 规则不允许上线。
+  - 取证命令必须显式钉全部相关标志。已知五类陷阱，逐条实测：
+    不带 `--exit-code-violations` 时有违规也返回 0；`--save-board` / `--refill-zones`
+    会改写输入 PCB（禁用）；`pcb export svg` 不带 `--mode-*` 时默认行为已弃用；
+    `--output` 在 `--mode-single` 下是文件、在 `--mode-multi` 下是目录；
+    输出内嵌绝对本机路径（入库前必须剥离）。
+  - 报告**不是 artifact**。把一次采集结果当产物求哈希，会得到「同一设计两个不同身份」。
+    故证据身份分五类：`raw`（provenance）/ `semantic`（唯一可作比较依据）/
+    `execution` / `context` / **`report`（观测，不可作身份）**。
+  - 一个已知但尚未实现的免费版本守卫：ERC/DRC 报告自带 `$schema`
+    （`erc.v1.json` / `drc.v1.json`），且该 schema 是 `additionalProperties: false`，
+    字段增删必升版。**把 `$schema` 值纳入 expected 常量并 fail-closed 检查，
+    可在不解析内容的前提下发现 schema 漂移。**（本轮未实现。）
+
+- 影响：
+  - PR-1 的 KICAD_VERIFY 只跑四项必需检查，ERC 留在 `deferred`，本决策不改变已合并的行为。
+  - PR-2 实现 ERC 时必须先满足上述三条绑定要求，且必须带实测依据。
+  - 「delta 是否满足 requirements_contract」是**另一个**空证明方向：当前 C5 链路验证的是
+    「变更是否等于授权的变更」，没有任何一环验证「变更是否满足需求」。列为 P1，
+    且只能覆盖可自动判定的需求项。
+
+- 复查条件：
+  - KiCad 升级并改变 ERC/DRC 报告结构（`$schema` 升版）时复查。
+  - `stability_evidence` 目前只有一块载体、一个 KiCad 版本；第二载体解封后必须复现，
+    否则它不具备强制化资格。
+  - 若将来把 ERC 纳入门禁，必须先证明它在**已知缺陷**上有检出率——现有实测是：
+    标准 ERC 对 DC-04 缺陷类的检出率为 **0**（缺陷态 error 数为 0）。
+
+- Evidence / Reference：
+  - 被关闭的 PR #99 及其关闭评论（记录了本决策的由来，以及本仓库犯下的具体错误）
+  - `tasks/PR1-C5-KICAD-VERIFY.yaml` 的 `design_frozen_by_owner` 裁定 3
+  - 实测来源：KiCad 10.0.5（sha256 `fc142e3b…`）本机运行；ERC JSON 顶层键为
+    `$schema / coordinate_units / date / ignored_checks / included_severities /
+    kicad_version / sheets / source`
+  - 另一会话产出的 KICAD_VERIFY 设计评审 v2（§1.5 受控 A/B、§1.4 schema、F11）
+  - 合同 §21 / §351 / §373 / §424
+- 团队自主判断：本条由 Owner 直接裁定（2026-09-28 会话「3.处理」），
+  依据是本项目自己工具链上的实测，不是外部偏好。
+- AI 参与：实测与 ADR 文本由 OPENCODE 会话产出，见
+  `AI-20260928-OPENCODE-76DB9B9EC4A1703B7C2C8B2B1C30969B`（该条目同时记录了被关闭的
+  PR #99 的四个实测缺陷，含本决策的由来）。

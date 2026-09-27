@@ -1,0 +1,134 @@
+task: PR1-C5-VERIFY-STAGE
+
+base:
+  branch: feat/c5-verify-stage
+  sha: e1724d4
+
+goal: |
+  Wire the contract's OWN verifier into the phase machine, and nothing else.
+
+  Contract section 9 defines KICAD_VERIFY precisely:
+
+    line 292: "KICAD_VERIFY 内对 snapshot before 和 stage after 各执行一次新的导出"
+    line 373: "执行第9节两次 fresh 导出及四项检查，冻结所有报告和 staged manifest"
+    line 355: "Phase 固定: PRECHECK -> SNAPSHOT -> STAGE_APPLY -> DELTA_CHECK
+               -> KICAD_VERIFY -> COMMIT"
+    line 424: C3 criterion, "deferred ERC 不被伪写 PASS"
+
+  `gates/repair_verification.py` already implements all of it: `verify_stage`
+  (:1792) runs `bind_inputs` (:1539) then TWO `fresh_export` calls (:1400) -- one
+  against snapshot_root as BEFORE, one against stage_root as AFTER -- then the
+  four required checks and the section 9 PASS invariant. It has 25 test callers
+  and ZERO production callers. It is built, tested, and unwired.
+
+  PR #98 (SNAPSHOT) already produces the four fields it needs: `snapshot_root`,
+  `before_manifest`, `stage_root`, `staged_manifest`. Measured: 14 of the 15
+  fields in `_VERIFICATION_REQUEST_FIELDS` are already in scope inside `run_round`;
+  only `report_root` is missing.
+
+  So this task is the wiring, and it is deliberately small.
+
+scope: |
+  In scope:
+  - tools/repair_pipeline.py:
+      * a status mapping from `verify_stage`'s vocabulary to the round's, per
+        contract line 373. Separated into its own function so it is testable
+        without running the verifier, following the `_delta_refusal` precedent;
+      * `run_round` calls `verify_stage` after DELTA_CHECK passes, with the
+        manifests SNAPSHOT produced, and maps the result per line 373;
+      * `ROUND_PENDING_PHASES` stops claiming a phase is pending once the round
+        has reached it.
+  - tests/test_repair_pipeline.py: `VerifyStageWiringTests` and a status-mapping
+    table test.
+  - tasks/PR1-C5-VERIFY-STAGE.yaml
+  - docs/compliance/DECISIONS.md, docs/compliance/ai-usage/**,
+    docs/compliance/AI_USAGE_LOG.md
+
+  Out of scope, explicitly:
+  - **No COMMIT phase.** A thin PASS is `status=None, terminal=False`, awaiting
+    COMMIT. Contract line 349 forbids publishing a thin PASS as a whole-candidate
+    VerifierPort PASS, and nothing here does.
+  - **No ERC, no DRC, no render, no netlist driver.** PR #99 built a parallel
+    evidence path for those and Owner closed it as implementing the wrong object.
+    Contract lines 21 and 351 put ERC in PR-2. Nothing here re-adds them.
+  - **No change to `gates/**`.** `verify_stage`, `fresh_export`, `bind_inputs`
+    and `write_thin_verification` are consumed exactly as they are.
+  - **No Evidence Manifest, no `evidence_manifest_ref`, no `expected_schema`.**
+    The design review rates those P0, but they are changes to `gates/**`, which
+    this task may not touch. Recorded as follow-up.
+  - **No toolchain binding repair.** PR #99 reported a kicad digest gap; that
+    report was WRONG -- `fresh_export` already measures the binary before and
+    after the run and halts on mismatch. Owner ruled: do not port.
+  - No qualify_toolchain fix, no recover_incomplete, no feedback learning, no
+    planner. No Evidence-index work (`docs/evidence/**` forbidden).
+
+dependencies: []
+  # verify_stage, fresh_export and bind_inputs are all ancestors of this base.sha
+  # (gates/ has not changed since #90), so the prerequisite is the baseline
+  # rather than a ref. A task-id ref must not be declared: tools/admit.py:88
+  # resolves refs by TRAILING DIGITS, so "EVID-DC04" silently became GitHub
+  # issue #4 once.
+
+allowed_paths:
+  - tools/repair_pipeline.py
+  - tests/test_repair_pipeline.py
+  - tasks/PR1-C5-VERIFY-STAGE.yaml
+  - docs/compliance/DECISIONS.md
+  - docs/compliance/ai-usage/**
+  - docs/compliance/AI_USAGE_LOG.md
+
+forbidden_paths:
+  - gates/**
+  - src/**
+  - .github/**
+  - docs/evidence/**
+  - delivery/**
+  - sandbox_runtime/**
+  - tools/akcli_adapter.py
+  - tools/host_toolchain.py
+  - tools/board_review.py
+
+acceptance: |
+  - `run_round` calls `verify_stage` with all fifteen fields of
+    `_VERIFICATION_REQUEST_FIELDS`, and a test asserts the request is COMPLETE by
+    comparing against that field set rather than against a hand-written list.
+  - The two fresh exports run against snapshot_root and stage_root respectively.
+    Asserted by observing the two export directories the verifier creates, not by
+    trusting its report.
+  - The status mapping is table-driven and each row is tested: PASS -> the round
+    stays unpromoted; FAIL and BLOCKED -> ROLLBACK with cause BLOCKED;
+    TOOL_ERROR -> ROLLBACK with cause TOOL_ERROR; UNKNOWN -> ROLLBACK with cause
+    UNKNOWN. Contract line 373.
+  - A thin PASS never yields a terminal status and never yields COMMITTED.
+  - `deferred` is carried through untouched and never rewritten to PASS. Contract
+    line 424. A test asserts the deferred mapping survives the round.
+  - `pending_phases` after a thin PASS is exactly ("COMMIT",) -- it no longer
+    claims KICAD_VERIFY is pending once the round has reached it.
+  - `write_thin_verification` and `recheck_reports` are called so the result is
+    frozen and re-readable, as contract line 373's "冻结所有报告" requires.
+  - A verifier that raises is contained: the round refuses with a named cause
+    rather than propagating an exception out of run_round.
+  - The full suite stays green, every new test is mutation-verified, and
+    `py -3 -m tools.dev_gate --envelope tasks/PR1-C5-VERIFY-STAGE.yaml` exits 0.
+
+design_frozen_by_owner:
+  ruling_1: "关闭 PR #99 -- it implemented a parallel evidence path, not the contract's verifier"
+  ruling_2: "不要把 PR #99 的工具身份逻辑移植进 fresh_export -- fresh_export already measures the binary before and after the run and halts on mismatch, which is stricter"
+  ruling_3: "处理 ignored_checks -- `violations == []` is not evidence, because rules can be set to ignore. This is recorded as a durable decision, not left on a closed branch."
+
+change_budget:
+  expected_files: 6
+  expected_modules: [tools, tests, tasks, docs]
+  cross_module: false          # one module in tools/; gates/ consumed read-only
+  contract_change: true        # a phase that previously did nothing now runs the
+                               # contract's verifier and can refuse the round
+  evidence_semantics_change: false
+
+exceptions:
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "Yenefa 2026-09-27/28 会话：SNAPSHOT -> VERIFY -> COMMIT 顺序裁定；设计评审（另一会话产出）确认 verify_stage 已建成未接线；2026-09-28 三条裁定「1.关闭 2.不要 3.处理 全量推进」"
+  # allow_dirty is NOT claimed.
+
+escalation:
+  owner: Yenefa

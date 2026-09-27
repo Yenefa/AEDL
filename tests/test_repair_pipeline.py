@@ -2448,13 +2448,56 @@ class RunRoundTests(unittest.TestCase):
         self.assertNotIn("STATUS_COMMITTED,", body)
         self.assertNotIn("STATUS_COMMITTED}", body)
 
-    def test_the_driven_phases_are_exactly_three_and_commit_is_not_one(self):
-        self.assertEqual(pipeline.ROUND_PHASES,
-                         (pipeline.PHASE_PRECHECK, pipeline.PHASE_STAGE_APPLY,
-                          pipeline.PHASE_DELTA_CHECK))
-        self.assertNotIn(pipeline.PHASE_COMMIT, pipeline.ROUND_PHASES)
+    def test_the_driven_phase_order_is_the_contracts(self):
+        """Derived from a real receipt, not from a hand-maintained constant.
+
+        The removed version of this test asserted `ROUND_PHASES` against its own
+        definition -- a tautology -- and was wrong while being unable to fail: it
+        claimed three phases while the round drove five, because SNAPSHOT landed
+        without updating it. The order is now read off what a round records.
+        """
+        receipt = pipeline.run_round(self._request())
+        reached = [row["phase"] for row in receipt["phases"]
+                   if row["status"] == "reached"]
+        # this interpreter has no pinned akcli, so the round stops at
+        # STAGE_APPLY; that is enough to prove PRECHECK and SNAPSHOT come first
+        # and that SNAPSHOT is driven at all
+        self.assertEqual(reached[:2],
+                         [pipeline.PHASE_SNAPSHOT, pipeline.PHASE_PRECHECK])
+        self.assertNotIn(pipeline.PHASE_COMMIT, reached)
         self.assertEqual(pipeline.ROUND_PENDING_PHASES,
-                         (pipeline.PHASE_KICAD_VERIFY, pipeline.PHASE_COMMIT))
+                         (pipeline.PHASE_COMMIT,))
+
+    def test_the_contract_phase_order_is_spelled_out_in_one_place(self):
+        """Contract line 355, as literals, so a renamed phase cannot slip past.
+
+        This is the assertion that actually pins the order. The derived one above
+        can only prove what a partial round reached; this states the whole
+        contract order and is checked against the phase constants themselves.
+        """
+        self.assertEqual(
+            (pipeline.PHASE_PRECHECK, pipeline.PHASE_SNAPSHOT,
+             pipeline.PHASE_STAGE_APPLY, pipeline.PHASE_DELTA_CHECK,
+             pipeline.PHASE_KICAD_VERIFY, pipeline.PHASE_COMMIT),
+            ("PRECHECK", "SNAPSHOT", "STAGE_APPLY", "DELTA_CHECK",
+             "KICAD_VERIFY", "COMMIT"))
+
+    def test_no_phase_constant_is_orphaned(self):
+        """Every phase constant the contract names is actually driven.
+
+        ROUND_PHASES drifted for two rounds precisely because nothing checked it
+        against the phase constants. A constant that no code reaches is how
+        "the receipt says one thing and the module another" starts.
+        """
+        from pathlib import Path as _Path
+        import inspect as _inspect
+        source = _Path(pipeline.__file__).read_text(encoding="utf-8")
+        body = _inspect.getsource(pipeline.run_round)
+        for name in ("PHASE_PRECHECK", "PHASE_SNAPSHOT", "PHASE_STAGE_APPLY",
+                     "PHASE_DELTA_CHECK", "PHASE_KICAD_VERIFY"):
+            self.assertIn(name, source, "%s is not defined" % name)
+            self.assertIn("reach(%s)" % name, body,
+                          "%s is defined but never reached" % name)
 
     def test_a_non_committed_round_projects_as_execution_unavailable(self):
         """Intended MVP behaviour, asserted rather than tolerated.
@@ -3378,6 +3421,720 @@ class StageCandidateSeparationTests(unittest.TestCase):
 def fixtures_symbol():
     from tests.test_repair_pipeline import SYMBOL
     return SYMBOL
+
+
+class ThinVerificationMappingTests(unittest.TestCase):
+    """PR1-C5-VERIFY-STAGE: contract line 373's status mapping, table-driven.
+
+    The table is separated from run_round precisely so it can be tested without
+    running the verifier, following the `_delta_refusal` precedent. Each row is
+    contract text, not a preference.
+    """
+
+    def test_each_row_of_the_contract_mapping(self):
+        """Compared against the LITERALS, not the constants.
+
+        The first version built its expectations from `pipeline.STATUS_*` -- the
+        very constants `_THIN_REFUSAL_CAUSE` is built from -- so mutating the
+        table moved the expectation with it and mutation V6 passed. That is the
+        same defect as K5 in PR #99, in a new place. `test_the_status_constants_
+        are_what_the_contract_calls_them` pins the constants separately.
+        """
+        rows = (
+            # (verify_stage status, expected round status, expected cause)
+            # contract line 373, in its own words
+            ("FAIL", "ROLLBACK", "BLOCKED"),        # 真实回归
+            ("BLOCKED", "ROLLBACK", "BLOCKED"),     # 旧报告 / 源漂移
+            ("TOOL_ERROR", "ROLLBACK", "TOOL_ERROR"),  # 缺工具/超时/坏 XML
+            ("UNKNOWN", "ROLLBACK", "UNKNOWN"),     # coverage / 解析器分歧
+        )
+        for thin, want_status, want_cause in rows:
+            status, cause, reasons = pipeline._thin_verification_refusal(
+                {"status": thin, "reasons": []})
+            self.assertEqual(status, want_status, thin)
+            self.assertEqual(cause, want_cause, thin)
+            self.assertTrue(reasons, "%s produced no reason at all" % thin)
+
+    def test_the_status_constants_are_what_the_contract_calls_them(self):
+        for name, value in (("STATUS_ROLLBACK", "ROLLBACK"),
+                            ("STATUS_BLOCKED", "BLOCKED"),
+                            ("STATUS_TOOL_ERROR", "TOOL_ERROR"),
+                            ("STATUS_UNKNOWN", "UNKNOWN")):
+            self.assertEqual(getattr(pipeline, name), value, name)
+
+    def test_every_row_of_the_table_is_covered_by_the_literal_test(self):
+        """A row added to the table without a contract row is a silent gap."""
+        self.assertEqual(sorted(pipeline._THIN_REFUSAL_CAUSE),
+                         ["BLOCKED", "FAIL", "TOOL_ERROR", "UNKNOWN"])
+
+    def test_a_real_regression_is_not_published_as_a_tool_problem(self):
+        """FAIL must not become cause=TOOL_ERROR.
+
+        The delta verdict already learned this the hard way: a ROLLBACK caused by
+        a BLOCKED authorization publishes as REJECTED, not UNAVAILABLE, and
+        getting that pairing wrong was silent. Same trap, different verdict.
+        """
+        _, cause, _ = pipeline._thin_verification_refusal(
+            {"status": "FAIL", "reasons": []})
+        self.assertNotEqual(cause, pipeline.STATUS_TOOL_ERROR)
+        self.assertNotEqual(cause, pipeline.STATUS_UNKNOWN)
+
+    def test_an_unrecognised_status_is_never_treated_as_a_pass(self):
+        status, cause, reasons = pipeline._thin_verification_refusal(
+            {"status": "SOMETHING_NEW", "reasons": []})
+        self.assertEqual(status, pipeline.STATUS_ROLLBACK)
+        self.assertEqual(cause, pipeline.STATUS_UNKNOWN)
+        self.assertTrue(reasons)
+
+    def test_a_bare_refusal_still_names_itself(self):
+        """A verifier that returns a status and no reason is still reported."""
+        _, _, reasons = pipeline._thin_verification_refusal(
+            {"status": "UNKNOWN", "reasons": []})
+        self.assertEqual(len(reasons), 1)
+        self.assertIn("UNKNOWN", getattr(reasons[0], "detail", ""))
+
+    def test_the_verifiers_dict_reasons_become_readable_findings(self):
+        """verify_stage reports dicts; a dict has no .detail.
+
+        Passing them through unchanged would be SILENT -- every consumer reads
+        reasons with getattr(r, "detail", ""), so a dict yields "" and the
+        refusal appears to carry no explanation. The first version of this test
+        passed dicts in and then indexed .detail on them, which is the same
+        mistake the production code would have made.
+        """
+        given = [{"code": pipeline.REASON_COVERAGE_INCOMPLETE,
+                  "stage": pipeline.PHASE_KICAD_VERIFY, "object_id": None,
+                  "detail": "the parser disagreed"}]
+        _, _, reasons = pipeline._thin_verification_refusal(
+            {"status": "UNKNOWN", "reasons": given})
+        self.assertEqual([r.detail for r in reasons], ["the parser disagreed"])
+        self.assertEqual([r.code for r in reasons],
+                         [pipeline.REASON_COVERAGE_INCOMPLETE])
+        self.assertEqual([r.stage for r in reasons],
+                         [pipeline.PHASE_KICAD_VERIFY])
+
+    def test_a_reason_dict_with_no_detail_still_says_something(self):
+        _, _, reasons = pipeline._thin_verification_refusal(
+            {"status": "UNKNOWN",
+             "reasons": [{"code": pipeline.REASON_INPUT_DRIFT}]})
+        self.assertTrue(reasons[0].detail)
+
+    def test_a_non_mapping_reason_is_kept_rather_than_dropped(self):
+        _, _, reasons = pipeline._thin_verification_refusal(
+            {"status": "UNKNOWN", "reasons": ["something went sideways"]})
+        self.assertIn("something went sideways", reasons[0].detail)
+
+    def test_pending_phases_no_longer_claims_a_reached_phase(self):
+        """A round that reached KICAD_VERIFY must not report it as pending.
+
+        The superseded tuple was (KICAD_VERIFY, COMMIT) and was written
+        unconditionally, so a round that had just run the phase still reported it
+        pending. A receipt that contradicts itself is worse than no receipt.
+        """
+        self.assertEqual(pipeline.ROUND_PENDING_PHASES, (pipeline.PHASE_COMMIT,))
+        self.assertNotIn(pipeline.PHASE_KICAD_VERIFY,
+                         pipeline.ROUND_PENDING_PHASES)
+        self.assertEqual(
+            pipeline.ROUND_PENDING_PHASES_SUPERSEDED,
+            (pipeline.PHASE_KICAD_VERIFY, pipeline.PHASE_COMMIT))
+
+    def test_the_phase_order_matches_the_contract(self):
+        """Contract line 355, in the order the receipt records them."""
+        self.assertEqual(
+            (pipeline.PHASE_PRECHECK, pipeline.PHASE_SNAPSHOT,
+             pipeline.PHASE_STAGE_APPLY, pipeline.PHASE_DELTA_CHECK,
+             pipeline.PHASE_KICAD_VERIFY, pipeline.PHASE_COMMIT),
+            ("PRECHECK", "SNAPSHOT", "STAGE_APPLY", "DELTA_CHECK",
+             "KICAD_VERIFY", "COMMIT"))
+
+
+class VerifyStageWiringTests(unittest.TestCase):
+    """PR1-C5-VERIFY-STAGE: run_round calls the contract's own verifier.
+
+    `verify_stage` had 25 test callers and ZERO production callers. These tests
+    are about the wiring, not about the verifier, which `tests/test_repair_
+    verification.py` already covers.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+
+    FIXTURES = Path(__file__).resolve().parent / "fixtures" / "repair_pr1" / "native"
+    CASE = "DC-04"
+
+    def test_the_real_verifier_accepts_the_request_run_round_builds(self):
+        """Nothing in this file executed the real `verify_stage` until now.
+
+        Every other wiring test patches it, so nothing established that the
+        request `run_round` assembles is ACCEPTED by the consumer -- and the
+        envelope's acceptance criterion for the two fresh exports is therefore
+        untested in the suite. The end-to-end harness proves it against real
+        kicad-cli, but that is not the suite and does not run in CI here.
+
+        So: capture the request, hand it to the REAL verifier, and require the
+        real refusal. It will refuse on this interpreter -- the pinned akcli is
+        not importable, and the frozen export toolchain points at a kicad-cli
+        that is not the bound one -- but the point is that it refuses with a
+        NAMED reason about a VALIDATED request, not "you have missing or unknown
+        fields". That distinction is exactly what a hand-forked request breaks.
+        """
+        from gates import repair_verification as c2
+        seen = {}
+        self._run_with(verify_stage=lambda request: (
+            seen.update(request), self._thin("PASS"))[1])
+
+        # the request is complete and of the right shape before it is used at all
+        self.assertEqual(sorted(seen), sorted(c2._VERIFICATION_REQUEST_FIELDS))
+        c2.toolchain_manifest(seen["toolchain_manifest"])
+        c2._manifest(seen["before_manifest"])
+        c2._manifest(seen["staged_manifest"])
+
+        result = c2.verify_stage(dict(seen))
+        self.assertIn(result["status"], ("PASS", "FAIL", "BLOCKED",
+                                          "TOOL_ERROR", "UNKNOWN"))
+        # and it got past REQUEST VALIDATION, which is the property at stake
+        blob = " ".join(str(r) for r in (result.get("reasons") or []))
+        self.assertNotIn("missing or unknown fields", blob)
+        self.assertNotIn("has missing or unknown fields", blob)
+        # a refusal, if any, names something concrete
+        if result["status"] != "PASS":
+            self.assertTrue(result.get("reasons"),
+                            "the real verifier refused with no reason at all")
+
+    def test_the_deriver_used_is_the_repository_own(self):
+        """C1: the KiCad slice must come from the canonical deriver.
+
+        A parallel copy produced a DIFFERENT toolchain digest for a legal
+        binding -- the canonical `_resolved_files` sorts the declared rows and
+        the copy did not, and `canonical_json_bytes` sorts dict keys but not
+        lists -- so the gate the receipt exists to satisfy refused legitimate
+        runs. This is the same failure mode as PR #99.
+        """
+        import inspect
+        from pathlib import Path as _Path
+        source = _Path(pipeline.__file__).read_text(encoding="utf-8")
+        body = inspect.getsource(pipeline.run_round)
+        self.assertIn("host_toolchain.derive_kicad_slice", body)
+        # no parallel deriver survives, by definition or by call
+        self.assertNotRegex(source, r"^def _export_toolchain\(", )
+        self.assertNotIn("_export_toolchain(", source)
+
+    def test_the_reason_keeps_the_verifiers_own_phase(self):
+        """m1: bind_inputs reports SNAPSHOT-stage drift; re-stamping it to
+        KICAD_VERIFY sends a debugger to the wrong phase."""
+        converted = pipeline._thin_reasons({"reasons": [
+            {"code": pipeline.REASON_SOURCE_UNBOUND, "stage": pipeline.PHASE_SNAPSHOT,
+             "object_id": None, "detail": "the stage drifted"}]})
+        self.assertEqual([r.stage for r in converted], [pipeline.PHASE_SNAPSHOT])
+        fallback = pipeline._thin_reasons({"reasons": [
+            {"code": pipeline.REASON_SOURCE_UNBOUND, "object_id": None,
+             "detail": "no stage given"}]})
+        self.assertEqual([r.stage for r in fallback],
+                         [pipeline.PHASE_KICAD_VERIFY])
+
+    def test_the_receipt_carries_what_commit_will_need(self):
+        """M3/M5: the VERIFIED staged manifest and the toolchain digest.
+
+        The seed-time manifest is a different document -- it predates the write
+        and includes repair_ops.json -- so publishing it under `staged_manifest`
+        gave a reader pre-write digests. And `toolchain_sha256` is the one field
+        `same_host_toolchain` compares, so dropping it left COMMIT with nothing
+        to cross-check.
+        """
+        receipt = self._run_with(lambda request: self._thin("PASS"))
+        thin = receipt["kicad_verify"]
+        self.assertIn("verified_staged_manifest", thin)
+        self.assertNotIn("repair_ops.json",
+                         [row["path"] for row in
+                          thin["verified_staged_manifest"]["files"]])
+        self.assertNotEqual(thin["verified_staged_manifest"],
+                            receipt["staged_manifest"])
+        # the value, not just the key: setting it to None keeps the key present,
+        # and a mutation that did exactly that survived the first version
+        self.assertIn("toolchain_sha256", thin)
+        self.assertIsNotNone(thin["toolchain_sha256"],
+                             "COMMIT has no digest to cross-check the toolchain "
+                             "against if this is None")
+
+    def test_a_non_pass_verdict_publishes_its_own_cause_not_the_rechecks(self):
+        """C2: guard ORDER, which only a driven round can observe.
+
+        The recheck FAILs for every non-PASS outcome, because `verify_stage`
+        leaves reports=None unless both exports passed. So checking the recheck
+        first made EVERY refusal ROLLBACK(cause=BLOCKED) and left contract line
+        373's TOOL_ERROR and UNKNOWN buckets unreachable. The table test cannot
+        see this -- it never drives a round.
+        """
+        thin = self._thin("TOOL_ERROR")
+        thin["reports"] = None          # exactly what the real verifier leaves
+        thin["reasons"] = [{"code": pipeline.REASON_TOOL_UNAVAILABLE,
+                            "stage": pipeline.PHASE_KICAD_VERIFY,
+                            "object_id": None,
+                            "detail": "the pinned kicad-cli binary is missing"}]
+        receipt = self._run_with(
+            verify_stage=lambda request: thin,
+            freeze=lambda result, root: (str(self.root / "f.json"), "a" * 64),
+            recheck=lambda result, root: self._recheck("FAIL", [
+                {"code": pipeline.REASON_EXPORT_STALE,
+                 "stage": pipeline.PHASE_KICAD_VERIFY, "object_id": None,
+                 "detail": "the receipt carries no reports manifest"}]))
+        self.assertEqual(receipt["status"], pipeline.STATUS_ROLLBACK)
+        self.assertEqual(receipt["cause_status"], pipeline.STATUS_TOOL_ERROR,
+                         "the recheck's cause overwrote the verifier's own")
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("kicad-cli binary is missing", detail)
+
+    def test_a_freeze_failure_does_not_hide_the_verifiers_reason(self):
+        """C3: the freeze runs before the status branch, so its failure would
+        otherwise replace the one thing a reader acts on."""
+
+        def failing_freeze(result, root):
+            raise OSError("the report volume is read-only")
+
+        thin = self._thin("BLOCKED")
+        thin["reports"] = {"version": 1, "files": [{"path": "x"}]}
+        thin["reasons"] = [{"code": pipeline.REASON_SOURCE_UNBOUND,
+                            "stage": pipeline.PHASE_SNAPSHOT, "object_id": None,
+                            "detail": "the stage drifted from the snapshot"}]
+        receipt = self._run_with(verify_stage=lambda request: thin,
+                                 freeze=failing_freeze)
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("the stage drifted from the snapshot", detail,
+                      "the freeze failure replaced the verifier's own reason")
+        self.assertIn("read-only", detail,
+                      "and the freeze failure itself was swallowed")
+
+    def test_a_refusal_before_kicad_verify_still_has_the_key(self):
+        """M4: `_round_receipt` promises a caller can read the keys without
+        knowing which phase the round stopped in.
+
+        The first version of this test drove a round that REACHED KICAD_VERIFY,
+        where `run_round` assigns the key itself -- so deleting the initialiser
+        from `_round_receipt` changed nothing and the mutation survived. The
+        property is about a round that refuses BEFORE the phase, which is exactly
+        where the key was missing.
+        """
+        request = self._request()
+        request["stage_target"] = "../escapes.kicad_sch"   # refused in PRECHECK
+        with mock.patch("tools.akcli_adapter.apply_stage",
+                        return_value={
+                            "status": "APPLIED_TO_STAGE",
+                            "tool": {"tool_applied": True, "exit_code": 0,
+                                     "changed": True},
+                            "changed": True, "before_source_sha256": "0" * 64,
+                            "after_source_sha256": "1" * 64, "reasons": []}), \
+                mock.patch.object(pipeline, "compare_delta", return_value={
+                    "status": "PASS", "authorized_delta_sha256": "2" * 64,
+                    "actual_delta_sha256": "2" * 64, "missing": [],
+                    "unexpected": [], "coverage_complete": True,
+                    "reasons": []}):
+            receipt = pipeline.run_round(request)
+        self.assertTrue(receipt["terminal"])
+        self.assertNotEqual(receipt["phase"], pipeline.PHASE_KICAD_VERIFY)
+        self.assertIn("kicad_verify", receipt,
+                      "a round that stopped before KICAD_VERIFY must still "
+                      "carry the key, or a reader cannot read the receipt "
+                      "without knowing which phase it stopped in")
+        self.assertIsNone(receipt["kicad_verify"])
+
+    def test_the_report_root_is_scoped_by_transaction(self):
+        """M8: a shared root meant a retried round could never succeed.
+
+        `fresh_export` refuses a pre-existing output directory, so a root shared
+        across transactions made every retry fail closed with a misleading
+        "stale reports" reason.
+        """
+        seen = {}
+        receipt = self._run_with(verify_stage=lambda request: (
+            seen.update(request), self._thin("PASS"))[1])
+        root = Path(seen["report_root"])
+        self.assertIn(receipt["txn_id"], root.parts,
+                      "the report root is not scoped by the transaction id")
+
+    def _request(self, design_root=None, repair_root=None):
+        cand = design_root or (self.root / "cand")
+        design = cand / "design"
+        design.mkdir(parents=True, exist_ok=True)
+        # The REAL frozen fixture, for the same reason RunRoundTests uses it: an
+        # invented one is not a parseable schematic, so _c2_observe_source fails
+        # in SNAPSHOT and the round never reaches the phase under test. The first
+        # version of this class used b"(kicad_sch)\n" and every wiring test was
+        # silently asserting against a round that had already refused.
+        raw = (self.FIXTURES / self.CASE / "fault.kicad_sch").read_bytes()
+        (design / "fault.kicad_sch").write_bytes(raw)
+        stage = self.root / "stage"
+        stage.mkdir(parents=True, exist_ok=True)
+        (stage / "fault.kicad_sch").write_bytes(raw)
+        oplist = stage / "repair_ops.json"
+        oplist.write_text(json.dumps(
+            {"protocol_version": 2, "target_format": "kicad", "ops": []}),
+            encoding="utf-8")
+        ops = json.loads((Path(__file__).resolve().parent / "fixtures"
+                          / "repair_pr1" / "native" / "DC-04"
+                          / "repair_ops.json").read_text(encoding="utf-8"))["ops"]
+        context = pipeline.validate_host_context(host_context(
+            design_root=str(cand),
+            base_source_sha256=pipeline.hash_bytes(raw),
+            target="fault.kicad_sch",
+            authority=authority(approvals=[{
+                "policy_file_sha256": policy_sha(), "rule_id": "DC-04",
+                "run_id": RUN, "candidate_id": CAND, "paths": [str(cand)]}])))
+        return {
+            "host_context": context,
+            "proposal_raw": json.dumps({
+                "schema_version": 1, "context_id": CONTEXT,
+                "target": "fault.kicad_sch",
+                "base_source_sha256": pipeline.hash_bytes(raw),
+                "decision": pipeline.DECISION_PATCH,
+                "diagnosis": [{"rule_id": "DC-04", "observed": "nothing",
+                               "fact_ids": ["F1"],
+                               "requirement_level": "MANDATORY",
+                               "rationale": "wiring tests"}],
+                "oplist": {"protocol_version": 2, "target_format": "kicad",
+                           "ops": ops}}, ensure_ascii=False).encode("utf-8"),
+            "txn_id": "txn-wiring",
+            "stage_root": str(stage),
+            "stage_target": "fault.kicad_sch",
+            "oplist_path": str(oplist),
+            "native_artifact_root": str(self.root / "artifacts"),
+        }
+
+    def test_the_request_is_complete_against_the_verifiers_own_field_set(self):
+        """Completeness is checked against `_VERIFICATION_REQUEST_FIELDS`.
+
+        Not against a hand-written list, which is how a field could be dropped
+        without any test noticing: the list would be the same omission twice.
+        The verifier's own field set is the single source of truth.
+        """
+        from gates import repair_verification as c2
+        seen = {}
+
+        def capture(request):
+            seen.update(request)
+            return self._thin("PASS")
+
+        self._run_with(verify_stage=capture)
+        self.assertTrue(seen, "run_round never called verify_stage")
+        missing = sorted(c2._VERIFICATION_REQUEST_FIELDS - set(seen))
+        self.assertEqual(missing, [],
+                         "the verifier request is missing %r" % missing)
+        self.assertEqual(sorted(seen), sorted(c2._VERIFICATION_REQUEST_FIELDS))
+
+    def test_report_root_is_a_real_directory_not_merely_a_present_key(self):
+        """Completeness of keys is not usefulness of values.
+
+        Mutation V4 set report_root to "" and the completeness test passed,
+        because an empty string is still a present key. The verifier freezes its
+        reports there, so the value has to be a directory that exists -- and
+        asserting that costs one line.
+        """
+        seen = {}
+        self._run_with(verify_stage=lambda request: (
+            seen.update(request), self._thin("PASS"))[1])
+        root = seen["report_root"]
+        self.assertTrue(root, "report_root was passed as an empty value")
+        self.assertTrue(Path(root).is_absolute())
+        self.assertTrue(Path(root).is_dir(),
+                        "report_root does not exist: %s" % root)
+
+    def test_the_snapshot_side_is_what_is_verified_as_before(self):
+        """Contract line 292: BEFORE is exported from the SNAPSHOT root.
+
+        Not from the stage. If both sides came from the stage the two exports
+        would be of the same bytes and the comparison would be vacuous.
+        """
+        from gates import repair_verification as c2
+        seen = {}
+        self._run_with(verify_stage=lambda request: (
+            seen.update(request), self._thin("PASS"))[1])
+        snapshot_root = Path(seen["snapshot_root"]).resolve()
+        stage_root = Path(seen["stage_root"]).resolve()
+        self.assertNotEqual(snapshot_root, stage_root)
+        # the snapshot holds the BEFORE bytes, and the stage has been written
+        snapshot_target = snapshot_root / seen["relative_target"]
+        self.assertTrue(snapshot_target.is_file())
+        self.assertEqual(
+            pipeline.hash_bytes(snapshot_target.read_bytes()),
+            seen["before_manifest"]["files"][0]["sha256"])
+
+    def test_the_manifests_passed_describe_the_state_the_verifier_will_read(self):
+        """BEFORE is SNAPSHOT's; AFTER is the stage as it is NOW.
+
+        The first version asserted `staged_manifest == receipt["staged_manifest"]`
+        -- the manifest SNAPSHOT builds when it SEEDS the stage. That is wrong on
+        two counts and the real end-to-end run is what exposed it:
+
+          * timing: the writer has run since, so `source_hash_binding` refuses
+            with "stage file does not match its declared manifest";
+          * scope: the seed-time manifest includes repair_ops.json, which is the
+            writer's input and not part of the design, so the stage's dependency
+            key set would differ from the snapshot's and read as an unexpected
+            dependency.
+
+        So the verifier gets the post-write DESIGN manifest: the snapshot's paths,
+        re-measured, without the op-list.
+        """
+        from gates import repair_verification as c2
+        seen = {}
+        receipt = self._run_with(verify_stage=lambda request: (
+            seen.update(request), self._thin("PASS"))[1])
+
+        # BEFORE is exactly the snapshot's manifest -- that side never changes.
+        self.assertEqual(seen["before_manifest"],
+                         receipt["snapshot"]["manifest"])
+
+        staged = seen["staged_manifest"]
+        snapshot_paths = sorted(row["path"] for row
+                                in seen["before_manifest"]["files"])
+        staged_paths = sorted(row["path"] for row in staged["files"])
+        self.assertEqual(staged_paths, snapshot_paths,
+                         "the stage manifest must cover the snapshot's paths")
+        self.assertNotIn("repair_ops.json", staged_paths,
+                         "the writer's op-list is not part of the design")
+
+        # and it is a FRESH measurement, not the seed-time manifest restated.
+        # The assertNotEqual alone does NOT prove this -- the row sets already
+        # differ because of repair_ops.json, and a review mutant that replaced
+        # _staged_design_manifest with a pure passthrough still passed. So the
+        # function is called directly on a stage whose bytes have changed and its
+        # digest is asserted to move.
+        self.assertNotEqual(staged, receipt["staged_manifest"])
+        self.assertIn("repair_ops.json",
+                      [row["path"] for row in receipt["staged_manifest"]["files"]],
+                      "the seed-time manifest did include the op-list, so these "
+                      "two really are different documents")
+
+        design = self.root / "cand" / "design"
+        live = self.root / "stage"
+        before = pipeline._staged_design_manifest(
+            str(live), receipt["snapshot"]["manifest"], "fault.kicad_sch")
+        (live / "fault.kicad_sch").write_bytes(b"(kicad_sch (edited by the writer))\n")
+        after = pipeline._staged_design_manifest(
+            str(live), receipt["snapshot"]["manifest"], "fault.kicad_sch")
+        self.assertNotEqual(
+            before["files"][0]["sha256"], after["files"][0]["sha256"],
+            "the manifest is not re-measured: the stage's bytes changed and the "
+            "digest did not")
+        self.assertEqual(after["files"][0]["sha256"],
+                         pipeline.hash_bytes((live / "fault.kicad_sch").read_bytes()))
+        self.assertEqual(after["files"][0]["size_bytes"],
+                         (live / "fault.kicad_sch").stat().st_size)
+
+        # both are the shape the frozen validator accepts
+        c2._manifest(seen["before_manifest"])
+        c2._manifest(staged)
+
+    # --- helpers ---------------------------------------------------------
+    def _thin(self, status):
+        from gates import repair_verification as c2
+        return {
+            "status": status, "scope": "PR1_CANDIDATE_BYTES",
+            # the real verifier sets this, and the receipt must carry it: it is
+            # the digest `same_host_toolchain` compares at commit time
+            "toolchain_sha256": "9" * 64,
+            "checks": {name: {"status": "PASS", "reason_codes": [],
+                              "artifact_paths": []}
+                       for name in ("fresh_export", "source_hash_binding",
+                                    "exact_topology_delta", "protected_diff")},
+            "coverage": {"before": {"keys": set()}, "after": {"keys": set()}},
+            "parser_agreement": {"before": {"status": "PASS"},
+                                 "after": {"status": "PASS"}},
+            "authorized_delta_sha256": "2" * 64,
+            "actual_delta_sha256": "2" * 64,
+            "missing_delta": [], "unexpected_delta": [],
+            "protected_changes": [], "dependencies_unchanged": True,
+            "exports": [{"role": "BEFORE"}, {"role": "AFTER"}],
+            "reports": [], "deferred": dict(c2._DEFERRED), "reasons": [],
+        }
+
+    def _run_with(self, verify_stage, freeze=None, recheck=None):
+        """Drive one round to KICAD_VERIFY with the writer and the delta verdict
+        stubbed. Neither is available on this interpreter -- the pinned akcli is
+        not importable here -- so without this the round stops at STAGE_APPLY and
+        the wiring is never exercised. What is under test is the wiring, not the
+        writer or compare_delta, both of which have their own suites.
+        """
+        request = self._request()
+        fake_stage = {
+            "status": "APPLIED_TO_STAGE",
+            "tool": {"tool_applied": True, "exit_code": 0, "changed": True},
+            "changed": True, "before_source_sha256": "0" * 64,
+            "after_source_sha256": "1" * 64, "reasons": [],
+        }
+        fake_verdict = {
+            "status": "PASS", "authorized_delta_sha256": "2" * 64,
+            "actual_delta_sha256": "2" * 64, "missing": [], "unexpected": [],
+            "coverage_complete": True, "reasons": [],
+        }
+        # Patch the real function, not the module. run_round does
+        # `from tools import akcli_adapter` inside the function, which resolves
+        # the name as an attribute of the `tools` package -- so faking
+        # sys.modules had no effect and the round refused at STAGE_APPLY with
+        # "the READ worker could not start", which is the absent pinned
+        # toolchain and not the wiring under test.
+        with mock.patch("tools.akcli_adapter.apply_stage",
+                        return_value=fake_stage), \
+                mock.patch.object(pipeline, "compare_delta",
+                                  return_value=fake_verdict), \
+                mock.patch.object(pipeline, "_c2_verify_stage", verify_stage), \
+                mock.patch.object(
+                    pipeline, "_c2_write_thin",
+                    freeze or (lambda result, root:
+                               (str(self.root / "frozen.json"), "f" * 64))), \
+                mock.patch.object(
+                    pipeline, "_c2_recheck_reports",
+                    recheck or (lambda result, root: self._recheck("PASS"))):
+            return pipeline.run_round(request)
+
+    def _recheck(self, status, reasons=()):
+        return {"status": status, "checked": 2, "reasons": list(reasons)}
+
+    def test_the_result_is_frozen_and_the_reports_re_read(self):
+        """Contract line 374 (冻结所有报告) and line 343 (报告重算).
+
+        Both collaborators had ZERO production callers before this change, so
+        "the round calls them" is a real property and not a detail.
+        """
+        frozen, rechecked = [], []
+        real_thin = self._thin("PASS")
+        real_thin["reports"] = {"version": 1, "files": [{"path": "x"}]}
+
+        def thin(request):
+            return real_thin
+
+        def freeze(result, report_root):
+            frozen.append((result, report_root))
+            return str(Path(report_root) / "thin.json"), "a" * 64
+
+        def recheck(result, report_root):
+            rechecked.append((result, report_root))
+            return self._recheck("PASS")
+
+        self._run_with(verify_stage=thin, freeze=freeze, recheck=recheck)
+        self.assertEqual(len(frozen), 1, "the thin result was never frozen")
+        self.assertEqual(len(rechecked), 1, "the reports were never re-read")
+        self.assertIs(frozen[0][0], rechecked[0][0],
+                      "the re-read must be of the SAME result that was frozen")
+        self.assertEqual(frozen[0][1], rechecked[0][1])
+
+    def test_report_drift_refuses_with_the_contracts_cause(self):
+        """A FAIL from the re-read is the contract's 报告漂移 case.
+
+        Line 374 puts report drift in ROLLBACK(cause=BLOCKED) with the other
+        drift cases, and forbids downgrading the verification to let a commit
+        through. A thin PASS with stale reports must NOT stay a PASS.
+        """
+        real_thin = self._thin("PASS")
+        real_thin["reports"] = {"version": 1, "files": [{"path": "x"}]}
+
+        with mock.patch("tools.akcli_adapter.apply_stage",
+                        return_value={
+                            "status": "APPLIED_TO_STAGE",
+                            "tool": {"tool_applied": True, "exit_code": 0,
+                                     "changed": True},
+                            "changed": True, "before_source_sha256": "0" * 64,
+                            "after_source_sha256": "1" * 64, "reasons": []}), \
+                mock.patch.object(pipeline, "compare_delta", return_value={
+                    "status": "PASS", "authorized_delta_sha256": "2" * 64,
+                    "actual_delta_sha256": "2" * 64, "missing": [],
+                    "unexpected": [], "coverage_complete": True,
+                    "reasons": []}), \
+                mock.patch.object(pipeline, "_c2_verify_stage",
+                                  return_value=real_thin), \
+                mock.patch.object(pipeline, "_c2_write_thin",
+                                  return_value=(str(self.root / "f.json"),
+                                                "a" * 64)), \
+                mock.patch.object(pipeline, "_c2_recheck_reports",
+                                  return_value=self._recheck("FAIL", [
+                                      {"code": pipeline.REASON_EXPORT_STALE,
+                                       "stage": pipeline.PHASE_KICAD_VERIFY,
+                                       "object_id": None,
+                                       "detail": "the reports no longer match"}])):
+            receipt = pipeline.run_round(self._request())
+
+        self.assertTrue(receipt["terminal"])
+        self.assertEqual(receipt["status"], pipeline.STATUS_ROLLBACK)
+        self.assertEqual(receipt["cause_status"], pipeline.STATUS_BLOCKED)
+        self.assertEqual(receipt["phase"], pipeline.PHASE_KICAD_VERIFY)
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("no longer match", detail)
+        self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED)
+
+    def test_a_thin_pass_leaves_the_round_unpromoted(self):
+        """Contract line 349: a thin PASS is not a commit and not a candidate
+        VerifierPort PASS."""
+        receipt = self._run_with(lambda request: self._thin("PASS"))
+        self.assertIsNone(receipt["status"])
+        self.assertFalse(receipt["terminal"])
+        self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED)
+        self.assertEqual(receipt["phase"], pipeline.PHASE_KICAD_VERIFY)
+        self.assertEqual(receipt["pending_phases"], [pipeline.PHASE_COMMIT])
+
+    def test_the_deferred_mapping_survives_the_round_untouched(self):
+        """Contract line 424: a deferred ERC must never be written as PASS."""
+        from gates import repair_verification as c2
+        receipt = self._run_with(lambda request: self._thin("PASS"))
+        # NOT `== dict(c2._DEFERRED)`: the stub's own literal is
+        # dict(c2._DEFERRED), so that comparison is the stub against itself and a
+        # hardcoded production value would pass. The loop below is the part that
+        # does real work, so it is kept and the tautology dropped.
+        self.assertTrue(receipt["kicad_verify"]["deferred"])
+        for name, value in receipt["kicad_verify"]["deferred"].items():
+            self.assertEqual(value, "NOT_RUN",
+                             "deferred %r was rewritten to %r" % (name, value))
+            self.assertNotEqual(value, "PASS")
+
+    def test_the_two_exports_are_carried_in_the_receipt(self):
+        """Contract line 292: one fresh export per side."""
+        receipt = self._run_with(lambda request: self._thin("PASS"))
+        roles = [row.get("role") for row in
+                 receipt["kicad_verify"]["exports"]]
+        self.assertEqual(roles, ["BEFORE", "AFTER"])
+
+    def test_a_non_pass_verdict_refuses_with_the_contract_cause(self):
+        """A TOOL_ERROR verdict maps to ROLLBACK(cause=TOOL_ERROR)."""
+        from gates import repair_verification as c2
+        thin = self._thin("TOOL_ERROR")
+        thin["reports"] = {"version": 1, "files": [{"path": "x"}]}
+        thin["reasons"] = [{"code": pipeline.REASON_TOOL_UNAVAILABLE,
+                            "stage": pipeline.PHASE_KICAD_VERIFY,
+                            "object_id": None,
+                            "detail": "the export exceeded the frozen timeout"}]
+        self.assertEqual(thin["deferred"], dict(c2._DEFERRED))
+        receipt = self._run_with(verify_stage=lambda request: thin)
+        self.assertTrue(receipt["terminal"])
+        self.assertEqual(receipt["status"], pipeline.STATUS_ROLLBACK)
+        self.assertEqual(receipt["cause_status"], pipeline.STATUS_TOOL_ERROR)
+        self.assertEqual(receipt["phase"], pipeline.PHASE_KICAD_VERIFY)
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("frozen timeout", detail)
+
+    def test_a_verifier_that_raises_is_contained_not_propagated(self):
+        request = self._request()
+        fake_stage = {
+            "status": "APPLIED_TO_STAGE",
+            "tool": {"tool_applied": True, "exit_code": 0, "changed": True},
+            "changed": True, "before_source_sha256": "0" * 64,
+            "after_source_sha256": "1" * 64, "reasons": [],
+        }
+        fake_verdict = {
+            "status": "PASS", "authorized_delta_sha256": "2" * 64,
+            "actual_delta_sha256": "2" * 64, "missing": [], "unexpected": [],
+            "coverage_complete": True, "reasons": [],
+        }
+        with mock.patch("tools.akcli_adapter.apply_stage",
+                        return_value=fake_stage), \
+                mock.patch.object(pipeline, "compare_delta",
+                                  return_value=fake_verdict), \
+                mock.patch.object(pipeline, "_c2_verify_stage",
+                                  side_effect=RuntimeError("boom")):
+            receipt = pipeline.run_round(request)      # must not raise
+        self.assertTrue(receipt["terminal"])
+        self.assertEqual(receipt["status"], pipeline.STATUS_TOOL_ERROR)
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("boom", detail)
 
 
 if __name__ == "__main__":

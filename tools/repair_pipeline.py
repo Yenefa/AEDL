@@ -36,6 +36,18 @@ from gates.repair_verification import (  # single home for digests since C2
     observation_delta,
     protected_projection_sha256,
     topology_sha256,
+    # PR1-C5-VERIFY-STAGE: the contract's OWN thin verifier (contract line 292 /
+    # 373).  It had 25 test callers and zero production callers until this
+    # import; run_round is its first.  Imported from the same single home as the
+    # digests rather than reimplemented -- a previous attempt (PR #99) built a
+    # parallel evidence path instead of calling this and was closed.
+    verify_stage as _c2_verify_stage,
+    # PR1-C5-VERIFY-STAGE: the freeze and the report half of the commit
+    # predicate (contract line 374 "冻结所有报告", line 343 "verifier 返回后
+    # 重算 ... report hashes 与回执一致").  Both existed and were tested with
+    # ZERO production callers; run_round is their first.
+    write_thin_verification as _c2_write_thin,
+    recheck_reports as _c2_recheck_reports,
     _BOUND_FIELDS as _C2_BOUND_FIELDS,
     # C5 reuses verifier-private source helpers because selector binding must use the
     # exact same source semantics as C2.  Publicising this interface is deferred; C5
@@ -3168,8 +3180,20 @@ ROUND_FIELDS = ROUND_REQUIRED + ROUND_OPTIONAL
 # Phases this MVP drives, in order.  KICAD_VERIFY and COMMIT are deliberately
 # absent: they are not implemented, and naming them as driven would overstate
 # what a run actually proved.
-ROUND_PHASES = (PHASE_PRECHECK, PHASE_STAGE_APPLY, PHASE_DELTA_CHECK)
-ROUND_PENDING_PHASES = (PHASE_KICAD_VERIFY, PHASE_COMMIT)
+# REMOVED: ROUND_PHASES = (PRECHECK, STAGE_APPLY, DELTA_CHECK)
+#
+# It described the pipeline instead of being derived from it, and no production
+# code ever read it -- only a test, which asserted the constant against its own
+# definition and therefore could not fail. By this commit it claimed three phases
+# while the round drove five: SNAPSHOT was added in PR1-C5-SNAPSHOT without
+# touching it, and KICAD_VERIFY is driven now. The order a round actually records
+# is asserted from a real round's receipt in the test suite, not from a
+# hand-maintained tuple that can drift silently.
+# SUPERSEDED by the definition next to run_round: a round that reached
+# KICAD_VERIFY must not report it as still pending, which is exactly what this
+# tuple made it do.  Kept as a deleted-name marker rather than silently
+# overwritten so the reason survives in the diff.
+ROUND_PENDING_PHASES_SUPERSEDED = (PHASE_KICAD_VERIFY, PHASE_COMMIT)
 
 # apply_stage reports a stage-level refusal in its own vocabulary.  Each keeps
 # its own failure class; collapsing a refusal into UNKNOWN would hide the reason
@@ -3203,6 +3227,10 @@ def _round_receipt(status, phase, reasons, terminal):
         "authorized_delta_sha256": None,
         "stage": None,
         "verification": None,
+        # Present from the start. Its own docstring promises "a caller must be
+        # able to read these without knowing which phase the round stopped in",
+        # and every refusal before KICAD_VERIFY produced a KeyError.
+        "kicad_verify": None,
         "pending_phases": None,
         "feedback": None,
     }
@@ -3531,6 +3559,150 @@ _OVERLAP_DETAIL = {
 }
 
 
+# Phases a round has not yet reached, in contract order (contract line 355:
+# PRECHECK -> SNAPSHOT -> STAGE_APPLY -> DELTA_CHECK -> KICAD_VERIFY -> COMMIT).
+# A round only ever withholds COMMIT, because KICAD_VERIFY now really runs.
+ROUND_PENDING_PHASES = (PHASE_COMMIT,)
+
+# How `verify_stage`'s vocabulary maps onto the round's, per contract line 373:
+#   "缺工具/超时/坏 XML      -> ROLLBACK(cause=TOOL_ERROR)"
+#   "旧报告/源漂移/真实回归   -> ROLLBACK(cause=BLOCKED)"
+#   "coverage/必需属性缺失/解析器分歧 -> ROLLBACK(cause=UNKNOWN)"
+#
+# A FAIL verdict is grouped with BLOCKED because a failed required check IS the
+# "真实回归" case: the delta is not the authorized delta, or a protected
+# projection moved.  It is not an execution problem, so cause=TOOL_ERROR would
+# publish a real regression as an unavailable tool.
+_THIN_REFUSAL_CAUSE = {
+    "FAIL": STATUS_BLOCKED,
+    "BLOCKED": STATUS_BLOCKED,
+    "TOOL_ERROR": STATUS_TOOL_ERROR,
+    "UNKNOWN": STATUS_UNKNOWN,
+}
+
+
+def _staged_design_manifest(stage_root, design_manifest, target):
+    """Describe the stage's DESIGN files, after the writer has run.
+
+    Two things make this different from the manifest SNAPSHOT builds:
+
+      * TIMING.  SNAPSHOT records what the stage was SEEDED with.  The verifier's
+        ``source_hash_binding`` checks the stage against the manifest it is
+        given, and the stage has been written since -- so passing the seed-time
+        manifest fails closed with "stage file does not match its declared
+        manifest".  The manifest the verifier needs is the one that describes the
+        stage as it now is.
+      * SCOPE.  The stage also holds ``repair_ops.json``, which is the writer's
+        input and not part of the design.  Including it would make the stage's
+        dependency key set differ from the snapshot's, and the verifier compares
+        those two sets -- so an extra row reads as an unexpected dependency.  The
+        rows are therefore restricted to the paths the snapshot declared, which
+        is exactly the candidate's design tree.
+
+    Every digest and size is measured from the stage's current bytes, so this
+    describes the real post-write state rather than restating a declaration.
+    """
+    stage = Path(stage_root).resolve()
+    wanted = [row.get("path") for row in (design_manifest.get("files") or [])
+              if isinstance(row, Mapping) and isinstance(row.get("path"), str)]
+    if target not in wanted:
+        wanted = list(wanted) + [target]
+    rows = []
+    for relative in wanted:
+        absolute = stage / relative
+        if not absolute.is_file():
+            raise ProposalInvalidError([_finding(
+                REASON_INPUT_DRIFT,
+                "the stage no longer carries %r, which the candidate declared; "
+                "the writer must not remove a design file" % relative,
+                stage=PHASE_KICAD_VERIFY)])
+        raw = absolute.read_bytes()
+        rows.append({
+            "path": relative,
+            "sha256": hash_bytes(raw),
+            "size_bytes": len(raw),
+            "role": "TARGET" if relative == target else "READONLY_DEPENDENCY",
+        })
+    # No "is there a TARGET row" guard: `target` is force-appended to `wanted`
+    # above and the role is assigned by comparison with it, so such a guard can
+    # never fire. It was a check that could only reassure and never refuse.
+    return {"version": 1, "files": rows}
+
+
+# REMOVED: a 100-line parallel re-implementation of
+# host_toolchain.derive_kicad_slice, living in this file. It produced a
+# DIFFERENT toolchain digest for a legal binding -- the canonical
+# _resolved_files sorts the declared rows and the copy did not, and
+# canonical_json_bytes sorts dict keys but NOT lists -- so the gate this
+# receipt exists to satisfy refused legitimate runs. It also dropped four
+# validations the canonical path performs (kicad_version pinning, the
+# frozen timeout ceiling, absolute-path/role manifest checks, and
+# self-validation). Same failure mode as PR #99: a parallel object
+# instead of the repository's own. The canonical deriver is imported
+# already.
+
+
+def _thin_reasons(result):
+    """Convert the verifier's reason dicts into this module's `Finding` objects.
+
+    `verify_stage` reports its reasons as plain dicts --
+    ``{"code", "stage", "object_id", "detail"}`` -- because C2 owns that shape
+    (its `_reason_code`).  Everything downstream of `refuse()` expects
+    `Finding` instances: ``receipt["reasons"]`` is read with
+    ``getattr(r, "detail")`` by the public feedback path and by every test that
+    inspects a refusal.
+
+    Passing the dicts through unchanged would therefore be SILENT: a dict has no
+    ``.detail``, so ``getattr(..., "detail", "")`` yields the empty string and
+    the reason appears to carry no explanation at all.  This conversion is the
+    only thing standing between a real refusal and an unreadable one.
+    """
+    converted = []
+    for item in result.get("reasons") or []:
+        if isinstance(item, Finding):
+            converted.append(item)
+        elif isinstance(item, Mapping):
+            # The verifier's OWN phase, not ours. bind_inputs emits its reasons
+            # with stage="SNAPSHOT" (repair_verification.py:1572,1576), so
+            # hardcoding KICAD_VERIFY re-stamped snapshot/stage binding drift to
+            # the wrong phase in both reason.stage and receipt["phase"].
+            converted.append(_finding(
+                item.get("code") or REASON_INPUT_DRIFT,
+                item.get("detail") or "the thin verifier gave no detail",
+                object_id=item.get("object_id"),
+                stage=item.get("stage") or PHASE_KICAD_VERIFY))
+        else:
+            converted.append(_finding(REASON_INPUT_DRIFT, str(item),
+                                     stage=PHASE_KICAD_VERIFY))
+    return converted
+
+
+def _thin_verification_refusal(result):
+    """Map a non-PASS `verify_stage` result to (status, cause_status, reasons).
+
+    Split out from run_round so the whole table is testable without running the
+    verifier, following the `_delta_refusal` precedent that already exists for
+    the delta verdict.
+
+    A thin PASS is not a refusal and is not handled here.  Contract line 349 is
+    explicit that a thin PASS must never be published as a whole-candidate
+    VerifierPort PASS, so the caller leaves such a round unpromoted
+    (`status=None`, `terminal=False`) and awaits COMMIT.
+    """
+    thin_status = result.get("status")
+    cause = _THIN_REFUSAL_CAUSE.get(thin_status)
+    if cause is None:
+        # An unrecognised status is not treated as a pass.  It becomes UNKNOWN,
+        # which is the honest reading of "the verifier said something this
+        # pipeline does not know how to map".
+        cause = STATUS_UNKNOWN
+    reasons = _thin_reasons(result) or [_finding(
+        REASON_COVERAGE_INCOMPLETE,
+        "the thin verifier reported %r with no reason of its own" % thin_status,
+        stage=PHASE_KICAD_VERIFY)]
+    return STATUS_ROLLBACK, cause, reasons
+
+
 def run_round(round_request):
     """Drive one repair round: PRECHECK -> SNAPSHOT -> STAGE_APPLY ->
     DELTA_CHECK.
@@ -3609,61 +3781,6 @@ def run_round(round_request):
 
     receipt["txn_id"] = txn_id
 
-    # ---- the stage must be provably disjoint from the candidate -----------
-    # Checked BEFORE the before-bytes are read and long before the writer runs,
-    # so an overlapping stage is never even observed.  Fail-closed: if the
-    # candidate's design root cannot be determined, disjointness cannot be
-    # proven and the round is refused rather than allowed on trust.
-    workspace = host_context.get("workspace") if isinstance(host_context, Mapping) \
-        else None
-    design_root = workspace.get("design_root") if isinstance(workspace, Mapping) \
-        else None
-    repair_root = workspace.get("repair_root") if isinstance(workspace, Mapping) \
-        else None
-    if not isinstance(design_root, str) or not design_root.strip():
-        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
-            REASON_INPUT_DRIFT,
-            "the host context declares no candidate design root, so the stage "
-            "cannot be proven disjoint from it; refusing rather than trusting it")])
-    if not isinstance(repair_root, str) or not repair_root.strip():
-        return refuse(PHASE_SNAPSHOT, STATUS_BLOCKED, [_finding(
-            REASON_INPUT_DRIFT,
-            "the host context declares no repair root, so a snapshot has nowhere "
-            "to be taken; refusing rather than inventing a location")])
-    try:
-        overlap = _stage_candidate_overlap(stage_root, design_root)
-    except (OSError, ValueError) as exc:
-        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
-            REASON_INPUT_DRIFT,
-            "the stage root and the candidate design root could not be compared: %s"
-            % exc)])
-    if overlap is not None:
-        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
-            REASON_INPUT_DRIFT,
-            "the writer's stage is not disjoint from the candidate: %s "
-            "(stage=%s design_root=%s); a round that stops before COMMIT must not "
-            "be able to have modified the candidate"
-            % (_OVERLAP_DETAIL[overlap], Path(stage_root).resolve(),
-               Path(design_root).resolve()))])
-    receipt["stage_root"] = str(Path(stage_root).resolve())
-    receipt["candidate_design_root"] = str(Path(design_root).resolve())
-
-    # The op-list must already live inside the stage.  The stage is re-seeded
-    # from the snapshot in SNAPSHOT, so an op-list from anywhere else would not
-    # survive the re-seed, and the writer would be handed a path that no longer
-    # exists.  Proving it here means the round refuses before copying anything.
-    oplist_source = Path(oplist_path)
-    if not oplist_source.is_file():
-        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
-            REASON_INPUT_DRIFT,
-            "the op-list path is missing or is not a file: %s" % oplist_path)])
-    try:
-        oplist_source.resolve().relative_to(Path(stage_root).resolve())
-    except ValueError:
-        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
-            REASON_INPUT_DRIFT,
-            "the op-list path lies outside the stage root it must be run from")])
-
     # NOTE: the containment check for the stage target lives ONCE, further down,
     # immediately before the proposal parse. An earlier version of this file
     # carried a second copy here, and that copy was DEAD: it resolved and
@@ -3691,6 +3808,11 @@ def run_round(round_request):
             REASON_INPUT_DRIFT,
             "the host context declares no candidate design root, so the stage "
             "cannot be proven disjoint from it; refusing rather than trusting it")])
+    if not isinstance(repair_root, str) or not repair_root.strip():
+        return refuse(PHASE_SNAPSHOT, STATUS_BLOCKED, [_finding(
+            REASON_INPUT_DRIFT,
+            "the host context declares no repair root, so a snapshot has nowhere "
+            "to be taken; refusing rather than inventing a location")])
     try:
         overlap = _stage_candidate_overlap(stage_root, design_root)
     except (OSError, ValueError) as exc:
@@ -3915,8 +4037,194 @@ def run_round(round_request):
         return refuse(PHASE_DELTA_CHECK, status, reasons, cause_status=cause)
     reach(PHASE_DELTA_CHECK)
 
-    # Verified at stage, not committed: no terminal status exists yet.
-    receipt.update(status=None, phase=PHASE_DELTA_CHECK, cause_status=None,
+    # ---- KICAD_VERIFY ------------------------------------------------------
+    # The contract's OWN verifier, run for the first time.  Contract line 292:
+    # "对 snapshot before 和 stage after 各执行一次新的导出"; line 373: "执行第9节
+    # 两次 fresh 导出及四项检查，冻结所有报告和 staged manifest".
+    #
+    # `verify_stage` (gates/repair_verification.py:1792) has been implemented and
+    # tested -- 25 test callers -- and had ZERO production callers until here.
+    # Everything it needs was already in scope: PR1-C5-SNAPSHOT produces the
+    # snapshot_root and before_manifest, and 13 of the remaining fields come from
+    # this function's own locals.  Only report_root was missing.
+    #
+    # What this phase deliberately does NOT do, because a previous attempt at it
+    # (PR #99, closed) did and was wrong: it does not run ERC, does not drive
+    # kicad-cli itself, and does not re-implement export or tool identity.
+    # Contract line 21 and line 351 put ERC in PR-2; line 424 forbids writing a
+    # deferred ERC as PASS.  `fresh_export` already measures the kicad binary
+    # before and after the run and halts on mismatch, so a second tool-identity
+    # implementation here would have been weaker duplication.
+    # Scoped BY transaction. fresh_export refuses a pre-existing output dir
+    # ("a leftover directory or XML is never reused"), so a shared root meant a
+    # retried round could never succeed and the receipt blamed stale reports
+    # rather than the retry.
+    report_root = Path(artifact_root) / "kicad_verify" / txn_id
+    try:
+        report_root.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return refuse(PHASE_KICAD_VERIFY, STATUS_TOOL_ERROR, [_finding(
+            REASON_TOOL_UNAVAILABLE,
+            "the verification report root could not be created: %s" % exc)])
+    # The KiCad slice comes from the repository's OWN deriver, which is
+    # self-validating and is what `same_host_toolchain` later compares this
+    # receipt's toolchain_sha256 against. Deriving it here instead forks the
+    # digest, which is how a legitimate round gets refused for using "the
+    # wrong" toolchain.
+    try:
+        export_toolchain = host_toolchain.derive_kicad_slice(
+            host_context["toolchain_binding"])
+    except host_toolchain.HostBindingError as exc:
+        return refuse(PHASE_KICAD_VERIFY, STATUS_BLOCKED, [_finding(
+            REASON_INPUT_DRIFT,
+            "the host binding does not derive a usable KiCad export slice: %s"
+            % exc)])
+    try:
+        staged_design_manifest = _staged_design_manifest(
+            stage_root, receipt["snapshot"]["manifest"], stage_target)
+    except (RepairContractError, OSError) as exc:
+        findings = list(getattr(exc, "findings", None) or ()) or [
+            _finding(REASON_INPUT_DRIFT, str(exc), stage=PHASE_KICAD_VERIFY)]
+        return refuse(PHASE_KICAD_VERIFY, STATUS_UNKNOWN, findings)
+    # The request is built in its OWN try. A KeyError or TypeError here is a
+    # defect in OUR wiring, and publishing it as "the thin verifier could not be
+    # run" points a debugger at the wrong object -- the repo has an explicit
+    # test against exactly that pattern.
+    try:
+        verify_request = {
+            "txn_id": txn_id,
+            "run_id": host_context["run_id"],
+            "candidate_id": host_context["candidate_id"],
+            "patch_sha256": bound["host_patch"]["patch_sha256"],
+            "bound_policy_sha256": bound["host_patch"]["policy"][
+                "bound_policy_sha256"],
+            "snapshot_root": receipt["snapshot"]["root"],
+            "stage_root": str(Path(stage_root).resolve()),
+            "relative_target": stage_target,
+            "before_manifest": receipt["snapshot"]["manifest"],
+            "staged_manifest": staged_design_manifest,
+            "bound_policy": bound["host_patch"]["bound_policy"],
+            "toolchain_manifest": export_toolchain,
+            "native_before": before_observation,
+            "native_after": after_observation,
+            "report_root": str(report_root.resolve()),
+        }
+    except (KeyError, TypeError, AttributeError) as exc:
+        return refuse(PHASE_KICAD_VERIFY, STATUS_UNKNOWN, [_finding(
+            REASON_INPUT_DRIFT,
+            "the thin verification request could not be built from this round: "
+            "%s: %s" % (type(exc).__name__, exc))])
+    except Exception as exc:
+        return refuse(PHASE_KICAD_VERIFY, STATUS_UNKNOWN, [_finding(
+            REASON_INPUT_DRIFT,
+            "the thin verification request could not be assembled: %s" % exc)])
+    try:
+        thin = _c2_verify_stage(verify_request)
+    except Exception as exc:
+        # The verifier is the repository's own, and an exception escaping it would
+        # otherwise escape run_round as an unhandled error rather than a refusal.
+        return refuse(PHASE_KICAD_VERIFY, STATUS_TOOL_ERROR, [_finding(
+            REASON_TOOL_UNAVAILABLE,
+            "the thin verifier could not be run: %s" % exc)])
+    # Contract line 374: "冻结所有报告" -- freeze the result next to its exports
+    # so a later reader can see exactly what the verifier concluded, and cannot
+    # edit it after the fact without changing the recorded digest.  Line 343 then
+    # requires the report half of the commit predicate to be recomputed AFTER the
+    # verifier returned.  Both functions exist and are tested; before this commit
+    # they had no production caller at all.
+    #
+    # NOTE the frozen file is written INSIDE report_root but is NOT itself listed
+    # in thin["reports"], so recheck_reports does not cover it. That is stated
+    # rather than papered over: the digest returned here is what a later reader
+    # compares the frozen file against.
+    # The freeze is best-effort WITH RESPECT TO THE REASON. It runs
+    # unconditionally, before the status branch, so a freeze failure would
+    # otherwise replace the verifier's real refusal with a generic
+    # REPAIR_TOOL_UNAVAILABLE and destroy the one thing a reader acts on. So a
+    # freeze failure is recorded AND the verifier's own cause is still published.
+    frozen, freeze_error = None, None
+    try:
+        frozen_path, frozen_sha = _c2_write_thin(thin, str(report_root.resolve()))
+        frozen = {"path": frozen_path, "sha256": frozen_sha}
+    except Exception as exc:
+        freeze_error = "the thin verification result could not be frozen: %s" % exc
+    recheck, recheck_error = None, None
+    if frozen is not None:
+        try:
+            recheck = _c2_recheck_reports(thin, str(report_root.resolve()))
+        except Exception as exc:
+            recheck_error = "the frozen reports could not be re-read: %s" % exc
+    receipt["kicad_verify"] = {
+        "scope": thin.get("scope"),
+        "status": thin.get("status"),
+        # M5: the digest the commit predicate cross-checks the toolchain with.
+        # Dropping it left COMMIT with nothing to compare against.
+        "toolchain_sha256": thin.get("toolchain_sha256"),
+        # M3: the manifest that was ACTUALLY verified. The seed-time one stays
+        # under `staged_manifest` and is a different document -- it predates the
+        # write and includes repair_ops.json -- so publishing it under this name
+        # gave a reader pre-write digests.
+        "verified_staged_manifest": staged_design_manifest,
+        "freeze_error": freeze_error,
+        "recheck_error": recheck_error,
+        "checks": thin.get("checks"),
+        "coverage": thin.get("coverage"),
+        "parser_agreement": thin.get("parser_agreement"),
+        "authorized_delta_sha256": thin.get("authorized_delta_sha256"),
+        "actual_delta_sha256": thin.get("actual_delta_sha256"),
+        "missing_delta": thin.get("missing_delta"),
+        "unexpected_delta": thin.get("unexpected_delta"),
+        "protected_changes": thin.get("protected_changes"),
+        "dependencies_unchanged": thin.get("dependencies_unchanged"),
+        "exports": thin.get("exports"),
+        "reports": thin.get("reports"),
+        # carried through untouched.  Line 424: a deferred ERC must never be
+        # written as PASS, so it is copied verbatim and never recomputed.
+        "deferred": thin.get("deferred"),
+        "report_root": str(report_root.resolve()),
+        "frozen_result": frozen,
+        "report_recheck": None if recheck is None else {
+            "status": recheck.get("status"),
+            "checked": recheck.get("checked"),
+            "reasons": recheck.get("reasons") or []},
+    }
+    reach(PHASE_KICAD_VERIFY)
+
+    # ORDER MATTERS, and the first version had these the wrong way round.
+    # verify_stage initialises reports=None and only populates it when both
+    # exports PASS *and* coverage/agreement are complete, so recheck_reports
+    # FAILs for EVERY non-PASS outcome. Checking the recheck first therefore made
+    # every refusal ROLLBACK(cause=BLOCKED) and left contract line 373's
+    # TOOL_ERROR and UNKNOWN buckets unreachable -- proven against the real
+    # verifier, which reported TOOL_ERROR while the round published BLOCKED.
+    # So the verdict's own cause is published FIRST.
+    if thin.get("status") != "PASS":
+        status, cause, reasons = _thin_verification_refusal(thin)
+        if freeze_error:
+            reasons = reasons + [_finding(REASON_TOOL_UNAVAILABLE, freeze_error,
+                                          stage=PHASE_KICAD_VERIFY)]
+        return refuse(PHASE_KICAD_VERIFY, status, reasons, cause_status=cause)
+
+    # A thin PASS with reports that no longer match is contract line 374's
+    # "报告漂移" case, which belongs in ROLLBACK(cause=BLOCKED) with the other
+    # drift cases. Reached only on a PASS, where reports is populated.
+    if recheck_error:
+        return refuse(PHASE_KICAD_VERIFY, STATUS_TOOL_ERROR, [_finding(
+            REASON_TOOL_UNAVAILABLE, recheck_error, stage=PHASE_KICAD_VERIFY)])
+    if recheck is not None and recheck.get("status") != "PASS":
+        return refuse(PHASE_KICAD_VERIFY, STATUS_ROLLBACK,
+                      _thin_reasons(recheck) or [_finding(
+                          REASON_EXPORT_STALE,
+                          "the frozen reports no longer match the receipt",
+                          stage=PHASE_KICAD_VERIFY)],
+                      cause_status=STATUS_BLOCKED)
+    if freeze_error:
+        return refuse(PHASE_KICAD_VERIFY, STATUS_TOOL_ERROR, [_finding(
+            REASON_TOOL_UNAVAILABLE, freeze_error, stage=PHASE_KICAD_VERIFY)])
+
+    # A thin PASS is not a commit and not a candidate-level PASS (line 349).  The
+    # round stays unpromoted and awaits COMMIT, which does not exist yet.
+    receipt.update(status=None, phase=PHASE_KICAD_VERIFY, cause_status=None,
                    terminal=False, reasons=[])
     receipt["pending_phases"] = list(ROUND_PENDING_PHASES)
     receipt["feedback"] = public_feedback({

@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 121 条。完整正文在各自条目文件中；本索引只做导航。
+共 123 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -178,3 +178,7 @@
 - [`AI-20260927-OPENCODE-26F93624EFDFF840AB36B6DBF1BB3D4C`](ai-usage/AI-20260927-OPENCODE-26F93624EFDFF840AB36B6DBF1BB3D4C.md) — C5 `run_round` MVP —— 把已存在的 observe / proposal / bind_policy / apply / verify / feedback 串成一轮
 - [`AI-20260927-OPENCODE-47A962EA618E12E790D73A2CFE6D66C5`](ai-usage/AI-20260927-OPENCODE-47A962EA618E12E790D73A2CFE6D66C5.md) — C5 CP2 correction + CP3 `_host_patch` + `policy_id` 收口 + CP4-A authorization resolver
 - [`AI-20260927-OPENCODE-C90BA7F59551FE9CF7D0F807A03DB2CC`](ai-usage/AI-20260927-OPENCODE-C90BA7F59551FE9CF7D0F807A03DB2CC.md) — M7 verified rejection loop —— 被授权 A 却交付 B 的轮次必须被拒绝，且拒绝证据要指名偏差
+## 2026-09-28
+
+- [`AI-20260928-OPENCODE-260FFBD44D4C44DD609BF543455D8142`](ai-usage/AI-20260928-OPENCODE-260FFBD44D4C44DD609BF543455D8142.md) — PR1-C5-VERIFY-STAGE: wire the contract's own verify_stage into the phase machine
+- [`AI-20260928-OPENCODE-76DB9B9EC4A1703B7C2C8B2B1C30969B`](ai-usage/AI-20260928-OPENCODE-76DB9B9EC4A1703B7C2C8B2B1C30969B.md) — 裁定 3 —— 把「`violations == []` 不构成 evidence；ERC/DRC 若落地必须绑定并记录 `ignored_checks`」落盘为 ADR-014
