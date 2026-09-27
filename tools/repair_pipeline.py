@@ -29,6 +29,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 from gates.repair_verification import (  # single home for digests since C2
     canonical_json_bytes,
     canonical_sha256,
+    compare_delta,  # PR1-C5-RUN-ROUND: the ONE acceptance entry point
     hash_bytes,
     normalize_observation,
     observation_delta,
@@ -3094,4 +3095,353 @@ def bind_policy(host_context, proposal, native_before, policy=None,
         expected_after_source_sha256=bound["expected_after"]["source_sha256"],
         host_patch=host_patch,
     )
+    return receipt
+
+
+# ===========================================================================
+# PR1-C5 RUN-ROUND MVP -- one round controller
+# ===========================================================================
+#
+# Composition only.  Every stage below already existed, already had tests and was
+# already frozen; the thing that was missing was the code that ORDERS them and
+# refuses to continue past the first refusal.
+#
+#     PRECHECK      observe_source -> parse_proposal -> build_expected_after
+#                   -> bind_policy
+#     STAGE_APPLY   akcli_adapter.apply_stage      (the real pinned writer)
+#     DELTA_CHECK   gates.repair_verification.compare_delta
+#
+# Three properties are load-bearing, and each exists because the alternative has
+# already gone wrong on this repository:
+#
+# 1. compare_delta is the ONLY acceptance entry.  An earlier harness compared
+#    observation_delta digests by hand and reported a FALSE "identity delta
+#    FAIL"; the capability it declared missing had been in C2 all along
+#    (_align_new, called from _prepare, called from compare_delta) and the real
+#    defect was using the wrong entry point.  PR #93 pinned the entry with a
+#    static guard.  run_round consumes compare_delta and never touches
+#    observation_delta, so it cannot reintroduce that failure.
+#
+# 2. There is NO seam for the writer.  run_round always calls the real
+#    apply_stage -- no parameter, hook or override.  A successful write is
+#    therefore structurally impossible to simulate, not merely discouraged.  On
+#    a host without the pinned akcli the round cannot report a write at all,
+#    which is the correct answer rather than a gap.
+#
+# 3. A stage-level status is never read as a transaction status.  apply_stage
+#    returns "APPLIED_TO_STAGE", which says only that the writer ran against a
+#    scratch stage.  Success additionally requires tool_applied, exit_code == 0
+#    and changed, because a tool that exits 0 having applied nothing is not a
+#    write.
+#
+# The round STOPS after DELTA_CHECK.  KICAD_VERIFY and COMMIT are not
+# implemented, so a verified round has no terminal transaction status and this
+# function does not invent one: it reports status=None with terminal=False and
+# the phases still owed.  public_feedback() then projects EXECUTION_UNAVAILABLE,
+# which is the truthful public answer -- the outcome is not established because
+# the round never committed.  Claiming STATUS_COMMITTED here would be precisely
+# the failure this repository exists to prevent.
+#
+# Round-trip asymmetry worth stating plainly: PRECHECK reads the BEFORE bytes
+# from the stage target and DELTA_CHECK reads the AFTER bytes from that same
+# path.  Both ends of the comparison are therefore the same file observed either
+# side of the real write, so no caller can pair an unrelated before with an
+# unrelated after.
+
+ROUND_REQUIRED = (
+    "host_context",
+    "proposal_raw",
+    "txn_id",
+    "stage_root",
+    "stage_target",
+    "oplist_path",
+    "native_artifact_root",
+)
+ROUND_OPTIONAL = ("policy", "required_paths")
+ROUND_FIELDS = ROUND_REQUIRED + ROUND_OPTIONAL
+
+# Phases this MVP drives, in order.  KICAD_VERIFY and COMMIT are deliberately
+# absent: they are not implemented, and naming them as driven would overstate
+# what a run actually proved.
+ROUND_PHASES = (PHASE_PRECHECK, PHASE_STAGE_APPLY, PHASE_DELTA_CHECK)
+ROUND_PENDING_PHASES = (PHASE_KICAD_VERIFY, PHASE_COMMIT)
+
+# apply_stage reports a stage-level refusal in its own vocabulary.  Each keeps
+# its own failure class; collapsing a refusal into UNKNOWN would hide the reason
+# code the caller has to act on.
+_STAGE_REFUSAL_STATUS = {
+    "BLOCKED": STATUS_BLOCKED,
+    "TOOL_ERROR": STATUS_TOOL_ERROR,
+}
+
+
+def _round_receipt(status, phase, reasons, terminal):
+    return {
+        "status": status,
+        "phase": phase,
+        "cause_status": status if terminal else None,
+        "terminal": terminal,
+        "reasons": list(reasons),
+        "phases": [],
+        # Stable shape: a caller must be able to read these without knowing
+        # which phase the round stopped in.
+        "txn_id": None,
+        "before_source_sha256": None,
+        "after_source_sha256": None,
+        "rule_id": None,
+        "route": None,
+        "policy_sha256": None,
+        "bound_policy_sha256": None,
+        "patch_sha256": None,
+        "authorized_delta_sha256": None,
+        "stage": None,
+        "verification": None,
+        "pending_phases": None,
+        "feedback": None,
+    }
+
+
+def _stage_write_succeeded(staged: Mapping) -> bool:
+    """True only when the pinned writer really wrote the authorized op-list.
+
+    Property 3 of run_round: ``APPLIED_TO_STAGE`` is a STAGE-level status.  It
+    says the writer ran against a scratch stage; it says nothing about whether
+    anything was written.  All four facts are required, because each can be false
+    while the others are true:
+
+    ``status == "APPLIED_TO_STAGE"``  the writer ran and claimed the stage route
+    ``tool_applied is True``          the writer self-reported applying the ops
+    ``exit_code == 0``                the tool did not fail
+    ``changed is True``               the target bytes actually differ
+
+    A tool that exits 0 having applied nothing is not a write, and treating its
+    exit code as success is precisely how a fake write would enter the evidence
+    chain.  The predicate is separated from run_round purely so this criterion
+    can be tested exhaustively; run_round itself always calls the real
+    ``apply_stage`` and has no seam through which a receipt could be injected.
+    """
+    if not isinstance(staged, Mapping):
+        return False
+    tool = staged.get("tool")
+    if not isinstance(tool, Mapping):
+        return False
+    return (staged.get("status") == "APPLIED_TO_STAGE"
+            and tool.get("tool_applied") is True
+            and tool.get("exit_code") == 0
+            and staged.get("changed") is True)
+
+
+def run_round(round_request):
+    """Drive exactly one repair round: PRECHECK -> STAGE_APPLY -> DELTA_CHECK.
+
+    ``round_request`` is a closed mapping:
+
+    ==================  ====================================================
+    ``host_context``    the validated host context (identities, workspace,
+                        toolchain binding, authority)
+    ``proposal_raw``    the proposal as raw bytes.  run_round parses it with
+                        ``parse_proposal`` itself, so a caller cannot hand in a
+                        pre-parsed proposal and bypass that validation.
+    ``txn_id``          transaction id passed through to apply_stage
+    ``stage_root``      the scratch stage directory the writer may touch
+    ``stage_target``    the target filename, relative to ``stage_root``
+    ``oplist_path``     the on-disk op-list the writer executes
+    ``native_artifact_root``  where the writer may leave native artifacts
+    ``policy``          optional; the policy DOCUMENT.  Identity is derived from
+                        it, never from an argument, so a caller cannot offer a
+                        ``policy_id`` that disagrees with the hashed bytes.
+    ``required_paths``  optional; forwarded to the authorization resolver
+    ==================  ====================================================
+
+    Returns a round receipt.  ``status`` is ``None`` for a round that applied
+    and verified but has not committed -- there is no terminal status for that
+    state and none is fabricated.  A refusal at any phase stops the round and
+    carries that phase's own findings through unchanged.
+    """
+    receipt = _round_receipt(STATUS_BLOCKED, PHASE_PRECHECK, [], False)
+
+    def reach(phase):
+        receipt["phases"].append({"phase": phase, "status": "reached"})
+
+    def refuse(phase, status, reasons):
+        receipt["phases"].append({"phase": phase, "status": "refused"})
+        receipt.update(status=status, phase=phase, cause_status=status,
+                       terminal=True, reasons=list(reasons))
+        return receipt
+
+    # ---- the request itself ------------------------------------------------
+    if not isinstance(round_request, Mapping):
+        raise TypeError("round_request must be a mapping")
+    _closed_keys(round_request, ROUND_FIELDS, "round request")
+    _require_keys(round_request, ROUND_REQUIRED, "round request")
+    try:
+        host_context = round_request["host_context"]
+        txn_id = _identifier(round_request["txn_id"], "txn_id")
+        stage_root = _text(round_request["stage_root"], "stage_root", allow_empty=False)
+        # stage_target is a FILENAME relative to stage_root, not an identifier:
+        # the real targets are things like "fault.kicad_sch".
+        stage_target = _text(round_request["stage_target"], "stage_target",
+                             allow_empty=False)
+        oplist_path = _text(round_request["oplist_path"], "oplist_path",
+                            allow_empty=False)
+        artifact_root = _text(round_request["native_artifact_root"],
+                              "native_artifact_root", allow_empty=False)
+        proposal_raw = round_request["proposal_raw"]
+        if not isinstance(proposal_raw, (bytes, bytearray)):
+            raise TypeError("proposal_raw must be bytes")
+        policy = round_request.get("policy")
+        required_paths = tuple(round_request.get("required_paths") or ())
+    except HostContextError as exc:
+        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, exc.findings)
+    except RepairContractError as exc:
+        return refuse(PHASE_PRECHECK, STATUS_UNKNOWN,
+                      [_finding(REASON_INPUT_DRIFT, str(exc))])
+
+    receipt["txn_id"] = txn_id
+
+    # ---- PRECHECK ----------------------------------------------------------
+    # BEFORE is read from the stage target itself, not from a caller-supplied
+    # blob, so DELTA_CHECK later compares the two ends of one real file.
+    #
+    # Containment is enforced HERE, before the read, and not left to the adapter:
+    # the adapter's _resolve_within only guards ITS read, which happens later.
+    # A stage_target of "../../elsewhere" must not let this function read outside
+    # the stage it was told to touch.
+    try:
+        resolved_root = Path(stage_root).resolve()
+        target_path = (resolved_root / stage_target).resolve()
+        target_path.relative_to(resolved_root)
+    except (OSError, ValueError) as exc:
+        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
+            REASON_INPUT_DRIFT,
+            "the stage target escapes the stage root and will not be read: %s" % exc)])
+    try:
+        before_raw = target_path.read_bytes()
+        before_sha = hash_bytes(before_raw)
+    except OSError as exc:
+        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
+            REASON_INPUT_DRIFT,
+            "the stage target could not be read for observation: %s" % exc)])
+    # Recorded now, not only on the success path, so a refusal at a later phase
+    # still identifies exactly which bytes this round was reasoning about.
+    receipt["before_source_sha256"] = before_sha
+
+    try:
+        before_observation = _c2_observe_source(before_raw)
+    except Exception as exc:
+        return refuse(PHASE_PRECHECK, STATUS_UNKNOWN, [_finding(
+            REASON_INPUT_DRIFT, "the before observation could not be established: %s" % exc)])
+    if not before_observation["coverage"]["complete"]:
+        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
+            REASON_COVERAGE_INCOMPLETE,
+            "the before observation is not complete, so no delta can be trusted")])
+
+    try:
+        proposal = parse_proposal(bytes(proposal_raw))
+        symbol_digest = host_context["candidate_symbol_digest"]
+    except KeyError:
+        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
+            REASON_INPUT_DRIFT, "the host context carries no candidate_symbol_digest")])
+    except RepairContractError as exc:
+        return refuse(PHASE_PRECHECK, STATUS_UNKNOWN,
+                      [_finding(REASON_INPUT_DRIFT, str(exc))])
+
+    native_before = {"status": "PASS", "observation": before_observation,
+                     "tool": {"symbol_digest": symbol_digest}}
+    bound = bind_policy(host_context, proposal, native_before, policy=policy,
+                        required_paths=required_paths)
+    if bound["status"] == STATUS_BLOCKED:
+        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, bound["reasons"])
+    reach(PHASE_PRECHECK)
+    receipt.update(
+        rule_id=bound["rule_id"],
+        route=bound["route"],
+        policy_sha256=bound["policy_sha256"],
+        bound_policy_sha256=bound["bound_policy_sha256"],
+        patch_sha256=bound["patch_sha256"],
+        authorized_delta_sha256=bound["authorized_delta_sha256"],
+    )
+
+    # ---- STAGE_APPLY -------------------------------------------------------
+    from tools import akcli_adapter  # lazy: keeps akcli off the import path
+
+    try:
+        staged = akcli_adapter.apply_stage({
+            "host_patch": bound["host_patch"],
+            "txn_id": txn_id,
+            "stage_root": stage_root,
+            "stage_target": stage_target,
+            "oplist_path": oplist_path,
+            "native_artifact_root": artifact_root,
+        })
+    except Exception as exc:
+        return refuse(PHASE_STAGE_APPLY, STATUS_TOOL_ERROR, [_finding(
+            REASON_TOOL_UNAVAILABLE, "the pinned writer could not be run: %s" % exc)])
+
+    tool = staged.get("tool") or {}
+    # Property 3: APPLIED_TO_STAGE alone is NOT success.  exit_code 0 with
+    # tool_applied False, or changed False, means the writer did not write.
+    applied = _stage_write_succeeded(staged)
+    receipt["stage"] = {
+        "status": staged.get("status"),
+        "tool_applied": tool.get("tool_applied"),
+        "exit_code": tool.get("exit_code"),
+        "changed": staged.get("changed"),
+        "before_source_sha256": staged.get("before_source_sha256"),
+        "after_source_sha256": staged.get("after_source_sha256"),
+        "reasons": staged.get("reasons") or [],
+    }
+    if not applied:
+        status = _STAGE_REFUSAL_STATUS.get(staged.get("status"), STATUS_UNKNOWN)
+        findings = list(staged.get("reasons") or []) or [_finding(
+            REASON_TOOL_PROTOCOL_ERROR,
+            "the writer did not apply the authorized op-list "
+            "(status=%r tool_applied=%r exit_code=%r changed=%r)"
+            % (staged.get("status"), tool.get("tool_applied"),
+               tool.get("exit_code"), staged.get("changed")))]
+        return refuse(PHASE_STAGE_APPLY, status, findings)
+    reach(PHASE_STAGE_APPLY)
+
+    # ---- DELTA_CHECK -------------------------------------------------------
+    # AFTER is read back from the bytes the writer produced.  It is never
+    # hand-constructed and never taken from the writer's own claim.
+    try:
+        after_raw = target_path.read_bytes()
+        after_observation = _c2_observe_source(after_raw)
+    except Exception as exc:
+        return refuse(PHASE_DELTA_CHECK, STATUS_UNKNOWN, [_finding(
+            REASON_INPUT_DRIFT, "the after state could not be observed: %s" % exc)])
+
+    verdict = compare_delta(before_observation, after_observation,
+                            bound["host_patch"]["bound_policy"])
+    receipt["verification"] = {
+        "status": verdict["status"],
+        "authorized_delta_sha256": verdict["authorized_delta_sha256"],
+        "actual_delta_sha256": verdict["actual_delta_sha256"],
+        "missing": verdict["missing"],
+        "unexpected": verdict["unexpected"],
+        "coverage_complete": verdict["coverage_complete"],
+        "reasons": verdict["reasons"],
+    }
+    receipt["after_source_sha256"] = hash_bytes(after_raw)
+
+    if verdict["status"] == "UNKNOWN":
+        return refuse(PHASE_DELTA_CHECK, STATUS_UNKNOWN, verdict["reasons"])
+    if verdict["status"] != "PASS":
+        # The write is real but the stage is not the authorized stage, so it is
+        # discarded rather than promoted.  cause_status is BLOCKED because what
+        # verification found violated is the authorization itself; that pairing
+        # is what projects this round as REJECTED rather than as unavailable.
+        return refuse(PHASE_DELTA_CHECK, STATUS_ROLLBACK, verdict["reasons"])
+    reach(PHASE_DELTA_CHECK)
+
+    # Verified at stage, not committed: no terminal status exists yet.
+    receipt.update(status=None, phase=PHASE_DELTA_CHECK, cause_status=None,
+                   terminal=False, reasons=[])
+    receipt["pending_phases"] = list(ROUND_PENDING_PHASES)
+    receipt["feedback"] = public_feedback({
+        "context_id": host_context["context_id"],
+        "status": None,
+        "cause_status": None,
+    })
     return receipt

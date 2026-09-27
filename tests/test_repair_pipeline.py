@@ -14,6 +14,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tests.test_host_toolchain import base_binding
 from tests.test_repair_verification import circuit, mini
@@ -2033,6 +2034,422 @@ class BindPolicyOrchestrationTests(unittest.TestCase):
         for forbidden in ("apply_stage", "verify_stage", "commit", "recheck_reports",
                           "write_bytes", "shutil"):
             self.assertNotIn(forbidden, code)
+
+
+class RunRoundTests(unittest.TestCase):
+    """C5 run_round MVP: one round controller, composition only.
+
+    Driven by the REAL frozen DC-04 native fixture, because an invented rule id
+    would never be selected and the composition would not be exercised.
+
+    The central property under test is FAIL-CLOSED.  run_round has no seam for
+    the writer: it always calls the real akcli_adapter.apply_stage.  On an
+    interpreter without the pinned akcli that means the round provably cannot
+    report a write, so most of these tests assert that it does not -- the happy
+    path needs the pinned toolchain and is opt-in (AEDL_PR1_NATIVE=1).
+    """
+
+    FIXTURES = Path(__file__).resolve().parent / "fixtures" / "repair_pr1" / "native"
+    CASE = "DC-04"
+    RULE_ID = "DC-04"
+    STAGE_TARGET = "fault.kicad_sch"
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.cand = self.root / "cand"
+        self.design = self.cand / "design"
+        self.design.mkdir(parents=True)
+        self.raw = (self.FIXTURES / self.CASE / self.STAGE_TARGET).read_bytes()
+        (self.design / self.STAGE_TARGET).write_bytes(self.raw)
+        self.ops = json.loads((self.FIXTURES / self.CASE / "repair_ops.json")
+                              .read_text(encoding="utf-8"))["ops"]
+        self.oplist = self.design / "repair_ops.json"
+        self.oplist.write_text(json.dumps(
+            {"protocol_version": 2, "target_format": "kicad", "ops": self.ops},
+            ensure_ascii=False, indent=2), encoding="utf-8")
+        self.artifacts = self.root / "artifacts"
+        self.artifacts.mkdir(parents=True)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _before_sha(self):
+        return pipeline.hash_bytes(self.raw)
+
+    def _proposal_raw(self, **overrides):
+        document = {
+            "schema_version": 1, "context_id": CONTEXT,
+            "target": self.STAGE_TARGET, "base_source_sha256": self._before_sha(),
+            "decision": pipeline.DECISION_PATCH,
+            "diagnosis": [{"rule_id": self.RULE_ID, "observed": "R9 is absent",
+                           "fact_ids": ["F1"], "requirement_level": "MANDATORY",
+                           "rationale": "observed against the frozen fixture"}],
+            "oplist": {"protocol_version": 2, "target_format": "kicad",
+                       "ops": self.ops},
+        }
+        document.update(overrides)
+        return json.dumps(document, ensure_ascii=False).encode("utf-8")
+
+    def _context(self, rule_id=None, **overrides):
+        return pipeline.validate_host_context(host_context(
+            design_root=str(self.cand),
+            base_source_sha256=self._before_sha(),
+            target=self.STAGE_TARGET,
+            authority=authority(approvals=[{
+                "policy_file_sha256": policy_sha(),
+                "rule_id": rule_id or self.RULE_ID, "run_id": RUN,
+                "candidate_id": CAND, "paths": [str(self.cand)]}]),
+            **overrides))
+
+    def _request(self, **overrides):
+        request = {
+            "host_context": self._context(),
+            "proposal_raw": self._proposal_raw(),
+            "txn_id": "txn-run-round-1",
+            "stage_root": str(self.design),
+            "stage_target": self.STAGE_TARGET,
+            "oplist_path": str(self.oplist),
+            "native_artifact_root": str(self.artifacts),
+        }
+        request.update(overrides)
+        return request
+
+    def _run(self, **overrides):
+        return pipeline.run_round(self._request(**overrides))
+
+    @staticmethod
+    def _codes(receipt):
+        return [getattr(reason, "code", reason) for reason in receipt["reasons"]]
+
+    # --- the request is a closed set ------------------------------------
+    def test_the_request_must_be_a_mapping(self):
+        with self.assertRaises(TypeError):
+            pipeline.run_round("not a mapping")
+
+    def test_an_unknown_request_field_is_rejected(self):
+        request = self._request()
+        request["surprise"] = 1
+        with self.assertRaises(pipeline.ProposalInvalidError) as caught:
+            pipeline.run_round(request)
+        findings = caught.exception.findings
+        self.assertEqual([item.code for item in findings],
+                         [pipeline.REASON_SCHEMA_INVALID])
+        self.assertIn("surprise", findings[0].detail)
+
+    def test_a_missing_required_field_is_rejected(self):
+        request = self._request()
+        del request["oplist_path"]
+        with self.assertRaises(pipeline.ProposalInvalidError) as caught:
+            pipeline.run_round(request)
+        self.assertEqual([item.code for item in caught.exception.findings],
+                         [pipeline.REASON_SCHEMA_INVALID])
+
+    def test_the_proposal_must_arrive_as_raw_bytes(self):
+        with self.assertRaises(TypeError):
+            self._run(proposal_raw=json.loads(self._proposal_raw().decode("utf-8")))
+
+    def test_run_round_parses_the_proposal_itself(self):
+        """A caller cannot bypass parse_proposal by pre-parsing.
+
+        The document below is structurally invalid -- it carries no oplist at
+        all.  run_round must refuse it in its own parse, at PRECHECK, and never
+        reach the writer.  If a caller could hand in a pre-parsed Proposal and
+        skip this, an unvalidated proposal would reach apply_stage.
+        """
+        receipt = self._run(proposal_raw=json.dumps({
+            "schema_version": 1, "context_id": CONTEXT,
+            "target": self.STAGE_TARGET, "base_source_sha256": self._before_sha(),
+            "decision": pipeline.DECISION_PATCH,
+            "diagnosis": [{"rule_id": self.RULE_ID}],
+        }, ensure_ascii=False).encode("utf-8"))
+        self.assertTrue(receipt["terminal"])
+        self.assertEqual(receipt["status"], pipeline.STATUS_UNKNOWN)
+        self.assertEqual(receipt["phase"], pipeline.PHASE_PRECHECK)
+        # PRECHECK is recorded as refused; no phase was ever REACHED, and the
+        # writer phases never appear at all
+        self.assertEqual(receipt["phases"],
+                         [{"phase": pipeline.PHASE_PRECHECK, "status": "refused"}])
+        self.assertEqual([row["phase"] for row in receipt["phases"] if
+                          row["status"] == "reached"], [])
+        self.assertIn(pipeline.REASON_INPUT_DRIFT, self._codes(receipt))
+        self.assertEqual((self.design / self.STAGE_TARGET).read_bytes(), self.raw)
+
+    # --- containment ----------------------------------------------------
+    def test_a_stage_target_that_escapes_the_stage_root_is_never_read(self):
+        """The escape target is placed exactly where "../" would reach it.
+
+        The stage root is <cand>/design, so a stage_target of
+        "../outside.kicad_sch" resolves to <cand>/outside.kicad_sch.  That file
+        EXISTS here on purpose: without the containment check run_round would
+        read it and sail on, so this test fails if containment is removed rather
+        than passing because the path happened to be missing.
+        """
+        outside = self.cand / "outside.kicad_sch"
+        outside.write_bytes(b"secret")
+        receipt = self._run(stage_target="../outside.kicad_sch")
+        self.assertEqual(receipt["status"], pipeline.STATUS_BLOCKED)
+        self.assertTrue(receipt["terminal"])
+        self.assertEqual(receipt["phase"], pipeline.PHASE_PRECHECK)
+        self.assertIn(pipeline.REASON_INPUT_DRIFT, self._codes(receipt))
+        # the file is still there, and the round reported no before-digest for it
+        self.assertEqual(outside.read_bytes(), b"secret")
+        self.assertIsNone(receipt["before_source_sha256"])
+
+    def test_a_missing_stage_target_is_blocked_before_any_writer_runs(self):
+        receipt = self._run(stage_target="absent.kicad_sch")
+        self.assertEqual(receipt["status"], pipeline.STATUS_BLOCKED)
+        self.assertEqual(receipt["phase"], pipeline.PHASE_PRECHECK)
+        self.assertEqual(receipt["phases"][-1]["status"], "refused")
+
+    # --- precheck refusals ----------------------------------------------
+    def test_a_rule_the_host_did_not_approve_is_refused(self):
+        receipt = self._run(host_context=self._context(rule_id="E1"))
+        self.assertEqual(receipt["status"], pipeline.STATUS_BLOCKED)
+        self.assertEqual(receipt["phase"], pipeline.PHASE_PRECHECK)
+        self.assertIn(pipeline.REASON_AUTH_DENIED, self._codes(receipt))
+        self.assertEqual(receipt["phases"][-1]["status"], "refused")
+
+    def test_a_refused_precheck_never_reaches_the_writer_phase(self):
+        receipt = self._run(host_context=self._context(rule_id="E1"))
+        reached = [row["phase"] for row in receipt["phases"]]
+        self.assertNotIn(pipeline.PHASE_STAGE_APPLY, reached)
+        self.assertNotIn(pipeline.PHASE_DELTA_CHECK, reached)
+
+    def test_the_before_observation_must_be_complete_or_the_round_blocks(self):
+        original = pipeline._c2_observe_source
+
+        def incomplete(raw):
+            observed = original(raw)
+            observed["coverage"] = dict(observed["coverage"], complete=False)
+            return observed
+
+        with mock.patch.object(pipeline, "_c2_observe_source", incomplete):
+            receipt = self._run()
+        self.assertEqual(receipt["status"], pipeline.STATUS_BLOCKED)
+        self.assertIn(pipeline.REASON_COVERAGE_INCOMPLETE, self._codes(receipt))
+
+    # --- the real DC-04 round on a host without the pinned writer -------
+    def test_the_real_dc04_round_binds_then_fails_closed_without_the_writer(self):
+        """PRECHECK must complete on the real fixture, then the write must fail.
+
+        This is the load-bearing test: it proves the controller reaches the
+        writer and then refuses, rather than reporting a write it cannot back.
+        """
+        receipt = self._run()
+        reached = [row["phase"] for row in receipt["phases"]]
+        self.assertIn(pipeline.PHASE_PRECHECK, reached)
+        self.assertEqual(receipt["rule_id"], self.RULE_ID)
+        self.assertEqual(len(receipt["bound_policy_sha256"]), 64)
+        self.assertEqual(receipt["before_source_sha256"], self._before_sha())
+        # whatever the writer did, the stage bytes are only changed by a real
+        # write, and this interpreter has no pinned akcli
+        self.assertEqual((self.design / self.STAGE_TARGET).read_bytes(), self.raw)
+        self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED)
+
+    def test_the_bound_authorized_delta_is_the_one_the_real_transaction_recorded(self):
+        """Cross-check against EVID-20260927-001.
+
+        The first real DC-04 transaction recorded authorized_delta_sha256
+        69877d3e9a4be9133f0c31684b35952a9f9745596974eb1f1237c6b437ebc681.  If
+        run_round's PRECHECK reproduces that digest from the frozen fixture
+        alone, it is binding the same expectation the recorded transaction bound.
+        """
+        receipt = self._run()
+        self.assertEqual(
+            receipt["authorized_delta_sha256"],
+            "69877d3e9a4be9133f0c31684b35952a9f9745596974eb1f1237c6b437ebc681")
+
+    def test_a_write_is_never_claimed_when_the_writer_did_not_apply(self):
+        receipt = self._run()
+        stage = receipt.get("stage") or {}
+        # the four-way conjunction is all-or-nothing; a refusal leaves no claim
+        self.assertNotEqual(stage.get("status"), "APPLIED_TO_STAGE")
+        self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED)
+        self.assertTrue(receipt["terminal"])
+        self.assertIn(receipt["status"],
+                      (pipeline.STATUS_TOOL_ERROR, pipeline.STATUS_BLOCKED,
+                       pipeline.STATUS_UNKNOWN))
+
+    def test_the_refusal_keeps_the_writer_own_reason_rather_than_a_generic_one(self):
+        receipt = self._run()
+        self.assertTrue(receipt["reasons"])
+        detail = " ".join(str(getattr(r, "detail", r)) for r in receipt["reasons"])
+        self.assertNotEqual(detail.strip(), "")
+
+    def test_a_refusal_is_always_terminal(self):
+        """Every refusal path must end the round, whatever the phase."""
+        cases = {
+            "unreadable stage target": {"stage_target": "absent.kicad_sch"},
+            "unapproved rule": {"host_context": self._context(rule_id="E1")},
+            "escaping stage target": {"stage_target": "../outside.kicad_sch"},
+            "no pinned writer": {},
+        }
+        for label, overrides in cases.items():
+            with self.subTest(case=label):
+                receipt = self._run(**overrides)
+                self.assertTrue(receipt["terminal"], label)
+                self.assertEqual(receipt["cause_status"], receipt["status"], label)
+                self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED)
+
+    # --- the success criterion, tested exhaustively ----------------------
+    # run_round has no seam for the writer, so the "did it really write?"
+    # criterion is a separate predicate and is pinned here directly.  Each of
+    # the four facts can be false while the others hold true, which is exactly
+    # how a fake write would otherwise be admitted.
+    def test_only_a_complete_stage_receipt_counts_as_a_write(self):
+        ok = {"status": "APPLIED_TO_STAGE", "changed": True,
+              "tool": {"tool_applied": True, "exit_code": 0}}
+        self.assertTrue(pipeline._stage_write_succeeded(ok))
+
+    def test_each_missing_fact_alone_defeats_the_success_criterion(self):
+        ok = {"status": "APPLIED_TO_STAGE", "changed": True,
+              "tool": {"tool_applied": True, "exit_code": 0}}
+        for field, value in (("status", "APPLIED"), ("status", None),
+                             ("changed", False), ("changed", None)):
+            with self.subTest(field=field, value=value):
+                broken = copy.deepcopy(ok)
+                broken[field] = value
+                self.assertFalse(pipeline._stage_write_succeeded(broken))
+        for field, value in (("tool_applied", False), ("tool_applied", None),
+                             ("exit_code", 1), ("exit_code", None),
+                             ("exit_code", "0")):
+            with self.subTest(field=field, value=value):
+                broken = copy.deepcopy(ok)
+                broken["tool"][field] = value
+                self.assertFalse(pipeline._stage_write_succeeded(broken))
+
+    def test_a_malformed_stage_receipt_is_never_a_write(self):
+        for candidate in (None, "APPLIED_TO_STAGE", [], {},
+                          {"status": "APPLIED_TO_STAGE"},
+                          {"status": "APPLIED_TO_STAGE", "tool": None,
+                           "changed": True}):
+            with self.subTest(candidate=candidate):
+                self.assertFalse(pipeline._stage_write_succeeded(candidate))
+
+    def test_run_round_has_no_seam_for_the_writer(self):
+        """A fake write must be structurally impossible, not merely discouraged.
+
+        run_round's request carries no writer, receipt or override field, and its
+        body calls the real apply_stage with no injection point.
+        """
+        request_fields = set(pipeline.ROUND_FIELDS)
+        for forbidden in ("writer", "applier", "apply_stage", "receipt",
+                          "stage_receipt", "override", "mock", "fake"):
+            self.assertNotIn(forbidden, request_fields)
+        import inspect
+        import textwrap
+        body = textwrap.dedent(inspect.getsource(pipeline.run_round))
+        self.assertIn("akcli_adapter.apply_stage", body)
+        for forbidden in ("writer=", "applier=", "override=", "mock"):
+            self.assertNotIn(forbidden, body)
+
+    # --- properties that must hold structurally -------------------------
+    def test_compare_delta_is_the_only_acceptance_entry(self):
+        """run_round must not re-derive the delta by hand.
+
+        An earlier harness compared observation_delta digests itself and reported
+        a FALSE "identity delta FAIL"; the capability it wanted already lived in
+        C2 behind compare_delta.  This guard stops that regression returning.
+        """
+        import ast
+        import inspect
+        import textwrap
+
+        tree = ast.parse(textwrap.dedent(inspect.getsource(pipeline.run_round)))
+        called = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                if isinstance(node.func, ast.Attribute):
+                    called.add(node.func.attr)
+                elif isinstance(node.func, ast.Name):
+                    called.add(node.func.id)
+        self.assertIn("compare_delta", called)
+        self.assertNotIn("observation_delta", called)
+
+    def test_the_round_never_claims_committed(self):
+        """COMMITTED belongs to the unimplemented commit phase.
+
+        The behavioural guarantee is asserted in the fail-closed tests above; this
+        pins the structural half: the token is never written into a receipt.
+        """
+        import inspect
+        import textwrap
+
+        body = textwrap.dedent(inspect.getsource(pipeline.run_round))
+        self.assertNotIn("status=STATUS_COMMITTED", body)
+        self.assertNotIn('"status": STATUS_COMMITTED', body)
+        self.assertNotIn("STATUS_COMMITTED,", body)
+        self.assertNotIn("STATUS_COMMITTED}", body)
+
+    def test_the_driven_phases_are_exactly_three_and_commit_is_not_one(self):
+        self.assertEqual(pipeline.ROUND_PHASES,
+                         (pipeline.PHASE_PRECHECK, pipeline.PHASE_STAGE_APPLY,
+                          pipeline.PHASE_DELTA_CHECK))
+        self.assertNotIn(pipeline.PHASE_COMMIT, pipeline.ROUND_PHASES)
+        self.assertEqual(pipeline.ROUND_PENDING_PHASES,
+                         (pipeline.PHASE_KICAD_VERIFY, pipeline.PHASE_COMMIT))
+
+    def test_a_non_committed_round_projects_as_execution_unavailable(self):
+        """Intended MVP behaviour, asserted rather than tolerated.
+
+        A round that applied and verified has no terminal status because the
+        commit phase is unimplemented, so the public outcome is genuinely not
+        established.  Claiming APPLIED_TO_CANDIDATE here would be a lie.
+        """
+        feedback = pipeline.public_feedback({
+            "context_id": CONTEXT, "status": None, "cause_status": None})
+        self.assertEqual(feedback["proposal_outcome"],
+                         pipeline.OUTCOME_UNAVAILABLE)
+        self.assertEqual(feedback["reason_code"], "EXECUTION_UNAVAILABLE")
+
+    def test_public_feedback_of_this_round_would_be_four_fields_only(self):
+        feedback = pipeline.public_feedback({
+            "context_id": CONTEXT, "status": None, "cause_status": None})
+        self.assertEqual(tuple(feedback), pipeline.PUBLIC_FEEDBACK_FIELDS)
+
+    # --- the opt-in real write ------------------------------------------
+    def test_the_real_pinned_writer_completes_the_round(self):
+        """Opt-in: the whole point of the MVP, so it is not left unproven.
+
+        Requires AEDL_PR1_NATIVE=1 and AEDL_AKCLI_PYTHON pointing at the pinned
+        3.11 interpreter that has akcli-kicad 0.21.0 installed, plus
+        AEDL_RUN_ROUND_STAGE_ROOT pointing at a prepared real stage directory.
+        Without those this is NOT_RUN, never silently passing.
+        """
+        if os.environ.get("AEDL_PR1_NATIVE") != "1":
+            self.skipTest("native round is not opted in (AEDL_PR1_NATIVE=1)")
+        stage_root = os.environ.get("AEDL_RUN_ROUND_STAGE_ROOT")
+        python = os.environ.get("AEDL_AKCLI_PYTHON")
+        if not stage_root or not python or not os.path.isfile(python):
+            self.fail("AEDL_PR1_NATIVE=1 requires AEDL_RUN_ROUND_STAGE_ROOT and "
+                      "AEDL_AKCLI_PYTHON for the pinned writer")
+        binding = json.loads(os.environ["AEDL_RUN_ROUND_BINDING"])
+        context = pipeline.validate_host_context(host_context(
+            design_root=os.path.dirname(stage_root.rstrip("/\\")),
+            base_source_sha256=self._before_sha(),
+            target=self.STAGE_TARGET,
+            toolchain_binding=binding,
+            authority=authority(approvals=[{
+                "policy_file_sha256": policy_sha(), "rule_id": self.RULE_ID,
+                "run_id": RUN, "candidate_id": CAND,
+                "paths": [os.path.dirname(stage_root.rstrip("/\\"))]}]),
+        ))
+        receipt = pipeline.run_round({
+            "host_context": context, "proposal_raw": self._proposal_raw(),
+            "txn_id": "txn-run-round-native", "stage_root": stage_root,
+            "stage_target": self.STAGE_TARGET,
+            "oplist_path": os.path.join(stage_root, "repair_ops.json"),
+            "native_artifact_root": self.artifacts,
+        })
+        self.assertEqual(receipt["verification"]["status"], "PASS")
+        self.assertEqual(receipt["verification"]["missing"], [])
+        self.assertEqual(receipt["verification"]["unexpected"], [])
+        # a verified round is still not a committed round
+        self.assertIsNone(receipt["status"])
+        self.assertFalse(receipt["terminal"])
+        self.assertEqual(receipt["pending_phases"],
+                         list(pipeline.ROUND_PENDING_PHASES))
 
 
 if __name__ == "__main__":
