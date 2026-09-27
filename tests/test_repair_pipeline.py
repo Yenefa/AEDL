@@ -4715,6 +4715,71 @@ class CommitReceiptTests(unittest.TestCase):
             self.assertIn("rollback", receipt)
             self.assertIn("commit_predicate", receipt)
 
+    def test_a_live_design_that_differs_from_the_snapshot_fails_the_conjunct(self):
+        """Contract 344, with a genuine MISMATCH rather than an exception.
+
+        The exception path is covered elsewhere. This is the case the conjunct
+        actually exists for: the manifest comparison completes and the two
+        documents disagree -- a human or another process edited the candidate
+        between SNAPSHOT and COMMIT.
+
+        Without this, `live_equals_snapshot = True` hard-coded survives,
+        because the only other test asserts the conjunct is NOT in the
+        unsatisfied list, which holds whether the comparison is real or faked.
+        """
+        real_build = pipeline.build_file_manifest
+        from tests.test_repair_pipeline import RunRoundTests
+
+        def tamper(root, target):
+            manifest = real_build(root, target)
+            if str(root).rstrip("\\/").endswith("cand\\design"):
+                # a valid manifest that simply does not describe what the
+                # snapshot recorded
+                rows = [dict(row) for row in manifest["files"]]
+                for row in rows:
+                    if row["path"] == RunRoundTests.STAGE_TARGET:
+                        row["sha256"] = "e" * 64
+                return {"version": manifest["version"], "files": rows}
+            return manifest
+
+        with mock.patch.object(pipeline, "build_file_manifest", tamper):
+            receipt = self._pass_receipt()
+
+        self.assertIsNotNone(receipt["commit_predicate"],
+                             "the round stopped before COMMIT")
+        self.assertIn("live_design_still_equals_snapshot",
+                      receipt["commit_predicate"]["unsatisfied_conjuncts"])
+        self.assertEqual(receipt["rollback"]["status"], "UNKNOWN",
+                         "a mismatched live design cannot be VERIFIED")
+        self.assertIsNone(receipt["rollback"]["byte_equal"])
+
+    def test_stage_bytes_that_moved_after_the_verifier_fail_the_conjunct(self):
+        """Contract 343: after the verifier returned, recompute the stage hashes.
+
+        The lever is real rather than contrived: the verifier request carries
+        `stage_root`, so the stub can modify the stage after the writer ran and
+        after the verifier read it. That is exactly the drift 343 guards
+        against, and it is why the stage is re-measured at COMMIT instead of the
+        receipt's own `after_source_sha256` being trusted.
+        """
+        from tests.test_repair_pipeline import RunRoundTests
+        stage = self.root / "stage" / RunRoundTests.STAGE_TARGET
+
+        def verifier(request):
+            # touch the stage, as a concurrent or misbehaving writer would
+            stage.write_bytes(stage.read_bytes() + b"\n; touched after verify\n")
+            return self._thin("PASS")
+
+        receipt = self._run_with(verify_stage=verifier)
+
+        self.assertIsNotNone(receipt["commit_predicate"],
+                             "the round stopped before COMMIT")
+        self.assertIn("recomputed_hashes_match",
+                      receipt["commit_predicate"]["unsatisfied_conjuncts"],
+                      "a stage that moved after the verifier was accepted")
+        self.assertEqual(receipt["commit"],
+                         {"attempted": False, "replaced": False, "verified": False})
+
     def test_a_refusal_before_commit_reports_nothing_attempted(self):
         """Contract 388: a failure before any write is BLOCKED, not a rollback."""
         request = self._request()
