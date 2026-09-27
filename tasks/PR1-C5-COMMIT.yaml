@@ -5,79 +5,107 @@ base:
   sha: 3e5cd88
 
 goal: |
-  Implement the COMMIT phase, and only the part of it that can be made safe
-  without inventing a recovery subsystem.
+  Land the two parts of COMMIT that are safe WITHOUT the writer, and declare the
+  rest as not implemented rather than shipping half a commit.
 
-  Contract line 374, verbatim, in order:
+  Contract 374's COMMIT row has two halves, and they are not separable in the way
+  the first draft of this envelope assumed:
 
-    "再次检查 commit 谓词；先持久化 COMMIT_INTENT 与 verified staged hash；
-     从 stage 读取固定 bytes，hash 对齐；同一 design 目录写临时文件、
-     flush/fsync、原子 replace；逐字节和 hash 核验最终 design"
+    WRITING (deliberately NOT here)
+      "先持久化 COMMIT_INTENT 与 verified staged hash；从 stage 读取固定 bytes，
+       hash 对齐；同一 design 目录写临时文件、flush/fsync、原子 replace；逐字节
+       和 hash 核验最终 design ... 只有已验证 bytes、最终核验与 terminal
+       journal 均完成才 COMMITTED"
 
-    "权限/输入/stage/report 漂移 -> 不 replace 并 ROLLBACK；
-     replace/post-read/journal 错误 -> 依恢复规则处理。
-     禁止为了提交重跑 op-list。
-     只有已验证 bytes、最终核验与 terminal journal 均完成才 COMMITTED。"
+    PREDICATE (here)
+      Contract 335-347, the nine-way conjunction, which line 374's first act
+      requires and which line 349 makes non-negotiable: "这是合取，没有'置信度高'
+      '仅 warning''多数 checks PASS'的例外."
 
-  So COMMIT is: re-check the predicate, persist INTENT, read the stage bytes,
-  atomically replace the candidate's design file, verify the result byte for
-  byte, write a terminal record, and only then say COMMITTED.
+  The writing half cannot ship alone. Contract 387 requires a RESTORE for a
+  transaction that has a COMMIT_INTENT and no terminal record -- "无 COMMITTED
+  terminal record 的事务，即使有 COMMIT_INTENT 且 live=after，也按第2条恢复；
+  不猜测这次已经成功" -- and 385 makes that restore a write from the snapshot.
+  With no restore, a single I/O fault during the replace leaves a candidate that
+  needs a human forever, in order to satisfy a predicate that could not be
+  satisfied anyway: contract 346 requires the single-writer lock, no lock
+  primitive exists anywhere in this repository, and Owner ruled 2026-09-28 that
+  the lock is its own PR.
 
-  The predicate is contract 335-347, a NINE-way conjunction. It is not a
-  formality: line 349 says "这是合取，没有'置信度高''仅 warning''多数 checks
-  PASS'的例外."
+  So this increment lands:
 
-  What exists today, measured: `os.replace`, `os.fsync`, `O_EXCL` and any
-  notion of a journal appear ZERO times in tools/repair_pipeline.py,
-  tools/host_toolchain.py and gates/repair_verification.py. `lock_path` is
-  validated as a path field and nothing acquires it. `_round_receipt` has no
-  `commit` key. So this is not a wiring task; it is three new primitives
-  (durable journal, atomic design write, commit predicate) plus the phase.
+    * `_commit_predicate` -- the nine conjuncts as a PURE function, so each is
+      testable in isolation and none can be quietly dropped or aliased;
+    * the durable journal READ path, wired into PRECHECK per contract 369
+      ("先处理未完成事务"), so a stale COMMIT_INTENT fails CLOSED instead of
+      being ignored;
+    * the receipt fields of contract 404/405, with values that mean "nothing was
+      attempted";
+    * a structural declaration of what is missing, as a receipt FIELD rather than
+      as a comment.
+
+  The round is therefore still unpromoted, exactly as before, and no existing
+  test needed to be weakened -- which is the honest signature of an increment
+  that adds a gate without granting a promotion.
 
 scope: |
   In scope:
   - tools/repair_pipeline.py:
-      * `_write_journal_record` -- an append-only, fsync'd record of
-        COMMIT_INTENT and TERMINAL. Contract 390: "事务锁、不可变快照、
-        COMMIT_INTENT、terminal record 都必须在对应副作用前/后按规定持久化."
-      * `_atomic_replace_file` -- temp in the SAME directory, write, flush,
-        fsync, os.replace, then fsync the directory. Contract 374 and 385 both
-        require exactly this sequence; the contract's own recovery write uses
-        it too.
-      * `_commit_predicate` -- the nine conjuncts of contract 337-347, as a
-        PURE function returning (ok, reasons) so it is testable without running
-        a transaction, following the `_delta_refusal` / `_thin_verification_
-        refusal` precedent already in this file.
-      * `run_round`'s COMMIT phase, and `commit:{attempted, replaced, verified}`
-        in the receipt per contract 404.
-      * PRECHECK refuses when a previous transaction left a COMMIT_INTENT with
-        no terminal record. This is the fail-closed half of recovery rule 4 and
-        it is what makes shipping COMMIT without a restore defensible.
-  - tests/test_repair_pipeline.py: the predicate table, the atomic write under
-    fault injection, the journal, the COMMIT phase, and deliberate rewrites of
-    the existing tests that assert COMMITTED is impossible.
+      * `_commit_predicate` -- contract 337-347 as a pure function returning
+        (ok, reasons, unsatisfied_conjuncts). No filesystem, no clock, no
+        mutation; everything it needs is an argument. That is what makes each
+        conjunct drivable to failure with the other eight satisfied, which is the
+        only way to know all nine are checked.
+      * `COMMIT_CONJUNCTS` and `COMMIT_ROUTES`, so a reason names WHICH conjunct
+        failed and the route set is not restated from memory. The routes are
+        STRICT and CONSTRAINED_EXCEPTION, read from the policy document; the
+        first draft listed a route that exists nowhere, so three rules could
+        never have committed.
+      * `_journal_file`, `_read_journal`, `_unresolved_intents` -- the durable
+        journal at `<repair_root>/journal.jsonl`, read WITHOUT skipping bad
+        lines. Contract 387 forbids a history reader that skips unparseable
+        lines from being the sole basis of recovery, because a truncated record
+        then reads as "no record" and the round concludes it never committed. A
+        torn FINAL line is the normal artefact of a crash mid-append, so it is
+        identified as such and fails closed.
+      * `run_round`'s COMMIT phase: evaluate the predicate, publish
+        `commit_predicate`, publish `rollback` whose `VERIFIED` is EARNED by the
+        byte/manifest comparison (contract 384) rather than asserted.
+      * PRECHECK: refuse when a previous transaction left an unresolved
+        COMMIT_INTENT, or when the journal holds a record this reader cannot
+        trust. It REFUSES rather than cleaning up, because rule 3 (386) requires
+        that a live design which is neither the recorded before nor the after
+        bytes be QUARANTINED -- "隔离现场，不覆盖可能的人类/其他进程修改" -- not
+        overwritten by a repair round. Guessing could destroy a human's edit.
+  - tests/test_repair_pipeline.py: `CommitPredicateTests`,
+    `CommitJournalTests`, `CommitReceiptTests`.
   - tasks/PR1-C5-COMMIT.yaml
-  - docs/compliance/ai-/**, docs/compliance/AI_USAGE_LOG.md, and
-    docs/compliance/DECISIONS.md ONLY if a decision is actually made.
+  - docs/compliance/ai-usage/**, docs/compliance/AI_USAGE_LOG.md
 
   Out of scope, explicitly:
-  - **No restore.** Contract 385's recovery write and rules 1/3/5 are NOT
-    implemented. A transaction whose INTENT has no terminal record is refused
-    at PRECHECK with BLOCKED and a reason naming the exact journal path a human
-    must read. This is reported as NOT implemented in the PR, in the AI usage
-    entry, and in the receipt's own `rollback` field. Claiming a restore works
-    would be the exact failure mode this repository keeps hitting.
-  - **No single-writer lock.** Contract 346 makes "单写者锁仍由本事务持有" a
-    conjunct of the predicate. No lock primitive exists anywhere in the repo.
-    Implementing one is its own change. Until then the conjunct is reported as
-    NOT SATISFIED and the round refuses, rather than being quietly dropped from
-    the conjunction. `NOT_FOUND`, deferred to its own PR.
+  - **No COMMIT_INTENT write, no atomic design replace, no terminal record.**
+    Deferred to the PR that brings the single-writer lock AND the restore
+    together. See `not_implemented_and_declared`.
+  - **No restore** (contract 385, rules 1/2/3/5). A stale INTENT refuses.
+  - **No single-writer lock** (contract 346, 369, 376). `lock_path` is validated
+    as a path field and nothing has ever acquired it; `msvcrt|flock|LockFileEx|
+    filelock|portalocker` is `NOT_FOUND` in AEDL code. The conjunct is reported
+    unsatisfied, not assumed. Owner ruled 2026-09-28: separate PR.
+  - **No one-write-call count** (contract 339). `apply_stage`'s receipt carries
+    no call counter, so the conjunct is not checkable. Reported unsatisfied
+    rather than reduced to three of its four halves -- 349 forbids treating
+    UNKNOWN as satisfied. Emitting the counter is a change to
+    `tools/akcli_adapter.py`, which is forbidden here.
+  - **No NO_CHANGE idempotent replay** (contract 392); the
+    `(run_id, candidate_id, patch_id)` key index is not built.
   - **No `CandidateWorkspace.candidate_hash` finalisation** (contract 414).
-  - **No NO_CHANGE idempotent replay** (contract 392). The predicate machinery
-    it needs is the same; the key index `(run_id,candidate_id,patch_id)` is not
-    built. Deferred.
   - **No ERC / DRC / render / evidence work.** `docs/evidence/**` remains frozen
     (PR #94 review). ADR-014's `ignored_checks` constraint still binds PR-2.
+  - **No contract 378 per-component re-check at COMMIT** (`resolve_within(...,
+    strict=True)` on the candidate root, per-path-component symlink/reparse
+    checks, file link count). `build_file_manifest` checks per-file
+    `is_symlink()` and containment but not `st_nlink`, and the root is not
+    re-resolved. Recorded as a known gap, not silently skipped.
   - No change to `gates/**`, `sandbox_runtime/**`, `src/**`,
     `tools/akcli_adapter.py`, `tools/host_toolchain.py`, `tools/board_review.py`.
 
@@ -91,7 +119,6 @@ allowed_paths:
   - tools/repair_pipeline.py
   - tests/test_repair_pipeline.py
   - tasks/PR1-C5-COMMIT.yaml
-  - docs/compliance/DECISIONS.md
   - docs/compliance/ai-usage/**
   - docs/compliance/AI_USAGE_LOG.md
 
@@ -107,73 +134,104 @@ forbidden_paths:
   - tools/board_review.py
 
 acceptance: |
-  - `_commit_predicate` evaluates all nine conjuncts of contract 337-347 and
-    returns a REASON for each one that fails. A test drives each conjunct to
-    failure individually -- a predicate that only ever returns one reason is a
-    predicate that only ever checks one thing.
-  - The predicate is a pure function: no filesystem, no globals mutated, and
-    the same inputs give the same reasons. Tested by calling it directly.
-  - The lock conjunct (346) is evaluated and, with no lock primitive in the
-    repo, is reported as NOT SATISFIED. A test asserts the round refuses rather
-    than proceeding. Silently omitting a conjunct is the failure this test
-    exists to prevent.
-  - COMMIT_INTENT is persisted and fsync'd BEFORE the design is written, and
-    carries the verified staged hash. A fault-injection test kills the process
-    between INTENT and the replace and asserts the INTENT is on disk with the
-    right hash.
-  - The design write is temp-in-the-same-directory -> flush -> fsync ->
-    os.replace -> directory fsync. Tested by asserting no temp file survives a
-    successful write, and that a fault before the replace leaves the candidate
-    design byte-identical to its snapshot.
-  - After the replace, the final design is verified byte for byte AND by hash.
-    A test corrupts the bytes between replace and verify and asserts the round
-    refuses rather than reporting COMMITTED.
-  - The terminal record is written before COMMITTED is published. A test kills
-    the process after the replace and before the terminal record and asserts the
-    status is NOT COMMITTED.
-  - `commit:{attempted, replaced, verified}` is present in every receipt, with
-    the values reflecting what actually happened, not what was intended.
-  - COMMITTED is the only status that projects APPLIED_TO_CANDIDATE. The
-    existing test for this is extended to cover a real committed round rather
-    than only the mapping function.
-  - A round that is refused before COMMIT reports `commit.attempted == False`
-    and `rollback.status == "NOT_NEEDED"` (contract 388).
-  - PRECHECK refuses when a prior transaction left a COMMIT_INTENT with no
-    terminal record, and the reason names the journal path. This is contract
-    387's "不猜测这次已经成功" and is what makes the missing restore safe.
-  - Every existing test that asserted COMMITTED was structurally impossible is
-    deliberately rewritten -- deleted, inverted or narrowed -- with the reason
-    recorded in the commit message. Silently deleting a test is not acceptable.
-  - The full suite stays green, every new test is mutation-verified, and
+  - `_commit_predicate` evaluates all nine conjuncts of contract 337-347 and names
+    each one that fails. `test_every_conjunct_is_independently_observable` drives
+    each conjunct to failure with the other eight satisfied -- a predicate that
+    checks one thing twice under two names cannot produce that table. This
+    matters concretely: the first draft aliased conjuncts 5 and 6 to one check.
+  - The predicate is pure. Tested by calling it directly and asserting the same
+    inputs give the same answer twice.
+  - Conjunct 4 defers to the verifier rather than re-deriving line 333.
+    `gates/repair_verification.py:2006-2019` already evaluates the whole
+    invariant set and collapses it to `status`. A test feeds the predicate a thin
+    result in the REAL shape -- dict-valued `checks` and `parser_agreement`, and
+    `coverage` carrying `complete` -- because the first draft read all three as
+    strings and was therefore False for every genuine PASS. That was the third
+    instance of the PR #99 mistake: a parallel object instead of the repository's.
+  - The route set is read from `src/repair/topology_policy_v1.json` and compared
+    against `COMMIT_ROUTES`, so a test cannot pass by restating a wrong constant.
+  - The one-write-call conjunct is reported unsatisfied, and a test asserts the
+    conjunct still fails when `one_write_call` is absent from the stage receipt.
+  - A live design that DIFFERS from the round snapshot fails conjunct 344 -- with
+    a genuine manifest mismatch, not merely an exception. Without this,
+    hard-coding the comparison to True survives, because the only other test
+    asserts the conjunct is absent from the unsatisfied list.
+  - Stage bytes that move after the verifier returned fail conjunct 343. The
+    lever is real: the request carries `stage_root`, so the stub can modify the
+    stage exactly as a concurrent writer would.
+  - A torn final journal line is reported as a tear and fails closed. A reader
+    that skipped it would conclude the round never committed, which is the exact
+    inversion contract 387 forbids.
+  - A journal record missing a field is reported, not accepted. A corrupt interior
+    line is reported and distinguished from a torn final line.
+  - PRECHECK refuses when a previous transaction left an unresolved
+    COMMIT_INTENT, and the reason names both the transaction and the journal path
+    a human has to read. The test pins the journal path the round reads, so a
+    typo cannot make the refusal test pass vacuously -- an absent journal also
+    reports "no pending intents".
+  - PRECHECK refuses when the journal holds a record this reader cannot trust.
+  - `rollback.status == "VERIFIED"` is published ONLY alongside a real comparison
+    and `byte_equal is True`. An uncomparable or mismatched live design yields
+    `UNKNOWN` with `byte_equal is None`. Contract 384.
+  - `commit` keeps contract 404's closed shape: exactly `attempted`, `replaced`,
+    `verified`. The predicate verdict lives in `commit_predicate`.
+  - The round still cannot commit: `status is None`, `terminal is False`,
+    `pending_phases == ["COMMIT"]`, and the candidate design is byte-identical to
+    what the snapshot recorded.
+  - The absence of the writer is a receipt FIELD (`writer_available: False` plus
+    `not_implemented`), not a comment. The first draft's refusal text claimed
+    "the next round will refuse at PRECHECK" while nothing read the journal.
+  - `run_round` never raises on any thin verdict, for any of the five statuses.
+    The first draft had a NameError from an unbound name, a missing `hashlib`
+    import inside the commit path, and a keyword argument that does not exist --
+    all three escaping `run_round` instead of refusing.
+  - Every new test is mutation-verified. `mut_commit.py` applies 15 mutations,
+    each reintroducing one defect actually found in this increment, and all 15
+    must be detected.
+  - The full suite stays green with NO existing test weakened, and
     `py -3 -m tools.dev_gate --envelope tasks/PR1-C5-COMMIT.yaml` exits 0.
 
 not_implemented_and_declared:
-  # Recorded here so it cannot be quietly lost, and so the receipt and the PR
-  # can be checked against this list rather than against prose.
-  - "Contract 385's restore (recovery rules 1, 2, 3, 5): the actual write-back
-     from the snapshot. NOT implemented. A stale INTENT refuses at PRECHECK."
-  - "The single-writer lock (contract 346, 369, 376). No primitive exists in the
-     repo. NOT implemented; the conjunct is reported unsatisfied."
+  # Recorded here, in the receipt, and in the PR, so the claim can be checked
+  # against a list rather than against prose.
+  - "COMMIT_INTENT write, atomic design replace, terminal record (contract 374's
+     writing half). NOT implemented. They ship with the lock and the restore,
+     because a durable INTENT with no restore is strictly worse than no commit."
+  - "The restore of contract 385 and recovery rules 1/2/3/5. NOT implemented. A
+     stale INTENT refuses at PRECHECK with the journal path named."
+  - "The single-writer lock (contract 346, 369, 376). NOT implemented; no
+     primitive exists. The conjunct is reported unsatisfied. Owner's ruling
+     2026-09-28: separate PR."
+  - "The one-write-call count (contract 339). NOT implemented; `apply_stage`
+     records no counter, so the conjunct is reported unsatisfied."
   - "NO_CHANGE idempotent replay (contract 392). The key index is not built."
   - "Final candidate_hash + .actions.jsonl write (contract 414)."
+  - "Contract 378's per-component re-resolution and file link-count check at
+     COMMIT. `build_file_manifest` checks per-file is_symlink and containment but
+     not st_nlink, and the candidate root is not re-resolved with strict=True."
 
 design_frozen_by_owner:
   ruling_1: "关闭 PR #99 -- it implemented a parallel evidence path, not the contract's verifier"
   ruling_2: "不要把 PR #99 的工具身份逻辑移植进 fresh_export"
   ruling_3: "处理 ignored_checks -- `violations == []` is not evidence. Recorded as ADR-014."
   ruling_4: >-
+    2026-09-28, asked directly whether to implement the single-writer lock in
+    this increment: 「锁单独开一个 PR，本轮如实标记不可达」. The lock is its own PR;
+    this round marks the unreachability honestly.
+  ruling_5: >-
     2026-09-28: 「停止所有人工review纪律，全量推进我们的项目主线」. Merging is
     authorised for this run with the Owner's explicit acceptance that it may need
     reverting. This does NOT lower the bar on what the code must do: every
-    conjunct is either satisfied or reported unsatisfied. Nothing is omitted to
-    make a round succeed.
+    conjunct is either satisfied or reported unsatisfied, and nothing is omitted
+    to make a round succeed.
 
 change_budget:
-  expected_files: 5
+  expected_files: 4
   expected_modules: [tools, tests, tasks, docs]
   cross_module: false
-  contract_change: true         # a thin PASS now becomes a real promotion, and the
-                                # round can reach a terminal COMMITTED status
+  contract_change: false         # a new refusal at PRECHECK and a new receipt
+                                # field; the round's promotion power is UNCHANGED
+                                # and still absent
   evidence_semantics_change: false
 
 exceptions:
