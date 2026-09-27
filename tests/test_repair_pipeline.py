@@ -4645,6 +4645,279 @@ if __name__ == "__main__":
 
 
 
+class SingleWriterLockTests(unittest.TestCase):
+    """Contract 346 / 369 / 376. The mechanism is an INTERPRETATION -- see the
+    module comment above `_SingleWriterLock` -- and these are the tests that make
+    the interpretation falsifiable rather than merely plausible."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp(prefix="aedl-lock-"))
+        self.anchor = self.root / ".repair.lock"
+
+    def tearDown(self):
+        shutil.rmtree(str(self.root), ignore_errors=True)
+
+    def test_a_second_holder_is_refused_while_the_first_holds_it(self):
+        first = pipeline._SingleWriterLock(self.anchor)
+        self.assertTrue(first.acquire(), first.refusal)
+        self.addCleanup(first.release)
+        second = pipeline._SingleWriterLock(self.anchor)
+        self.assertFalse(second.acquire(),
+                         "a second writer was let into the same candidate")
+        self.assertFalse(second.held)
+
+    def test_a_holder_can_be_taken_again_after_release(self):
+        first = pipeline._SingleWriterLock(self.anchor)
+        self.assertTrue(first.acquire(), first.refusal)
+        first.release()
+        self.assertFalse(first.held)
+        second = pipeline._SingleWriterLock(self.anchor)
+        self.addCleanup(second.release)
+        self.assertTrue(second.acquire(), second.refusal)
+
+    def test_the_anchor_is_fixed_content_and_survives_release(self):
+        """Contract 376: 内容固定、不因 unlock 删除."""
+        lock = pipeline._SingleWriterLock(self.anchor)
+        self.assertTrue(lock.acquire(), lock.refusal)
+        lock.release()
+        self.assertTrue(self.anchor.is_file(), "the anchor was deleted on unlock")
+        self.assertEqual(self.anchor.read_bytes(), pipeline.LOCK_ANCHOR_BYTES)
+
+    def test_a_tampered_anchor_is_refused_not_rewritten(self):
+        self.anchor.write_bytes(b"someone else's content\n")
+        lock = pipeline._SingleWriterLock(self.anchor)
+        self.assertFalse(lock.acquire(),
+                         "a foreign anchor was accepted as our own")
+        self.assertIn("frozen anchor content", lock.refusal)
+        self.assertEqual(self.anchor.read_bytes(), b"someone else's content\n",
+                         "the foreign anchor was overwritten instead of refused")
+
+    def test_no_primitive_means_a_refusal_not_a_fallback(self):
+        """A fallback that cannot exclude another process is not a lock."""
+        original = pipeline._byte_lock
+        self.addCleanup(setattr, pipeline, "_byte_lock", original)
+        pipeline._byte_lock = None
+        lock = pipeline._SingleWriterLock(self.anchor)
+        self.assertFalse(lock.acquire())
+        self.assertIn("no OS byte-range locking primitive", lock.refusal)
+
+    def test_a_missing_lock_path_refuses_rather_than_assuming(self):
+        case = RunRoundTests("test_the_request_must_be_a_mapping")
+        case.setUp()
+        self.addCleanup(case.tearDown)
+        request = case._request()
+        del request["host_context"]["workspace"]["lock_path"]
+        receipt = pipeline.run_round(request)
+        self.assertTrue(receipt["terminal"])
+        self.assertEqual(receipt["status"], pipeline.STATUS_BLOCKED)
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("lock path", detail)
+        self.assertIn("single writer", detail)
+
+
+class AtomicReplaceTests(unittest.TestCase):
+    """Contract 374: 同一 design 目录写临时文件、flush/fsync、原子 replace."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp(prefix="aedl-atomic-"))
+        self.target = self.root / "design.kicad_sch"
+        self.target.write_bytes(b"(kicad_sch original)\n")
+
+    def tearDown(self):
+        shutil.rmtree(str(self.root), ignore_errors=True)
+
+    def _temps(self):
+        return list(self.root.glob(".design.kicad_sch.aedl-tmp-*"))
+
+    def test_it_writes_exactly_the_payload_and_leaves_no_temp(self):
+        result = pipeline._atomic_replace_file(self.target, b"new bytes\n")
+        self.assertTrue(result["replaced"])
+        self.assertEqual(self.target.read_bytes(), b"new bytes\n")
+        self.assertEqual(result["sha256"], pipeline.hash_bytes(b"new bytes\n"))
+        self.assertEqual(self._temps(), [], "a temp file survived a good write")
+
+    def test_the_temp_lives_in_the_targets_own_directory(self):
+        """Cross-directory is not atomic, so this is load-bearing."""
+        other = self.root / "elsewhere"
+        other.mkdir()
+        pipeline._atomic_replace_file(self.target, b"x")
+        # the prefix is derived from the target name, so a leftover is
+        # recognisable as ours rather than looking like a design file
+        self.assertEqual(self._temps(), [])
+
+    def test_a_failure_leaves_the_target_untouched(self):
+        payload = b"new bytes\n"
+        with mock.patch("os.replace", side_effect=OSError("sharing violation")):
+            with self.assertRaises(pipeline.RepairContractError) as caught:
+                pipeline._atomic_replace_file(self.target, payload)
+        self.assertEqual(self.target.read_bytes(), b"(kicad_sch original)\n",
+                         "a failed replace changed the target")
+        self.assertEqual(self._temps(), [],
+                         "a temp file survived a failed write")
+        detail = " ".join(f.detail for f in caught.exception.findings)
+        self.assertIn("untouched", detail)
+
+    def test_a_leftover_temp_is_never_clobbered(self):
+        """It is evidence of a crashed earlier process, not garbage."""
+        leftover = self.root / ".design.kicad_sch.aedl-tmp-crashed"
+        leftover.write_bytes(b"evidence of an earlier crash")
+        pipeline._atomic_replace_file(self.target, b"new bytes\n")
+        self.assertEqual(leftover.read_bytes(), b"evidence of an earlier crash")
+
+
+class RecoveryBranchTests(unittest.TestCase):
+    """Contract 384 / 385 / 386, one test per branch, on the primitive."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp(prefix="aedl-recover-"))
+        self.journal = self.root / "journal.jsonl"
+        self.design = self.root / "cand" / "design"
+        self.design.mkdir(parents=True)
+        self.snapshot = self.root / "snapshot"
+        self.snapshot.mkdir()
+        self.target = self.design / "design.kicad_sch"
+        self.before = b"(kicad_sch before)\n"
+        self.after = b"(kicad_sch after)\n"
+        (self.snapshot / self.target.name).write_bytes(self.before)
+        self.target.write_bytes(self.before)
+
+    def tearDown(self):
+        shutil.rmtree(str(self.root), ignore_errors=True)
+
+    def _intent(self, **overrides):
+        row = {"kind": pipeline.JOURNAL_COMMIT_INTENT, "txn_id": "t1",
+               "run_id": "r", "candidate_id": "c", "patch_id": "p",
+               "stage_sha256": pipeline.hash_bytes(self.after),
+               "before_sha256": pipeline.hash_bytes(self.before),
+               "after_sha256": pipeline.hash_bytes(self.after),
+               "target": str(self.target), "status": None,
+               "snapshot_root": str(self.snapshot),
+               "snapshot_sha256": pipeline.hash_bytes(self.before),
+               "design_root": str(self.design)}
+        row.update(overrides)
+        return row
+
+    def _write(self, row):
+        self.journal.write_bytes(
+            (json.dumps(row, ensure_ascii=False, sort_keys=True)
+             + "\n").encode("utf-8"))
+
+    def test_rule_385_really_restores_the_snapshot_bytes(self):
+        """live == recorded after, no terminal record -> restore from snapshot."""
+        self.target.write_bytes(self.after)
+        self._write(self._intent())
+        notes, blocking = pipeline._resolve_one_intent(self.journal,
+                                                       self._intent())
+        self.assertIsNone(blocking, [n.detail for n in notes])
+        self.assertEqual(self.target.read_bytes(), self.before,
+                         "rule 385 did not restore the original bytes")
+        records, corrupt = pipeline._read_journal(self.journal)
+        self.assertEqual(corrupt, [])
+        self.assertEqual(records[-1]["kind"], pipeline.JOURNAL_TERMINAL,
+                         "the resolved transaction got no terminal record")
+
+    def test_rule_384_does_not_rewrite_an_unchanged_file(self):
+        """live == recorded before -> confirm, and write nothing.
+
+        Contract 384: 「无需为了"回滚"重写未变文件」. Rewriting would touch a file
+        that is already correct, which is a needless chance to lose it.
+        """
+        stamp = self.target.stat().st_mtime_ns
+        self._write(self._intent())
+        notes, blocking = pipeline._resolve_one_intent(self.journal,
+                                                       self._intent())
+        self.assertIsNone(blocking, [n.detail for n in notes])
+        self.assertEqual(self.target.read_bytes(), self.before)
+        self.assertEqual(self.target.stat().st_mtime_ns, stamp,
+                         "an unchanged design file was rewritten")
+        self.assertIn("no rewrite was needed", notes[0].detail)
+
+    def test_rule_386_blocks_and_leaves_unrecognised_bytes_alone(self):
+        """live is neither before nor after -> quarantine, and STOP."""
+        stranger = b"\x00 a human wrote this\n"
+        self.target.write_bytes(stranger)
+        self._write(self._intent())
+        notes, blocking = pipeline._resolve_one_intent(self.journal,
+                                                       self._intent())
+        self.assertEqual(notes, [], "a quarantined transaction reported notes")
+        self.assertIsNotNone(blocking,
+                             "the quarantine did not block -- this is the "
+                             "fail-open this test exists to prevent")
+        self.assertIn("QUARANTINE", blocking.detail)
+        self.assertEqual(self.target.read_bytes(), stranger,
+                         "unrecognised bytes were overwritten")
+
+    def test_a_missing_target_takes_rule_384_not_a_crash(self):
+        """An absent target is 384's ordinary case; it must not raise."""
+        self.target.unlink()
+        self._write(self._intent())
+        notes, blocking = pipeline._resolve_one_intent(self.journal,
+                                                       self._intent())
+        self.assertIsNone(blocking, [n.detail for n in notes])
+        self.assertIn("never took", notes[0].detail)
+
+    def test_a_snapshot_that_does_not_match_the_record_is_refused(self):
+        """Restoring bytes nobody verified would be worse than not restoring."""
+        self.target.write_bytes(self.after)
+        (self.snapshot / self.target.name).write_bytes(b"tampered snapshot\n")
+        self._write(self._intent())
+        notes, blocking = pipeline._resolve_one_intent(self.journal,
+                                                       self._intent())
+        self.assertIsNotNone(blocking, "a mismatched snapshot was restored")
+        self.assertIn("bytes nobody verified", blocking.detail)
+        self.assertEqual(self.target.read_bytes(), self.after,
+                         "the candidate was modified despite the mismatch")
+
+    def test_a_gone_snapshot_blocks_instead_of_guessing(self):
+        self.target.write_bytes(self.after)
+        shutil.rmtree(str(self.snapshot))
+        self._write(self._intent())
+        notes, blocking = pipeline._resolve_one_intent(self.journal,
+                                                       self._intent())
+        self.assertIsNotNone(blocking)
+        self.assertIn("cannot be", blocking.detail + " ")
+        self.assertEqual(self.target.read_bytes(), self.after,
+                         "bytes were written when the original was unavailable")
+
+
+class Contract378Tests(unittest.TestCase):
+    """Contract 378: 再检查每个路径分量的 symlink/reparse point、文件 link count
+    /别名与实际身份；不能仅复用 workspace root 的宽范围检查."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp(prefix="aedl-378-"))
+        self.design = self.root / "cand" / "design"
+        self.design.mkdir(parents=True)
+        self.target = self.design / "fault.kicad_sch"
+        self.target.write_bytes(b"(kicad_sch)\n")
+
+    def tearDown(self):
+        shutil.rmtree(str(self.root), ignore_errors=True)
+
+    def test_an_ordinary_single_link_design_file_passes(self):
+        self.assertEqual(
+            pipeline._design_paths_are_own_and_unique(self.design,
+                                                      "fault.kicad_sch"), [])
+
+    def test_a_hard_link_alias_is_refused(self):
+        """More than one name for the same bytes is an alias (别名)."""
+        alias = self.root / "elsewhere.kicad_sch"
+        try:
+            os.link(str(self.target), str(alias))
+        except (OSError, NotImplementedError):
+            self.skipTest("this filesystem does not support hard links")
+        reasons = pipeline._design_paths_are_own_and_unique(
+            self.design, "fault.kicad_sch")
+        self.assertTrue(reasons, "a two-name design file was accepted")
+        self.assertIn("hard links", " ".join(r.detail for r in reasons))
+
+    def test_a_missing_design_root_is_refused(self):
+        reasons = pipeline._design_paths_are_own_and_unique(
+            self.root / "absent", "fault.kicad_sch")
+        self.assertTrue(reasons)
+        self.assertIn("not a directory", " ".join(r.detail for r in reasons))
+
+
 class CommitReceiptTests(unittest.TestCase):
     """Drives a real round to a thin PASS and inspects what it publishes.
 
