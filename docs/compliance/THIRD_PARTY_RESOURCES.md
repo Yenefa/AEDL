@@ -230,3 +230,18 @@
 - 支持工具：KiCad 8.0.9 已在本 PR 的 DEV-only ingest smoke 中**实际调用**（`kicad-cli` 8.0.9，二进制 sha256 `8b7f4a889dc8cfb8c3eae1337d64ade2fe0cf1ec5daa87878cc709904378fb26`；每次 subprocess 前后都对同一 digest 复算，整轮绑定同一个 binary）。不涉及 repair / scorer / 正式实验。akcli 0.21.0 属 held 半，本 PR 不使用。
 - 合规状态：`TO_VERIFY`。
 - 关联：`notes/schgen-dev-chain/TASK.md`、EVID-20260918-001、AI-20260918-DSH-C7396AEC9D7DC7BCD22C6337E56A806E。
+
+## RES-012
+
+- 名称：KiCad（`kicad-cli`）。
+- 类型：外部 EDA 工具链 / 独立验证器；融合角色：**SUPPORT**（参与验证，**不**参与 AEDL 核心机制）。
+- 版本：`10.0.5`，为本仓库合同钉死版本（`gates/repair_verification.py:1174` `REQUIRED_KICAD_VERSION`）。本机 `kicad-cli version` 实测输出 `10.0.5`，与钉死值逐字一致。**当前 stable 为 10.0.6，本轮刻意未安装、未替换。**
+- 来源：官方 `downloads.kicad.org` 稳定版镜像（重定向至 `s3.cern.ch`）。GitHub release CDN 从本机不可达（`os error 10060`），故改用官方镜像取同一发布资产。安装体 `kicad-10.0.5-x86_64.exe`，967,270,176 B，sha256 `d2702ed1fabf2b52bd631450407f141563bc14393a607fb335b63194a8284d33`（由独立来源 Chocolatey `kicad 10.0.5` 包核对，本机 `Get-FileHash` 复算一致）。
+- License / 授权 / 关键义务：GPL-3.0（KiCad 上游）。本仓库**不**随附 KiCad 源码或二进制、**不**再分发，仅以独立进程调用已安装二进制，故无附加分发义务。`TO_VERIFY`：未逐条复核 GPL-3.0 在本使用方式下的义务边界。
+- 用途：作为**独立第三方验证器**产出 EVID-20260927-001 的 P1 工程证据 —— netlist 导出、ERC、SVG render。ERC 报告交由本仓库自有的 `gate_core.erc_gate_verdict()` 解析，netlist 导出使用合同自身的 `EXPORT_ARGUMENTS`。
+- 是否修改上游源码：否；是否随本次源码差异再分发：否。
+- AEDL 自研边界：**ERC / netlist / render 的产出与判读均属 KiCad 与 KiCad 格式本身**；AEDL 自研的是策略绑定、授权、预期化与验收入口。KiCad 变绿**不得**表述为 AEDL 的修复收益。
+- 关键义务 / 边界声明：实测发现 KiCad 10.0.5 标准 ERC 对「boot strapping 网缺显式上拉电阻」这类**语义缺陷检出率为 0**（修复前后 `error_count` 均为 0）。因此 ERC 绿色**不构成**该类缺陷的证据，也**不得**用于此类主张。
+- 合规状态：`OK`（版本钉死与摘要核对已实测）／ License 义务 `TO_VERIFY`。
+- 关联模块：`gates/gate_core.py`、`gates/repair_verification.py`、`gates/run_gates.py`。
+- 关联：EVID-20260927-001（P1 补充）、RES-005（akcli-kicad，写入侧工具链）、AI-20260927-OPENCODE-1B933070EE4E81D783BDF5AC527B95FD（本轮 P1 验证）。

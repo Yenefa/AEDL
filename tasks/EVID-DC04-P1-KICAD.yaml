@@ -1,0 +1,116 @@
+task: EVID-DC04-P1-KICAD
+
+# Supersedes one clause of tasks/EVID-DC04.yaml -- see "Why a new envelope" below.
+
+base:
+  branch: docs/evidence-dc04-first-transaction
+  sha: 057247225ed49fd2f34fd2e6b18bd92263a4b26c  # HEAD after ebc50d9 + 0572472
+
+goal: |
+  Close the NOT_RUN gap that EVID-20260927-001 left open: provision the
+  contract-pinned kicad-cli 10.0.5 and record real ERC / netlist / render
+  evidence for the SAME DC-04 transaction, so the closure of that transaction no
+  longer rests solely on AEDL's own observation model.
+
+  Evidence: amendment to EVID-20260927-001. New entry: RES-012 (KiCad 10.0.5).
+
+  Why a new envelope rather than amending EVID-DC04.yaml:
+  tasks/EVID-DC04.yaml states under "Out of scope, explicitly":
+      "No kicad-cli claim: KiCad 10.0.5 is not installed, so ERC / netlist /
+       render are NOT_RUN."
+  and its acceptance requires the record NOT claim any kicad-cli derived result.
+  That clause was TRUE when written and is now FALSE. Every file this task
+  touches was already inside EVID-DC04's allowed_paths, so `admit` would have
+  passed MECHANICALLY while the record silently contradicted its own envelope.
+  Landing this under a separate envelope keeps that contradiction explicit and
+  auditable instead of letting a green gate absorb it.
+
+scope: |
+  In scope (documentation only, no code):
+  - docs/evidence/EVIDENCE_INDEX.md: amend EVID-20260927-001 -- replace the two
+    now-falsified NOT_RUN statements with measured results, and add a
+    "P1 独立工程验证" section (third-party independent witness + ERC blind-spot
+    finding + explicit statement of what ERC green does NOT support).
+  - docs/compliance/THIRD_PARTY_RESOURCES.md: add RES-012 for KiCad 10.0.5,
+    including the measured ERC blind-spot boundary.
+  - docs/compliance/ai-usage/**, docs/compliance/AI_USAGE_LOG.md: append-only
+    bookkeeping.
+
+  Out of scope, explicitly:
+  - ANY code change. tools/**, gates/**, src/** are forbidden and untouched.
+  - No change to any acceptance contract, expected-after spec, or Evidence
+    schema. This task RECORDS evidence; it does not change what evidence means.
+  - No claim that CI ran. GitHub Actions is still BLOCKED by the billing
+    failure; recorded as NOT_RUN.
+  - No claim of COMMITTED. The round still stops at APPLIED_TO_STAGE.
+  - No claim that the design is correct. ERC error_count = 0 supports ONLY
+    "this repair introduced no ERC-level error", never "the design is sound".
+  - No substitution of the KiCad version. 10.0.5 is pinned by
+    gates/repair_verification.py:1174; current stable 10.0.6 was deliberately
+    NOT installed.
+  - Do NOT touch PR #91 / GH-51.
+
+dependencies:
+  - ref: EVID-DC04
+    required_state: open   # the record this task amends
+
+allowed_paths:
+  - docs/evidence/EVIDENCE_INDEX.md
+  - docs/compliance/THIRD_PARTY_RESOURCES.md
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/compliance/ai-usage/**
+  - tasks/EVID-DC04-P1-KICAD.yaml
+
+forbidden_paths:
+  - tools/**
+  - gates/**
+  - src/**
+  - sandbox_runtime/**
+  - delivery/**
+  - notes/m2-*
+  - .github/**
+  - tests/**
+
+acceptance: |
+  - Every kicad-cli derived number in EVID-20260927-001 was produced by an
+    actually executed command in this session, and the command is recorded.
+  - The recorded kicad-cli version equals REQUIRED_KICAD_VERSION exactly, and
+    the installer digest is corroborated by a source independent of the host
+    that served the bytes.
+  - ERC and netlist outputs are parsed by the REPOSITORY'S OWN parsers
+    (gate_core.erc_gate_verdict, repair_verification.EXPORT_ARGUMENTS), not by
+    a hand-rolled weaker reader.
+  - The record states the ERC blind-spot finding with its boundary: ERC green is
+    NOT evidence for the semantic defect class in question.
+  - The 22/23 vs 20/21 component-count difference is reconciled exactly, with
+    the offset named (2 net-tie flag symbols), and with zero discrepancy in
+    either direction.
+  - The falsified NOT_RUN statements are struck rather than left to contradict
+    the new section.
+  - Two self-inflicted harness errors (module-level `return`; kicadxml
+    attributes-vs-elements) are recorded rather than hidden.
+  - `py -3 -S -m unittest discover -s tests` stays green and
+    `py -3 -m tools.dev_gate --envelope tasks/EVID-DC04-P1-KICAD.yaml` exits 0.
+
+change_budget:
+  expected_files: 5
+  expected_modules: [docs, tasks]
+  cross_module: false
+  contract_change: false
+  evidence_semantics_change: false   # RECORDS evidence; does not change what evidence means
+
+exceptions:
+  # Agent cannot self-authorize. The Owner was shown the contradiction between
+  # this work and tasks/EVID-DC04.yaml and directed "继续" (proceed) on
+  # 2026-09-27 after the recommended new-envelope path was presented. That
+  # instruction is the authority for the two flags below; no other exception is
+  # claimed.
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "Yenefa 2026-09-27 会话指令「继续」—— 在被明确告知 P1 与 EVID-DC04 envelope 的 scope/acceptance 冲突、并给出新建 envelope 的推荐路径后"
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "Yenefa 2026-09-27 会话指令「继续」，同上；drift 仅由本任务的 envelope / bookkeeping 提交产生"
+
+escalation:
+  owner: Yenefa
