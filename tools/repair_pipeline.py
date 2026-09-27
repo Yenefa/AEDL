@@ -3664,15 +3664,12 @@ def run_round(round_request):
             REASON_INPUT_DRIFT,
             "the op-list path lies outside the stage root it must be run from")])
 
-    # Containment for the target, enforced here and not left to the adapter: the
-    # adapter's _resolve_within only guards ITS read, which happens later.
-    try:
-        target_path = (Path(stage_root).resolve() / stage_target).resolve()
-        target_path.relative_to(Path(stage_root).resolve())
-    except (OSError, ValueError) as exc:
-        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
-            REASON_INPUT_DRIFT,
-            "the stage target escapes the stage root and will not be read: %s" % exc)])
+    # NOTE: the containment check for the stage target lives ONCE, further down,
+    # immediately before the proposal parse. An earlier version of this file
+    # carried a second copy here, and that copy was DEAD: it resolved and
+    # validated a `target_path` that nothing read, because BEFORE had already
+    # moved to the snapshot. A check that can only refuse and can never permit is
+    # not a second guard, it is a second place to look. Removed.
 
     # ---- PRECHECK ----------------------------------------------------------
     # The request was validated and read above.  What follows settles the
@@ -3787,11 +3784,23 @@ def run_round(round_request):
         op_list = str(re_seeded_oplist)
         before_raw = (Path(snapshot_root) / stage_target).read_bytes()
         before_sha = hash_bytes(before_raw)
-    except (RepairContractError, OSError) as exc:
-        return refuse(PHASE_SNAPSHOT, STATUS_BLOCKED, [
-            item if isinstance(item, Finding) else _finding(
-                REASON_INPUT_DRIFT, str(item))
-            for item in (getattr(exc, "findings", None) or (exc,))])
+    except RepairContractError as exc:
+        # The contract's own findings, which name the refusal.
+        return refuse(PHASE_SNAPSHOT, STATUS_BLOCKED,
+                      list(getattr(exc, "findings", None) or ()))
+    except OSError as exc:
+        # OSError is reported separately from RepairContractError on purpose.
+        # These three operations -- copy the tree, seed the stage, read BEFORE
+        # out of the snapshot -- are ours, so a bare "[Errno 2] No such file"
+        # reads as a caller's missing file. It is not: earlier in this round a
+        # stage re-seed deleted the op-list one line before it was copied back,
+        # and the only thing the receipt said was that the file was missing.
+        # Which of the three failed is the first thing anyone debugging this
+        # needs to know, so it is named.
+        return refuse(PHASE_SNAPSHOT, STATUS_BLOCKED, [_finding(
+            REASON_INPUT_DRIFT,
+            "the snapshot could not be materialised, the stage could not be "
+            "seeded from it, or BEFORE could not be read out of it: %s" % exc)])
     reach(PHASE_SNAPSHOT)
     receipt["snapshot"] = {
         "root": snapshot_root,

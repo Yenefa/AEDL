@@ -3165,6 +3165,53 @@ class StageCandidateSeparationTests(unittest.TestCase):
         verification = receipt.get("verification") or {}
         self.assertNotEqual(verification.get("status"), "PASS")
 
+    def test_an_unreadable_snapshot_says_which_operation_failed(self):
+        """A read failure must not read as a caller's missing file.
+
+        The snapshot block performs three of its own operations in one try: copy
+        the tree, seed the stage, read BEFORE out of the snapshot. A bare OSError
+        message ("[Errno 2] No such file") names none of them, and earlier in this
+        round a genuine ordering bug presented exactly that way -- the stage
+        re-seed deleted the op-list and the receipt blamed the caller.
+
+        The injection is Path.read_bytes scoped to the snapshot root, because the
+        stage is seeded FROM the snapshot: deleting the target makes the stage
+        manifest build fail first, which is a different refusal. Two earlier
+        versions of this test therefore did not test the read at all -- the first
+        compared against a repair_root the fixture never uses, the second broke
+        the stage instead of the read.
+        """
+        request = self._round_request()
+        original_snapshot = pipeline.materialise_snapshot
+        original_read = Path.read_bytes
+        captured = {}
+
+        def capture_snapshot(candidate, destination, target):
+            root, manifest = original_snapshot(candidate, destination, target)
+            captured["root"] = str(Path(root).resolve())
+            return root, manifest
+
+        def read_bytes_but_fail_for_the_snapshot(path_self):
+            if str(path_self.resolve()).startswith(captured.get("root", "\\0")):
+                raise FileNotFoundError(
+                    2, "No such file or directory", str(path_self))
+            return original_read(path_self)
+
+        with mock.patch.object(pipeline, "materialise_snapshot",
+                               capture_snapshot), \
+                mock.patch.object(Path, "read_bytes", read_bytes_but_fail_for_the_snapshot):
+            receipt = pipeline.run_round(request)
+
+        self.assertTrue(captured, "the snapshot was never taken")
+        self.assertEqual(receipt["status"], pipeline.STATUS_BLOCKED)
+        self.assertEqual(receipt["phase"], pipeline.PHASE_SNAPSHOT)
+        self.assertEqual(receipt["phases"],
+                         [{"phase": pipeline.PHASE_SNAPSHOT, "status": "refused"}])
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("could not be read out of it", detail)
+        # the cause is still reported, not swallowed
+        self.assertIn("No such file", detail)
+
     def _round_request(self, **overrides):
         """A request that gets as far as the snapshot, on a VALID host context.
 
