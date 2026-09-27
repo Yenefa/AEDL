@@ -315,7 +315,7 @@ Evidence（其元数据冻结结论不受影响）。
 | worker Python | `3.11.16`（akcli 要求 ≥3.11） | 实测；主仓解释器仍为 3.9.13 |
 | candidate_symbol_digest | `9a0473ffba425f02c434832f427467365f24acfa5332b76b26ddd22bf23db49b` | 由 pinned reader 实测（9 个内嵌库符号） |
 | HostPatch toolchain_sha256 | `5651aff08f8d338d94d69d5d60f6c1e256d26931690a27db0208c5c1ce78d239` | 由 akcli slice 派生 |
-| **kicad-cli 10.0.5** | **未安装** | 本机无 `kicad-cli`；binding 中该 digest 为**合同声明**，非本机实测 |
+| **kicad-cli 10.0.5** | **已安装并实测** | `C:\dev\tools\kicad-10.0.5\bin\kicad-cli.exe`，`kicad-cli version` → `10.0.5`，与 `REQUIRED_KICAD_VERSION` 一致；binary sha256 `fc142e3b4c13af868501fcbc9312dd94ad62d3c05882f97a23b6fd9f8118d0c3`；installer sha256 `d2702ed1fabf2b52bd631450407f141563bc14393a607fb335b63194a8284d33`（本项为 P1 补充，已从合同声明升为本机实测） |
 
 ### Before / After
 
@@ -365,6 +365,73 @@ Evidence（其元数据冻结结论不受影响）。
 - 该错误的防回归已落在 PR #93（`PostWriteVerificationContractTests`）：naive 路径与验收入口在**同一对数据**上必须给出不同结论，且 `tools/repair_pipeline.py` 中 `observation_delta()` 的调用函数集合必须精确等于 `{_bound_policy}`。
 - 旧 receipt 中若出现 `delta match=false / a9e87dea…`，那是**被取代的 naive 结果**；以本条 `compare_delta` 结果为准。
 
+### P1 独立工程验证（kicad-cli 10.0.5，本项为后续补充）
+
+上文的 `compare_delta` PASS 已证明「AEDL 观察到的实际结果等于被授权的结果」。
+但这仍是 **AEDL 自己的观察模型**，存在「观察者与被观察者共谋」的困局。
+本节用 **KiCad 自己的 netlist 导出**（独立解析器）重新验证同一件事，使结论不依赖 AEDL 的计数。
+
+**工具身份**（全部本机实测）：`kicad-cli version` → `10.0.5`，与 `repair_verification.REQUIRED_KICAD_VERSION`
+（`gates/repair_verification.py:1174`）**逐字一致**。当前 stable 为 10.0.6，**未被替换安装** —— 合同钉死版本，静默替换正是该合同禁止的失效模式。
+安装体 sha256 `d2702ed1…a8284d33`（967,270,176 B）由独立来源（Chocolatey `kicad 10.0.5` 包）核对，
+本机再用 `Get-FileHash` 独立复算一致。GitHub release CDN 从本机不可达（`os error 10060`），
+字节由官方 `downloads.kicad.org` 镜像（重定向 `s3.cern.ch`）提供。
+
+**执行结果（8 项全 PASS，零 FAIL）**：netlist 导出使用合同自身的 `EXPORT_ARGUMENTS`；
+ERC 使用 `gates/run_gates.py` 的同一 argv，并交由仓库自己的 `gate_core.erc_gate_verdict()` 解析（不自拟解析器）。
+
+| 阶段 | 结果 |
+| --- | --- |
+| kicad-cli 版本与合同钉一致 | PASS — `10.0.5` |
+| netlist 导出（before / after） | PASS — rc=0，36,418 B / 37,292 B |
+| ERC（before） | **PASS — error_count = 0** |
+| ERC（after） | **PASS — error_count = 0** |
+| SVG render（after） | PASS — 644,290 B |
+| netlist 差分形状符合预期 | PASS — added=`['R9']`, removed=`[]`, changed=`[]` |
+
+#### netlist 差分 = 第三个独立见证
+
+DC-04 的冻结验收合同（`tests/fixtures/repair_pr1/private/acceptance_v1.json`）本身就是用 **netlist 语言** 写的。
+KiCad 自己导出的 netlist 满足它，且是**精确集合相等**：
+
+| 合同要求 | netlist before | netlist after |
+| --- | --- | --- |
+| `/BOOT` 成员 = 恰好 `{R9.2, SW2.1, U1.8}` | `{SW2.1, U1.8}` | **`{R9.2, SW2.1, U1.8}`** ✓ 精确相等 |
+| `/+3V3` 获得 `R9.1` | 无 | 有 ✓ |
+| R9 = `Device:R` / `10k` / `R_0603_1608Metric` | — | ✓ |
+
+- `/BOOT` 从 2 个成员变为 3 个，多出的正是合同指定的 `R9.2`。
+  据此可以准确说：**修复前该 boot strapping 网上没有显式上拉/下拉电阻**（**不宣称「悬空」** —— 网表上仍有 `SW2.1`，不是无节点之网）。
+- components 20→21（KiCad netlist）与 22→23（AEDL 观察）的差异已完整对账：
+  AEDL 计数含 2 个 net-tie flag 符号 `#FLG01` / `#FLG02`，KiCad netlist 不导出 flag。
+  去掉 flag 后 20→21 与 netlist **逐个对应，双向零差异**（已实测双向差集，未估算）。
+
+#### 关键观察：标准 ERC 对该类缺陷**零检出**
+
+| | ERC error_count |
+| --- | --- |
+| 修复前（缺乏显式上拉电阻） | **0** |
+| 修复后（已补齐） | **0** |
+
+即 KiCad 10.0.5 的标准 ERC 在修复前后给出完全相同的绿色。
+它对「boot strapping 网缺显式上拉电阻」这类**语义缺陷**的检出率为 **0**。
+只有 AEDL 的语义合同门禁拦下了它。
+
+**这一结果对「评估器可能空洞地绿」是一个已实测的实例**，
+而不是一个类比：一个工业标准工具在真实缺陷上返回绿色，
+说明它在这一类缺陷上的绿色**不携带信息**。因此任何绿色都不得被当作该类缺陷的证据。
+
+#### 本次证据的边界（不过度声称）
+
+- 本节不新增任何产品代码，不修改任何验收合同。
+- ERC error_count = 0 只能支持「本次修复**未引入** ERC 级错误」，
+  **不支持**「设计无错」。本 board 的语义缺陷数不得由此推断。
+- 本节仍**不是**制造放行，**不**代表实体板验证，**不**触碰 M2 物理冻结线。
+- `COMMITTED` 仍从未声称（下文同项）。
+- 实例与原始证据在仓库外：`…\aedl-txn-dc04\kicad-verify\`（`kicad-verification.json`、
+  `kicad-provenance.json`、`netlist-before.xml`、`netlist-after.xml`、`erc-before.json`、`erc-after.json`、`render-after.svg\fault.svg`）。
+- KiCad 10.0.5 本身作为第三方验证工具，已在 `THIRD_PARTY_RESOURCES.md` 登记（本轮补充）。
+
 ### 环境与方法
 
 - 本机：Windows / `core.autocrlf=false` / 主仓 Python 3.9.13 / akcli worker Python 3.11.16 / uv 0.12.18。
@@ -385,7 +452,7 @@ Evidence（其元数据冻结结论不受影响）。
 
 - **CI 双平台矩阵：NOT_RUN —— 被 GitHub Actions 计费阻断。** 失败注释原文：*“The job was not started because recent account payments have failed or your spending limit needs to be increased.”* 同一原因导致 master 上 PR #92 合并、PR #91、PR #89 的 CI 同样为红。**因此本记录不含任何 CI 证据**；本机 `dev_gate` exit 0 仅为单平台（Windows）开发回执，不能替代 ubuntu 侧。
 - **`COMMITTED` 从未声称。** 本轮止于 `APPLIED_TO_STAGE`；commit / snapshot / recheck_reports 阶段尚未实现。
-- **kicad-cli 10.0.5 未安装**：ERC、netlist 导出、render evidence 全部 **NOT_RUN**。binding 中 kicad 的 `executable_sha256` 是合同声明值，**不是**本机实测。
+- ~~**kicad-cli 10.0.5 未安装**~~：**已由 P1 实测取代**。kicad-cli 10.0.5 已安装并实测，ERC / netlist / render 均已真实运行，见上新增的「P1 独立工程验证」一节。此前的 NOT_RUN 声明已被实测取代。
 - **native geometry differential：NOT_RUN**（3 条 skip，需 `AEDL_PR1_NATIVE=1` 与真实 akcli）。CP1 此前已完成 120 组 transform + 48 组 angle differential，但那是历史记录，本轮未重跑。
 - 本记录**不是**制造放行，**不**代表实体板已验证，**不**触碰 M2 物理冻结线。
 
