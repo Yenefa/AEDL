@@ -114,10 +114,17 @@ change_budget:
   evidence_semantics_change: false
 
 exceptions:
+  # Scope of the grant, deliberately narrow: drift is permitted ONLY for commits
+  # made on feat/c5-m7-untrusted-execution by THIS task. Drift caused by another
+  # branch, a rebase onto a moved master, or a new merge is NOT covered.
+  #
+  # Unavoidable for this task shape: a committed envelope makes its own base.sha
+  # stale the moment it lands, and admit has no "ignore drift caused by the
+  # task's own commits" concept. Same handling as tasks/PR1-C5-RUN-ROUND.yaml,
+  # which the Owner accepted on 2026-09-27.
   allow_drift:
     granted_by: Yenefa
-    decision_ref: "Yenefa 2026-09-27 会话指令「先 merge #95，然后开 M7」；与 tasks/PR1-C5-RUN-ROUND.yaml 同理，envelope 自身提交必然使 base.sha 陈旧"
-    scope_note: "仅限本任务在 feat/c5-m7-untrusted-execution 上的自身提交"
+    decision_ref: "Yenefa 2026-09-27 会话指令「先 merge #95，然后开 M7」"
   # allow_dirty is NOT claimed: every commit lands with a clean tree.
 
 escalation:
