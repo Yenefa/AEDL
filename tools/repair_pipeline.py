@@ -22,6 +22,7 @@ import copy
 import json
 import os
 import re
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
@@ -3237,6 +3238,120 @@ def _stage_write_succeeded(staged: Mapping) -> bool:
             and staged.get("changed") is True)
 
 
+def build_file_manifest(root, target_relative):
+    """Build a C3 dependency manifest from the REAL bytes under ``root``.
+
+    PR1-C5-SNAPSHOT.  C3 could already VALIDATE a manifest (``_manifest``) and
+    VERIFY one against real bytes (``_tree_digest``), but nothing could PRODUCE
+    one, so the snapshot half of ``bind_inputs`` could never be fed.  This is
+    that missing producer.
+
+    The shape is not invented here: it is exactly what
+    ``gates.repair_verification._manifest`` accepts --
+
+        {"version": 1,
+         "files": [{"path": ..., "sha256": ..., "size_bytes": ...,
+                    "role": "TARGET" | "READONLY_DEPENDENCY"}, ...]}
+
+    -- and the tests assert that by calling the repository's own validator
+    rather than restating its rules.  Every digest and size is measured from the
+    file; nothing is carried over from a declaration.
+
+    ``target_relative`` names the one TARGET.  Paths are emitted with forward
+    slashes and are resolved inside ``root``; a file that escapes the root, or a
+    link, is refused rather than described.
+    """
+    root_path = Path(root).resolve()
+    target = _text(target_relative, "target_relative", allow_empty=False)
+
+    rows = []
+    for absolute in sorted(root_path.rglob("*")):
+        if not absolute.is_file():
+            continue
+        resolved = absolute.resolve()
+        try:
+            relative = resolved.relative_to(root_path)
+        except ValueError:
+            raise ProposalInvalidError([_finding(
+                REASON_INPUT_DRIFT,
+                "the tree at %s contains a path outside it: %s" % (root, absolute))])
+        if absolute.is_symlink() or resolved != absolute:
+            raise ProposalInvalidError([_finding(
+                REASON_INPUT_DRIFT,
+                "a link is not describable in a manifest: %s" % absolute)])
+        as_text = relative.as_posix()
+        rows.append({
+            "path": as_text,
+            "sha256": hash_bytes(resolved.read_bytes()),
+            "size_bytes": resolved.stat().st_size,
+            "role": "TARGET" if as_text == target else "READONLY_DEPENDENCY",
+        })
+
+    if not any(row["role"] == "TARGET" for row in rows):
+        raise ProposalInvalidError([_finding(
+            REASON_INPUT_DRIFT,
+            "the tree at %s carries no %r to mark as the TARGET" % (root, target))])
+    return {"version": 1, "files": rows}
+
+
+def materialise_snapshot(candidate_design_root, snapshot_root, target_relative):
+    """Copy the candidate's design tree into a snapshot and describe it.
+
+    PR1-C5-SNAPSHOT.  The snapshot is the BEFORE of record: it is what the round
+    reads, and what a later COMMIT would restore from.  Copying rather than
+    pointing matters -- the point of a snapshot is that the bytes it names cannot
+    drift underneath the decision that referenced them.
+
+    Returns ``(snapshot_root, manifest)``.  The copy is verified to be
+    byte-identical to the source before the manifest is built, so a truncated or
+    partially-copied snapshot fails here instead of being described as valid.
+
+    Refuses a snapshot root that overlaps the candidate, which would make the
+    snapshot a view of the thing it is supposed to be independent of.
+    """
+    source = Path(candidate_design_root).resolve()
+    destination = Path(snapshot_root).resolve()
+    overlap = _stage_candidate_overlap(destination, source)
+    if overlap is not None:
+        raise ProposalInvalidError([_finding(
+            REASON_INPUT_DRIFT,
+            "the snapshot root is not disjoint from the candidate design root: %s "
+            "(snapshot=%s candidate=%s); a snapshot of the candidate cannot live "
+            "inside the candidate" % (_OVERLAP_DETAIL[overlap], destination, source))])
+    if not source.is_dir():
+        raise ProposalInvalidError([_finding(
+            REASON_INPUT_DRIFT,
+            "the candidate design root is not a directory: %s" % source)])
+
+    if destination.exists():
+        shutil.rmtree(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source, destination)
+
+    # byte-for-byte confirmation, before anything is described as a snapshot
+    for absolute in sorted(destination.rglob("*")):
+        if not absolute.is_file():
+            continue
+        relative = absolute.relative_to(destination)
+        origin = source / relative
+        if not origin.is_file():
+            raise ProposalInvalidError([_finding(
+                REASON_INPUT_DRIFT,
+                "the snapshot carries a file the candidate does not: %s" % relative)])
+        if absolute.read_bytes() != origin.read_bytes():
+            raise ProposalInvalidError([_finding(
+                REASON_INPUT_DRIFT,
+                "the snapshot copy of %s is not byte-identical to the candidate"
+                % relative)])
+    if not (destination / _text(target_relative, "target_relative",
+                                allow_empty=False)).is_file():
+        raise ProposalInvalidError([_finding(
+            REASON_INPUT_DRIFT,
+            "the snapshot does not carry the target %r" % target_relative)])
+
+    return str(destination), build_file_manifest(destination, target_relative)
+
+
 def _delta_identity_label(identity) -> str:
     """Name one object the way a reviewer would.
 
@@ -3417,7 +3532,8 @@ _OVERLAP_DETAIL = {
 
 
 def run_round(round_request):
-    """Drive exactly one repair round: PRECHECK -> STAGE_APPLY -> DELTA_CHECK.
+    """Drive one repair round: PRECHECK -> SNAPSHOT -> STAGE_APPLY ->
+    DELTA_CHECK.
 
     ``round_request`` is a closed mapping:
 
@@ -3482,8 +3598,14 @@ def run_round(round_request):
     except HostContextError as exc:
         return refuse(PHASE_PRECHECK, STATUS_BLOCKED, exc.findings)
     except RepairContractError as exc:
-        return refuse(PHASE_PRECHECK, STATUS_UNKNOWN,
-                      [_finding(REASON_INPUT_DRIFT, str(exc))])
+        # Carry the contract's OWN findings through, not str(exc).
+        # RepairContractError stringifies to its reason CODES joined by "; ", so
+        # the receipt was naming the class of refusal while discarding which
+        # field was wrong -- the one piece of information the caller acts on.
+        findings = list(getattr(exc, "findings", None) or ())
+        if not findings:
+            findings = [_finding(REASON_INPUT_DRIFT, str(exc))]
+        return refuse(PHASE_PRECHECK, STATUS_UNKNOWN, findings)
 
     receipt["txn_id"] = txn_id
 
@@ -3495,6 +3617,74 @@ def run_round(round_request):
     workspace = host_context.get("workspace") if isinstance(host_context, Mapping) \
         else None
     design_root = workspace.get("design_root") if isinstance(workspace, Mapping) \
+        else None
+    repair_root = workspace.get("repair_root") if isinstance(workspace, Mapping) \
+        else None
+    if not isinstance(design_root, str) or not design_root.strip():
+        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
+            REASON_INPUT_DRIFT,
+            "the host context declares no candidate design root, so the stage "
+            "cannot be proven disjoint from it; refusing rather than trusting it")])
+    if not isinstance(repair_root, str) or not repair_root.strip():
+        return refuse(PHASE_SNAPSHOT, STATUS_BLOCKED, [_finding(
+            REASON_INPUT_DRIFT,
+            "the host context declares no repair root, so a snapshot has nowhere "
+            "to be taken; refusing rather than inventing a location")])
+    try:
+        overlap = _stage_candidate_overlap(stage_root, design_root)
+    except (OSError, ValueError) as exc:
+        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
+            REASON_INPUT_DRIFT,
+            "the stage root and the candidate design root could not be compared: %s"
+            % exc)])
+    if overlap is not None:
+        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
+            REASON_INPUT_DRIFT,
+            "the writer's stage is not disjoint from the candidate: %s "
+            "(stage=%s design_root=%s); a round that stops before COMMIT must not "
+            "be able to have modified the candidate"
+            % (_OVERLAP_DETAIL[overlap], Path(stage_root).resolve(),
+               Path(design_root).resolve()))])
+    receipt["stage_root"] = str(Path(stage_root).resolve())
+    receipt["candidate_design_root"] = str(Path(design_root).resolve())
+
+    # The op-list must already live inside the stage.  The stage is re-seeded
+    # from the snapshot in SNAPSHOT, so an op-list from anywhere else would not
+    # survive the re-seed, and the writer would be handed a path that no longer
+    # exists.  Proving it here means the round refuses before copying anything.
+    oplist_source = Path(oplist_path)
+    if not oplist_source.is_file():
+        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
+            REASON_INPUT_DRIFT,
+            "the op-list path is missing or is not a file: %s" % oplist_path)])
+    try:
+        oplist_source.resolve().relative_to(Path(stage_root).resolve())
+    except ValueError:
+        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
+            REASON_INPUT_DRIFT,
+            "the op-list path lies outside the stage root it must be run from")])
+
+    # NOTE: the containment check for the stage target lives ONCE, further down,
+    # immediately before the proposal parse. An earlier version of this file
+    # carried a second copy here, and that copy was DEAD: it resolved and
+    # validated a `target_path` that nothing read, because BEFORE had already
+    # moved to the snapshot. A check that can only refuse and can never permit is
+    # not a second guard, it is a second place to look. Removed.
+
+    # ---- PRECHECK ----------------------------------------------------------
+    # The request was validated and read above.  What follows settles the
+    # stage/candidate separation; the BEFORE observation is taken in SNAPSHOT,
+    # from bytes fixed before any writer exists.
+    receipt["txn_id"] = txn_id
+
+    # The stage must be provably disjoint from the candidate (PR1-C5-SEPARATION).
+    # Checked before anything is read, and fail-closed: if the candidate's design
+    # root cannot be determined, disjointness cannot be proven.
+    workspace = host_context.get("workspace") if isinstance(host_context, Mapping) \
+        else None
+    design_root = workspace.get("design_root") if isinstance(workspace, Mapping) \
+        else None
+    repair_root = workspace.get("repair_root") if isinstance(workspace, Mapping) \
         else None
     if not isinstance(design_root, str) or not design_root.strip():
         return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
@@ -3519,14 +3709,21 @@ def run_round(round_request):
     receipt["stage_root"] = str(Path(stage_root).resolve())
     receipt["candidate_design_root"] = str(Path(design_root).resolve())
 
-    # ---- PRECHECK ----------------------------------------------------------
-    # BEFORE is read from the stage target itself, not from a caller-supplied
-    # blob, so DELTA_CHECK later compares the two ends of one real file.
-    #
-    # Containment is enforced HERE, before the read, and not left to the adapter:
-    # the adapter's _resolve_within only guards ITS read, which happens later.
-    # A stage_target of "../../elsewhere" must not let this function read outside
-    # the stage it was told to touch.
+    # The op-list must already live inside the stage: the stage is re-seeded from
+    # the snapshot below, so an op-list from elsewhere would not survive it.
+    oplist_source = Path(oplist_path)
+    if not oplist_source.is_file():
+        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
+            REASON_INPUT_DRIFT,
+            "the op-list path is missing or is not a file: %s" % oplist_path)])
+    try:
+        oplist_source.resolve().relative_to(Path(stage_root).resolve())
+    except ValueError:
+        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
+            REASON_INPUT_DRIFT,
+            "the op-list path lies outside the stage root it must be run from")])
+
+    # Containment for the target, enforced here and not left to the adapter.
     try:
         resolved_root = Path(stage_root).resolve()
         target_path = (resolved_root / stage_target).resolve()
@@ -3535,43 +3732,104 @@ def run_round(round_request):
         return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
             REASON_INPUT_DRIFT,
             "the stage target escapes the stage root and will not be read: %s" % exc)])
-    try:
-        before_raw = target_path.read_bytes()
-        before_sha = hash_bytes(before_raw)
-    except OSError as exc:
-        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
-            REASON_INPUT_DRIFT,
-            "the stage target could not be read for observation: %s" % exc)])
-    # Recorded now, not only on the success path, so a refusal at a later phase
-    # still identifies exactly which bytes this round was reasoning about.
-    receipt["before_source_sha256"] = before_sha
-
-    try:
-        before_observation = _c2_observe_source(before_raw)
-    except Exception as exc:
-        return refuse(PHASE_PRECHECK, STATUS_UNKNOWN, [_finding(
-            REASON_INPUT_DRIFT, "the before observation could not be established: %s" % exc)])
-    if not before_observation["coverage"]["complete"]:
-        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
-            REASON_COVERAGE_INCOMPLETE,
-            "the before observation is not complete, so no delta can be trusted")])
 
     try:
         proposal = parse_proposal(bytes(proposal_raw))
         symbol_digest = host_context["candidate_symbol_digest"]
     except KeyError:
         return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
-            REASON_INPUT_DRIFT, "the host context carries no candidate_symbol_digest")])
+            REASON_INPUT_DRIFT,
+            "the host context carries no candidate_symbol_digest")])
     except RepairContractError as exc:
-        return refuse(PHASE_PRECHECK, STATUS_UNKNOWN,
-                      [_finding(REASON_INPUT_DRIFT, str(exc))])
+        # Carry the contract's OWN findings through, not str(exc).  RepairContractError
+        # stringifies to its reason CODES joined by "; " ("REPAIR_SCHEMA_INVALID"),
+        # so the receipt was naming the class of refusal while discarding which
+        # field was wrong -- the one piece of information the caller acts on.
+        findings = list(getattr(exc, "findings", None) or ())
+        if not findings:
+            findings = [_finding(REASON_INPUT_DRIFT, str(exc))]
+        return refuse(PHASE_PRECHECK, STATUS_UNKNOWN, findings)
 
+    # ---- SNAPSHOT ----------------------------------------------------------
+    # Contract order is PRECHECK -> SNAPSHOT -> STAGE_APPLY
+    # (akcli_adapter.py:1354).  The snapshot is taken before any writer exists.
+    #
+    # BEFORE is read from the snapshot, not from the stage.  Reading it from the
+    # stage made the round's before and its after the same file observed either
+    # side of one write: self-consistent, but it left the bytes the authorization
+    # was computed against unfixed.  C3 already expects a snapshot_root distinct
+    # from stage_root (_BINDING_REQUEST_FIELDS) and names the roles "BEFORE from
+    # the snapshot root, AFTER from the stage root" (:1403); this adopts that.
+    #
+    # The snapshot lands under repair_root, never inside the candidate, and is
+    # held to the same disjointness rule as the stage: a snapshot of the
+    # candidate that lives inside the candidate is not a record of anything.
+    try:
+        snapshot_root, snapshot_manifest = materialise_snapshot(
+            design_root, Path(repair_root) / "snapshot", stage_target)
+        stage_seeding = Path(stage_root)
+        # The op-list is not part of the design, so re-seeding the stage deletes
+        # it.  It is the caller's, and it is what the writer is authorised to
+        # execute, so it is read into memory BEFORE the re-seed and written back
+        # after.  Copying it from the stage afterwards reads a file this function
+        # has just deleted -- which is exactly what happened, and presented as a
+        # caller's missing file rather than as our own ordering.
+        op_list_bytes = oplist_source.read_bytes()
+        if stage_seeding.exists():
+            shutil.rmtree(stage_seeding)
+        shutil.copytree(snapshot_root, stage_seeding)
+        re_seeded_oplist = stage_seeding / oplist_source.name
+        re_seeded_oplist.write_bytes(op_list_bytes)
+        stage_manifest = build_file_manifest(stage_seeding, stage_target)
+        op_list = str(re_seeded_oplist)
+        before_raw = (Path(snapshot_root) / stage_target).read_bytes()
+        before_sha = hash_bytes(before_raw)
+    except RepairContractError as exc:
+        # The contract's own findings, which name the refusal.
+        return refuse(PHASE_SNAPSHOT, STATUS_BLOCKED,
+                      list(getattr(exc, "findings", None) or ()))
+    except OSError as exc:
+        # OSError is reported separately from RepairContractError on purpose.
+        # These three operations -- copy the tree, seed the stage, read BEFORE
+        # out of the snapshot -- are ours, so a bare "[Errno 2] No such file"
+        # reads as a caller's missing file. It is not: earlier in this round a
+        # stage re-seed deleted the op-list one line before it was copied back,
+        # and the only thing the receipt said was that the file was missing.
+        # Which of the three failed is the first thing anyone debugging this
+        # needs to know, so it is named.
+        return refuse(PHASE_SNAPSHOT, STATUS_BLOCKED, [_finding(
+            REASON_INPUT_DRIFT,
+            "the snapshot could not be materialised, the stage could not be "
+            "seeded from it, or BEFORE could not be read out of it: %s" % exc)])
+    reach(PHASE_SNAPSHOT)
+    receipt["snapshot"] = {
+        "root": snapshot_root,
+        "manifest": snapshot_manifest,
+        "target_sha256": snapshot_manifest["files"][0]["sha256"]
+        if snapshot_manifest["files"] else None,
+    }
+    receipt["staged_manifest"] = stage_manifest
+    receipt["before_source_sha256"] = before_sha
+
+    try:
+        before_observation = _c2_observe_source(before_raw)
+    except Exception as exc:
+        return refuse(PHASE_SNAPSHOT, STATUS_UNKNOWN, [_finding(
+            REASON_INPUT_DRIFT,
+            "the snapshot observation could not be established: %s" % exc)])
+    if not before_observation["coverage"]["complete"]:
+        return refuse(PHASE_SNAPSHOT, STATUS_BLOCKED, [_finding(
+            REASON_COVERAGE_INCOMPLETE,
+            "the snapshot observation is not complete, so no delta can be trusted")])
+
+    # The binding is issued HERE, against the snapshot's observation, so the
+    # authorization is computed from bytes that were fixed before it was decided.
     native_before = {"status": "PASS", "observation": before_observation,
                      "tool": {"symbol_digest": symbol_digest}}
     bound = bind_policy(host_context, proposal, native_before, policy=policy,
                         required_paths=required_paths)
     if bound["status"] == STATUS_BLOCKED:
-        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, bound["reasons"])
+        return refuse(PHASE_SNAPSHOT, STATUS_BLOCKED, bound["reasons"])
     reach(PHASE_PRECHECK)
     receipt.update(
         rule_id=bound["rule_id"],
@@ -3591,7 +3849,7 @@ def run_round(round_request):
             "txn_id": txn_id,
             "stage_root": stage_root,
             "stage_target": stage_target,
-            "oplist_path": oplist_path,
+            "oplist_path": op_list,
             "native_artifact_root": artifact_root,
         })
     except Exception as exc:

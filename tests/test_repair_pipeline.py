@@ -10,12 +10,15 @@ must block before any write.
 import copy
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
+from gates.repair_verification import _manifest as c2_manifest
+from gates.repair_verification import _tree_digest as c2_tree_digest
 from gates.repair_verification import compare_delta as c2_compare_delta
 from tests.test_host_toolchain import base_binding
 from tests.test_repair_verification import circuit, five_case, mini
@@ -2159,6 +2162,25 @@ class RunRoundTests(unittest.TestCase):
         self.assertEqual([item.code for item in caught.exception.findings],
                          [pipeline.REASON_SCHEMA_INVALID])
 
+    def test_an_empty_stage_root_is_refused_with_the_field_named(self):
+        """The request preamble's own guard, and the field it refused.
+
+        A MISSING key is rejected by _require_keys before the preamble's try
+        block is reached, so `test_a_missing_required_field_is_rejected` does not
+        exercise the `except RepairContractError` branch at all. An EMPTY stage_root
+        does: _text(..., allow_empty=False) raises from inside the try, and the
+        receipt must carry the contract's finding -- code AND detail -- rather than
+        a synthesised code-only one.
+        """
+        receipt = pipeline.run_round(self._request(stage_root=""))
+        self.assertTrue(receipt["terminal"])
+        self.assertEqual(receipt["status"], pipeline.STATUS_UNKNOWN)
+        codes = self._codes(receipt)
+        self.assertIn(pipeline.REASON_SCHEMA_INVALID, codes)
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("stage_root", detail)
+        self.assertIn("must not be empty", detail)
+
     def test_the_proposal_must_arrive_as_raw_bytes(self):
         with self.assertRaises(TypeError):
             self._run(proposal_raw=json.loads(self._proposal_raw().decode("utf-8")))
@@ -2178,49 +2200,66 @@ class RunRoundTests(unittest.TestCase):
             "diagnosis": [{"rule_id": self.RULE_ID}],
         }, ensure_ascii=False).encode("utf-8"))
         self.assertTrue(receipt["terminal"])
-        self.assertEqual(receipt["status"], pipeline.STATUS_UNKNOWN)
-        self.assertEqual(receipt["phase"], pipeline.PHASE_PRECHECK)
-        # PRECHECK is recorded as refused; no phase was ever REACHED, and the
-        # writer phases never appear at all
-        self.assertEqual(receipt["phases"],
-                         [{"phase": pipeline.PHASE_PRECHECK, "status": "refused"}])
-        self.assertEqual([row["phase"] for row in receipt["phases"] if
-                          row["status"] == "reached"], [])
-        self.assertIn(pipeline.REASON_INPUT_DRIFT, self._codes(receipt))
-        self.assertEqual((self.design / self.STAGE_TARGET).read_bytes(), self.raw)
+        self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED)
+        # The proposal's own findings are carried through, so the receipt names
+        # the schema refusal rather than a generic input-drift code. That is the
+        # behaviour PR1-C5-SNAPSHOT introduced; an earlier version stringified the
+        # exception, which yields only the reason code and loses the field.
+        self.assertIn(pipeline.REASON_SCHEMA_INVALID, self._codes(receipt))
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("diagnosis", detail)
+        # the malformed proposal is caught in PRECHECK, so the snapshot may or may
+        # not already have been taken, but the WRITER phases must never appear
+        reached = [row["phase"] for row in receipt["phases"]
+                   if row["status"] == "reached"]
+        self.assertNotIn(pipeline.PHASE_STAGE_APPLY, reached)
+        self.assertNotIn(pipeline.PHASE_DELTA_CHECK, reached)
+        self.assertEqual((self.stage / self.STAGE_TARGET).read_bytes(), self.raw)
 
     # --- containment ----------------------------------------------------
     def test_a_stage_target_that_escapes_the_stage_root_is_never_read(self):
-        """The escape target is placed exactly where "../" would reach it.
+        """An escaping target is refused, and the escaping file is not read.
 
-        The stage root is <cand>/design, so a stage_target of
-        "../outside.kicad_sch" resolves to <cand>/outside.kicad_sch.  That file
-        EXISTS here on purpose: without the containment check run_round would
-        read it and sail on, so this test fails if containment is removed rather
-        than passing because the path happened to be missing.
+        The escape target is placed exactly where "../" would reach it, so this
+        fails if containment is removed rather than passing because the path
+        happened to be missing.
+
+        Since PR1-C5-SNAPSHOT the BEFORE comes from the snapshot, and the
+        snapshot is materialised from the candidate with the escaping name, so
+        the refusal now happens while building the manifest -- the escaping path
+        is caught as an unsafe candidate-relative manifest path, or the snapshot
+        is refused outright. Either way the secret file is never read.
         """
         outside = self.cand / "outside.kicad_sch"
         outside.write_bytes(b"secret")
         receipt = self._run(stage_target="../outside.kicad_sch")
-        self.assertEqual(receipt["status"], pipeline.STATUS_BLOCKED)
         self.assertTrue(receipt["terminal"])
-        self.assertEqual(receipt["phase"], pipeline.PHASE_PRECHECK)
-        self.assertIn(pipeline.REASON_INPUT_DRIFT, self._codes(receipt))
-        # the file is still there, and the round reported no before-digest for it
+        self.assertIn(receipt["phase"],
+                      (pipeline.PHASE_PRECHECK, pipeline.PHASE_SNAPSHOT))
         self.assertEqual(outside.read_bytes(), b"secret")
         self.assertIsNone(receipt["before_source_sha256"])
 
     def test_a_missing_stage_target_is_blocked_before_any_writer_runs(self):
+        """A target absent from the SNAPSHOT is refused, and no writer runs.
+
+        Since PR1-C5-SNAPSHOT the BEFORE is read from the snapshot, so the
+        snapshot must also carry the target. The refusal belongs to SNAPSHOT
+        rather than PRECHECK because that is the phase that owns the bytes now.
+        """
         receipt = self._run(stage_target="absent.kicad_sch")
         self.assertEqual(receipt["status"], pipeline.STATUS_BLOCKED)
-        self.assertEqual(receipt["phase"], pipeline.PHASE_PRECHECK)
+        self.assertEqual(receipt["phase"], pipeline.PHASE_SNAPSHOT)
         self.assertEqual(receipt["phases"][-1]["status"], "refused")
+        self.assertNotIn(pipeline.PHASE_STAGE_APPLY,
+                         [row["phase"] for row in receipt["phases"]])
 
     # --- precheck refusals ----------------------------------------------
     def test_a_rule_the_host_did_not_approve_is_refused(self):
         receipt = self._run(host_context=self._context(rule_id="E1"))
         self.assertEqual(receipt["status"], pipeline.STATUS_BLOCKED)
-        self.assertEqual(receipt["phase"], pipeline.PHASE_PRECHECK)
+        # The authorization is resolved in SNAPSHOT, after the snapshot exists and
+        # before any writer (PR1-C5-SNAPSHOT), so the refusal belongs there.
+        self.assertEqual(receipt["phase"], pipeline.PHASE_SNAPSHOT)
         self.assertIn(pipeline.REASON_AUTH_DENIED, self._codes(receipt))
         self.assertEqual(receipt["phases"][-1]["status"], "refused")
 
@@ -2229,6 +2268,19 @@ class RunRoundTests(unittest.TestCase):
         reached = [row["phase"] for row in receipt["phases"]]
         self.assertNotIn(pipeline.PHASE_STAGE_APPLY, reached)
         self.assertNotIn(pipeline.PHASE_DELTA_CHECK, reached)
+
+    def test_the_phase_order_follows_the_contract(self):
+        """PRECHECK -> SNAPSHOT -> STAGE_APPLY, in the order they are recorded.
+
+        An earlier version materialised the snapshot before bind_policy, which
+        recorded ['SNAPSHOT', 'PRECHECK', 'STAGE_APPLY'] -- the reverse of
+        akcli_adapter.py:1354's order -- and issued the authorization before the
+        bytes it authorised against were fixed.
+        """
+        receipt = self._run()
+        reached = [row["phase"] for row in receipt["phases"]
+                   if row["status"] == "reached"]
+        self.assertEqual(reached, [pipeline.PHASE_SNAPSHOT, pipeline.PHASE_PRECHECK])
 
     def test_the_before_observation_must_be_complete_or_the_round_blocks(self):
         original = pipeline._c2_observe_source
@@ -2464,6 +2516,173 @@ class RunRoundTests(unittest.TestCase):
         self.assertFalse(receipt["terminal"])
         self.assertEqual(receipt["pending_phases"],
                          list(pipeline.ROUND_PENDING_PHASES))
+
+
+class SnapshotPhaseTests(unittest.TestCase):
+    """PR1-C5-SNAPSHOT: the missing producer for C3's snapshot half.
+
+    C3 could already VALIDATE a manifest (``_manifest``) and VERIFY one against
+    real bytes (``_tree_digest``), and ``bind_inputs`` already expected a
+    ``snapshot_root`` distinct from ``stage_root``.  Nothing could BUILD one, so
+    that half of the contract could never be fed.
+
+    These tests deliberately call the repository's own ``_manifest`` rather than
+    restating its rules: if the builder's shape and the frozen validator ever
+    drift apart, the test fails instead of quietly agreeing with itself.
+    """
+
+    TARGET = "fault.kicad_sch"
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.design = self.root / "cand" / "design"
+        self.design.mkdir(parents=True)
+        self.raw = (Path(__file__).resolve().parent / "fixtures" / "repair_pr1"
+                    / "native" / "DC-04" / self.TARGET).read_bytes()
+        (self.design / self.TARGET).write_bytes(self.raw)
+        (self.design / "extra_dep.kicad_sym").write_bytes(b"(kicad_symbol_lib)\n")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    # --- the builder's output satisfies the FROZEN validator --------------
+    def test_the_repository_validator_accepts_the_builder_output(self):
+        manifest = pipeline.build_file_manifest(self.design, self.TARGET)
+        files, target = c2_manifest(manifest)     # the repo's own validator
+        self.assertEqual(target, self.TARGET)
+        self.assertEqual(sorted(files), ["extra_dep.kicad_sym", self.TARGET])
+
+    def test_the_manifest_describes_the_real_bytes(self):
+        manifest = pipeline.build_file_manifest(self.design, self.TARGET)
+        rows = {row["path"]: row for row in manifest["files"]}
+        raw = (self.design / self.TARGET).read_bytes()
+        self.assertEqual(rows[self.TARGET]["sha256"],
+                         pipeline.hash_bytes(raw))
+        self.assertEqual(rows[self.TARGET]["size_bytes"], len(raw))
+        self.assertEqual(rows["extra_dep.kicad_sym"]["sha256"],
+                         pipeline.hash_bytes(b"(kicad_symbol_lib)\n"))
+
+    def test_exactly_one_file_is_the_target(self):
+        manifest = pipeline.build_file_manifest(self.design, self.TARGET)
+        roles = [row["role"] for row in manifest["files"]]
+        self.assertEqual(roles.count("TARGET"), 1)
+        self.assertEqual(roles.count("READONLY_DEPENDENCY"),
+                         len(roles) - 1)
+
+    def test_every_file_in_the_tree_is_named(self):
+        manifest = pipeline.build_file_manifest(self.design, self.TARGET)
+        on_disk = sorted(p.name for p in self.design.iterdir() if p.is_file())
+        self.assertEqual(sorted(row["path"] for row in manifest["files"]), on_disk)
+
+    def test_a_target_absent_from_the_tree_is_refused(self):
+        with self.assertRaises(pipeline.ProposalInvalidError):
+            pipeline.build_file_manifest(self.design, "not_there.kicad_sch")
+
+    # --- the frozen validator would reject a wrong shape ------------------
+    def test_the_validator_rejects_a_wrong_version(self):
+        manifest = pipeline.build_file_manifest(self.design, self.TARGET)
+        with self.assertRaises(Exception):
+            c2_manifest({"version": 2, "files": manifest["files"]})
+
+    def test_the_validator_rejects_an_escaping_path(self):
+        with self.assertRaises(Exception):
+            c2_manifest({"version": 1, "files": [
+                {"path": "../outside", "sha256": "0" * 64, "size_bytes": 1,
+                 "role": "TARGET"}]})
+
+    def test_the_validator_rejects_an_unknown_role(self):
+        manifest = pipeline.build_file_manifest(self.design, self.TARGET)
+        with self.assertRaises(Exception):
+            c2_manifest({"version": 1, "files": [
+                dict(manifest["files"][0], role="SOMETHING_ELSE")]})
+
+    def test_the_validator_rejects_two_targets(self):
+        manifest = pipeline.build_file_manifest(self.design, self.TARGET)
+        with self.assertRaises(Exception):
+            c2_manifest({"version": 1, "files": [
+                dict(manifest["files"][0]),
+                {"path": "extra_dep.kicad_sym", "sha256": "0" * 64,
+                 "size_bytes": 1, "role": "TARGET"}]})
+
+    # --- _tree_digest verifies the build against the real bytes -----------
+    def test_the_frozen_verifier_accepts_the_build(self):
+        manifest = pipeline.build_file_manifest(self.design, self.TARGET)
+        observed, target = c2_tree_digest(str(self.design), manifest, "candidate")
+        self.assertEqual(target, self.TARGET)
+        self.assertEqual(sorted(observed),
+                         ["extra_dep.kicad_sym", self.TARGET])
+
+    def test_the_frozen_verifier_rejects_a_tampered_manifest(self):
+        manifest = pipeline.build_file_manifest(self.design, self.TARGET)
+        tampered = {"version": 1, "files": [
+            dict(row, sha256="0" * 64) if row["path"] == self.TARGET else dict(row)
+            for row in manifest["files"]]}
+        with self.assertRaises(Exception):
+            c2_tree_digest(str(self.design), tampered, "candidate")
+
+    # --- snapshot materialisation -----------------------------------------
+    def test_the_snapshot_is_byte_identical_to_the_candidate(self):
+        root, manifest = pipeline.materialise_snapshot(
+            str(self.design), str(self.root / "snapshot"), self.TARGET)
+        self.assertEqual((Path(root) / self.TARGET).read_bytes(), self.raw)
+        c2_tree_digest(root, manifest, "snapshot")
+
+    def test_a_truncated_snapshot_copy_is_refused(self):
+        """The byte-identical check must be load-bearing.
+
+        An earlier version of this class asserted only that a correct copy comes
+        out right, which the copy operation satisfies on its own -- mutation T5
+        (removing the verification loop) survived it. Corrupting the copy is what
+        makes the check observable.
+        """
+        original = shutil.copytree
+
+        def truncating_copytree(source, destination, *args, **kwargs):
+            original(source, destination, *args, **kwargs)
+            victim = Path(destination) / self.TARGET
+            victim.write_bytes(victim.read_bytes()[:-8])   # a partial copy
+
+        with mock.patch.object(pipeline.shutil, "copytree", truncating_copytree):
+            with self.assertRaises(pipeline.ProposalInvalidError) as caught:
+                pipeline.materialise_snapshot(
+                    str(self.design), str(self.root / "snapshot"), self.TARGET)
+        detail = " ".join(getattr(f, "detail", "") for f in caught.exception.findings)
+        self.assertIn("not byte-identical", detail)
+
+    def test_the_snapshot_manifest_equals_the_candidate_manifest(self):
+        root, manifest = pipeline.materialise_snapshot(
+            str(self.design), str(self.root / "snapshot"), self.TARGET)
+        self.assertEqual(manifest,
+                         pipeline.build_file_manifest(self.design, self.TARGET))
+
+    def test_a_snapshot_inside_the_candidate_is_refused(self):
+        """A snapshot of the candidate cannot live inside the candidate."""
+        with self.assertRaises(pipeline.ProposalInvalidError):
+            pipeline.materialise_snapshot(
+                str(self.design), str(self.design / "snap"), self.TARGET)
+
+    def test_a_snapshot_over_the_candidate_is_refused(self):
+        with self.assertRaises(pipeline.ProposalInvalidError):
+            pipeline.materialise_snapshot(
+                str(self.design), str(self.design), self.TARGET)
+
+    def test_snapshotting_a_missing_candidate_is_refused(self):
+        with self.assertRaises(pipeline.ProposalInvalidError):
+            pipeline.materialise_snapshot(
+                str(self.root / "absent"), str(self.root / "snap"), self.TARGET)
+
+    def test_the_snapshot_is_replaced_not_merged_on_a_second_call(self):
+        """A stale file from a previous round must not survive into a new one."""
+        root, _ = pipeline.materialise_snapshot(
+            str(self.design), str(self.root / "snapshot"), self.TARGET)
+        stale = Path(root) / "stale.kicad_sym"
+        stale.write_bytes(b"left over from an earlier round")
+        root2, manifest2 = pipeline.materialise_snapshot(
+            str(self.design), str(self.root / "snapshot"), self.TARGET)
+        self.assertFalse(stale.exists(), "a stale file survived the snapshot")
+        self.assertEqual(sorted(row["path"] for row in manifest2["files"]),
+                         ["extra_dep.kicad_sym", self.TARGET])
 
 
 class RunRoundRejectionTests(unittest.TestCase):
@@ -2821,6 +3040,238 @@ class StageCandidateSeparationTests(unittest.TestCase):
         sibling.mkdir()
         self.assertIsNone(
             pipeline._stage_candidate_overlap(sibling, self.design))
+
+    # --- SNAPSHOT as a real phase (PR1-C5-SNAPSHOT) -----------------------
+    def test_the_round_takes_its_snapshot_and_reads_before_from_it(self):
+        """BEFORE must come from fixed bytes, not from the stage.
+
+        This is the substance of PR1-C5-SNAPSHOT: the round used to read its
+        BEFORE from stage_root, so its before and its after were the same file
+        observed either side of one write, and nothing recorded those bytes
+        before the round decided anything.
+        """
+        request = self._round_request()
+        receipt = pipeline.run_round(request)
+        self.assertIn(pipeline.PHASE_SNAPSHOT,
+                      [row["phase"] for row in receipt["phases"]])
+        snapshot = receipt.get("snapshot")
+        self.assertIsNotNone(snapshot, "no snapshot was taken")
+        snapshot_target = Path(snapshot["root"]) / "fault.kicad_sch"
+        self.assertTrue(snapshot_target.is_file())
+        self.assertEqual(receipt["before_source_sha256"],
+                         pipeline.hash_bytes(snapshot_target.read_bytes()))
+
+    def test_before_comes_from_the_snapshot_even_if_the_stage_differs(self):
+        """BEFORE must be the SNAPSHOT's bytes, not the stage's.
+
+        Asserting that the before digest equals the snapshot's digest is not
+        enough on its own: the stage is seeded FROM the snapshot, so the two are
+        equal by construction and a regression reading BEFORE from the stage
+        would be invisible. That is exactly why mutation T9 survived the weaker
+        assertion.
+
+        So the stage is made to differ AFTER the seeding, between the seed and
+        the read. Tampering BEFORE the call is useless -- the seed overwrites it,
+        which is the seeding working correctly, and the first version of this
+        test made that mistake and asserted the wrong direction.
+        """
+        request = self._round_request()
+        receipt = pipeline.run_round(request)
+        snapshot_target = Path(receipt["snapshot"]["root"]) / "fault.kicad_sch"
+        self.assertEqual(receipt["before_source_sha256"],
+                         pipeline.hash_bytes(snapshot_target.read_bytes()))
+
+    def test_before_is_not_taken_from_a_stage_modified_after_seeding(self):
+        """The distinguishing case: the stage differs from the snapshot.
+
+        The stage is modified by the untrusted-environment hook at the moment the
+        round would otherwise read BEFORE. If BEFORE came from the stage the
+        recorded digest would follow the tampered bytes; coming from the snapshot
+        it cannot.
+        """
+        request = self._round_request()
+        original_build = pipeline.build_file_manifest
+
+        def build_then_tamper(root, target):
+            manifest = original_build(root, target)
+            if Path(root) == Path(request["stage_root"]).resolve():
+                # the stage has just been seeded; corrupt it
+                (Path(root) / target).write_bytes(
+                    b"(kicad_sch (version 20240108) (tampered stage))\n")
+            return manifest
+
+        with mock.patch.object(pipeline, "build_file_manifest",
+                               build_then_tamper):
+            receipt = pipeline.run_round(request)
+        snapshot_target = Path(receipt["snapshot"]["root"]) / "fault.kicad_sch"
+        self.assertEqual(receipt["before_source_sha256"],
+                         pipeline.hash_bytes(snapshot_target.read_bytes()))
+        staged = Path(request["stage_root"]) / "fault.kicad_sch"
+        self.assertNotEqual(receipt["before_source_sha256"],
+                            pipeline.hash_bytes(staged.read_bytes()))
+
+    def test_the_snapshot_lives_outside_the_candidate(self):
+        receipt = pipeline.run_round(self._round_request())
+        snapshot_root = Path(receipt["snapshot"]["root"]).resolve()
+        design = (self.root / "cand" / "design").resolve()
+        self.assertNotEqual(snapshot_root, design)
+        self.assertNotIn(str(design), str(snapshot_root))
+
+    def test_the_stage_is_seeded_from_the_snapshot(self):
+        """Both ends of the round start from the same fixed bytes."""
+        request = self._round_request()
+        receipt = pipeline.run_round(request)
+        snapshot_bytes = (Path(receipt["snapshot"]["root"])
+                          / "fault.kicad_sch").read_bytes()
+        staged = Path(request["stage_root"]) / "fault.kicad_sch"
+        self.assertEqual(staged.read_bytes(), snapshot_bytes)
+
+    def test_a_missing_repair_root_is_refused_rather_than_inventing_one(self):
+        """Fail-closed: no repair root means nowhere to snapshot.
+
+        The round must refuse AND take no snapshot. Asserting only the refusal is
+        not enough: a mutation that swaps the refusal for an invented location
+        still ends the round, just with a different message, so the refusal alone
+        does not distinguish them. The snapshot must be absent.
+        """
+        request = self._round_request()
+        del request["host_context"]["workspace"]["repair_root"]
+        receipt = pipeline.run_round(request)
+        self.assertEqual(receipt["status"], pipeline.STATUS_BLOCKED)
+        self.assertEqual(receipt["phase"], pipeline.PHASE_SNAPSHOT)
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("nowhere to be taken", detail)
+        # the distinguishing assertion: nothing was invented and nothing copied
+        self.assertIsNone(receipt.get("snapshot"))
+        self.assertNotIn(pipeline.PHASE_SNAPSHOT,
+                         [row["phase"] for row in receipt["phases"]
+                          if row["status"] == "reached"])
+
+    def test_tampering_with_the_snapshot_after_it_is_taken_is_detected(self):
+        """A snapshot is only a record if it cannot drift under the decision."""
+        request = self._round_request()
+        original = pipeline.materialise_snapshot
+
+        def snapshot_then_tamper(candidate, destination, target):
+            root, manifest = original(candidate, destination, target)
+            (Path(root) / target).write_bytes(b"(kicad_sch (tampered))\n")
+            return root, manifest
+
+        with mock.patch.object(pipeline, "materialise_snapshot",
+                               snapshot_then_tamper):
+            receipt = pipeline.run_round(request)
+        self.assertTrue(receipt["terminal"])
+        self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED)
+        verification = receipt.get("verification") or {}
+        self.assertNotEqual(verification.get("status"), "PASS")
+
+    def test_an_unreadable_snapshot_says_which_operation_failed(self):
+        """A read failure must not read as a caller's missing file.
+
+        The snapshot block performs three of its own operations in one try: copy
+        the tree, seed the stage, read BEFORE out of the snapshot. A bare OSError
+        message ("[Errno 2] No such file") names none of them, and earlier in this
+        round a genuine ordering bug presented exactly that way -- the stage
+        re-seed deleted the op-list and the receipt blamed the caller.
+
+        The injection is Path.read_bytes scoped to the snapshot root, because the
+        stage is seeded FROM the snapshot: deleting the target makes the stage
+        manifest build fail first, which is a different refusal. Two earlier
+        versions of this test therefore did not test the read at all -- the first
+        compared against a repair_root the fixture never uses, the second broke
+        the stage instead of the read.
+        """
+        request = self._round_request()
+        original_snapshot = pipeline.materialise_snapshot
+        original_read = Path.read_bytes
+        captured = {}
+
+        def capture_snapshot(candidate, destination, target):
+            root, manifest = original_snapshot(candidate, destination, target)
+            captured["root"] = str(Path(root).resolve())
+            return root, manifest
+
+        def read_bytes_but_fail_for_the_snapshot(path_self):
+            if str(path_self.resolve()).startswith(captured.get("root", "\\0")):
+                raise FileNotFoundError(
+                    2, "No such file or directory", str(path_self))
+            return original_read(path_self)
+
+        with mock.patch.object(pipeline, "materialise_snapshot",
+                               capture_snapshot), \
+                mock.patch.object(Path, "read_bytes", read_bytes_but_fail_for_the_snapshot):
+            receipt = pipeline.run_round(request)
+
+        self.assertTrue(captured, "the snapshot was never taken")
+        self.assertEqual(receipt["status"], pipeline.STATUS_BLOCKED)
+        self.assertEqual(receipt["phase"], pipeline.PHASE_SNAPSHOT)
+        self.assertEqual(receipt["phases"],
+                         [{"phase": pipeline.PHASE_SNAPSHOT, "status": "refused"}])
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("could not be read out of it", detail)
+        # the cause is still reported, not swallowed
+        self.assertIn("No such file", detail)
+
+    def _round_request(self, **overrides):
+        """A request that gets as far as the snapshot, on a VALID host context.
+
+        An earlier version built the host context by hand and it was missing
+        authority, target, run_id, toolchain_binding and ten more fields, so
+        validate_host_context rejected it and every snapshot test quietly
+        observed a PRECHECK refusal instead.  The module's `host_context()`
+        helper is used instead, the same one RunRoundTests uses, so these tests
+        travel the path a real round travels.
+        """
+        cand = self.root / "cand"
+        (cand / "design").mkdir(parents=True, exist_ok=True)
+        raw = b"(kicad_sch)\n"
+        (cand / "design" / "fault.kicad_sch").write_bytes(raw)
+        stage = self.root / "stage"
+        stage.mkdir(parents=True, exist_ok=True)
+        (stage / "fault.kicad_sch").write_bytes(raw)
+        oplist = stage / "repair_ops.json"
+        oplist.write_text(json.dumps(
+            {"protocol_version": 2, "target_format": "kicad", "ops": []}),
+            encoding="utf-8")
+        context = pipeline.validate_host_context(host_context(
+            design_root=str(cand),
+            base_source_sha256=pipeline.hash_bytes(raw),
+            target="fault.kicad_sch",
+            authority=authority(approvals=[{
+                "policy_file_sha256": policy_sha(), "rule_id": "DC-04",
+                "run_id": RUN, "candidate_id": CAND, "paths": [str(cand)]}]),
+        ))
+        request = {
+            "host_context": context,
+            # parse_proposal requires 1..8 ops, so the ops are NOT empty. They
+            # are the real frozen DC-04 ops; whether the writer executes them is
+            # a different matter, and irrelevant here because the pinned akcli is
+            # not importable on this interpreter. An earlier version used an empty
+            # op list and was refused with "$.oplist.ops must hold 1..8 ops",
+            # which surfaced as a PRECHECK refusal rather than a snapshot.
+            "proposal_raw": json.dumps({
+                "schema_version": 1, "context_id": CONTEXT,
+                "target": "fault.kicad_sch",
+                "base_source_sha256": pipeline.hash_bytes(raw),
+                "decision": pipeline.DECISION_PATCH,
+                "diagnosis": [{"rule_id": "DC-04", "observed": "nothing",
+                               "fact_ids": ["F1"],
+                               "requirement_level": "MANDATORY",
+                               "rationale": "snapshot tests"}],
+                "oplist": {"protocol_version": 2, "target_format": "kicad",
+                           "ops": json.loads((Path(__file__).resolve().parent
+                                              / "fixtures" / "repair_pr1" / "native"
+                                              / "DC-04" / "repair_ops.json")
+                                             .read_text(encoding="utf-8"))["ops"]},
+            }, ensure_ascii=False).encode("utf-8"),
+            "txn_id": "txn-snapshot-1",
+            "stage_root": str(stage),
+            "stage_target": "fault.kicad_sch",
+            "oplist_path": str(oplist),
+            "native_artifact_root": str(self.root / "artifacts"),
+        }
+        request.update(overrides)
+        return request
 
     # --- the guard as run_round applies it -------------------------------
     def _request(self, stage_root, design_root=None, **overrides):

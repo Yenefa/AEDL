@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 120 条。完整正文在各自条目文件中；本索引只做导航。
+共 121 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -174,6 +174,7 @@
 ## 2026-09-27
 
 - [`AI-20260927-OPENCODE-01E084C9B19C83FAC7D3E2E48BAC0F1D`](ai-usage/AI-20260927-OPENCODE-01E084C9B19C83FAC7D3E2E48BAC0F1D.md) — stage / candidate 分离守卫 —— 让「未 commit」真正意味着「candidate 未被改动」
+- [`AI-20260927-OPENCODE-255E6B088320ABA0F3DD7E11BBCD9E31`](ai-usage/AI-20260927-OPENCODE-255E6B088320ABA0F3DD7E11BBCD9E31.md) — PR1-C5-SNAPSHOT —— 补上 C3 缺失的 manifest 构造器，并把 SNAPSHOT 变成真阶段
 - [`AI-20260927-OPENCODE-26F93624EFDFF840AB36B6DBF1BB3D4C`](ai-usage/AI-20260927-OPENCODE-26F93624EFDFF840AB36B6DBF1BB3D4C.md) — C5 `run_round` MVP —— 把已存在的 observe / proposal / bind_policy / apply / verify / feedback 串成一轮
 - [`AI-20260927-OPENCODE-47A962EA618E12E790D73A2CFE6D66C5`](ai-usage/AI-20260927-OPENCODE-47A962EA618E12E790D73A2CFE6D66C5.md) — C5 CP2 correction + CP3 `_host_patch` + `policy_id` 收口 + CP4-A authorization resolver
 - [`AI-20260927-OPENCODE-C90BA7F59551FE9CF7D0F807A03DB2CC`](ai-usage/AI-20260927-OPENCODE-C90BA7F59551FE9CF7D0F807A03DB2CC.md) — M7 verified rejection loop —— 被授权 A 却交付 B 的轮次必须被拒绝，且拒绝证据要指名偏差
