@@ -7,6 +7,7 @@ symbol digest is a host input cross-checked against the native read, and a misma
 must block before any write.
 """
 
+import inspect
 import copy
 import json
 import os
@@ -100,6 +101,25 @@ def native_before(symbol=SYMBOL, status="PASS", observation=None):
     return {"status": status,
             "observation": circuit() if observation is None else observation,
             "tool": {"symbol_digest": symbol}}
+
+
+def _round_source():
+    """The source of the WHOLE round: the locking wrapper plus its body.
+
+    `run_round` became a thin wrapper -- it takes the single-writer lock
+    (contract 346/369) and runs recovery, then delegates -- around
+    `_run_round_body`, which holds the phases.
+
+    Five tests read the round's source to assert it drives, or does not contain,
+    something. Against the wrapper alone they would pass VACUOUSLY: an
+    `assertNotIn` is satisfied by a function containing none of the code, for
+    entirely the wrong reason. So they read both halves.
+
+    Concatenated rather than nested, so a substring test behaves as it did when
+    the phases lived in one function.
+    """
+    return (inspect.getsource(pipeline.run_round)
+            + inspect.getsource(pipeline._run_round_body))
 
 
 class HostContextTests(unittest.TestCase):
@@ -2405,7 +2425,7 @@ class RunRoundTests(unittest.TestCase):
             self.assertNotIn(forbidden, request_fields)
         import inspect
         import textwrap
-        body = textwrap.dedent(inspect.getsource(pipeline.run_round))
+        body = textwrap.dedent(_round_source())
         self.assertIn("akcli_adapter.apply_stage", body)
         for forbidden in ("writer=", "applier=", "override=", "mock"):
             self.assertNotIn(forbidden, body)
@@ -2422,7 +2442,7 @@ class RunRoundTests(unittest.TestCase):
         import inspect
         import textwrap
 
-        tree = ast.parse(textwrap.dedent(inspect.getsource(pipeline.run_round)))
+        tree = ast.parse(textwrap.dedent(_round_source()))
         called = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
@@ -2434,19 +2454,41 @@ class RunRoundTests(unittest.TestCase):
         self.assertNotIn("observation_delta", called)
 
     def test_the_round_never_claims_committed(self):
-        """COMMITTED belongs to the unimplemented commit phase.
+        """INVERTED when the writer landed: COMMITTED is now reachable.
 
-        The behavioural guarantee is asserted in the fail-closed tests above; this
-        pins the structural half: the token is never written into a receipt.
+        This pinned "the token STATUS_COMMITTED never appears in run_round's
+        source" -- the structural half of "COMMITTED is unreachable", true while
+        the writer was absent and the point of PR #101. Not deleted, not
+        relaxed: it now pins the property that replaced it, namely that the token
+        appears only AFTER the COMMIT phase begins, so no earlier phase can
+        claim a status it has not earned.
         """
         import inspect
         import textwrap
 
-        body = textwrap.dedent(inspect.getsource(pipeline.run_round))
-        self.assertNotIn("status=STATUS_COMMITTED", body)
-        self.assertNotIn('"status": STATUS_COMMITTED', body)
-        self.assertNotIn("STATUS_COMMITTED,", body)
-        self.assertNotIn("STATUS_COMMITTED}", body)
+        body = textwrap.dedent(_round_source())
+        # INVERTED, and still four assertions rather than one, because the
+        # original pinned four distinct ways the token could have been smuggled
+        # in. Each now has to be PRESENT, and all four must sit after the COMMIT
+        # phase begins -- so the test still catches a status claimed early, which
+        # is the property that actually matters.
+        self.assertIn("status=STATUS_COMMITTED", body,
+                      "the writer landed, so the token must be reachable")
+        self.assertIn('"status": STATUS_COMMITTED', body)
+        self.assertIn("STATUS_COMMITTED,", body)
+        # The bare `STATUS_COMMITTED}` spelling is GONE and deliberately not
+        # asserted: the writer builds its terminal record as
+        # `kind=JOURNAL_TERMINAL, status=STATUS_COMMITTED`, so no code path
+        # produces that form any more. Asserting it would pin a spelling the code
+        # does not use -- a test that can only pass if the code were written
+        # differently from how it is written, which is a test about style
+        # masquerading as a test about behaviour.
+        boundary = body.index("COMMIT -- contract line 374")
+        for token in ("status=STATUS_COMMITTED", '"status": STATUS_COMMITTED',
+                      "STATUS_COMMITTED,"):
+            self.assertGreater(body.index(token), boundary,
+                               "%s appears before the COMMIT phase begins"
+                               % token)
 
     def test_the_driven_phase_order_is_the_contracts(self):
         """Derived from a real receipt, not from a hand-maintained constant.
@@ -2492,7 +2534,8 @@ class RunRoundTests(unittest.TestCase):
         from pathlib import Path as _Path
         import inspect as _inspect
         source = _Path(pipeline.__file__).read_text(encoding="utf-8")
-        body = _inspect.getsource(pipeline.run_round)
+        body = (_inspect.getsource(pipeline.run_round)
+                    + _inspect.getsource(pipeline._run_round_body))
         for name in ("PHASE_PRECHECK", "PHASE_SNAPSHOT", "PHASE_STAGE_APPLY",
                      "PHASE_DELTA_CHECK", "PHASE_KICAD_VERIFY"):
             self.assertIn(name, source, "%s is not defined" % name)
@@ -2953,7 +2996,7 @@ class RunRoundRejectionTests(unittest.TestCase):
         """
         import inspect
         import textwrap
-        body = textwrap.dedent(inspect.getsource(pipeline.run_round))
+        body = textwrap.dedent(_round_source())
         self.assertIn("_delta_refusal", body)
         self.assertIn("status, cause, reasons = _delta_refusal(verdict)", body)
         self.assertIn("refuse(PHASE_DELTA_CHECK, status, reasons, "
@@ -2996,7 +3039,7 @@ class RunRoundRejectionTests(unittest.TestCase):
         """
         import inspect
         import textwrap
-        body = textwrap.dedent(inspect.getsource(pipeline.run_round))
+        body = textwrap.dedent(_round_source())
         self.assertIn("_delta_refusal", body)
         delegate = textwrap.dedent(inspect.getsource(pipeline._delta_refusal))
         self.assertIn("_delta_findings", delegate)
@@ -3181,9 +3224,18 @@ class StageCandidateSeparationTests(unittest.TestCase):
         del request["host_context"]["workspace"]["repair_root"]
         receipt = pipeline.run_round(request)
         self.assertEqual(receipt["status"], pipeline.STATUS_BLOCKED)
-        self.assertEqual(receipt["phase"], pipeline.PHASE_SNAPSHOT)
+        # PRECHECK, not SNAPSHOT. The refusal is unchanged and still fail-closed;
+        # it is now decided one layer earlier because the WRAPPER needs
+        # repair_root to locate the durable journal, and it does that before the
+        # body reaches SNAPSHOT. Same complaint, earlier decision -- and earlier
+        # is correct, since an earlier transaction must be ruled out before this
+        # one starts writing.
+        self.assertEqual(receipt["phase"], pipeline.PHASE_PRECHECK)
         detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
-        self.assertIn("nowhere to be taken", detail)
+        # the complaint is still about having nowhere to put things, and it now
+        # names the FIRST user of repair_root: the durable journal the wrapper
+        # must read before the body can take a snapshot
+        self.assertIn("journal", detail, detail)
         # the distinguishing assertion: nothing was invented and nothing copied
         self.assertIsNone(receipt.get("snapshot"))
         self.assertNotIn(pipeline.PHASE_SNAPSHOT,
@@ -3606,8 +3658,12 @@ class CommitPredicateTests(unittest.TestCase):
         return receipt
 
     def _ok(self, receipt=None, thin=None, **overrides):
+        # writer_calls defaults to 1 because that is what a correct round does,
+        # and the point of the table below is that every OTHER conjunct is
+        # observable in isolation.
         args = {"live_equals_snapshot": True, "hashes_recomputed": True,
-                "binding_drift": [], "permission_drift": [], "lock_held": True}
+                "binding_drift": [], "permission_drift": [], "lock_held": True,
+                "writer_calls": 1}
         args.update(overrides)
         return pipeline._commit_predicate(
             receipt or self._receipt(), thin or self._thin(), **args)
@@ -3642,7 +3698,7 @@ class CommitPredicateTests(unittest.TestCase):
             # the conjunct correctly held. The route half has its own test.
             "route_and_effect_checks": (
                 {"stage": {"status": "APPLIED_TO_STAGE", "tool_applied": False,
-                           "changed": True, "one_write_call": True}}, {}, {}),
+                           "changed": True}}, {}, {}),
             # contract 340
             "thin_scope_is_candidate_bytes": (
                 {}, {"scope": "SOMETHING_ELSE"}, {}),
@@ -3689,18 +3745,27 @@ class CommitPredicateTests(unittest.TestCase):
                 self.assertIn(note, reasons[1].detail,
                               "the drift note was not carried through")
 
-    def test_the_write_call_half_of_the_effect_check_is_not_assumed(self):
-        """Contract 339 says "one-write-call". No call counter exists.
+    def test_the_write_call_count_is_the_rounds_own(self):
+        """Contract 339's "one-write-call" and 371's 「native 只调用一次」.
 
-        `apply_stage` records no call count, so the conjunct cannot be checked.
-        Line 349 forbids treating UNKNOWN as satisfied, so it is reported
-        unsatisfied rather than quietly reduced to three of its four halves.
+        The first version read this from `apply_stage`'s receipt, which has no
+        such field -- so the conjunct was unsatisfiable in PRODUCTION as well as
+        in tests, and a real round refused at COMMIT with
+        `route_and_effect_checks`. Found by driving a real round, not by a green
+        suite. The count is now the round's own, passed in.
+
+        So: any count other than exactly 1 fails the conjunct, and the value is
+        not read out of any receipt.
         """
-        receipt = self._receipt()
-        del receipt["stage"]["one_write_call"]
-        ok, _, unsatisfied = self._ok(receipt=receipt)
-        self.assertFalse(ok)
-        self.assertIn("route_and_effect_checks", unsatisfied)
+        for calls, should_pass in ((1, True), (0, False), (2, False), (7, False)):
+            ok, _, unsatisfied = self._ok(writer_calls=calls)
+            self.assertEqual(ok, should_pass,
+                             "writer_calls=%d" % calls)
+            if not should_pass:
+                self.assertIn("route_and_effect_checks", unsatisfied)
+        source = Path(pipeline.__file__).read_text(encoding="utf-8")
+        self.assertNotIn('stage.get("one_write_call")', source,
+                         "the conjunct reads a field apply_stage never emits")
 
     def test_a_real_pass_satisfies_the_invariant_conjunct(self):
         """Conjunct 4 must accept the SHAPE the real verifier emits.
@@ -3773,10 +3838,19 @@ class CommitJournalTests(unittest.TestCase):
         shutil.rmtree(self.root, ignore_errors=True)
 
     def _record(self, **overrides):
+        # The FULL field set, not a hand-picked subset: `JOURNAL_FIELDS` gained
+        # snapshot_root / snapshot_sha256 / design_root because contract 385's
+        # restore has to read the snapshot's original bytes, and a recovery that
+        # could not find them could only guess. A fixture carrying a subset
+        # would be refused as malformed -- which is the reader working correctly
+        # and the test being wrong about the shape.
         row = {"kind": pipeline.JOURNAL_COMMIT_INTENT, "txn_id": "old-txn",
                "run_id": "run-1", "candidate_id": "cand-1", "patch_id": "p-1",
                "stage_sha256": "a" * 64, "before_sha256": "b" * 64,
-               "after_sha256": "c" * 64, "target": "x", "status": None}
+               "after_sha256": "c" * 64, "target": "x", "status": None,
+               "snapshot_root": str(Path(self.root) / "snapshot"),
+               "snapshot_sha256": "b" * 64,
+               "design_root": str(Path(self.root) / "cand" / "design")}
         row.update(overrides)
         return row
 
@@ -3852,6 +3926,16 @@ class CommitJournalTests(unittest.TestCase):
         pending, _ = pipeline._unresolved_intents(self.journal, "mine")
         self.assertEqual(pending, [])
 
+    def test_the_fixture_matches_the_field_set_the_reader_demands(self):
+        """A hand-written record is a liability, so pin it to the real set.
+
+        Without this, adding a field to `JOURNAL_FIELDS` would make every test
+        in this class fail with a confusing "missing ..." message, and the fix
+        would be to trim the fixture rather than to think about the new field.
+        """
+        record = self._record()
+        self.assertEqual(sorted(record), sorted(pipeline.JOURNAL_FIELDS))
+
     def test_a_missing_journal_is_empty_not_an_error(self):
         self.assertEqual(pipeline._read_journal(
             Path(self.root) / "absent.jsonl"), ([], []))
@@ -3871,20 +3955,53 @@ class CommitJournalTests(unittest.TestCase):
         self.assertIn("never committed", detail)
         self.assertIn("cannot trust", detail)
 
-    def test_an_unresolved_intent_refuses_at_precheck_and_names_the_file(self):
+    def test_live_bytes_that_are_neither_before_nor_after_are_quarantined(self):
+        """CONVERTED to contract 386's QUARANTINE -- the branch that must refuse.
+
+        PR #101 asserted "an unresolved intent refuses at PRECHECK and names the
+        file", which was correct while rule 385's restore did not exist. Now that
+        it does, an ORDINARY unresolved intent is resolved and the round carries
+        on, so that assertion is no longer true of this fixture.
+
+        Rather than delete it, it moves to the one case where refusing is the ONLY
+        correct answer: the live bytes match neither the recorded before-digest
+        nor the recorded after-digest, so they may be a human's edit or another
+        process's. Contract 386: 「隔离现场，不覆盖可能的人类/其他进程修改」 --
+        quarantine, do not overwrite, do not open another round.
+
+        So the round refuses, says it QUARANTINED (a different human response from
+        a plain failure), names the transaction and the journal, and leaves the
+        bytes exactly as found.
+        """
         import json
+        from tests.test_repair_pipeline import RunRoundTests
+        # Path(), because CommitJournalTests.setUp does `tempfile.mkdtemp()` and
+        # so `self.root` is a STRING here -- unlike the suites where a fixture
+        # attribute shadows it with a Path. `self.root / "cand"` raised TypeError.
+        design = Path(self.root) / "cand" / "design"
+        design.mkdir(parents=True, exist_ok=True)
+        stranger = design / RunRoundTests.STAGE_TARGET
+        stranger.write_bytes(b"\x00 someone else wrote this\n")
+        stranger_sha = pipeline.hash_bytes(stranger.read_bytes())
+
+        record = self._record(txn_id="stuck")
+        record["target"] = str(stranger)
         with open(str(self.journal), "w", encoding="utf-8") as handle:
-            handle.write(json.dumps(self._record(txn_id="stuck"),
-                                    sort_keys=True) + "\n")
-        request = self._request(repair_root=self.root)
-        receipt = pipeline.run_round(request)
+            handle.write(json.dumps(record, sort_keys=True) + "\n")
+
+        receipt = pipeline.run_round(self._request(repair_root=self.root))
+
         self.assertTrue(receipt["terminal"])
-        self.assertEqual(receipt["status"], pipeline.STATUS_BLOCKED)
+        self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED)
         detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("QUARANTINE", detail,
+                      "the refusal must distinguish quarantining from failing")
         self.assertIn("stuck", detail, "the unresolved txn was not named")
         self.assertIn("journal.jsonl", detail,
                       "the reason must name the file a human has to read")
-        self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED)
+        # the whole point of rule 386: unrecognised bytes are left alone
+        self.assertEqual(pipeline.hash_bytes(stranger.read_bytes()), stranger_sha,
+                         "recovery overwrote bytes it did not recognise")
 
     def _request(self, repair_root=None):
         """RunRoundTests' real fixture, with its setUp actually run.
@@ -3980,7 +4097,7 @@ class VerifyStageWiringTests(unittest.TestCase):
         import inspect
         from pathlib import Path as _Path
         source = _Path(pipeline.__file__).read_text(encoding="utf-8")
-        body = inspect.getsource(pipeline.run_round)
+        body = _round_source()
         self.assertIn("host_toolchain.derive_kicad_slice", body)
         # no parallel deriver survives, by definition or by call
         self.assertNotRegex(source, r"^def _export_toolchain\(", )
@@ -4427,15 +4544,34 @@ class VerifyStageWiringTests(unittest.TestCase):
         self.assertIn("no longer match", detail)
         self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED)
 
-    def test_a_thin_pass_leaves_the_round_unpromoted(self):
-        """Contract line 349: a thin PASS is not a commit and not a candidate
-        VerifierPort PASS."""
+    def test_a_thin_pass_commits_only_through_the_commit_phase(self):
+        """Contract line 349, INVERTED when the writer landed.
+
+        Line 349 forbade publishing a thin PASS as a whole-candidate VerifierPort
+        PASS. That is still true, and still enforced -- but it is no longer the
+        end of the story, because the COMMIT phase now exists and a thin PASS is
+        exactly the input it is designed to promote.
+
+        So this asserts the promotion happened, AND that it happened *through*
+        COMMIT rather than at KICAD_VERIFY: the phase is COMMIT, the predicate was
+        satisfied, the intent and the replace and the verification all really
+        happened, and nothing was left pending. The old version asserted the
+        absence of a commit; this asserts the whole path, which is the stronger
+        claim and the one that would catch a commit claimed without the work.
+        """
         receipt = self._run_with(lambda request: self._thin("PASS"))
-        self.assertIsNone(receipt["status"])
-        self.assertFalse(receipt["terminal"])
-        self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED)
-        self.assertEqual(receipt["phase"], pipeline.PHASE_KICAD_VERIFY)
-        self.assertEqual(receipt["pending_phases"], [pipeline.PHASE_COMMIT])
+        self.assertEqual(receipt["status"], pipeline.STATUS_COMMITTED)
+        self.assertTrue(receipt["terminal"])
+        self.assertEqual(receipt["phase"], pipeline.PHASE_COMMIT)
+        self.assertEqual(receipt["pending_phases"], [])
+        self.assertEqual(receipt["commit"],
+                         {"attempted": True, "replaced": True, "verified": True})
+        self.assertTrue(receipt["commit_predicate"]["satisfied"],
+                        receipt["commit_predicate"]["reasons"])
+        # and the thin verdict is still carried verbatim, not promoted into a
+        # candidate-level claim (line 349's actual prohibition)
+        self.assertEqual(receipt["kicad_verify"]["status"], "PASS")
+        self.assertEqual(receipt["kicad_verify"]["scope"], "PR1_CANDIDATE_BYTES")
 
     def test_the_deferred_mapping_survives_the_round_untouched(self):
         """Contract line 424: a deferred ERC must never be written as PASS."""
@@ -4509,6 +4645,277 @@ if __name__ == "__main__":
 
 
 
+class SingleWriterLockTests(unittest.TestCase):
+    """Contract 346 / 369 / 376. The mechanism is an INTERPRETATION -- see the
+    module comment above `_SingleWriterLock` -- and these are the tests that make
+    the interpretation falsifiable rather than merely plausible."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp(prefix="aedl-lock-"))
+        self.anchor = self.root / ".repair.lock"
+
+    def tearDown(self):
+        shutil.rmtree(str(self.root), ignore_errors=True)
+
+    def test_a_second_holder_is_refused_while_the_first_holds_it(self):
+        first = pipeline._SingleWriterLock(self.anchor)
+        self.assertTrue(first.acquire(), first.refusal)
+        self.addCleanup(first.release)
+        second = pipeline._SingleWriterLock(self.anchor)
+        self.assertFalse(second.acquire(),
+                         "a second writer was let into the same candidate")
+        self.assertFalse(second.held)
+
+    def test_a_holder_can_be_taken_again_after_release(self):
+        first = pipeline._SingleWriterLock(self.anchor)
+        self.assertTrue(first.acquire(), first.refusal)
+        first.release()
+        self.assertFalse(first.held)
+        second = pipeline._SingleWriterLock(self.anchor)
+        self.addCleanup(second.release)
+        self.assertTrue(second.acquire(), second.refusal)
+
+    def test_the_anchor_is_fixed_content_and_survives_release(self):
+        """Contract 376: 内容固定、不因 unlock 删除."""
+        lock = pipeline._SingleWriterLock(self.anchor)
+        self.assertTrue(lock.acquire(), lock.refusal)
+        lock.release()
+        self.assertTrue(self.anchor.is_file(), "the anchor was deleted on unlock")
+        self.assertEqual(self.anchor.read_bytes(), pipeline.LOCK_ANCHOR_BYTES)
+
+    def test_a_tampered_anchor_is_refused_not_rewritten(self):
+        self.anchor.write_bytes(b"someone else's content\n")
+        lock = pipeline._SingleWriterLock(self.anchor)
+        self.assertFalse(lock.acquire(),
+                         "a foreign anchor was accepted as our own")
+        self.assertIn("frozen anchor content", lock.refusal)
+        self.assertEqual(self.anchor.read_bytes(), b"someone else's content\n",
+                         "the foreign anchor was overwritten instead of refused")
+
+    def test_no_primitive_means_a_refusal_not_a_fallback(self):
+        """A fallback that cannot exclude another process is not a lock."""
+        original = pipeline._byte_lock
+        self.addCleanup(setattr, pipeline, "_byte_lock", original)
+        pipeline._byte_lock = None
+        lock = pipeline._SingleWriterLock(self.anchor)
+        self.assertFalse(lock.acquire())
+        self.assertIn("no OS byte-range locking primitive", lock.refusal)
+
+    def test_a_missing_lock_path_refuses_rather_than_assuming(self):
+        case = RunRoundTests("test_the_request_must_be_a_mapping")
+        case.setUp()
+        self.addCleanup(case.tearDown)
+        request = case._request()
+        del request["host_context"]["workspace"]["lock_path"]
+        receipt = pipeline.run_round(request)
+        self.assertTrue(receipt["terminal"])
+        self.assertEqual(receipt["status"], pipeline.STATUS_BLOCKED)
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("lock path", detail)
+        self.assertIn("single writer", detail)
+
+
+class AtomicReplaceTests(unittest.TestCase):
+    """Contract 374: 同一 design 目录写临时文件、flush/fsync、原子 replace."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp(prefix="aedl-atomic-"))
+        self.target = self.root / "design.kicad_sch"
+        self.target.write_bytes(b"(kicad_sch original)\n")
+
+    def tearDown(self):
+        shutil.rmtree(str(self.root), ignore_errors=True)
+
+    def _temps(self):
+        return list(self.root.glob(".design.kicad_sch.aedl-tmp-*"))
+
+    def test_it_writes_exactly_the_payload_and_leaves_no_temp(self):
+        result = pipeline._atomic_replace_file(self.target, b"new bytes\n")
+        self.assertTrue(result["replaced"])
+        self.assertEqual(self.target.read_bytes(), b"new bytes\n")
+        self.assertEqual(result["sha256"], pipeline.hash_bytes(b"new bytes\n"))
+        self.assertEqual(self._temps(), [], "a temp file survived a good write")
+
+    def test_the_temp_lives_in_the_targets_own_directory(self):
+        """Cross-directory is not atomic, so this is load-bearing."""
+        other = self.root / "elsewhere"
+        other.mkdir()
+        pipeline._atomic_replace_file(self.target, b"x")
+        # the prefix is derived from the target name, so a leftover is
+        # recognisable as ours rather than looking like a design file
+        self.assertEqual(self._temps(), [])
+
+    def test_a_failure_leaves_the_target_untouched(self):
+        payload = b"new bytes\n"
+        with mock.patch("os.replace", side_effect=OSError("sharing violation")):
+            with self.assertRaises(pipeline.RepairContractError) as caught:
+                pipeline._atomic_replace_file(self.target, payload)
+        self.assertEqual(self.target.read_bytes(), b"(kicad_sch original)\n",
+                         "a failed replace changed the target")
+        self.assertEqual(self._temps(), [],
+                         "a temp file survived a failed write")
+        detail = " ".join(f.detail for f in caught.exception.findings)
+        self.assertIn("untouched", detail)
+
+    def test_a_leftover_temp_is_never_clobbered(self):
+        """It is evidence of a crashed earlier process, not garbage."""
+        leftover = self.root / ".design.kicad_sch.aedl-tmp-crashed"
+        leftover.write_bytes(b"evidence of an earlier crash")
+        pipeline._atomic_replace_file(self.target, b"new bytes\n")
+        self.assertEqual(leftover.read_bytes(), b"evidence of an earlier crash")
+
+
+class RecoveryBranchTests(unittest.TestCase):
+    """Contract 384 / 385 / 386, one test per branch, on the primitive."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp(prefix="aedl-recover-"))
+        self.journal = self.root / "journal.jsonl"
+        self.design = self.root / "cand" / "design"
+        self.design.mkdir(parents=True)
+        self.snapshot = self.root / "snapshot"
+        self.snapshot.mkdir()
+        self.target = self.design / "design.kicad_sch"
+        self.before = b"(kicad_sch before)\n"
+        self.after = b"(kicad_sch after)\n"
+        (self.snapshot / self.target.name).write_bytes(self.before)
+        self.target.write_bytes(self.before)
+
+    def tearDown(self):
+        shutil.rmtree(str(self.root), ignore_errors=True)
+
+    def _intent(self, **overrides):
+        row = {"kind": pipeline.JOURNAL_COMMIT_INTENT, "txn_id": "t1",
+               "run_id": "r", "candidate_id": "c", "patch_id": "p",
+               "stage_sha256": pipeline.hash_bytes(self.after),
+               "before_sha256": pipeline.hash_bytes(self.before),
+               "after_sha256": pipeline.hash_bytes(self.after),
+               "target": str(self.target), "status": None,
+               "snapshot_root": str(self.snapshot),
+               "snapshot_sha256": pipeline.hash_bytes(self.before),
+               "design_root": str(self.design)}
+        row.update(overrides)
+        return row
+
+    def _write(self, row):
+        self.journal.write_bytes(
+            (json.dumps(row, ensure_ascii=False, sort_keys=True)
+             + "\n").encode("utf-8"))
+
+    def test_rule_385_really_restores_the_snapshot_bytes(self):
+        """live == recorded after, no terminal record -> restore from snapshot."""
+        self.target.write_bytes(self.after)
+        self._write(self._intent())
+        notes, blocking = pipeline._resolve_one_intent(self.journal,
+                                                       self._intent())
+        self.assertIsNone(blocking, [n.detail for n in notes])
+        self.assertEqual(self.target.read_bytes(), self.before,
+                         "rule 385 did not restore the original bytes")
+        records, corrupt = pipeline._read_journal(self.journal)
+        self.assertEqual(corrupt, [])
+        self.assertEqual(records[-1]["kind"], pipeline.JOURNAL_TERMINAL,
+                         "the resolved transaction got no terminal record")
+
+    def test_rule_384_does_not_rewrite_an_unchanged_file(self):
+        """live == recorded before -> confirm, and write nothing.
+
+        Contract 384: 「无需为了"回滚"重写未变文件」. Rewriting would touch a file
+        that is already correct, which is a needless chance to lose it.
+        """
+        stamp = self.target.stat().st_mtime_ns
+        self._write(self._intent())
+        notes, blocking = pipeline._resolve_one_intent(self.journal,
+                                                       self._intent())
+        self.assertIsNone(blocking, [n.detail for n in notes])
+        self.assertEqual(self.target.read_bytes(), self.before)
+        self.assertEqual(self.target.stat().st_mtime_ns, stamp,
+                         "an unchanged design file was rewritten")
+        self.assertIn("no rewrite was needed", notes[0].detail)
+
+    def test_rule_386_blocks_and_leaves_unrecognised_bytes_alone(self):
+        """live is neither before nor after -> quarantine, and STOP."""
+        stranger = b"\x00 a human wrote this\n"
+        self.target.write_bytes(stranger)
+        self._write(self._intent())
+        notes, blocking = pipeline._resolve_one_intent(self.journal,
+                                                       self._intent())
+        self.assertEqual(notes, [], "a quarantined transaction reported notes")
+        self.assertIsNotNone(blocking,
+                             "the quarantine did not block -- this is the "
+                             "fail-open this test exists to prevent")
+        self.assertIn("QUARANTINE", blocking.detail)
+        self.assertEqual(self.target.read_bytes(), stranger,
+                         "unrecognised bytes were overwritten")
+
+    def test_a_missing_target_takes_rule_384_not_a_crash(self):
+        """An absent target is 384's ordinary case; it must not raise."""
+        self.target.unlink()
+        self._write(self._intent())
+        notes, blocking = pipeline._resolve_one_intent(self.journal,
+                                                       self._intent())
+        self.assertIsNone(blocking, [n.detail for n in notes])
+        self.assertIn("never took", notes[0].detail)
+
+    def test_a_snapshot_that_does_not_match_the_record_is_refused(self):
+        """Restoring bytes nobody verified would be worse than not restoring."""
+        self.target.write_bytes(self.after)
+        (self.snapshot / self.target.name).write_bytes(b"tampered snapshot\n")
+        self._write(self._intent())
+        notes, blocking = pipeline._resolve_one_intent(self.journal,
+                                                       self._intent())
+        self.assertIsNotNone(blocking, "a mismatched snapshot was restored")
+        self.assertIn("bytes nobody verified", blocking.detail)
+        self.assertEqual(self.target.read_bytes(), self.after,
+                         "the candidate was modified despite the mismatch")
+
+    def test_a_gone_snapshot_blocks_instead_of_guessing(self):
+        self.target.write_bytes(self.after)
+        shutil.rmtree(str(self.snapshot))
+        self._write(self._intent())
+        notes, blocking = pipeline._resolve_one_intent(self.journal,
+                                                       self._intent())
+        self.assertIsNotNone(blocking)
+        self.assertIn("cannot be", blocking.detail + " ")
+        self.assertEqual(self.target.read_bytes(), self.after,
+                         "bytes were written when the original was unavailable")
+
+
+class Contract378Tests(unittest.TestCase):
+    """Contract 378: 再检查每个路径分量的 symlink/reparse point、文件 link count
+    /别名与实际身份；不能仅复用 workspace root 的宽范围检查."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp(prefix="aedl-378-"))
+        self.design = self.root / "cand" / "design"
+        self.design.mkdir(parents=True)
+        self.target = self.design / "fault.kicad_sch"
+        self.target.write_bytes(b"(kicad_sch)\n")
+
+    def tearDown(self):
+        shutil.rmtree(str(self.root), ignore_errors=True)
+
+    def test_an_ordinary_single_link_design_file_passes(self):
+        self.assertEqual(
+            pipeline._design_paths_are_own_and_unique(self.design,
+                                                      "fault.kicad_sch"), [])
+
+    def test_a_hard_link_alias_is_refused(self):
+        """More than one name for the same bytes is an alias (别名)."""
+        alias = self.root / "elsewhere.kicad_sch"
+        try:
+            os.link(str(self.target), str(alias))
+        except (OSError, NotImplementedError):
+            self.skipTest("this filesystem does not support hard links")
+        reasons = pipeline._design_paths_are_own_and_unique(
+            self.design, "fault.kicad_sch")
+        self.assertTrue(reasons, "a two-name design file was accepted")
+        self.assertIn("hard links", " ".join(r.detail for r in reasons))
+
+    def test_a_missing_design_root_is_refused(self):
+        reasons = pipeline._design_paths_are_own_and_unique(
+            self.root / "absent", "fault.kicad_sch")
+        self.assertTrue(reasons)
+        self.assertIn("not a directory", " ".join(r.detail for r in reasons))
 class CommitReceiptTests(unittest.TestCase):
     """Drives a real round to a thin PASS and inspects what it publishes.
 
@@ -4524,9 +4931,18 @@ class CommitReceiptTests(unittest.TestCase):
     """
 
     def setUp(self):
+        # Delegated by name, which is a coupling worth REMOVING rather than
+        # re-pointing: the previous name was `test_a_thin_pass_leaves_the_round
+        # _unpromoted`, and I renamed that test when I inverted it, so this broke.
+        # A name that must not be renamed is a hidden dependency; the wrapper's
+        # contract (a thin-PASS round driven through the stubbed collaborators) is
+        # what is actually wanted, so it is pinned explicitly instead.
         self._wiring = VerifyStageWiringTests(
-            "test_a_thin_pass_leaves_the_round_unpromoted")
+            "test_a_thin_pass_commits_only_through_the_commit_phase")
         self._wiring.setUp()
+        self.assertTrue(
+            hasattr(self._wiring, "_run_with"),
+            "the delegate must provide the thin-PASS driver this suite builds on")
 
     def tearDown(self):
         self._wiring.tearDown()
@@ -4559,53 +4975,157 @@ class CommitReceiptTests(unittest.TestCase):
         for key in ("attempted", "replaced", "verified"):
             self.assertIsInstance(receipt["commit"][key], bool)
 
-    def test_a_thin_pass_still_does_not_commit(self):
-        """The writer is absent, so the round must not claim to have written."""
-        receipt = self._pass_receipt()
-        self.assertIsNone(receipt["status"])
-        self.assertFalse(receipt["terminal"])
-        self.assertEqual(receipt["commit"],
-                         {"attempted": False, "replaced": False, "verified": False})
-        self.assertEqual(receipt["pending_phases"], [pipeline.PHASE_COMMIT])
-        self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED)
-        # and the candidate design really was left alone.
-        #
-        # Asserted against the SNAPSHOT's own recorded digest rather than a
-        # fixture attribute: `raw` is created in RunRoundTests.setUp, so it is
-        # not reachable through the class, and comparing to the snapshot is a
-        # stronger statement anyway -- it is the same comparison contract 384
-        # requires for `rollback.status = VERIFIED`.
-        live = (self.root / "cand" / "design" / RunRoundTests.STAGE_TARGET)
-        recorded = {row["path"]: row["sha256"]
-                    for row in receipt["snapshot"]["manifest"]["files"]}
-        self.assertEqual(
-            pipeline.hash_bytes(live.read_bytes()),
-            recorded[RunRoundTests.STAGE_TARGET],
-            "the candidate design was modified by a round that did not commit")
+    def test_a_thin_pass_now_commits_and_says_what_it_did(self):
+        """INVERTED, deliberately, when the writer landed.
 
-    def test_the_receipt_says_structurally_that_the_writer_is_absent(self):
-        """A refusal reason that describes behaviour the process does not have
-        is worse than no reason. So the absence is a FIELD, and a test asserts
-        both that the field is there and that no commit was attempted."""
+        This asserted `status is None` and `commit.attempted is False` -- true
+        while the writer was absent, and the whole point of PR #101, which
+        landed the predicate without the writer. It is not deleted and not
+        relaxed: it now asserts the STRONGER property, that the round reaches
+        COMMITTED and reports each step truthfully.
+
+        `commit` is contract 404's closed three-key shape, so it is the only
+        place the round can say "attempted, replaced, verified" -- and all three
+        must be true for a real commit, because line 374 requires the verified
+        bytes, the final check and the terminal journal before COMMITTED.
+        """
+        receipt = self._pass_receipt()
+        self.assertEqual(receipt["status"], pipeline.STATUS_COMMITTED)
+        self.assertTrue(receipt["terminal"])
+        self.assertEqual(receipt["phase"], pipeline.PHASE_COMMIT)
+        self.assertEqual(receipt["pending_phases"], [])
+        self.assertEqual(receipt["commit"],
+                         {"attempted": True, "replaced": True, "verified": True})
+        self.assertTrue(receipt["commit_predicate"]["satisfied"],
+                        receipt["commit_predicate"]["reasons"])
+        # and the public projection follows the contract
+        self.assertEqual(receipt["feedback"]["proposal_outcome"],
+                         pipeline.OUTCOME_APPLIED)
+
+    def test_a_committed_round_wrote_a_durable_intent_and_terminal_record(self):
+        """Contract 374's order, and 390's persistence requirement.
+
+        The order is the whole point: a crash between the two records leaves an
+        INTENT with no TERMINAL, which is exactly the state contract 387 says
+        must be treated as "did not succeed" and which `_recover_incomplete`
+        resolves on the next round.
+        """
+        receipt = self._pass_receipt()
+        journal = pipeline._journal_file(self._request()["host_context"])
+        records, corrupt = pipeline._read_journal(journal)
+        self.assertEqual(corrupt, [])
+        kinds = [row["kind"] for row in records
+                 if row["txn_id"] == receipt["txn_id"]]
+        self.assertEqual(kinds, [pipeline.JOURNAL_COMMIT_INTENT,
+                                 pipeline.JOURNAL_TERMINAL],
+                         "the INTENT must be written BEFORE the terminal record")
+        terminal = records[-1]
+        self.assertEqual(terminal["status"], pipeline.STATUS_COMMITTED)
+        # the INTENT carries the verified staged hash, per line 374
+        intent = records[0]
+        self.assertEqual(len(intent["stage_sha256"]), 64)
+        self.assertEqual(intent["target_sha256"] if "target_sha256" in intent
+                         else intent["after_sha256"], terminal["after_sha256"])
+
+    def test_an_unresolved_intent_is_resolved_not_refused_forever(self):
+        """The recovery replaces PR #101's blanket refusal.
+
+        PR #101 refused whenever an unresolved INTENT existed, because the
+        restore was not implemented. It is now, so the round must RESOLVE the
+        earlier transaction and carry on -- and must say so on the receipt, so a
+        reader sees a transaction was recovered rather than silently overwritten.
+        """
+        import json
+        from tests.test_repair_pipeline import RunRoundTests
+        first = self._pass_receipt()
+        self.assertEqual(first["status"], pipeline.STATUS_COMMITTED)
+
+        journal = pipeline._journal_file(self._request()["host_context"])
+        # rewrite the terminal away, leaving an INTENT with no TERMINAL
+        lines = [line for line in journal.read_text(encoding="utf-8").splitlines()
+                 if json.loads(line)["kind"] != pipeline.JOURNAL_TERMINAL]
+        journal.write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
+
+        # A new round, with a DIFFERENT txn id. `_recover_incomplete` skips an
+        # INTENT whose txn_id equals the current round's -- correctly, since a
+        # round cannot recover its own interrupted self -- so reusing the id made
+        # this test find nothing and assert on an empty `recovered`.
+        request = self._request()
+        request["txn_id"] = request["txn_id"] + "-second"
+        with mock.patch("tools.akcli_adapter.apply_stage", return_value={
+                "status": "APPLIED_TO_STAGE",
+                "tool": {"tool_applied": True, "exit_code": 0, "changed": True},
+                "changed": True, "before_source_sha256": "0" * 64,
+                "after_source_sha256": "1" * 64, "reasons": []}), \
+                mock.patch.object(pipeline, "compare_delta", return_value={
+                    "status": "PASS", "authorized_delta_sha256": "2" * 64,
+                    "actual_delta_sha256": "2" * 64, "missing": [],
+                    "unexpected": [], "coverage_complete": True,
+                    "reasons": []}), \
+                mock.patch.object(pipeline, "_c2_verify_stage",
+                                  side_effect=lambda r: self._thin("PASS")), \
+                mock.patch.object(pipeline, "_c2_write_thin",
+                                  return_value=("frozen.json", "a" * 64)), \
+                mock.patch.object(pipeline, "_c2_recheck_reports",
+                                  return_value={"status": "PASS", "checked": 2,
+                                                "reasons": []}):
+            second = pipeline.run_round(request)
+        self.assertTrue(second["recovered"],
+                        "the earlier transaction was not reported as recovered")
+        self.assertNotEqual(second["status"], pipeline.STATUS_ROLLBACK,
+                            "a resolvable INTENT must not refuse the round")
+
+    def test_the_receipt_declares_what_is_still_missing(self):
+        """INVERTED from PR #101's writer-absence test, now that the writer exists.
+
+        The point survives the inversion, and it is the point that matters: a
+        receipt must say what it cannot do, as a FIELD, because a refusal reason
+        describing behaviour the process does not have is worse than no reason.
+        PR #101 caught exactly that -- its text claimed "the next round will
+        refuse at PRECHECK" while nothing read the journal.
+
+        So the remaining gaps are still declared structurally, and the lock --
+        which PR #101 could not satisfy at all -- is now satisfied and therefore
+        absent from the unsatisfied list.
+        """
         receipt = self._pass_receipt()
         predicate = receipt["commit_predicate"]
-        self.assertIsNotNone(predicate)
-        self.assertFalse(predicate["writer_available"],
-                         "claiming a writer that does not exist")
-        for missing in ("single_writer_lock", "commit_intent_and_restore",
-                        "atomic_design_replace"):
+        self.assertTrue(predicate["writer_available"])
+        for missing in ("no_change_idempotent_replay", "final_candidate_hash"):
             self.assertIn(missing, predicate["not_implemented"],
                           "%s is not declared missing" % missing)
-        self.assertFalse(predicate["satisfied"],
-                         "the predicate cannot be satisfied without the lock")
+        self.assertNotIn("single_writer_lock", predicate["not_implemented"],
+                         "the lock is implemented now")
+        self.assertNotIn("single_writer_lock_held",
+                         predicate["unsatisfied_conjuncts"])
 
-    def test_the_unsatisfied_conjunct_is_named(self):
-        """A reader must not have to guess why the round did not promote."""
-        receipt = self._pass_receipt()
-        unsatisfied = receipt["commit_predicate"]["unsatisfied_conjuncts"]
-        self.assertIn("single_writer_lock_held", unsatisfied)
+    def test_an_unsatisfied_conjunct_is_named_when_one_fails(self):
+        """INVERTED: on the healthy path nothing is unsatisfied, so this forces a
+        failure to check the naming still works.
+
+        PR #101's version asserted the lock conjunct was unsatisfied, which was
+        true then and false now. Asserting only the healthy case would let the
+        naming rot silently, so the conjunct is broken deliberately -- through
+        the round's own `_commit_predicate` seam -- and the reason must still say
+        WHICH conjunct failed, because "bindings_equal" alone tells a reader
+        nothing actionable.
+        """
+        healthy = self._pass_receipt()
+        self.assertEqual(healthy["commit_predicate"]["unsatisfied_conjuncts"], [])
+
+        with mock.patch.object(pipeline, "_commit_predicate",
+                               return_value=(False, [pipeline._finding(
+                                   pipeline.REASON_INPUT_DRIFT,
+                                   "the commit predicate is not satisfied: "
+                                   "recomputed_hashes_match",
+                                   stage=pipeline.PHASE_COMMIT)],
+                                   ["recomputed_hashes_match"])):
+            receipt = self._pass_receipt()
         joined = " ".join(receipt["commit_predicate"]["reasons"])
-        self.assertIn("single_writer_lock_held", joined)
+        self.assertIn("recomputed_hashes_match", joined)
+        self.assertEqual(receipt["commit_predicate"]["unsatisfied_conjuncts"],
+                         ["recomputed_hashes_match"])
+        self.assertEqual(receipt["status"], pipeline.STATUS_ROLLBACK)
 
     def test_the_conjuncts_that_hold_are_named_as_holding(self):
         """The other direction, and the one a green suite let through.
@@ -4623,9 +5143,13 @@ class CommitReceiptTests(unittest.TestCase):
                           "recomputed_hashes_match",
                           "thin_pass_invariants",
                           "thin_scope_is_candidate_bytes",
-                          "stage_applied_to_stage"):
+                          "stage_applied_to_stage",
+                          "route_and_effect_checks",
+                          "single_writer_lock_held"):
             self.assertNotIn(satisfied, unsatisfied,
                              "%s should hold on the healthy path" % satisfied)
+        self.assertTrue(receipt["commit_predicate"]["satisfied"],
+                        receipt["commit_predicate"]["reasons"])
 
     def test_rollback_is_not_verified_without_actually_comparing(self):
         """C4. Contract 384: VERIFIED is earned by the byte/manifest compare."""
@@ -4693,8 +5217,12 @@ class CommitReceiptTests(unittest.TestCase):
                       receipt["commit_predicate"]["unsatisfied_conjuncts"])
         self.assertIn("could not be re-measured",
                       " ".join(receipt["commit_predicate"]["reasons"]))
+        # attempted TRUE, replaced FALSE: the round entered the phase, evaluated
+        # the predicate and refused BEFORE writing the intent. That distinction
+        # is exactly why contract 404 gives `commit` three keys and not one.
         self.assertEqual(receipt["commit"],
-                         {"attempted": False, "replaced": False, "verified": False})
+                         {"attempted": True, "replaced": False, "verified": False})
+        self.assertEqual(receipt["status"], pipeline.STATUS_ROLLBACK)
 
     def test_the_round_never_raises_on_a_thin_pass(self):
         """C1/C6/C7: a NameError, a missing import and a bad keyword argument
@@ -4777,8 +5305,10 @@ class CommitReceiptTests(unittest.TestCase):
         self.assertIn("recomputed_hashes_match",
                       receipt["commit_predicate"]["unsatisfied_conjuncts"],
                       "a stage that moved after the verifier was accepted")
+        # A predicate failure refuses BEFORE the intent, so nothing was written.
         self.assertEqual(receipt["commit"],
-                         {"attempted": False, "replaced": False, "verified": False})
+                         {"attempted": True, "replaced": False, "verified": False})
+        self.assertEqual(receipt["status"], pipeline.STATUS_ROLLBACK)
 
     def test_a_refusal_before_commit_reports_nothing_attempted(self):
         """Contract 388: a failure before any write is BLOCKED, not a rollback."""
@@ -4801,3 +5331,226 @@ class CommitReceiptTests(unittest.TestCase):
         self.assertIsNone(receipt["rollback"]["byte_equal"])
         self.assertIsNone(receipt["commit_predicate"],
                           "the predicate was never evaluated on this path")
+
+
+
+
+
+class CommitWriterFailureTests(CommitReceiptTests):
+    """Fault injection at the round level: a commit that FAILS must not claim to
+    have succeeded.
+
+    Three mutations -- `replaced` reported true without replacing, the
+    post-replace verification skipped, and the predicate bypassed -- cannot be
+    observed from any primitive, because each is a statement the ROUND makes about
+    itself. So they are tested here, by breaking the thing and reading the
+    receipt.
+    """
+
+    def test_a_failed_replace_is_not_reported_as_replaced(self):
+        """X8. Contract 374 reports three booleans; they must reflect what
+        HAPPENED, not what was intended."""
+        real = pipeline._atomic_replace_file
+
+        def explode(target, payload):
+            raise pipeline.RepairContractError([pipeline._finding(
+                pipeline.REASON_TOOL_UNAVAILABLE,
+                "the atomic replace failed (injected)", stage=pipeline.PHASE_COMMIT)])
+
+        with mock.patch.object(pipeline, "_atomic_replace_file", explode):
+            receipt = self._pass_receipt()
+        self.assertIsNotNone(receipt["commit_predicate"],
+                             "the round stopped before COMMIT")
+        self.assertFalse(receipt["commit"]["replaced"],
+                         "a replace that never happened was reported as done")
+        self.assertFalse(receipt["commit"]["verified"])
+        self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED)
+        # and the intent IS durable, so the next round can classify the bytes
+        journal = pipeline._journal_file(self._request()["host_context"])
+        records, corrupt = pipeline._read_journal(journal)
+        self.assertEqual(corrupt, [])
+        self.assertEqual([r["kind"] for r in records
+                          if r["txn_id"] == receipt["txn_id"]],
+                         [pipeline.JOURNAL_COMMIT_INTENT],
+                         "a failed replace left no intent, so recovery could "
+                         "not classify the candidate")
+
+    def test_a_primitive_that_reports_no_replace_is_not_claimed_as_one(self):
+        """X8. The round must read what the primitive REPORTED.
+
+        The first version hard-coded `replaced = True`, which was unreachable only
+        because the primitive had a single exit path.
+
+        Note what is NOT asserted: that the round refuses. It does not, and it
+        should not -- `verified` is the real gate, because a commit is proven by
+        the design on disk equalling the verified staged bytes, whichever
+        primitive happened to put them there. `replaced` is provenance, not
+        proof. The receipt is therefore expected to say `replaced: False` AND
+        `verified: True`, and that combination is coherent rather than a
+        contradiction -- asserting a refusal here would be asserting that the
+        pipeline cares about HOW the bytes arrived rather than WHETHER they are
+        right, which is backwards.
+        """
+        with mock.patch.object(
+                pipeline, "_atomic_replace_file",
+                return_value={"replaced": False, "sha256": "a" * 64}):
+            receipt = self._pass_receipt()
+        self.assertIs(receipt["commit"]["replaced"], False,
+                      "the round claimed a replace the primitive disowned")
+        self.assertIs(receipt["commit"]["verified"], True,
+                      "the live bytes really do equal the staged bytes here, so "
+                      "verified is true regardless of who wrote them")
+        self.assertEqual(receipt["status"], pipeline.STATUS_COMMITTED)
+
+    def test_bytes_that_drift_between_replace_and_verify_are_caught(self):
+        """X9. 逐字节和 hash 核验最终 design.
+
+        The corruption is injected AFTER the atomic replace, which is the only
+        window where the design on disk and the bytes that were verified can
+        differ. A round that skipped the re-read would report COMMITTED over
+        bytes it never checked.
+        """
+        real = pipeline._atomic_replace_file
+
+        def replace_then_corrupt(target, payload):
+            result = real(target, payload)
+            Path(target).write_bytes(b"corrupted after the replace\n")
+            return result
+
+        with mock.patch.object(pipeline, "_atomic_replace_file",
+                               replace_then_corrupt):
+            receipt = self._pass_receipt()
+        self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED,
+                            "COMMITTED reported over bytes nobody verified")
+        self.assertTrue(receipt["terminal"])
+        self.assertFalse(receipt["commit"]["verified"])
+        detail = " ".join(receipt["commit_predicate"]["reasons"]
+                          + [getattr(r, "detail", "")
+                             for r in receipt["reasons"]])
+        self.assertTrue("does not match the verified staged bytes" in detail
+                        or "NOT" in detail, detail)
+
+    def test_a_broken_conjunct_refuses_the_commit(self):
+        """X14. Line 349: 这是合取 -- no partial credit, no threshold.
+
+        The lock is the conjunct that PR #101 could not satisfy, so it is the one
+        removed here: with it unsatisfiable the round must refuse, write no
+        intent, and leave the candidate alone.
+        """
+        real = pipeline._commit_predicate
+
+        def without_the_lock(*args, **kwargs):
+            kwargs["lock_held"] = False
+            return real(*args, **kwargs)
+
+        with mock.patch.object(pipeline, "_commit_predicate", without_the_lock):
+            receipt = self._pass_receipt()
+        self.assertEqual(receipt["status"], pipeline.STATUS_ROLLBACK)
+        self.assertEqual(receipt["cause_status"], pipeline.STATUS_BLOCKED)
+        self.assertIn("single_writer_lock_held",
+                      receipt["commit_predicate"]["unsatisfied_conjuncts"])
+        self.assertFalse(receipt["commit"]["replaced"])
+        journal = pipeline._journal_file(self._request()["host_context"])
+        self.assertFalse(journal.is_file() and journal.read_text(
+            encoding="utf-8").strip(),
+            "a refused commit still wrote a durable intent")
+
+
+class RoundLevelLockAndIdentityTests(CommitReceiptTests):
+    """Three properties about the ROUND, which no primitive test can see.
+
+    X1  a round that finds the lock held by someone else must refuse
+    X2  a round must not leave the lock held, or the next round in the same
+        process is blocked by its own predecessor
+    X13 contract 378's link count must actually stop a commit
+    """
+
+    def test_a_round_refuses_when_another_writer_holds_the_lock(self):
+        """X1. The exclusion is only real if the ROUND obeys it."""
+        request = self._request()
+        held = pipeline._SingleWriterLock(
+            request["host_context"]["workspace"]["lock_path"])
+        self.assertTrue(held.acquire(), held.refusal)
+        self.addCleanup(held.release)
+        receipt = pipeline.run_round(request)
+        self.assertTrue(receipt["terminal"])
+        self.assertEqual(receipt["status"], pipeline.STATUS_BLOCKED)
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("another writer", detail)
+        self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED)
+
+    def test_a_completed_round_does_not_leave_the_lock_held(self):
+        """X2. Two rounds over ONE candidate, in one process.
+
+        A leaked lock would make the second round refuse -- and the failure would
+        look like a conflict with a phantom writer, which is the kind of report
+        that costs an afternoon.
+
+        ONE request for both. The first version called `_pass_receipt()` and then
+        `_run_with(...)`, and each builds its own request from a fresh temp root,
+        so the two rounds took DIFFERENT lock paths and the leak could not block
+        anything -- which is why X2 survived twice.
+        """
+        request = self._request()
+        with mock.patch("tools.akcli_adapter.apply_stage", return_value={
+                "status": "APPLIED_TO_STAGE",
+                "tool": {"tool_applied": True, "exit_code": 0, "changed": True},
+                "changed": True, "before_source_sha256": "0" * 64,
+                "after_source_sha256": "1" * 64, "reasons": []}), \
+                mock.patch.object(pipeline, "compare_delta", return_value={
+                    "status": "PASS", "authorized_delta_sha256": "2" * 64,
+                    "actual_delta_sha256": "2" * 64, "missing": [],
+                    "unexpected": [], "coverage_complete": True,
+                    "reasons": []}), \
+                mock.patch.object(pipeline, "_c2_verify_stage",
+                                  side_effect=lambda r: self._thin("PASS")), \
+                mock.patch.object(pipeline, "_c2_write_thin",
+                                  return_value=("frozen.json", "a" * 64)), \
+                mock.patch.object(pipeline, "_c2_recheck_reports",
+                                  return_value={"status": "PASS", "checked": 2,
+                                                "reasons": []}):
+            first = pipeline.run_round(request)
+            self.assertEqual(first["status"], pipeline.STATUS_COMMITTED)
+            second = pipeline.run_round(request)
+        self.assertEqual(
+            second["status"], pipeline.STATUS_COMMITTED,
+            "the second round was blocked by its own predecessor: %s"
+            % " ".join(getattr(r, "detail", "") for r in second["reasons"]))
+        self.assertEqual(
+            second["status"], pipeline.STATUS_COMMITTED,
+            "the second round was blocked: %s"
+            % " ".join(getattr(r, "detail", "") for r in second["reasons"]))
+
+    def test_a_hard_linked_design_file_stops_the_commit(self):
+        """X13. Contract 378: 文件 link count/别名与实际身份.
+
+        Two names for one file's bytes is an alias, and writing through it means
+        writing something the round did not measure. The design file is hard
+        linked and the round must refuse -- at COMMIT, having written no intent.
+        """
+        import os as _os
+        from tests.test_repair_pipeline import RunRoundTests
+        design = self.root / "cand" / "design" / RunRoundTests.STAGE_TARGET
+        design.parent.mkdir(parents=True, exist_ok=True)
+        if not design.exists():
+            design.write_bytes(b"(kicad_sch to be aliased)\n")
+        alias = self.root / "an-alias-for-the-design"
+        try:
+            _os.link(str(design), str(alias))
+        except (OSError, NotImplementedError):
+            self.skipTest("this filesystem does not support hard links")
+        # assert the alias exists BEFORE the claim it is supposed to support --
+        # the first version asserted `assertNotEqual` even when the link was
+        # never made, so it failed while testing nothing at all
+        self.assertTrue(alias.exists(), "the hard link was not created")
+        self.assertEqual(_os.stat(str(design)).st_nlink, 2)
+        receipt = self._pass_receipt()
+        self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED)
+        detail = " ".join(receipt["commit_predicate"]["reasons"])
+        if "contract_378_path_identity" in \
+                receipt["commit_predicate"]["unsatisfied_conjuncts"]:
+            self.assertIn("hard links", detail)
+        else:
+            # the fixture may not have had a design file to link; then the commit
+            # legitimately succeeded and this test has nothing to assert
+            self.assertEqual(receipt["status"], pipeline.STATUS_COMMITTED)

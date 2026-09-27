@@ -1,0 +1,218 @@
+task: PR1-C5-COMMIT-WRITER
+
+base:
+  branch: feat/c5-commit-writer
+  sha: 3b66ac5
+
+goal: |
+  Make the round promotable: the single-writer lock, the restore, and the
+  COMMIT writer, landing TOGETHER.
+
+  PR #101 landed the predicate and the journal read path and proved, from an
+  adversarial review of its own first draft, that the writing half cannot ship
+  alone:
+
+    "If restore is not in this increment, then step 2 must not run either -- a
+     durable INTENT with no restore is strictly worse than no commit."
+
+  Contract 387 requires a RESTORE for a transaction holding a COMMIT_INTENT and
+  no terminal record ("无 COMMITTED terminal record 的事务，即使有 COMMIT_INTENT
+  且 live=after，也按第2条恢复；不猜测这次已经成功"), and 385 makes that restore a
+  write from the snapshot via temp -> fsync -> replace. Contract 346 makes the
+  single-writer lock a conjunct of the predicate.
+
+  So this increment adds, in one change:
+    * the single-writer lock (contract 346, 369, 376);
+    * the journal WRITE path -- COMMIT_INTENT and TERMINAL (contract 374, 390);
+    * the atomic design replace (contract 374, and 385 reuses it);
+    * the restore and the three-branch recovery of contract 384/385/386, driven
+      from the journal at PRECHECK (contract 369);
+    * the COMMIT phase itself, ending in a terminal COMMITTED;
+    * the one-write-call count of contract 339, counted at the single pipeline
+      call site rather than by changing the adapter;
+    * contract 378's per-component re-resolution and file link-count check at
+      COMMIT.
+
+  Owner rulings, 2026-09-28:
+    4. "锁单独开一个 PR" -- the lock is its own PR. This is it.
+    5. "停止所有人工review纪律，全量推进" and, when asked whether to stop and ask
+       again: do not. So the lock's mechanism, which the contract does not pin
+       down, is chosen explicitly below, stated as an interpretation, and made
+       FAIL-CLOSED rather than guessed at silently.
+
+  THE INTERPRETATION, stated plainly because it is a safety boundary.
+  Contract 376 says the lock file is "内容固定、不因 unlock 删除" -- fixed content,
+  not deleted on unlock. Fixed content plus never-deleted means the file's
+  EXISTENCE cannot signal whether the lock is held, so the exclusion has to come
+  from somewhere else. This increment reads it as:
+
+    * `<candidate>/.repair.lock` is a fixed-content ANCHOR. It is created once,
+      its bytes never change, and it is never deleted. (Contract 376, satisfied
+      literally.)
+    * EXCLUSION is an OS byte-range lock taken on that anchor for the lifetime of
+      the transaction. The OS releases it when the process dies, so a crash
+      cannot leave a stale lock -- which is what makes contract 390's guarantee
+      boundary ("进程异常/可检测 I/O 故障与重启恢复") true without inventing a
+      power-loss claim the contract explicitly forbids.
+    * If the lock cannot be acquired, or no OS locking primitive is available,
+      the round REFUSES. It never proceeds on the assumption that it holds one.
+
+  Windows uses `msvcrt.locking(LK_NBLCK)`; POSIX uses `fcntl.flock`. Both are
+  non-blocking. There is no third path and no in-process fallback, because a
+  fallback that cannot exclude another process is not a lock.
+
+scope: |
+  In scope:
+  - tools/repair_pipeline.py:
+      * `_SingleWriterLock` -- acquire / hold / release, non-blocking, fail-closed.
+      * `_write_journal_record` -- append + flush + fsync, closed field set.
+      * `_atomic_replace_file` -- temp in the SAME directory (O_EXCL, never
+        clobbering a leftover), write, flush, fsync, `os.replace`.
+      * `_recover_incomplete` -- the three branches of contract 384/385/386,
+        driven by the journal, writing a TERMINAL record for what it resolved.
+      * `run_round`: acquire the lock at PRECHECK, recover before anything else,
+        then COMMIT -- predicate, INTENT, read stage bytes, atomic replace,
+        post-verify byte AND hash, terminal record, and only then COMMITTED.
+      * the one-write-call count, incremented at the single `apply_stage` call
+        site, which is where the pipeline knows the answer. `akcli_adapter` is
+        NOT modified.
+      * contract 378's per-component link / reparse / link-count check at COMMIT.
+  - tests/test_repair_pipeline.py: `CommitWriterTests`, `SingleWriterLockTests`,
+    `RecoveryTests`.
+  - tasks/PR1-C5-COMMIT-WRITER.yaml
+  - docs/compliance/ai-usage/**, docs/compliance/AI_USAGE_LOG.md
+  - docs/compliance/DECISIONS.md -- one ADR for the lock interpretation, because
+    it is a safety boundary and the contract does not settle it.
+
+  Out of scope, explicitly:
+  - **No ERC / DRC / render / evidence work.** `docs/evidence/**` frozen.
+  - **No NO_CHANGE idempotent replay** (contract 392). The predicate machinery
+    exists; the `(run_id, candidate_id, patch_id)` key index does not, and it is
+    a separate increment.
+  - **No `CandidateWorkspace.candidate_hash` finalisation** (contract 414), and no
+    `.actions.jsonl` write. The finalisation depends on the final receipt shape
+    being settled, which NO_CHANGE would change.
+  - **No change to `gates/**`.** `verify_stage`, `write_thin_verification`,
+    `recheck_reports` and `recheck_reports`'s report manifest are consumed as-is.
+    Commit re-reads them; it does not re-run anything.
+  - No `sandbox_runtime/**`, no `src/**`, no `tools/akcli_adapter.py`,
+    `tools/host_toolchain.py`, `tools/board_review.py`, no `.github/**`.
+
+dependencies: []
+  # The primitives are ancestors of this base.sha, so the prerequisite is the
+  # baseline rather than a ref. A task-id ref must not be declared:
+  # tools/admit.py resolves refs by TRAILING DIGITS, so "EVID-DC04" silently
+  # became GitHub issue #4 once.
+
+allowed_paths:
+  - tools/repair_pipeline.py
+  - tests/test_repair_pipeline.py
+  - tasks/PR1-C5-COMMIT-WRITER.yaml
+  - docs/compliance/DECISIONS.md
+  - docs/compliance/ai-usage/**
+  - docs/compliance/AI_USAGE_LOG.md
+
+forbidden_paths:
+  - gates/**
+  - src/**
+  - .github/**
+  - docs/evidence/**
+  - delivery/**
+  - sandbox_runtime/**
+  - tools/akcli_adapter.py
+  - tools/host_toolchain.py
+  - tools/board_review.py
+
+acceptance: |
+  - The lock is taken before any write and released after. A test asserts a second
+    acquisition from another handle is REFUSED while the first is held, and
+    succeeds after release. On Windows this is `msvcrt.locking(LK_NBLCK)`; the
+    test is skipped, not silently passed, if no primitive is available.
+  - The lock anchor's bytes never change and the file is never deleted.
+    `test_the_anchor_is_fixed_content_and_survives_release` asserts both.
+  - If no OS locking primitive is available, the round REFUSES. There is no
+    in-process fallback, and a test asserts the refusal rather than the absence
+    of an exception.
+  - `COMMIT_INTENT` is durable and fsync'd BEFORE the design is written, and
+    carries the verified staged hash. A fault-injection test interrupts between
+    the INTENT and the replace and asserts the INTENT is on disk with that hash.
+  - A torn final journal line -- the normal artefact of a crash mid-append -- is
+    reported as a tear and fails closed, per contract 387. A reader that skipped
+    it would conclude the round never committed.
+  - The design write is temp-in-the-same-directory, O_EXCL, flush, fsync,
+    `os.replace`. Tested: no temp file survives a successful write; a leftover
+    temp from a crashed prior process is never silently clobbered; a fault
+    before the replace leaves the candidate design byte-identical to its
+    snapshot.
+  - After the replace, the final design is verified byte for byte AND by hash.
+    Corrupting the bytes between replace and verify must refuse, not COMMITTED.
+  - The terminal record is written BEFORE COMMITTED is published. Interrupting
+    between the replace and the terminal record must not yield COMMITTED.
+  - The restore implements contract 385's three branches and is driven from the
+    journal at PRECHECK:
+      live == recorded before  -> rule 1: confirm against the snapshot manifest,
+                                  `rollback.status = VERIFIED`, no rewrite;
+      live == recorded after   -> rule 2: restore the snapshot's bytes via
+                                  temp -> fsync -> replace, then byte + hash +
+                                  file-set compare, only then VERIFIED;
+      live == neither          -> rule 3: QUARANTINE. `UNKNOWN`, no overwrite,
+                                  no next round. Never guess.
+    Each branch has its own test, and each writes a TERMINAL record.
+  - `rollback.status = "VERIFIED"` is published ONLY alongside a real comparison.
+    Contract 384: VERIFIED is earned, not asserted.
+  - `commit` keeps contract 404's closed shape: `attempted`, `replaced`,
+    `verified`, reflecting what HAPPENED rather than what was intended.
+  - A committed round projects `APPLIED_TO_CANDIDATE`, and COMMITTED is the only
+    status that does. The existing test for that is extended to a real committed
+    round rather than only the mapping function.
+  - Contract 378: at COMMIT the candidate root is re-resolved with `strict=True`,
+    every path component is checked for a symlink or reparse point, and each
+    file's link count is read. A high link count REFUSES rather than warns.
+  - The one-write-call conjunct is satisfied by a counter at the single
+    `apply_stage` call site, asserted to be exactly 1. `akcli_adapter` is not
+    modified.
+  - `run_round` never raises for any verdict. The PR1-C5-COMMIT draft had a
+    NameError, a missing `hashlib` import and a non-existent keyword argument,
+    all escaping `run_round` instead of refusing.
+  - The full suite stays green, every new test is mutation-verified, and
+    `py -3 -m tools.dev_gate --envelope tasks/PR1-C5-COMMIT-WRITER.yaml` exits 0.
+  - Windows-specific: a file held open by another process without
+    `FILE_SHARE_DELETE` makes `os.replace` raise `PermissionError`. That is a
+    refusal with a named cause, not an unhandled exception, and not a silent
+    retry loop.
+
+not_implemented_and_declared:
+  - "NO_CHANGE idempotent replay (contract 392). The key index is not built."
+  - "Final candidate_hash + .actions.jsonl write (contract 414)."
+  - "Contract 380's sidecar whitelist expansion: the stage sidecar manifest is
+     consumed as-is; no new sidecar type is auto-allowed."
+
+design_frozen_by_owner:
+  ruling_1: "关闭 PR #99 -- it implemented a parallel evidence path, not the contract's verifier"
+  ruling_2: "不要把 PR #99 的工具身份逻辑移植进 fresh_export"
+  ruling_3: "处理 ignored_checks -- `violations == []` is not evidence. ADR-014."
+  ruling_4: "锁单独开一个 PR，本轮如实标记不可达 -- this is that PR."
+  ruling_5: >-
+    2026-09-28: 「停止所有人工review纪律，全量推进我们的项目主线」; and, when told
+    the run had paused to ask a question: 「别他妈再停下来问我了」. Merging is
+    authorised. The lock's mechanism is therefore chosen explicitly and recorded
+    as an interpretation, rather than the run stopping again.
+    This does NOT lower the bar: every conjunct is satisfied or reported
+    unsatisfied, and nothing is omitted to make a round succeed.
+
+change_budget:
+  expected_files: 6
+  expected_modules: [tools, tests, tasks, docs]
+  cross_module: false
+  contract_change: true          # a round can now reach a terminal COMMITTED, and
+                                 # a new refusal path exists at PRECHECK
+  evidence_semantics_change: false
+
+exceptions:
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "Yenefa 2026-09-28 会话：「停止所有人工review纪律，全量推进」"
+  # allow_dirty is NOT claimed.
+
+escalation:
+  owner: Yenefa

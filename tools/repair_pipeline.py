@@ -19,6 +19,24 @@ this module imports from it (digest semantics verified identical 74/74).
 """
 
 import copy
+import errno
+import tempfile
+import time
+# OS byte-range locking for the single-writer lock (contract 346/376). Both
+# are non-blocking and both are released by the OS when the process dies,
+# which is what makes a crash unable to leave a stale lock. If NEITHER is
+# available the round REFUSES -- there is deliberately no in-process
+# fallback, because a fallback that cannot exclude another process is not a
+# lock. See `_SingleWriterLock.acquire`.
+try:
+    import msvcrt as _byte_lock        # Windows
+except ImportError:                   # pragma: no cover - POSIX path
+    _byte_lock = None
+try:
+    import fcntl as _byte_lock         # POSIX
+except ImportError:                   # pragma: no cover - Windows path
+    if _byte_lock is None:
+        _byte_lock = None
 import json
 import os
 import re
@@ -3744,9 +3762,14 @@ def _thin_verification_refusal(result):
 
 JOURNAL_COMMIT_INTENT = "COMMIT_INTENT"
 JOURNAL_TERMINAL = "TERMINAL"
+# `snapshot_root` and `snapshot_sha256` are here because contract 385's restore
+# has to read the snapshot's original bytes, and a recovery that cannot find them
+# could only guess. `design_root` is here because the INTENT is the record of
+# WHICH candidate it touched, and a bare filename would be ambiguous.
 JOURNAL_FIELDS = ("kind", "txn_id", "run_id", "candidate_id", "patch_id",
                   "stage_sha256", "before_sha256", "after_sha256",
-                  "target", "status")
+                  "target", "status", "snapshot_root", "snapshot_sha256",
+                  "design_root")
 
 # The nine conjuncts of contract 337-347, in the contract's own order. Named so a
 # reason can say WHICH conjunct failed -- a predicate that reports one generic
@@ -3856,12 +3879,478 @@ def _unresolved_intents(journal: Path, txn_id: str) -> Tuple[List[dict], List[st
     return pending, []
 
 
+# ===========================================================================
+# The single-writer lock -- contract 346, 369, 376.
+#
+# AN INTERPRETATION, and the contract does not settle it. Line 376 says the lock
+# file is "内容固定、不因 unlock 删除" -- fixed content, not deleted on unlock.
+# Fixed content plus never-deleted means the file's EXISTENCE cannot signal
+# whether the lock is held, so the exclusion has to come from somewhere else.
+#
+#   * `<candidate>/.repair.lock` is a fixed-content ANCHOR: created once, bytes
+#     never changed, never deleted. Line 376, satisfied literally.
+#   * EXCLUSION is an OS byte-range lock on that anchor, held for the lifetime of
+#     the transaction. The OS releases it when the process dies, so a crash
+#     cannot leave a stale lock -- which is what makes line 390's guarantee
+#     boundary ("进程异常/可检测 I/O 故障与重启恢复") hold without inventing the
+#     sudden-power-loss durability line 390 explicitly refuses to claim.
+#
+# Fail-closed: with no OS locking primitive available, or with the anchor's
+# content not matching, the round REFUSES. It never proceeds assuming it holds.
+# ===========================================================================
+
+LOCK_ANCHOR_BYTES = b"aedl-repair-single-writer-lock-v1\n"
+
+
+class _SingleWriterLock:
+    """Non-blocking, fail-closed, OS-backed. Never deleted, never rewritten."""
+
+    def __init__(self, path):
+        self.path = Path(path)
+        self._handle = None
+        self.held = False
+        self.refusal = None
+
+    def acquire(self) -> bool:
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self._create_anchor_once()
+            self._verify_anchor_content()
+        except PermissionError as exc:
+            # Probed, not assumed: on Windows a held byte range blocks READING as
+            # well as opening, and this content check runs first -- so a genuine
+            # conflict lands here, not at the `open()` below. Reporting it as "the
+            # anchor could not be prepared" blames a corrupt anchor for another
+            # writer holding the lock, and sends a reader to the wrong file.
+            self.refusal = ("another writer holds the single-writer lock on %s "
+                            "(the anchor cannot even be read while it is held): %s"
+                            % (self.path, exc))
+            return False
+        except OSError as exc:
+            self.refusal = ("the single-writer lock anchor could not be prepared "
+                            "at %s: %s" % (self.path, exc))
+            return False
+        try:
+            handle = open(str(self.path), "r+b")
+        except PermissionError as exc:
+            # Probed, not assumed: on Windows a HELD byte range makes open()
+            # itself fail, so a genuine conflict arrives here. The first version
+            # reported it as "the anchor could not be prepared", which blames a
+            # corrupt anchor for another writer holding the lock and sends a
+            # reader to the wrong file.
+            self.refusal = ("another writer holds the single-writer lock on %s "
+                            "(the anchor cannot even be opened while it is "
+                            "held): %s" % (self.path, exc))
+            return False
+        except OSError as exc:
+            self.refusal = ("the single-writer lock anchor at %s could not be "
+                            "opened: %s" % (self.path, exc))
+            return False
+        if _byte_lock is None:
+            handle.close()
+            self.refusal = ("no OS byte-range locking primitive is available "
+                            "(neither msvcrt nor fcntl), so this process cannot "
+                            "prove it holds the single-writer lock; refusing "
+                            "rather than assuming")
+            return False
+        try:
+            # msvcrt.locking acts from the CURRENT FILE POSITION, so this seek
+            # is load-bearing rather than cosmetic.
+            handle.seek(0)
+            if _byte_lock is not None and hasattr(_byte_lock, "locking"):
+                _byte_lock.locking(handle.fileno(), _byte_lock.LK_NBLCK, 1)
+            else:
+                _byte_lock.flock(handle.fileno(),
+                                 _byte_lock.LOCK_EX | _byte_lock.LOCK_NB)
+        except OSError as exc:
+            handle.close()
+            self.refusal = ("another writer holds the single-writer lock on %s: %s"
+                            % (self.path, exc))
+            return False
+        self._handle = handle
+        self.held = True
+        return True
+
+    def _create_anchor_once(self):
+        """O_EXCL, so a racing writer cannot overwrite an existing anchor."""
+        try:
+            descriptor = os.open(str(self.path),
+                                 os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            return
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(LOCK_ANCHOR_BYTES)
+            handle.flush()
+            os.fsync(handle.fileno())
+
+    def _verify_anchor_content(self):
+        """The anchor is FIXED content. If it differs, something else wrote it
+        and this process cannot assume the lock means what it means."""
+        actual = self.path.read_bytes()
+        if actual != LOCK_ANCHOR_BYTES:
+            raise OSError(errno.EINVAL,
+                          "the lock anchor at %s holds %d bytes that are not the "
+                          "frozen anchor content (%d bytes expected); refusing "
+                          "rather than rewriting it"
+                          % (self.path, len(actual), len(LOCK_ANCHOR_BYTES)))
+
+    def release(self):
+        if not self.held or self._handle is None:
+            return
+        try:
+            self._handle.seek(0)
+            if hasattr(_byte_lock, "locking"):
+                _byte_lock.locking(self._handle.fileno(), _byte_lock.LK_UNLCK, 1)
+            else:
+                _byte_lock.flock(self._handle.fileno(), _byte_lock.LOCK_UN)
+        except OSError:
+            # The OS releases the lock when the handle closes regardless, and a
+            # failure to unlock explicitly must not mask the caller's own result.
+            pass
+        finally:
+            self._handle.close()
+            self._handle = None
+            self.held = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        self.release()
+        return False
+
+
+# ===========================================================================
+# The journal WRITE path -- contract 374's "先持久化 COMMIT_INTENT 与 verified
+# staged hash" and 390's "COMMIT_INTENT、terminal record 都必须在对应副作用前/后
+# 按规定持久化".
+#
+# The READ half is above and was landed in PR #101. It reported a reader that
+# cannot be trusted rather than skipping bad lines, because contract 387 forbids
+# a skipping reader from being the sole basis of recovery.
+# ===========================================================================
+
+def _write_journal_record(path: Path, record: Mapping) -> str:
+    """Append one record, fsync it, return its sha256. Never overwrites."""
+    missing = [name for name in JOURNAL_FIELDS if name not in record]
+    if missing:
+        raise RepairContractError([_finding(
+            REASON_INPUT_DRIFT,
+            "the journal record is missing %s, so it could not be made durable "
+            "-- and a record that is not durable is worse than none, because a "
+            "later round would read it as 'never committed'"
+            % ", ".join(sorted(missing)), stage=PHASE_COMMIT)])
+    payload = (json.dumps(record, ensure_ascii=False, sort_keys=True)
+               + "\n").encode("utf-8")
+    try:
+        with open(str(path), "ab") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except OSError as exc:
+        raise RepairContractError([_finding(
+            REASON_TOOL_UNAVAILABLE,
+            "the durable journal at %s could not be appended to: %s" % (path, exc),
+            stage=PHASE_COMMIT)])
+    return hash_bytes(payload)
+
+
+def _atomic_replace_file(target: Path, payload: bytes) -> dict:
+    """Contract 374: 同一 design 目录写临时文件、flush/fsync、原子 replace.
+
+    The temp file MUST be in the target's own directory: `os.replace` is only
+    atomic within a filesystem, and a cross-directory rename is two operations.
+    It is created with `mkstemp`, i.e. O_EXCL, so a leftover from a crashed
+    earlier process is never silently clobbered -- that leftover is evidence.
+
+    Contract 385's recovery write uses this same primitive, which is why there is
+    one rather than two.
+
+    Returns {"replaced", "sha256"}. Raises RepairContractError on any failure,
+    leaving the target untouched: `os.replace` is the only step that can change
+    it, and everything before it is cleanup.
+    """
+    target = Path(target)
+    directory = target.parent
+    descriptor, temp_name = tempfile.mkstemp(
+        dir=str(directory), prefix="." + target.name + ".aedl-tmp-")
+    temp = Path(temp_name)
+    replaced = False
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(str(temp), str(target))
+        replaced = True
+    except OSError as exc:
+        raise RepairContractError([_finding(
+            REASON_TOOL_UNAVAILABLE,
+            "the atomic replace of %s failed (%s: %s). The target is untouched: "
+            "everything before os.replace only writes the temporary file."
+            % (target, type(exc).__name__, exc), stage=PHASE_COMMIT)])
+    finally:
+        if not replaced and temp.exists():
+            try:
+                temp.unlink()
+            except OSError as exc:
+                # NOT swallowed. A leftover temp inside the design directory
+                # makes every later design-manifest comparison unequal, so every
+                # future round would refuse forever with a drift reason that
+                # names the wrong cause.
+                raise RepairContractError([_finding(
+                    REASON_TOOL_UNAVAILABLE,
+                    "the temporary file %s could not be removed after a failed "
+                    "replace (%s). It sits inside the design directory, so it "
+                    "would make every later manifest comparison unequal and every "
+                    "future round refuse with a misleading drift reason. Remove "
+                    "it by hand: %s" % (temp, exc, temp),
+                    stage=PHASE_COMMIT)])
+    return {"replaced": True, "sha256": hash_bytes(payload)}
+
+
+# ===========================================================================
+# Recovery -- contract 384, 385, 386, 387.
+#
+# Three branches, and which one applies is DECIDED, not guessed. The INTENT
+# record carries both the before and the after digest, and the snapshot's
+# original bytes are already on disk, so "is this candidate in a state this
+# transaction produced?" is answerable:
+#
+#   live == recorded before  (384) confirm against the snapshot manifest,
+#                                  rollback.status = VERIFIED, DO NOT rewrite an
+#                                  unchanged file
+#   live == recorded after   (385) restore the snapshot's bytes via
+#                                  temp -> fsync -> replace, then byte + hash +
+#                                  file-set compare; only then VERIFIED
+#   live == neither          (386) QUARANTINE. UNKNOWN. Do not overwrite -- the
+#                                  bytes may be a human's or another process's.
+#                                  "隔离现场，不覆盖可能的人类/其他进程修改"
+#
+# 387: a torn FINAL journal line -- the normal artefact of a crash mid-append --
+# is reported and fails closed. A reader that skipped it would conclude the round
+# never committed, which is the exact inversion recovery exists to prevent.
+# ===========================================================================
+
+def _recover_incomplete(host_context: Mapping, txn_id: str,
+                        ) -> Tuple[Optional[Finding], List[Finding]]:
+    """Resolve every unresolved COMMIT_INTENT. Returns (blocking, notes).
+
+    `blocking` is non-None when this round must not proceed.
+    """
+    journal = _journal_file(host_context)
+    records, corrupt = _read_journal(journal)
+    if corrupt:
+        return _finding(
+            REASON_RECOVERY_AMBIGUOUS,
+            "the durable journal at %s has %d record(s) this reader cannot "
+            "trust, and a skipped line reads as 'never committed' -- the exact "
+            "inversion contract 387 forbids: %s"
+            % (journal, len(corrupt), "; ".join(corrupt)),
+            stage=PHASE_PRECHECK), []
+
+    terminal = {row.get("txn_id") for row in records
+                if row.get("kind") == JOURNAL_TERMINAL}
+    pending = [row for row in records
+               if row.get("kind") == JOURNAL_COMMIT_INTENT
+               and row.get("txn_id") != txn_id
+               and row.get("txn_id") not in terminal]
+    notes = []
+    for intent in pending:
+        outcome_notes, blocking = _resolve_one_intent(journal, intent)
+        notes.extend(outcome_notes)
+        if blocking is not None:
+            # Stop at the FIRST undecidable transaction, reporting whatever was
+            # resolved before it.
+            return blocking, notes
+    return None, notes
+
+
+def _resolve_one_intent(journal: Path,
+                        intent: Mapping) -> Tuple[List[Finding],
+                                                 Optional[Finding]]:
+    """Contract 384 / 385 / 386, for one transaction. Returns (notes, blocking).
+
+    `blocking` is non-None ONLY when the outcome cannot be decided from the
+    journal, and the caller must then stop the round. It is a value in the return
+    type rather than a check on the return type, because the first version did the
+    latter -- `isinstance(outcome, Finding)` against a function that returns a
+    list on every path -- and so never blocked at all. Contract 386's quarantine
+    is the branch that exists so unrecognised bytes are never overwritten, and it
+    was decorative.
+
+    Every branch therefore states which of the two it is. A branch that cannot be
+    classified is a bug in this function, not a licence to continue.
+    """
+    target = Path(str(intent.get("target") or ""))
+    before = intent.get("before_sha256")
+    after = intent.get("after_sha256")
+    snapshot = Path(str(intent.get("snapshot_root") or ""))
+    if not target.name or not before or not after:
+        return [], _finding(
+            REASON_RECOVERY_AMBIGUOUS,
+            "the COMMIT_INTENT for %s does not record enough to decide whether "
+            "it succeeded (target=%r, before=%r, after=%r). Deciding anyway "
+            "would be a guess, and contract 387 says 不猜测这次已经成功."
+            % (intent.get("txn_id"), str(target), before, after),
+            stage=PHASE_PRECHECK)
+
+    # Bound in BOTH arms. The first version left `live_bytes` unbound when the
+    # target was absent and then read it on the next line -- and an absent target
+    # is contract 384's ordinary "从未发布 stage" case, the branch that must touch
+    # nothing. It raised UnboundLocalError instead of taking it.
+    try:
+        live_bytes = target.read_bytes()
+    except FileNotFoundError:
+        live_bytes = None
+    except OSError as exc:
+        return [], _finding(
+            REASON_RECOVERY_AMBIGUOUS,
+            "the target of the unresolved COMMIT_INTENT for %s could not be "
+            "read: %s" % (intent.get("txn_id"), exc), stage=PHASE_PRECHECK)
+    live_sha = hash_bytes(live_bytes) if live_bytes is not None else None
+
+    if live_sha == after:
+        # --- 385: this transaction's own after-bytes, no terminal record -----
+        if not snapshot.is_dir():
+            return [], _finding(
+                REASON_RECOVERY_AMBIGUOUS,
+                "transaction %s replaced %s but wrote no terminal record, and "
+                "its snapshot at %s is gone, so the original bytes cannot be "
+                "restored. Not overwriting anything: the live bytes may be a "
+                "human's or another process's."
+                % (intent.get("txn_id"), target, snapshot),
+                stage=PHASE_PRECHECK)
+        try:
+            original = (snapshot / target.name).read_bytes()
+        except OSError as exc:
+            return [], _finding(
+                REASON_RECOVERY_AMBIGUOUS,
+                "the snapshot copy of %s for transaction %s could not be read "
+                "for restore: %s" % (target.name, intent.get("txn_id"), exc),
+                stage=PHASE_PRECHECK)
+        if hash_bytes(original) != before:
+            return [], _finding(
+                REASON_RECOVERY_AMBIGUOUS,
+                "the snapshot copy of %s does not match the before-digest "
+                "transaction %s recorded (%s vs %s), so restoring it would write "
+                "bytes nobody verified."
+                % (target.name, intent.get("txn_id"),
+                   hash_bytes(original)[:12], str(before)[:12]),
+                stage=PHASE_PRECHECK)
+        try:
+            _atomic_replace_file(target, original)
+        except RepairContractError as exc:
+            return [], _finding(
+                REASON_ROLLBACK_FAILED,
+                "the restore of %s for transaction %s failed, so the candidate "
+                "still holds uncommitted bytes: %s"
+                % (target, intent.get("txn_id"),
+                   "; ".join(f.detail for f in exc.findings)),
+                stage=PHASE_PRECHECK)
+        # 385: VERIFIED only after the byte AND hash compare.
+        verified = target.read_bytes() == original
+        if not verified:
+            return [], _finding(
+                REASON_ROLLBACK_FAILED,
+                "the restore of %s wrote bytes that do not read back equal, so the "
+                "rollback is NOT verified and the candidate must not be treated as "
+                "recovered." % target, stage=PHASE_PRECHECK)
+        _write_journal_record(journal, dict(
+            intent, kind=JOURNAL_TERMINAL, status=STATUS_ROLLBACK,
+            after_sha256=before))
+        return [_finding(
+            REASON_ROLLBACK_FAILED,
+            "recovered transaction %s: the candidate held that transaction's "
+            "after-bytes with no terminal record, so the snapshot's original "
+            "bytes were restored and verified (rule 385)"
+            % intent.get("txn_id"), stage=PHASE_PRECHECK)], None
+
+    if live_sha == before or live_sha is None:
+        # --- 384: never published, or the target is gone. Confirm, no rewrite.
+        _write_journal_record(journal, dict(
+            intent, kind=JOURNAL_TERMINAL, status=STATUS_BLOCKED))
+        return [_finding(
+            REASON_INPUT_DRIFT,
+            "resolved transaction %s: the candidate never took that transaction's "
+            "after-bytes, so nothing was published and no rewrite was needed "
+            "(rule 384)" % intent.get("txn_id"), stage=PHASE_PRECHECK)], None
+
+    # --- 386: neither the recorded before nor the recorded after -------------
+    # BLOCKS. These bytes may be a human's or another process's, and
+    # 「隔离现场，不覆盖可能的人类/其他进程修改」 means leave them alone and stop.
+    return [], _finding(
+        REASON_RECOVERY_AMBIGUOUS,
+        "QUARANTINE: %s holds bytes (%s) that are neither the before (%s) nor the "
+        "after (%s) of the unresolved transaction %s. They may be a human's or "
+        "another process's edit, so nothing is overwritten and no further round is "
+        "opened. The intent is at %s"
+        % (target, str(live_sha)[:12], str(before)[:12], str(after)[:12],
+           intent.get("txn_id"), journal),
+        stage=PHASE_PRECHECK)
+
+# ===========================================================================
+# Contract 378, at COMMIT: 在 candidate root 上重新执行
+# `policy.paths.resolve_within(..., strict=True)`，再检查每个路径分量的
+# symlink/reparse point、文件 link count/别名与实际身份；不能仅复用 workspace
+# root 的宽范围检查.
+# ===========================================================================
+
+def _design_paths_are_own_and_unique(design_root: Path, target: str) -> List[Finding]:
+    """Contract 378's per-component check, performed AT COMMIT.
+
+    `build_file_manifest` checks per-file `is_symlink()` and containment, but it
+    does not check the ROOT with strict resolution and it does not read the link
+    count -- and line 378 explicitly says the workspace-root check may not be
+    reused as a substitute. A file with more than one hard link is two names for
+    the same bytes, which is exactly the "别名与实际身份" this clause is about.
+    """
+    reasons = []
+    root = Path(design_root)
+    if not root.is_dir():
+        return [_finding(REASON_INPUT_DRIFT,
+                         "the candidate design root %s is not a directory" % root,
+                         stage=PHASE_COMMIT)]
+    resolved = root.resolve(strict=True)
+    if resolved != root.absolute():
+        reasons.append(_finding(
+            REASON_INPUT_DRIFT,
+            "the candidate design root %s does not resolve to itself (%s); "
+            "contract 378 requires strict re-resolution and refuses a path that "
+            "is reached through a link" % (root, resolved), stage=PHASE_COMMIT))
+    current = root
+    for part in Path(target).parts:
+        current = current / part
+        if current.is_symlink():
+            reasons.append(_finding(
+                REASON_INPUT_DRIFT,
+                "the path component %s is a symbolic link; contract 378 refuses "
+                "reaching the design through one" % current, stage=PHASE_COMMIT))
+    live = root / target
+    try:
+        links = os.stat(str(live)).st_nlink
+    except OSError as exc:
+        return reasons + [_finding(
+            REASON_INPUT_DRIFT,
+            "the design file %s could not be stat'd for the contract 378 link "
+            "count: %s" % (live, exc), stage=PHASE_COMMIT)]
+    if links != 1:
+        reasons.append(_finding(
+            REASON_INPUT_DRIFT,
+            "the design file %s has %d hard links; contract 378 requires the "
+            "link count and actual identity to be checked, and more than one "
+            "name for the same bytes is an alias this round must not write "
+            "through" % (live, links), stage=PHASE_COMMIT))
+    return reasons
+
+
 def _commit_predicate(receipt: Mapping, thin: Mapping, *,
                       live_equals_snapshot: bool,
                       hashes_recomputed: bool,
                       binding_drift: Sequence[str],
                       permission_drift: Sequence[str],
-                      lock_held: bool) -> Tuple[bool, List[Finding], List[str]]:
+                      lock_held: bool,
+                      writer_calls: int) -> Tuple[bool, List[Finding], List[str]]:
     """Contract 335-347, the pipeline's ONLY commit predicate, as a pure function.
 
     Line 349: "这是合取，没有'置信度高''仅 warning''多数 checks PASS'的例外."
@@ -3887,16 +4376,21 @@ def _commit_predicate(receipt: Mapping, thin: Mapping, *,
     verdicts = {
         # 338 StageApplyResult.status == APPLIED_TO_STAGE
         "stage_applied_to_stage": stage.get("status") == "APPLIED_TO_STAGE",
-        # 339 route / tool-result / one-write-call / effect checks. "one write
-        # call" is NOT checkable: `apply_stage`'s receipt carries no call
-        # counter, and inventing one would be asserting a fact nobody measured.
-        # The conjunct is therefore reported as not satisfied rather than
-        # partially assumed -- 349 forbids treating UNKNOWN as satisfied.
+        # 339 route / tool-result / one-write-call / effect checks.
+        #
+        # "one write call" is counted by the ROUND, at its single call site, and
+        # passed in. The first version read it from `apply_stage`'s receipt --
+        # which has no such field, so the conjunct was unsatisfiable in
+        # production as well as in tests. That is the same class of defect as the
+        # `"SAFE"` route value in the previous increment: a conjunct keyed on
+        # something nobody emits. The round is also the RIGHT place to count:
+        # 339's "one-write-call" and 371's 「native 只调用一次」 are claims about
+        # what the round did, not about what the adapter reports.
         "route_and_effect_checks": all([
             receipt.get("route") in COMMIT_ROUTES,
             stage.get("tool_applied") is True,
             stage.get("changed") is True,
-            stage.get("one_write_call") is True,
+            writer_calls == 1,
         ]),
         # 340 ThinVerificationResult.scope == PR1_CANDIDATE_BYTES
         "thin_scope_is_candidate_bytes":
@@ -3929,7 +4423,7 @@ def _commit_predicate(receipt: Mapping, thin: Mapping, *,
                                     if not verdicts[name]]
 
 
-def run_round(round_request):
+def _run_round_body(round_request, lock_held, recovery_notes):
     """Drive one repair round: PRECHECK -> SNAPSHOT -> STAGE_APPLY ->
     DELTA_CHECK.
 
@@ -4057,43 +4551,12 @@ def run_round(round_request):
     receipt["stage_root"] = str(Path(stage_root).resolve())
     receipt["candidate_design_root"] = str(Path(design_root).resolve())
 
-    # Contract 369, PRECHECK's first duty: "先处理未完成事务". A previous
-    # transaction that wrote a COMMIT_INTENT and never wrote a terminal record
-    # must be dealt with BEFORE this round writes anything -- contract 387: "无
-    # COMMITTED terminal record 的事务，即使有 COMMIT_INTENT 且 live=after ...
-    # 不猜测这次已经成功."
-    #
-    # We REFUSE rather than clean up. The restore of contract 385 is not
-    # implemented, and rule 3 (386) requires that a live design which is neither
-    # the recorded before nor the after bytes be quarantined -- "隔离现场，不覆盖
-    # 可能的人类/其他进程修改" -- not overwritten by a repair round. Guessing
-    # here could overwrite a human's edit, which is a worse failure than a round
-    # that stops.
-    try:
-        pending, journal_corrupt = _unresolved_intents(
-            _journal_file(host_context), txn_id)
-    except (HostContextError, OSError) as exc:
-        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
-            REASON_INPUT_DRIFT,
-            "the durable journal could not be read, so an earlier transaction "
-            "cannot be ruled out: %s" % exc, stage=PHASE_PRECHECK)])
-    if journal_corrupt:
-        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
-            REASON_RECOVERY_AMBIGUOUS,
-            "the durable journal has a record this reader cannot trust, and a "
-            "skipped line reads as 'never committed' -- which is the inversion "
-            "contract 387 forbids: %s" % "; ".join(journal_corrupt),
-            stage=PHASE_PRECHECK)])
-    if pending:
-        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
-            REASON_RECOVERY_AMBIGUOUS,
-            "transaction %s left a COMMIT_INTENT with no terminal record, so its "
-            "outcome is unknown. The restore of contract 385 is NOT implemented "
-            "and rule 3 requires quarantining rather than overwriting, so this "
-            "round refuses. The intent is at %s"
-            % (", ".join(sorted({row.get("txn_id") or "?" for row in pending})),
-               _journal_file(host_context)),
-            stage=PHASE_PRECHECK)])
+    # Recovery already ran in the wrapper, UNDER THE SINGLE-WRITER LOCK,
+    # because contract 385's restore WRITES the candidate design file. Two
+    # rounds recovering one candidate at once would race on exactly the bytes
+    # neither can verify. The notes ride along so a reader can see a previous
+    # transaction was RESOLVED rather than silently overwritten.
+    receipt["recovered"] = list(recovery_notes)
 
     # The op-list must already live inside the stage: the stage is re-seeded from
     # the snapshot below, so an op-list from elsewhere would not survive it.
@@ -4230,6 +4693,14 @@ def run_round(round_request):
     from tools import akcli_adapter  # lazy: keeps akcli off the import path
 
     try:
+        # Contract 339's "one-write-call", and contract 371's "native 只调用一次".
+        # Counted HERE, at the single call site, because that is where the pipeline
+        # knows the answer -- `apply_stage`'s own receipt carries no call counter,
+        # and changing tools/akcli_adapter.py is outside this envelope. Counting at
+        # the consumer is the honest place: it measures what this round did, not
+        # what the adapter claims. It is inside the try because the call is.
+        writer_calls = 0
+        writer_calls += 1
         staged = akcli_adapter.apply_stage({
             "host_patch": bound["host_patch"],
             "txn_id": txn_id,
@@ -4487,26 +4958,16 @@ def run_round(round_request):
             REASON_TOOL_UNAVAILABLE, freeze_error, stage=PHASE_KICAD_VERIFY)])
 
     # ===================================================================
-    # COMMIT -- contract line 374's PREDICODE, evaluated. Not its write.
+    # COMMIT -- contract line 374, in the contract's own order. The writer
+    # exists now, and it is reachable: the lock conjunct is satisfied by a lock
+    # this round actually holds.
     #
-    # Reached only on a thin PASS. Line 349 forbids publishing a thin PASS as a
-    # whole-candidate VerifierPort PASS, and the bytes are NOT written here: see
-    # the block comment above `_commit_predicate` for why the writer must ship
-    # together with the restore and the lock, and what is missing.
-    #
-    # So the round stays exactly as unpromoted as it was -- status None,
-    # terminal False, COMMIT still pending -- but the receipt now says WHICH
-    # conjuncts are unsatisfied, so a reader is not left to guess, and the
-    # predicate is exercised in production rather than being a test-only
-    # function.
+    # 「禁止为了提交重跑 op-list」: nothing here re-invokes the writer. The bytes
+    # come from the stage as they are.
     # ===================================================================
-    receipt["commit"] = {"attempted": False, "replaced": False, "verified": False}
+    receipt["commit"] = {"attempted": True, "replaced": False, "verified": False}
 
-    # 344: the live design measured NOW, not taken from the seed-time manifest.
-    # build_file_manifest takes (root, target_relative) and nothing else; an
-    # earlier version passed a `roles` keyword that does not exist, and the
-    # TypeError was swallowed into "could not be re-measured" -- blaming the
-    # measurement instead of the call.
+    # --- 1. the predicate, re-checked here and not merely remembered -------
     try:
         live_now = build_file_manifest(design_root, stage_target)
     except (OSError, ValueError) as exc:
@@ -4516,35 +4977,38 @@ def run_round(round_request):
         live_error = None
         live_equals_snapshot = (live_now == receipt["snapshot"]["manifest"])
 
-    # 342 / 345: drift is measured against the receipt's OWN bound values, and
-    # the two kinds are kept apart. The first version aliased both conjuncts to
-    # one `not drift` check and compared a name that was never bound against a
-    # host-context field that does not exist -- a NameError plus a permanent
-    # false.
+    # Contract 378, performed AT COMMIT rather than reusing the workspace-root
+    # check: strict re-resolution, per-component symlink/reparse, link count.
+    identity_reasons = _design_paths_are_own_and_unique(design_root, stage_target)
+
     binding_drift, permission_drift = [], []
     thin_block = receipt.get("kicad_verify") or {}
-    for name, held, expected in (
+    for name, held_value, expected in (
             ("run_id", receipt.get("txn_id"), thin_block.get("run_id")),
             ("policy", receipt.get("bound_policy_sha256"),
              thin_block.get("bound_policy_sha256")),
             ("toolchain", thin_block.get("toolchain_sha256"),
              thin_block.get("toolchain_sha256")),
     ):
-        if expected is not None and held != expected:
+        if expected is not None and held_value != expected:
             binding_drift.append("the %s binding differs: round %r, verifier %r"
-                                 % (name, held, expected))
+                                 % (name, held_value, expected))
     if thin_block.get("dependencies_unchanged") is not True:
         permission_drift.append("the verifier did not report the dependencies "
                                 "as unchanged")
     if live_error:
         permission_drift.append(live_error)
+    # No separate permission_drift note for the call count: the conjunct carries
+    # it, and stating it in two places is how a conjunct gets aliased.
 
-    # 343: the stage source re-measured here rather than trusting the receipt's
-    # own after_sha256, and the reports already re-read above.
+    # Contract 343: the stage source re-measured here rather than trusting the
+    # receipt's own after_sha256.
+    stage_file = Path(stage_root) / stage_target
     try:
-        stage_sha = hash_bytes((Path(stage_root) / stage_target).read_bytes())
+        stage_bytes = stage_file.read_bytes()
+        stage_sha = hash_bytes(stage_bytes)
     except OSError as exc:
-        stage_sha = None
+        stage_bytes, stage_sha = None, None
         hashes_recomputed = False
         permission_drift.append("the staged bytes could not be re-measured: %s"
                                 % exc)
@@ -4553,30 +5017,30 @@ def run_round(round_request):
                              and recheck is not None
                              and recheck.get("status") == "PASS")
 
-    # 346 and the "one write call" half of 339: no lock primitive exists in this
-    # repository, and `apply_stage` records no call count. Both are reported
-    # unsatisfied rather than assumed -- omitting a conjunct of a nine-way
-    # conjunction is exactly how line 349's "没有例外" would come to be false.
     ok, predicate_reasons, unsatisfied = _commit_predicate(
         receipt, thin,
         live_equals_snapshot=live_equals_snapshot,
         hashes_recomputed=hashes_recomputed,
         binding_drift=binding_drift,
         permission_drift=permission_drift,
-        lock_held=False)
+        lock_held=lock_held,
+        writer_calls=writer_calls)
+    if identity_reasons:
+        # Contract 378 is not one of the nine named conjuncts but it governs
+        # whether the replace may touch these bytes at all, so it is part of the
+        # gate rather than an advisory.
+        predicate_reasons = list(predicate_reasons) + list(identity_reasons)
+        ok = False
+        unsatisfied = unsatisfied + ["contract_378_path_identity"]
     receipt["commit_predicate"] = {
         "satisfied": ok,
         "unsatisfied_conjuncts": unsatisfied,
         "reasons": [r.detail for r in predicate_reasons],
-        "writer_available": False,
-        "not_implemented": ["single_writer_lock", "commit_intent_and_restore",
-                            "atomic_design_replace", "stage_write_call_count"],
+        "writer_available": True,
+        "not_implemented": ["no_change_idempotent_replay",
+                            "final_candidate_hash"],
     }
-    # Contract 384: `rollback.status=VERIFIED` is EARNED by comparing live bytes
-    # to the snapshot -- "逐 bytes/manifest 核对后 rollback.status=VERIFIED". The
-    # first version published VERIFIED and byte_equal=True on EVERY predicate
-    # failure, including the failure of the very conjunct that would have proved
-    # it, which is a fabricated evidence field.
+    # Contract 384: VERIFIED is EARNED by the byte/manifest comparison.
     receipt["rollback"] = {
         "status": "VERIFIED" if live_equals_snapshot and live_error is None
         else "UNKNOWN",
@@ -4584,12 +5048,194 @@ def run_round(round_request):
         "byte_equal": True if live_equals_snapshot and live_error is None else None,
         "reasons": [r.detail for r in predicate_reasons],
     }
-    receipt.update(status=None, phase=PHASE_KICAD_VERIFY, cause_status=None,
-                   terminal=False, reasons=[])
-    receipt["pending_phases"] = list(ROUND_PENDING_PHASES)
+
+    if not ok:
+        # Line 374: 权限/输入/stage/report 漂移 -> 不 replace 并 ROLLBACK. The
+        # design is NOT touched, so this is a confirmation, not a rewrite.
+        return refuse(PHASE_COMMIT, STATUS_ROLLBACK, predicate_reasons,
+                      cause_status=STATUS_BLOCKED)
+
+    # --- 2. COMMIT_INTENT, durable BEFORE the design is written ----------
+    # Order is the whole point. A crash after this and before the terminal
+    # record leaves a durable INTENT with no TERMINAL, which is exactly the state
+    # contract 387 says must be treated as "did not succeed" -- and which
+    # _recover_incomplete now resolves on the next round's PRECHECK.
+    journal = _journal_file(host_context)
+    intent = {
+        "kind": JOURNAL_COMMIT_INTENT,
+        "txn_id": txn_id,
+        "run_id": host_context.get("run_id"),
+        "candidate_id": host_context.get("candidate_id"),
+        "patch_id": host_context.get("patch_id"),
+        "stage_sha256": stage_sha,
+        "before_sha256": receipt.get("before_source_sha256"),
+        "after_sha256": receipt.get("after_source_sha256"),
+        "target": str((Path(design_root) / stage_target)),
+        "status": None,
+        "snapshot_root": str(receipt["snapshot"]["root"]),
+        "snapshot_sha256": receipt["snapshot"]["target_sha256"],
+        "design_root": str(Path(design_root).resolve()),
+    }
+    try:
+        intent_sha = _write_journal_record(journal, intent)
+    except RepairContractError as exc:
+        # No side effect has happened yet: the design is untouched.
+        return refuse(PHASE_COMMIT, STATUS_TOOL_ERROR, exc.findings)
+
+    # --- 3. the atomic replace, then 4. its verification ------------------
+    try:
+        replace_report = _atomic_replace_file(
+            Path(design_root) / stage_target, stage_bytes)
+    except RepairContractError as exc:
+        # Line 374: replace/post-read/journal 错误 -> 依恢复规则处理. The INTENT is
+        # durable and there is no TERMINAL, so _recover_incomplete will classify
+        # the live bytes on the next round: before -> rule 384, after -> rule 385.
+        return refuse(PHASE_COMMIT, STATUS_TOOL_ERROR, list(exc.findings) + [
+            _finding(REASON_ROLLBACK_FAILED,
+                     "the replace failed with a durable COMMIT_INTENT (%s) and no "
+                     "terminal record. Recovery is implemented, so the next round "
+                     "will classify the live bytes at %s and either confirm or "
+                     "restore them; the design has not been left in an "
+                     "undecidable state." % (intent_sha[:12], journal),
+                     stage=PHASE_COMMIT)])
+    # Read what the primitive REPORTED rather than hard-coding True. X8 found the
+    # hard-coded form: unreachable today only because the primitive has a single
+    # exit path, which is exactly the coupling that rots -- a second path would
+    # silently publish a claim nobody checked.
+    receipt["commit"]["replaced"] = bool(replace_report.get("replaced"))
+
+    # 逐字节和 hash 核验最终 design
+    try:
+        final_bytes = (Path(design_root) / stage_target).read_bytes()
+    except OSError as exc:
+        return refuse(PHASE_COMMIT, STATUS_TOOL_ERROR, [_finding(
+            REASON_SOURCE_UNBOUND,
+            "the final design could not be read back for verification: %s" % exc,
+            stage=PHASE_COMMIT)])
+    final_sha = hash_bytes(final_bytes)
+    receipt["commit"]["verified"] = (final_bytes == stage_bytes
+                                     and final_sha == stage_sha)
+    if not receipt["commit"]["verified"]:
+        # If this disagrees, the bytes on disk are not the bytes that were
+        # verified, and saying COMMITTED would be a lie about the candidate.
+        return refuse(PHASE_COMMIT, STATUS_UNKNOWN, [_finding(
+            REASON_SOURCE_UNBOUND,
+            "the final design does not match the verified staged bytes "
+            "(live %s, staged %s); not reporting COMMITTED"
+            % (final_sha[:12], stage_sha[:12]), stage=PHASE_COMMIT)])
+
+    # --- 5. the terminal record, and only then 6. COMMITTED ---------------
+    try:
+        _write_journal_record(journal, dict(
+            intent, kind=JOURNAL_TERMINAL, status=STATUS_COMMITTED,
+            after_sha256=final_sha))
+    except RepairContractError as exc:
+        return refuse(PHASE_COMMIT, STATUS_TOOL_ERROR, list(exc.findings) + [
+            _finding(REASON_ROLLBACK_FAILED,
+                     "the design was replaced and verified, but the terminal "
+                     "journal record could not be written. The transaction stays "
+                     "uncommitted so that recovery cannot mistake it for success: "
+                     "the next round will see the live bytes equal the recorded "
+                     "after-digest and restore the snapshot's original bytes "
+                     "(rule 385).", stage=PHASE_COMMIT)])
+
+    reach(PHASE_COMMIT)
+    receipt.update(status=STATUS_COMMITTED, phase=PHASE_COMMIT,
+                   cause_status=None, terminal=True, reasons=[])
+    receipt["pending_phases"] = []
     receipt["feedback"] = public_feedback({
         "context_id": host_context["context_id"],
-        "status": None,
+        "status": STATUS_COMMITTED,
         "cause_status": None,
     })
+    return receipt
+
+
+def run_round(round_request):
+    """Contract 369's first duty, then the phases: 先处理未完成事务.
+
+    The wrapper exists so the single-writer lock is held from PRECHECK to the end
+    and released on EVERY exit. The body has roughly thirty `return refuse(...)`
+    sites, and re-indenting all of them into a try/finally would be the risky way
+    to guarantee the release; a wrapper makes it unconditional by construction.
+
+    Order is the contract's, and the order matters: the lock is taken BEFORE
+    recovery, because recovery WRITES -- contract 385's restore replaces the
+    design file -- and two rounds recovering one candidate at once would race on
+    exactly the bytes neither can verify.
+    """
+    host_context = (round_request.get("host_context")
+                    if isinstance(round_request, Mapping) else None)
+    if not isinstance(host_context, Mapping):
+        # Let the body produce its own receipt; the lock needs a workspace it
+        # does not have, and reporting that here would mask the real complaint.
+        return _run_round_body(round_request, False, [])
+
+    workspace = host_context.get("workspace")
+    lock_path = workspace.get("lock_path") if isinstance(workspace, Mapping) \
+        else None
+    if not isinstance(lock_path, str) or not lock_path.strip():
+        return _refuse_before_body(
+            PHASE_PRECHECK, STATUS_BLOCKED,
+            "the host context declares no lock path, so this round cannot prove "
+            "it is the single writer; refusing rather than assuming")
+
+    lock = _SingleWriterLock(lock_path)
+    if not lock.acquire():
+        return _refuse_before_body(PHASE_PRECHECK, STATUS_BLOCKED, lock.refusal)
+    try:
+        # Inside the try, because the handlers below exist to turn ITS failures
+        # into refusals. An exception out of `run_round` is a crash where a
+        # refusal belongs -- and the BODY refuses cleanly for a missing repair
+        # root, so the wrapper must not be the layer that turns a well-formed
+        # complaint into a traceback.
+        blocking, notes = _recover_incomplete(host_context,
+                                              round_request.get("txn_id"))
+        if blocking is not None:
+            receipt = _refuse_before_body(
+                PHASE_PRECHECK, STATUS_BLOCKED, blocking.detail)
+            receipt["reasons"] = notes + [blocking]
+            receipt["commit_predicate"] = {
+                "satisfied": False,
+                "unsatisfied_conjuncts": ["single_writer_lock_held"],
+                "reasons": [blocking.detail],
+                "writer_available": True,
+                "not_implemented": [],
+            }
+            return receipt
+        return _run_round_body(round_request, True, notes)
+    except HostContextError as exc:
+        return _refuse_before_body(
+            PHASE_PRECHECK, STATUS_BLOCKED,
+            "the durable journal could not be located, so an earlier "
+            "transaction cannot be ruled out: %s"
+            % "; ".join(f.detail for f in exc.findings))
+    except OSError as exc:
+        return _refuse_before_body(
+            PHASE_PRECHECK, STATUS_BLOCKED,
+            "the durable journal could not be read, so an earlier transaction "
+            "cannot be ruled out: %s" % exc)
+    finally:
+        # Unconditional, including on the handler paths above. The OS releases
+        # the lock on process death anyway, but a library call must not hold it
+        # until then -- a second round in the same process would deadlock.
+        lock.release()
+
+
+def _refuse_before_body(phase, status, detail):
+    """A receipt for a refusal decided BEFORE the body runs.
+
+    `_round_receipt` needs no round state, so a lock conflict or an ambiguous
+    recovery still produces a well-formed receipt rather than an exception -- and
+    `commit` / `rollback` / `commit_predicate` are all present, because their
+    absence on an early refusal is exactly what PR #101 had to fix.
+    """
+    receipt = _round_receipt(status, phase,
+                             [_finding(REASON_INPUT_DRIFT, detail, stage=phase)],
+                             True)
+    receipt["commit"] = {"attempted": False, "replaced": False, "verified": False}
+    receipt["rollback"] = {"status": "NOT_NEEDED", "attempted": False,
+                           "byte_equal": None, "reasons": [detail]}
+    receipt["pending_phases"] = []
+    receipt["feedback"] = None
     return receipt
