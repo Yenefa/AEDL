@@ -1,0 +1,193 @@
+task: PR1-C5-KICAD-VERIFY
+
+base:
+  branch: feat/c5-kicad-verify
+  sha: e1724d4
+
+goal: |
+  Make the transaction state, for the first time, exactly what it verified.
+
+  KICAD_VERIFY is an EVIDENCE GENERATOR, not a gate. Owner ruling, and the
+  reason is measured rather than stylistic: on the DC-04 fixture, kicad-cli
+  10.0.5 reports ZERO ERC errors on the DEFECTIVE board. 37 warnings are raised
+  and every one is lib_symbol_issues or footprint_link_issues -- library
+  resolution, not electrical. So a gate written as `erc_error_count == 0` is
+  already green on a broken board, and `--exit-code-violations` returns 5 for
+  reasons that have nothing to do with the design.
+
+  A verification tool's output is not a correctness proof, and this phase's
+  deliverable is the first artifact in the system that says so in its own
+  fields.
+
+  What the phase produces, per the frozen design:
+
+    ToolIdentity   resolved_path, version, measured_sha256, declared_sha256,
+                   status MATCH | SUBSTITUTION | UNAVAILABLE
+    ERC            severity totals AND by_type breakdown, plus kicad_version
+    Netlist        raw_sha256 + content_sha256 + the normalisation spec
+    Render         inventory of what the tool ACTUALLY produced
+    Limitations    the DC-04 detection result, in the artifact
+
+  Owner rulings, all eight, recorded verbatim in the design section below and
+  implemented as stated.
+
+scope: |
+  In scope:
+  - tools/repair_pipeline.py:
+      * a verification EVIDENCE BUILDER that runs kicad-cli from the bound
+        executable and records what happened;
+      * tool identity resolved ONLY from the toolchain binding, measured and
+        compared against the declared digest. No find_kicad_cli() fallback --
+        that function reads KICAD_CLI, then PATH, then a hardcoded path
+        belonging to a different user, and returns None on this machine while
+        KiCad 10.0.5 is installed and working. Falling back to it would let the
+        evidence say "verified kicad X" while kicad Y ran.
+      * run_round drives PHASE_KICAD_VERIFY after DELTA_CHECK passes, records
+        the artifact in the receipt, and returns WITHOUT changing status.
+  - tests/test_repair_pipeline.py: `KicadVerifyEvidenceTests`.
+  - tasks/PR1-C5-KICAD-VERIFY.yaml
+  - docs/compliance/ai-usage/**, docs/compliance/AI_USAGE_LOG.md
+
+  The phase MUST NOT decide the transaction's fate. There is no policy layer yet,
+  so nothing consumes the artifact. run_round's status after a successful
+  DELTA_CHECK is unchanged by this phase: status=None, terminal=False.
+
+  Out of scope, explicitly:
+  - **No COMMIT phase and no promotion.** Still unimplemented.
+  - **No gates/**. gates/** is consumed read-only and not edited.
+  - **No toolchain binding rewrite.** The binding's kicad executable_sha256 is a
+    declared value and nothing verifies the file at the resolved path hashes to
+    it -- the same shape as the akcli finding already on record. This phase
+    DETECTS and REPORTS that. It does not repair the binding architecture.
+  - **No find_kicad_cli() repair**, and no use of it.
+  - **No policy layer**, no promotion decision, no threshold.
+  - **No qualify_toolchain fix, no recover_incomplete, no feedback learning, no
+    planner** -- frozen by Owner direction.
+  - **No Evidence-index work.** docs/evidence/** is forbidden.
+  - Do NOT touch PR #91 / GH-51.
+
+dependencies: []
+  # run_round, the separation guard and the SNAPSHOT phase are merged
+  # (#95 c203346, #96 5861fc7, #97 9000ce5, #98 e1724d4); all are ancestors of
+  # this base.sha, so the prerequisite is the baseline rather than a ref. A
+  # task-id ref must not be declared: tools/admit.py:88 resolves refs by
+  # TRAILING DIGITS, so "EVID-DC04" silently became GitHub issue #4 once.
+
+allowed_paths:
+  - tools/repair_pipeline.py
+  - tests/test_repair_pipeline.py
+  - tasks/PR1-C5-KICAD-VERIFY.yaml
+  - docs/compliance/ai-usage/**
+  - docs/compliance/AI_USAGE_LOG.md
+
+forbidden_paths:
+  - gates/**
+  - src/**
+  - .github/**
+  - docs/evidence/**
+  - delivery/**
+  - sandbox_runtime/**
+  - tools/board_review.py
+  - notes/m2-*
+
+acceptance: |
+  Tool identity:
+  - Resolved ONLY from the toolchain binding. find_kicad_cli() is not called, and
+    a test asserts it is not.
+  - The binary's digest is MEASURED from the file that is about to run, never
+    copied from the declaration. A test points the binding at a real binary with
+    a WRONG declared digest and shows status SUBSTITUTION with both digests
+    present and unequal.
+  - A missing executable yields status UNAVAILABLE, not a fallback and not a
+    FAIL. No other binary is ever executed.
+  - The measured version string is recorded, not the declared one alone.
+
+  ERC:
+  - Reported as severity totals PLUS a by_type breakdown. A test asserts a total
+    alone is not what is emitted, i.e. by_type is present and non-empty when
+    violations exist.
+  - kicad_version comes from the report's own JSON, not from our expectation.
+  - The report is read as JSON, not scraped from the text report.
+
+  Netlist:
+  - raw_sha256 and content_sha256 BOTH present, plus an explicit normalisation
+    spec naming the removed fields and the reason. A test asserts the spec is
+    present and that a bare black-box normalised hash field is NOT.
+  - A test runs the same input twice and shows raw digests differ while content
+    digests match -- the property that makes the content digest comparable.
+
+  Render:
+  - The output inventory records what the tool ACTUALLY produced, keyed by the
+    requested path and the actual path. A test covers the measured case where
+    `sch export svg -o out.svg` produces the DIRECTORY out.svg/fault.svg, and
+    asserts the artefact is found rather than reported as a failure.
+
+  Known limitations:
+  - The artifact carries the measured DC-04 detection result. A test asserts the
+    field exists, so the limitation cannot be silently dropped.
+
+  Non-gating:
+  - A run whose KICAD_VERIFY evidence is UNAVAILABLE or SUBSTITUTION still ends
+    with the same status as one with MATCH evidence: status None, terminal
+    False. A test asserts both produce the same status, which is what makes this
+    an evidence generator rather than a gate.
+
+  Whole:
+  - The full suite stays green and every new test is mutation-verified.
+  - `py -3 -S -m unittest discover -s tests` stays green and
+    `py -3 -m tools.dev_gate --envelope tasks/PR1-C5-KICAD-VERIFY.yaml` exits 0.
+
+design_frozen_by_owner:
+  ruling_1: |
+    netlist raw + normalised BOTH retained; the normalised digest may be used
+    for comparison but must never stand in for the raw one. The normalisation
+    rule is recorded as data -- {"removed_fields": ["date"], "reason":
+    "generator timestamp"} -- and never as an opaque `normalized_hash` field,
+    because otherwise nobody can say years later why two different files hashed
+    alike.
+  ruling_2: |
+    Tool binding is fail-closed. binding path -> does the file exist -> no means
+    UNAVAILABLE. Otherwise measure sha256 and compare with the declaration ->
+    mismatch means SUBSTITUTION. find_kicad_cli() is forbidden: falling back to
+    it is the worst possible outcome, because the evidence would then say it
+    verified kicad X while kicad Y actually ran.
+  ruling_3: |
+    MATCH | SUBSTITUTION | UNAVAILABLE are EVIDENCE STATES recorded in the
+    artifact, not verdicts. The phase is explicitly not called FAIL, because the
+    evidence-generator boundary is the whole point; the policy layer decides, and
+    there is no policy layer yet.
+  ruling_4: |
+    ERC may not be reported as bare totals. A bare 37 carries no information;
+    22 missing-library plus 15 footprint-linkage plus 0 electrical carries a
+    great deal.
+  ruling_5: |
+    Render output is enumerated from what the tool actually produced, not from
+    the CLI argument's apparent meaning. `sch export svg -o out.svg` writes a
+    directory; a caller testing is_file() on the requested path concludes the
+    render failed when it succeeded.
+  ruling_6: |
+    The declared-vs-measured kicad digest gap is DETECTED AND REPORTED only.
+    Rewriting the toolchain binding architecture is out of scope, or Step 3B
+    would inflate.
+  ruling_7: |
+    gates/** is not modified.
+  ruling_8: |
+    No find_kicad_cli() fallback anywhere in this path.
+
+change_budget:
+  expected_files: 5
+  expected_modules: [tools, tests, tasks, docs]
+  cross_module: false          # one module in tools/; gates/ consumed read-only
+  contract_change: true        # a new phase runs and records evidence; run_round's
+                               # terminal status is deliberately unchanged, but the
+                               # phase list and receipt schema both grow
+  evidence_semantics_change: false
+
+exceptions:
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "Yenefa 2026-09-27 会话指令「SNAPSHOT -> VERIFY -> COMMIT」与随后的八条设计冻结裁定（raw+normalised 双 hash、normalization 规则公开、禁止 find_kicad_cli fallback、binding mismatch 作为 evidence 状态、ERC 分类统计、render 按真实输出枚举、不改 gates、不修 toolchain binding 架构）"
+  # allow_dirty is NOT claimed.
+
+escalation:
+  owner: Yenefa
