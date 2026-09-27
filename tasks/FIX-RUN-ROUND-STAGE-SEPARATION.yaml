@@ -1,0 +1,109 @@
+task: FIX-RUN-ROUND-STAGE-SEPARATION
+
+base:
+  branch: fix/run-round-stage-candidate-separation
+  sha: c4de675412970eac6b565f25feee8f298aa132c2
+
+goal: |
+  Make the already-merged claim true.
+
+  PRs #95 and #96 state that a round "stops at APPLIED_TO_STAGE and never reports
+  STATUS_COMMITTED".  That is currently true only in the narrow sense "no commit
+  phase ran".  It is NOT true in the sense "the candidate was not modified",
+  because nothing in the code relates the stage to the candidate at all:
+
+    * ``_WORKSPACE_FIELDS`` is (candidate_root, design_root, repair_root,
+      lock_path) -- there is no stage_root, so the stage is outside the declared
+      workspace entirely;
+    * ``run_round`` never references design_root, candidate_root or
+      repair_root, so it does not know where the candidate is;
+    * ``akcli_adapter`` has no candidate concept either.
+
+  The stage/candidate separation is therefore purely conventional and enforced by
+  nothing.  Measured on this host: in both the M6 and the M7 demonstration the
+  caller pointed stage_root at the very directory the host context declared as
+  workspace.design_root, so the writer modified the candidate directly.  The M7
+  round was REJECTED, and the rejected, unauthorized bytes (R9 resolved to 20k)
+  are still sitting in the candidate design directory.
+
+  This task makes the writer's sandbox and the candidate's design area provably
+  disjoint, so that a refused or uncommitted round cannot have altered the
+  candidate.
+
+scope: |
+  In scope:
+  - tools/repair_pipeline.py: run_round must resolve the stage root and the
+    host's design root, and REFUSE when they overlap in either direction (equal,
+    or one contains the other).  A refused overlap is a PRECHECK-stage BLOCKED
+    with a finding that names both paths, so the operator can see which
+    directory was wrong.
+  - tests/test_repair_pipeline.py: pin the invariant, including both overlap
+    directions and the disjoint case that must still work.
+  - docs/compliance/ai-usage/**, docs/compliance/AI_USAGE_LOG.md.
+
+  Out of scope, explicitly:
+  - **No COMMIT phase, no SNAPSHOT phase, no promotion.** This task only makes the
+    precondition true; implementing the promotion is the next step.
+  - **No KICAD_VERIFY.**
+  - **No change to the request's field set.** ``stage_root`` already exists; this
+    task adds a check, not a field, so the request contract is unchanged.
+  - **No new status token.** The refusal reuses BLOCKED, which is what a
+    misconfigured host already produces everywhere else.
+  - **No qualify_toolchain fix, no recover_incomplete, no feedback learning, no
+    planner** -- frozen by Owner direction on 2026-09-27.
+  - **No Evidence-index work.** docs/evidence/** is forbidden.
+  - Do NOT touch PR #91 / GH-51.
+
+dependencies: []
+  # run_round is merged (PR #95 = c203346, PR #96 = 5861fc7), both ancestors of
+  # this base.sha, so the prerequisite is the baseline rather than a ref.
+  # A task-id ref must not be declared here: tools/admit.py:88 resolves refs by
+  # TRAILING DIGITS, so "EVID-DC04" silently became GitHub issue #4.
+
+allowed_paths:
+  - tools/repair_pipeline.py
+  - tests/test_repair_pipeline.py
+  - tasks/FIX-RUN-ROUND-STAGE-SEPARATION.yaml
+  - docs/compliance/ai-usage/**
+  - docs/compliance/AI_USAGE_LOG.md
+
+forbidden_paths:
+  - gates/**
+  - src/**
+  - .github/**
+  - docs/evidence/**
+  - delivery/**
+  - sandbox_runtime/**
+  - notes/m2-*
+
+acceptance: |
+  - run_round refuses, at PRECHECK with BLOCKED, when stage_root and the host's
+    workspace.design_root are equal, or when either contains the other.  Both
+    directions are tested; the finding names both resolved paths.
+  - A stage root genuinely disjoint from design_root is still accepted, and the
+    pre-existing behaviour is unchanged -- the 25 RunRoundTests and 18
+    RunRoundRejectionTests must stay green without modification.
+  - The check is placed BEFORE the writer is invoked, and before any byte is
+    read from the stage, so an overlapping stage cannot even be observed.
+  - The refusal reason reuses an existing reason code; no new vocabulary.
+  - The check is mutation-verified: removing it, or inverting either direction,
+    makes the corresponding test fail.
+  - `py -3 -S -m unittest discover -s tests` stays green and
+    `py -3 -m tools.dev_gate --envelope tasks/FIX-RUN-ROUND-STAGE-SEPARATION.yaml`
+    exits 0.
+
+change_budget:
+  expected_files: 5
+  expected_modules: [tools, tests, tasks, docs]
+  cross_module: false
+  contract_change: false       # additive guard on an existing field; no signature change
+  evidence_semantics_change: false
+
+exceptions:
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "Yenefa 2026-09-27 会话指令「继续」（在 stage/candidate 无强制分离这一发现与其推荐路径被呈报之后）"
+  # allow_dirty is NOT claimed.
+
+escalation:
+  owner: Yenefa

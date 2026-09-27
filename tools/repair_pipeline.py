@@ -3190,6 +3190,8 @@ def _round_receipt(status, phase, reasons, terminal):
         # Stable shape: a caller must be able to read these without knowing
         # which phase the round stopped in.
         "txn_id": None,
+        "stage_root": None,
+        "candidate_design_root": None,
         "before_source_sha256": None,
         "after_source_sha256": None,
         "rule_id": None,
@@ -3373,6 +3375,47 @@ def _delta_refusal(verdict):
             list(verdict.get("reasons") or []) + _delta_findings(verdict))
 
 
+def _stage_candidate_overlap(stage_root, design_root):
+    """Classify how the writer's stage overlaps the candidate's design area.
+
+    Returns ``"equal"``, ``"stage_contains_design"``, ``"design_contains_stage"``,
+    or ``None`` when the two are genuinely disjoint.
+
+    Why this exists.  ``_WORKSPACE_FIELDS`` declares candidate_root, design_root,
+    repair_root and lock_path but NO stage, so the stage sits outside the declared
+    workspace; and neither run_round nor akcli_adapter knows where the candidate
+    is.  The separation was therefore conventional and enforced by nothing.  On
+    this host both the M6 and the M7 demonstration pointed ``stage_root`` at the
+    very directory the host context declared as ``workspace.design_root``, so the
+    writer modified the candidate directly -- and the M7 round, which was REJECTED,
+    left its unauthorized bytes in the candidate design directory.
+
+    A stage that overlaps the candidate in EITHER direction is refused, not just
+    the equal case: if the stage merely contains the design root, the adapter's
+    own ``_resolve_within`` containment check would still let an op-list path
+    reach into the design.  Disjointness is the property that makes "the round
+    stopped before COMMIT" mean "the candidate was not modified".
+    """
+    stage = Path(stage_root).resolve()
+    design = Path(design_root).resolve()
+    if stage == design:
+        return "equal"
+    # stage is a descendant of design  =>  the stage CONTAINS the design root
+    if stage in design.parents:
+        return "stage_contains_design"
+    # design is a descendant of stage  =>  the design root CONTAINS the stage
+    if design in stage.parents:
+        return "design_contains_stage"
+    return None
+
+
+_OVERLAP_DETAIL = {
+    "equal": "the stage root IS the candidate design root",
+    "stage_contains_design": "the stage root CONTAINS the candidate design root",
+    "design_contains_stage": "the stage root sits INSIDE the candidate design root",
+}
+
+
 def run_round(round_request):
     """Drive exactly one repair round: PRECHECK -> STAGE_APPLY -> DELTA_CHECK.
 
@@ -3443,6 +3486,38 @@ def run_round(round_request):
                       [_finding(REASON_INPUT_DRIFT, str(exc))])
 
     receipt["txn_id"] = txn_id
+
+    # ---- the stage must be provably disjoint from the candidate -----------
+    # Checked BEFORE the before-bytes are read and long before the writer runs,
+    # so an overlapping stage is never even observed.  Fail-closed: if the
+    # candidate's design root cannot be determined, disjointness cannot be
+    # proven and the round is refused rather than allowed on trust.
+    workspace = host_context.get("workspace") if isinstance(host_context, Mapping) \
+        else None
+    design_root = workspace.get("design_root") if isinstance(workspace, Mapping) \
+        else None
+    if not isinstance(design_root, str) or not design_root.strip():
+        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
+            REASON_INPUT_DRIFT,
+            "the host context declares no candidate design root, so the stage "
+            "cannot be proven disjoint from it; refusing rather than trusting it")])
+    try:
+        overlap = _stage_candidate_overlap(stage_root, design_root)
+    except (OSError, ValueError) as exc:
+        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
+            REASON_INPUT_DRIFT,
+            "the stage root and the candidate design root could not be compared: %s"
+            % exc)])
+    if overlap is not None:
+        return refuse(PHASE_PRECHECK, STATUS_BLOCKED, [_finding(
+            REASON_INPUT_DRIFT,
+            "the writer's stage is not disjoint from the candidate: %s "
+            "(stage=%s design_root=%s); a round that stops before COMMIT must not "
+            "be able to have modified the candidate"
+            % (_OVERLAP_DETAIL[overlap], Path(stage_root).resolve(),
+               Path(design_root).resolve()))])
+    receipt["stage_root"] = str(Path(stage_root).resolve())
+    receipt["candidate_design_root"] = str(Path(design_root).resolve())
 
     # ---- PRECHECK ----------------------------------------------------------
     # BEFORE is read from the stage target itself, not from a caller-supplied
