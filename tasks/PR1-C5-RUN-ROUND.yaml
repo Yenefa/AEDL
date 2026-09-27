@@ -1,0 +1,124 @@
+task: PR1-C5-RUN-ROUND
+
+base:
+  branch: feat/c5-run-round-mvp
+  sha: 81f1b32f820e534ebde2ea2462ca17cf3cbb7b52  # origin/master, PR #92 merge
+
+goal: |
+  Add ONE round controller, `run_round`, that drives the repair parts that
+  already exist into a single pass, and prove it on the real frozen DC-04 native
+  fixture:
+
+      PRECHECK      observe_source -> parse_proposal -> build_expected_after
+                    -> bind_policy
+      STAGE_APPLY   akcli_adapter.apply_stage   (the real pinned writer)
+      DELTA_CHECK   gates.repair_verification.compare_delta
+
+  This is composition, not capability. Every stage called here is already
+  implemented, already tested and already frozen; the missing piece was only the
+  thing that orders them and refuses to continue past the first refusal.
+
+  Owner directive 2026-09-27: "把现在已经存在的 observe / proposal /
+  bind_policy / apply / verify / feedback 串起来 … 现在只做 one repair round,
+  跑通即可" and explicitly NOT: self-improvement, benchmark evolution,
+  multi-agent, feedback learning.
+
+scope: |
+  In scope:
+  - tools/repair_pipeline.py: add `run_round` and its closed request field set.
+    Composition only -- no new verification semantics, no new digest kind, no new
+    status token, no relaxation of any existing fail-closed guard.
+  - tests/test_repair_pipeline.py: add `RunRoundTests`.
+  - docs/compliance/ai-/**, docs/compliance/AI_USAGE_LOG.md: append-only.
+
+  Out of scope, explicitly:
+  - **No feedback learning.** `public_feedback` is CALLED (it already exists and
+    is a pure whitelist projection) but nothing consumes its output, and no
+    policy, rule, threshold or fitness function is derived from it.
+  - **No multi-round loop.** Exactly one round. No convergence criterion, no
+    round budget, no retry, no backoff, no scheduler.
+  - **No self-improvement.** Nothing rewrites a rule, a policy, or a prompt
+    from an outcome. AEDL's evaluator stays human-written and human-approved.
+  - **No benchmark evolution.** No case generation, no metric search, no
+    baseline construction, no score maximisation.
+  - **No COMMITTED claim.** The commit / snapshot / recheck_reports phases stay
+    unimplemented, exactly as recorded in EVID-20260927-001. `run_round` stops
+    after DELTA_CHECK and never reports STATUS_COMMITTED.
+  - **No injection seam.** `run_round` always calls the real `apply_stage`.
+    There is deliberately no parameter, hook or override for the writer, so
+    faking a successful write is structurally impossible rather than merely
+    discouraged. The price is that the happy path needs a real akcli and is
+    therefore skipped without AEDL_PR1_NATIVE=1.
+  - **No Evidence-index work.** Owner: PR #94 is frozen pending review and
+    "下一步不要继续做 Evidence". docs/evidence/** is forbidden here.
+  - No change to gates/** -- `compare_delta` is consumed as the frozen
+    acceptance entry point, never reimplemented or bypassed.
+  - Do NOT touch PR #91 / GH-51.
+
+dependencies: []
+  # Empty on purpose. This task consumes code that is already MERGED into
+  # master (PR #92 = 81f1b32, which is this envelope's base.sha), not a task
+  # that is still open, so there is no machine-checkable prerequisite.
+  #
+  # A ref like "PR1-C5" must NOT be declared here: tools/admit.py:88 resolves
+  # dependency refs with re.search(r"(\d+)$", ref), i.e. by TRAILING DIGITS, so
+  # a task id silently binds to an unrelated GitHub issue of the same number
+  # instead of failing to resolve. Observed verbatim in the P1 task:
+  #   {"ref": "EVID-DC04", "status": "blocked", "detail": "issue state=CLOSED"}
+  # meaning it had quietly become issue #4.
+
+allowed_paths:
+  - tools/repair_pipeline.py
+  - tests/test_repair_pipeline.py
+  - tasks/PR1-C5-RUN-ROUND.yaml
+  - docs/compliance/ai-usage/**
+  - docs/compliance/AI_USAGE_LOG.md
+
+forbidden_paths:
+  - gates/**
+  - src/**
+  - .github/**
+  - docs/evidence/**
+  - delivery/**
+  - sandbox_runtime/**
+  - notes/m2-*
+
+acceptance: |
+  - `run_round` drives PRECHECK -> STAGE_APPLY -> DELTA_CHECK in that order and
+    records the phase reached; it cannot skip a phase.
+  - **compare_delta is the only acceptance entry.** A static guard asserts
+    `run_round`'s body does not reference `observation_delta`, so the naive
+    comparison that produced the false "identity delta FAIL" in EVID-20260927-001
+    cannot reappear here.
+  - A refused stage stops the round: no later phase runs, and the refusal's own
+    findings are carried through rather than replaced by a generic message.
+  - `run_round` cannot report a successful write unless `apply_stage` itself
+    reported `status == "APPLIED_TO_STAGE"` AND `tool.tool_applied is True` AND
+    `tool.exit_code == 0` AND `changed is True`. A stage-level status is never
+    treated as a transaction status.
+  - `run_round` never returns STATUS_COMMITTED and never claims KICAD_VERIFY.
+  - `public_feedback` on a non-committed round yields OUTCOME_UNAVAILABLE. This
+    is the intended MVP behaviour (the public outcome is not yet established
+    because the round did not commit) and is asserted as such, not tolerated.
+  - The proposal is parsed by `run_round` itself from raw bytes, so a caller
+    cannot hand it a pre-parsed proposal and bypass `parse_proposal`.
+  - `policy_id` is derived from the policy document only, never from a free
+    argument or from the proposal.
+  - `py -3 -S -m unittest discover -s tests` stays green and
+    `py -3 -m tools.dev_gate --envelope tasks/PR1-C5-RUN-ROUND.yaml` exits 0.
+  - Any test requiring the real akcli writer is skipped without
+    AEDL_PR1_NATIVE=1 and is reported as NOT_RUN, never as passing.
+
+change_budget:
+  expected_files: 4
+  expected_modules: [tools, tests, tasks, docs]
+  cross_module: false          # one new public function in tools/; gates/ untouched
+  contract_change: false       # additive entry point; no existing signature altered
+  evidence_semantics_change: false
+
+exceptions: {}
+  # No exception is claimed. If admit blocks, that is a real containment signal
+  # and the task escalates rather than self-authorising.
+
+escalation:
+  owner: Yenefa
