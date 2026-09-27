@@ -3564,6 +3564,195 @@ class VerifyStageWiringTests(unittest.TestCase):
     FIXTURES = Path(__file__).resolve().parent / "fixtures" / "repair_pr1" / "native"
     CASE = "DC-04"
 
+    def test_the_real_verifier_accepts_the_request_run_round_builds(self):
+        """Nothing in this file executed the real `verify_stage` until now.
+
+        Every other wiring test patches it, so nothing established that the
+        request `run_round` assembles is ACCEPTED by the consumer -- and the
+        envelope's acceptance criterion for the two fresh exports is therefore
+        untested in the suite. The end-to-end harness proves it against real
+        kicad-cli, but that is not the suite and does not run in CI here.
+
+        So: capture the request, hand it to the REAL verifier, and require the
+        real refusal. It will refuse on this interpreter -- the pinned akcli is
+        not importable, and the frozen export toolchain points at a kicad-cli
+        that is not the bound one -- but the point is that it refuses with a
+        NAMED reason about a VALIDATED request, not "you have missing or unknown
+        fields". That distinction is exactly what a hand-forked request breaks.
+        """
+        from gates import repair_verification as c2
+        seen = {}
+        self._run_with(verify_stage=lambda request: (
+            seen.update(request), self._thin("PASS"))[1])
+
+        # the request is complete and of the right shape before it is used at all
+        self.assertEqual(sorted(seen), sorted(c2._VERIFICATION_REQUEST_FIELDS))
+        c2.toolchain_manifest(seen["toolchain_manifest"])
+        c2._manifest(seen["before_manifest"])
+        c2._manifest(seen["staged_manifest"])
+
+        result = c2.verify_stage(dict(seen))
+        self.assertIn(result["status"], ("PASS", "FAIL", "BLOCKED",
+                                          "TOOL_ERROR", "UNKNOWN"))
+        # and it got past REQUEST VALIDATION, which is the property at stake
+        blob = " ".join(str(r) for r in (result.get("reasons") or []))
+        self.assertNotIn("missing or unknown fields", blob)
+        self.assertNotIn("has missing or unknown fields", blob)
+        # a refusal, if any, names something concrete
+        if result["status"] != "PASS":
+            self.assertTrue(result.get("reasons"),
+                            "the real verifier refused with no reason at all")
+
+    def test_the_deriver_used_is_the_repository_own(self):
+        """C1: the KiCad slice must come from the canonical deriver.
+
+        A parallel copy produced a DIFFERENT toolchain digest for a legal
+        binding -- the canonical `_resolved_files` sorts the declared rows and
+        the copy did not, and `canonical_json_bytes` sorts dict keys but not
+        lists -- so the gate the receipt exists to satisfy refused legitimate
+        runs. This is the same failure mode as PR #99.
+        """
+        import inspect
+        from pathlib import Path as _Path
+        source = _Path(pipeline.__file__).read_text(encoding="utf-8")
+        body = inspect.getsource(pipeline.run_round)
+        self.assertIn("host_toolchain.derive_kicad_slice", body)
+        # no parallel deriver survives, by definition or by call
+        self.assertNotRegex(source, r"^def _export_toolchain\(", )
+        self.assertNotIn("_export_toolchain(", source)
+
+    def test_the_reason_keeps_the_verifiers_own_phase(self):
+        """m1: bind_inputs reports SNAPSHOT-stage drift; re-stamping it to
+        KICAD_VERIFY sends a debugger to the wrong phase."""
+        converted = pipeline._thin_reasons({"reasons": [
+            {"code": pipeline.REASON_SOURCE_UNBOUND, "stage": pipeline.PHASE_SNAPSHOT,
+             "object_id": None, "detail": "the stage drifted"}]})
+        self.assertEqual([r.stage for r in converted], [pipeline.PHASE_SNAPSHOT])
+        fallback = pipeline._thin_reasons({"reasons": [
+            {"code": pipeline.REASON_SOURCE_UNBOUND, "object_id": None,
+             "detail": "no stage given"}]})
+        self.assertEqual([r.stage for r in fallback],
+                         [pipeline.PHASE_KICAD_VERIFY])
+
+    def test_the_receipt_carries_what_commit_will_need(self):
+        """M3/M5: the VERIFIED staged manifest and the toolchain digest.
+
+        The seed-time manifest is a different document -- it predates the write
+        and includes repair_ops.json -- so publishing it under `staged_manifest`
+        gave a reader pre-write digests. And `toolchain_sha256` is the one field
+        `same_host_toolchain` compares, so dropping it left COMMIT with nothing
+        to cross-check.
+        """
+        receipt = self._run_with(lambda request: self._thin("PASS"))
+        thin = receipt["kicad_verify"]
+        self.assertIn("verified_staged_manifest", thin)
+        self.assertNotIn("repair_ops.json",
+                         [row["path"] for row in
+                          thin["verified_staged_manifest"]["files"]])
+        self.assertNotEqual(thin["verified_staged_manifest"],
+                            receipt["staged_manifest"])
+        # the value, not just the key: setting it to None keeps the key present,
+        # and a mutation that did exactly that survived the first version
+        self.assertIn("toolchain_sha256", thin)
+        self.assertIsNotNone(thin["toolchain_sha256"],
+                             "COMMIT has no digest to cross-check the toolchain "
+                             "against if this is None")
+
+    def test_a_non_pass_verdict_publishes_its_own_cause_not_the_rechecks(self):
+        """C2: guard ORDER, which only a driven round can observe.
+
+        The recheck FAILs for every non-PASS outcome, because `verify_stage`
+        leaves reports=None unless both exports passed. So checking the recheck
+        first made EVERY refusal ROLLBACK(cause=BLOCKED) and left contract line
+        373's TOOL_ERROR and UNKNOWN buckets unreachable. The table test cannot
+        see this -- it never drives a round.
+        """
+        thin = self._thin("TOOL_ERROR")
+        thin["reports"] = None          # exactly what the real verifier leaves
+        thin["reasons"] = [{"code": pipeline.REASON_TOOL_UNAVAILABLE,
+                            "stage": pipeline.PHASE_KICAD_VERIFY,
+                            "object_id": None,
+                            "detail": "the pinned kicad-cli binary is missing"}]
+        receipt = self._run_with(
+            verify_stage=lambda request: thin,
+            freeze=lambda result, root: (str(self.root / "f.json"), "a" * 64),
+            recheck=lambda result, root: self._recheck("FAIL", [
+                {"code": pipeline.REASON_EXPORT_STALE,
+                 "stage": pipeline.PHASE_KICAD_VERIFY, "object_id": None,
+                 "detail": "the receipt carries no reports manifest"}]))
+        self.assertEqual(receipt["status"], pipeline.STATUS_ROLLBACK)
+        self.assertEqual(receipt["cause_status"], pipeline.STATUS_TOOL_ERROR,
+                         "the recheck's cause overwrote the verifier's own")
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("kicad-cli binary is missing", detail)
+
+    def test_a_freeze_failure_does_not_hide_the_verifiers_reason(self):
+        """C3: the freeze runs before the status branch, so its failure would
+        otherwise replace the one thing a reader acts on."""
+
+        def failing_freeze(result, root):
+            raise OSError("the report volume is read-only")
+
+        thin = self._thin("BLOCKED")
+        thin["reports"] = {"version": 1, "files": [{"path": "x"}]}
+        thin["reasons"] = [{"code": pipeline.REASON_SOURCE_UNBOUND,
+                            "stage": pipeline.PHASE_SNAPSHOT, "object_id": None,
+                            "detail": "the stage drifted from the snapshot"}]
+        receipt = self._run_with(verify_stage=lambda request: thin,
+                                 freeze=failing_freeze)
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("the stage drifted from the snapshot", detail,
+                      "the freeze failure replaced the verifier's own reason")
+        self.assertIn("read-only", detail,
+                      "and the freeze failure itself was swallowed")
+
+    def test_a_refusal_before_kicad_verify_still_has_the_key(self):
+        """M4: `_round_receipt` promises a caller can read the keys without
+        knowing which phase the round stopped in.
+
+        The first version of this test drove a round that REACHED KICAD_VERIFY,
+        where `run_round` assigns the key itself -- so deleting the initialiser
+        from `_round_receipt` changed nothing and the mutation survived. The
+        property is about a round that refuses BEFORE the phase, which is exactly
+        where the key was missing.
+        """
+        request = self._request()
+        request["stage_target"] = "../escapes.kicad_sch"   # refused in PRECHECK
+        with mock.patch("tools.akcli_adapter.apply_stage",
+                        return_value={
+                            "status": "APPLIED_TO_STAGE",
+                            "tool": {"tool_applied": True, "exit_code": 0,
+                                     "changed": True},
+                            "changed": True, "before_source_sha256": "0" * 64,
+                            "after_source_sha256": "1" * 64, "reasons": []}), \
+                mock.patch.object(pipeline, "compare_delta", return_value={
+                    "status": "PASS", "authorized_delta_sha256": "2" * 64,
+                    "actual_delta_sha256": "2" * 64, "missing": [],
+                    "unexpected": [], "coverage_complete": True,
+                    "reasons": []}):
+            receipt = pipeline.run_round(request)
+        self.assertTrue(receipt["terminal"])
+        self.assertNotEqual(receipt["phase"], pipeline.PHASE_KICAD_VERIFY)
+        self.assertIn("kicad_verify", receipt,
+                      "a round that stopped before KICAD_VERIFY must still "
+                      "carry the key, or a reader cannot read the receipt "
+                      "without knowing which phase it stopped in")
+        self.assertIsNone(receipt["kicad_verify"])
+
+    def test_the_report_root_is_scoped_by_transaction(self):
+        """M8: a shared root meant a retried round could never succeed.
+
+        `fresh_export` refuses a pre-existing output directory, so a root shared
+        across transactions made every retry fail closed with a misleading
+        "stale reports" reason.
+        """
+        seen = {}
+        receipt = self._run_with(verify_stage=lambda request: (
+            seen.update(request), self._thin("PASS"))[1])
+        root = Path(seen["report_root"])
+        self.assertIn(receipt["txn_id"], root.parts,
+                      "the report root is not scoped by the transaction id")
+
     def _request(self, design_root=None, repair_root=None):
         cand = design_root or (self.root / "cand")
         design = cand / "design"
@@ -3705,12 +3894,33 @@ class VerifyStageWiringTests(unittest.TestCase):
         self.assertNotIn("repair_ops.json", staged_paths,
                          "the writer's op-list is not part of the design")
 
-        # and it is a FRESH measurement, not the seed-time manifest restated
+        # and it is a FRESH measurement, not the seed-time manifest restated.
+        # The assertNotEqual alone does NOT prove this -- the row sets already
+        # differ because of repair_ops.json, and a review mutant that replaced
+        # _staged_design_manifest with a pure passthrough still passed. So the
+        # function is called directly on a stage whose bytes have changed and its
+        # digest is asserted to move.
         self.assertNotEqual(staged, receipt["staged_manifest"])
         self.assertIn("repair_ops.json",
                       [row["path"] for row in receipt["staged_manifest"]["files"]],
                       "the seed-time manifest did include the op-list, so these "
                       "two really are different documents")
+
+        design = self.root / "cand" / "design"
+        live = self.root / "stage"
+        before = pipeline._staged_design_manifest(
+            str(live), receipt["snapshot"]["manifest"], "fault.kicad_sch")
+        (live / "fault.kicad_sch").write_bytes(b"(kicad_sch (edited by the writer))\n")
+        after = pipeline._staged_design_manifest(
+            str(live), receipt["snapshot"]["manifest"], "fault.kicad_sch")
+        self.assertNotEqual(
+            before["files"][0]["sha256"], after["files"][0]["sha256"],
+            "the manifest is not re-measured: the stage's bytes changed and the "
+            "digest did not")
+        self.assertEqual(after["files"][0]["sha256"],
+                         pipeline.hash_bytes((live / "fault.kicad_sch").read_bytes()))
+        self.assertEqual(after["files"][0]["size_bytes"],
+                         (live / "fault.kicad_sch").stat().st_size)
 
         # both are the shape the frozen validator accepts
         c2._manifest(seen["before_manifest"])
@@ -3721,6 +3931,9 @@ class VerifyStageWiringTests(unittest.TestCase):
         from gates import repair_verification as c2
         return {
             "status": status, "scope": "PR1_CANDIDATE_BYTES",
+            # the real verifier sets this, and the receipt must carry it: it is
+            # the digest `same_host_toolchain` compares at commit time
+            "toolchain_sha256": "9" * 64,
             "checks": {name: {"status": "PASS", "reason_codes": [],
                               "artifact_paths": []}
                        for name in ("fresh_export", "source_hash_binding",
@@ -3736,7 +3949,7 @@ class VerifyStageWiringTests(unittest.TestCase):
             "reports": [], "deferred": dict(c2._DEFERRED), "reasons": [],
         }
 
-    def _run_with(self, verify_stage):
+    def _run_with(self, verify_stage, freeze=None, recheck=None):
         """Drive one round to KICAD_VERIFY with the writer and the delta verdict
         stubbed. Neither is available on this interpreter -- the pinned akcli is
         not importable here -- so without this the round stops at STAGE_APPLY and
@@ -3765,8 +3978,89 @@ class VerifyStageWiringTests(unittest.TestCase):
                         return_value=fake_stage), \
                 mock.patch.object(pipeline, "compare_delta",
                                   return_value=fake_verdict), \
-                mock.patch.object(pipeline, "_c2_verify_stage", verify_stage):
+                mock.patch.object(pipeline, "_c2_verify_stage", verify_stage), \
+                mock.patch.object(
+                    pipeline, "_c2_write_thin",
+                    freeze or (lambda result, root:
+                               (str(self.root / "frozen.json"), "f" * 64))), \
+                mock.patch.object(
+                    pipeline, "_c2_recheck_reports",
+                    recheck or (lambda result, root: self._recheck("PASS"))):
             return pipeline.run_round(request)
+
+    def _recheck(self, status, reasons=()):
+        return {"status": status, "checked": 2, "reasons": list(reasons)}
+
+    def test_the_result_is_frozen_and_the_reports_re_read(self):
+        """Contract line 374 (冻结所有报告) and line 343 (报告重算).
+
+        Both collaborators had ZERO production callers before this change, so
+        "the round calls them" is a real property and not a detail.
+        """
+        frozen, rechecked = [], []
+        real_thin = self._thin("PASS")
+        real_thin["reports"] = {"version": 1, "files": [{"path": "x"}]}
+
+        def thin(request):
+            return real_thin
+
+        def freeze(result, report_root):
+            frozen.append((result, report_root))
+            return str(Path(report_root) / "thin.json"), "a" * 64
+
+        def recheck(result, report_root):
+            rechecked.append((result, report_root))
+            return self._recheck("PASS")
+
+        self._run_with(verify_stage=thin, freeze=freeze, recheck=recheck)
+        self.assertEqual(len(frozen), 1, "the thin result was never frozen")
+        self.assertEqual(len(rechecked), 1, "the reports were never re-read")
+        self.assertIs(frozen[0][0], rechecked[0][0],
+                      "the re-read must be of the SAME result that was frozen")
+        self.assertEqual(frozen[0][1], rechecked[0][1])
+
+    def test_report_drift_refuses_with_the_contracts_cause(self):
+        """A FAIL from the re-read is the contract's 报告漂移 case.
+
+        Line 374 puts report drift in ROLLBACK(cause=BLOCKED) with the other
+        drift cases, and forbids downgrading the verification to let a commit
+        through. A thin PASS with stale reports must NOT stay a PASS.
+        """
+        real_thin = self._thin("PASS")
+        real_thin["reports"] = {"version": 1, "files": [{"path": "x"}]}
+
+        with mock.patch("tools.akcli_adapter.apply_stage",
+                        return_value={
+                            "status": "APPLIED_TO_STAGE",
+                            "tool": {"tool_applied": True, "exit_code": 0,
+                                     "changed": True},
+                            "changed": True, "before_source_sha256": "0" * 64,
+                            "after_source_sha256": "1" * 64, "reasons": []}), \
+                mock.patch.object(pipeline, "compare_delta", return_value={
+                    "status": "PASS", "authorized_delta_sha256": "2" * 64,
+                    "actual_delta_sha256": "2" * 64, "missing": [],
+                    "unexpected": [], "coverage_complete": True,
+                    "reasons": []}), \
+                mock.patch.object(pipeline, "_c2_verify_stage",
+                                  return_value=real_thin), \
+                mock.patch.object(pipeline, "_c2_write_thin",
+                                  return_value=(str(self.root / "f.json"),
+                                                "a" * 64)), \
+                mock.patch.object(pipeline, "_c2_recheck_reports",
+                                  return_value=self._recheck("FAIL", [
+                                      {"code": pipeline.REASON_EXPORT_STALE,
+                                       "stage": pipeline.PHASE_KICAD_VERIFY,
+                                       "object_id": None,
+                                       "detail": "the reports no longer match"}])):
+            receipt = pipeline.run_round(self._request())
+
+        self.assertTrue(receipt["terminal"])
+        self.assertEqual(receipt["status"], pipeline.STATUS_ROLLBACK)
+        self.assertEqual(receipt["cause_status"], pipeline.STATUS_BLOCKED)
+        self.assertEqual(receipt["phase"], pipeline.PHASE_KICAD_VERIFY)
+        detail = " ".join(getattr(r, "detail", "") for r in receipt["reasons"])
+        self.assertIn("no longer match", detail)
+        self.assertNotEqual(receipt["status"], pipeline.STATUS_COMMITTED)
 
     def test_a_thin_pass_leaves_the_round_unpromoted(self):
         """Contract line 349: a thin PASS is not a commit and not a candidate
@@ -3782,7 +4076,11 @@ class VerifyStageWiringTests(unittest.TestCase):
         """Contract line 424: a deferred ERC must never be written as PASS."""
         from gates import repair_verification as c2
         receipt = self._run_with(lambda request: self._thin("PASS"))
-        self.assertEqual(receipt["kicad_verify"]["deferred"], dict(c2._DEFERRED))
+        # NOT `== dict(c2._DEFERRED)`: the stub's own literal is
+        # dict(c2._DEFERRED), so that comparison is the stub against itself and a
+        # hardcoded production value would pass. The loop below is the part that
+        # does real work, so it is kept and the tautology dropped.
+        self.assertTrue(receipt["kicad_verify"]["deferred"])
         for name, value in receipt["kicad_verify"]["deferred"].items():
             self.assertEqual(value, "NOT_RUN",
                              "deferred %r was rewritten to %r" % (name, value))
@@ -3796,35 +4094,16 @@ class VerifyStageWiringTests(unittest.TestCase):
         self.assertEqual(roles, ["BEFORE", "AFTER"])
 
     def test_a_non_pass_verdict_refuses_with_the_contract_cause(self):
+        """A TOOL_ERROR verdict maps to ROLLBACK(cause=TOOL_ERROR)."""
         from gates import repair_verification as c2
-        request = self._request()
-        fake_stage = {
-            "status": "APPLIED_TO_STAGE",
-            "tool": {"tool_applied": True, "exit_code": 0, "changed": True},
-            "changed": True, "before_source_sha256": "0" * 64,
-            "after_source_sha256": "1" * 64, "reasons": [],
-        }
-        fake_verdict = {
-            "status": "PASS", "authorized_delta_sha256": "2" * 64,
-            "actual_delta_sha256": "2" * 64, "missing": [], "unexpected": [],
-            "coverage_complete": True, "reasons": [],
-        }
-        fake_thin = {
-            "status": "TOOL_ERROR", "scope": "PR1_CANDIDATE_BYTES",
-            "checks": {}, "coverage": {}, "parser_agreement": {},
-            "exports": [], "reports": None, "deferred": dict(c2._DEFERRED),
-            "reasons": [{"code": pipeline.REASON_TOOL_UNAVAILABLE,
-                         "stage": pipeline.PHASE_KICAD_VERIFY,
-                         "object_id": None,
-                         "detail": "the export exceeded the frozen timeout"}],
-        }
-        with mock.patch("tools.akcli_adapter.apply_stage",
-                        return_value=fake_stage), \
-                mock.patch.object(pipeline, "compare_delta",
-                                  return_value=fake_verdict), \
-                mock.patch.object(pipeline, "_c2_verify_stage",
-                                  return_value=fake_thin):
-            receipt = pipeline.run_round(request)
+        thin = self._thin("TOOL_ERROR")
+        thin["reports"] = {"version": 1, "files": [{"path": "x"}]}
+        thin["reasons"] = [{"code": pipeline.REASON_TOOL_UNAVAILABLE,
+                            "stage": pipeline.PHASE_KICAD_VERIFY,
+                            "object_id": None,
+                            "detail": "the export exceeded the frozen timeout"}]
+        self.assertEqual(thin["deferred"], dict(c2._DEFERRED))
+        receipt = self._run_with(verify_stage=lambda request: thin)
         self.assertTrue(receipt["terminal"])
         self.assertEqual(receipt["status"], pipeline.STATUS_ROLLBACK)
         self.assertEqual(receipt["cause_status"], pipeline.STATUS_TOOL_ERROR)
