@@ -1,0 +1,131 @@
+task: PR1-C5-M7-REJECT
+
+base:
+  branch: feat/c5-m7-untrusted-execution
+  sha: f85e0444dedfdafe8a00f4ed81a0e19ac0d35037   # origin/master, PR #95 merge + CI leg
+
+goal: |
+  Demonstrate that a repair round which was AUTHORIZED one thing and DELIVERED
+  another is refused, and that the refusal names the concrete deviation.
+
+  M6 (PR #95) proved a round can close successfully.  M7 proves the same round
+  machinery rejects an unauthorized deviation, under the threat model the Owner
+  chose: an **untrusted execution environment** (not "hand-edited after bytes").
+
+  Acceptance, exactly five and no more (Owner 2026-09-27):
+
+    1. The writer produces an unauthorized deviation.
+    2. DELTA_CHECK detects it.
+    3. The round becomes terminally rejected.
+    4. COMMITTED never appears.
+    5. The failure evidence identifies the CONCRETE delta mismatch
+       (missing / unexpected / object difference) rather than a generic ERROR.
+       A reader must be able to state "R9 resolved to 20k, but 10k was
+       authorized" -- not merely "failed".
+
+  Criterion 5 is the substantive one: it is what separates this from an ordinary
+  checker, and it is the one that is NOT yet satisfied by the round receipt.
+
+scope: |
+  In scope:
+  - tools/repair_pipeline.py: when DELTA_CHECK refuses, emit the concrete delta
+    findings into the round receipt's `reasons` -- one Finding per
+    missing/unexpected entry, each carrying the object's identity as
+    `object_id` and a `detail` naming the differing fields.  Today
+    `run_round` forwards only `verdict["reasons"]`, which is the single generic
+    code REPAIR_DELTA_MISMATCH; the concrete entries already exist but are only
+    reachable under `receipt["verification"]`.
+  - tests/test_repair_pipeline.py: `RunRoundRejectionTests`.
+  - docs/compliance/ai-usage/**, docs/compliance/AI_USAGE_LOG.md.
+
+  Out of scope, explicitly (Owner froze all of these on 2026-09-27):
+  - **No qualify_toolchain fix.** The finding that `akcli_artifact_sha256` is a
+    declaration rather than a measurement of the binary on this host is
+    RECORDED ONLY.  Do not measure, do not re-pin, do not harden.
+  - **No `recover_incomplete`.** No crash recovery, no resume, no reconciliation.
+  - **No feedback learning.** Nothing consumes `public_feedback` output; no
+    rule, policy, threshold or fitness function is derived from any outcome.
+  - **No planner, no auto-iteration, no multi-round loop, no benchmark
+    evolution, no self-improvement.**
+  - **No KICAD_VERIFY, no COMMIT.** The round still stops at DELTA_CHECK.
+  - **No Evidence-index work.** `docs/evidence/**` is forbidden: PR #94 is frozen
+    pending review and the Owner directed that Evidence work stops here.
+  - **No new status token, no new digest kind, no change to any acceptance
+    contract, no change to `compare_delta` or any other `gates/**` code.**
+  - Do NOT touch PR #91 / GH-51.
+
+dependencies: []
+  # Deliberately empty. run_round is MERGED into master (PR #95 = c203346, an
+  # ancestor of this envelope's base), so the prerequisite is expressed by
+  # base.sha and not by a dependency ref.
+  #
+  # A ref such as "PR1-C5" must not be declared here: tools/admit.py:88 resolves
+  # dependency refs with re.search(r"(\d+)$", ref), i.e. by TRAILING DIGITS, so a
+  # task id silently binds to an unrelated GitHub issue of that number instead of
+  # failing to resolve. Observed verbatim in the P1 task: "EVID-DC04" became
+  # issue #4 and reported "issue state=CLOSED".
+
+allowed_paths:
+  - tools/repair_pipeline.py
+  - tests/test_repair_pipeline.py
+  - tasks/PR1-C5-M7-REJECT.yaml
+  - docs/compliance/ai-usage/**
+  - docs/compliance/AI_USAGE_LOG.md
+
+forbidden_paths:
+  - gates/**
+  - src/**
+  - .github/**
+  - docs/evidence/**
+  - delivery/**
+  - sandbox_runtime/**
+  - notes/m2-*
+
+acceptance: |
+  - All five Owner criteria hold, each pinned by a named test rather than by
+    prose.  Criterion 1 and 2 need the real pinned writer and are therefore
+    opt-in (AEDL_PR1_NATIVE=1); they are reported as NOT_RUN when not opted in
+    and are never claimed as passing.
+  - Criterion 3: the round's `status` is STATUS_ROLLBACK, `cause_status` is
+    STATUS_BLOCKED, `terminal` is True, and `public_feedback()` projects
+    OUTCOME_REJECTED.
+  - Criterion 4: no code path in the rejection outcome can yield
+    STATUS_COMMITTED.
+  - Criterion 5: `receipt["reasons"]` contains at least one Finding whose
+    `detail` names the deviating object and the differing field, and whose
+    `object_id` identifies that object.  A test asserts the reader can recover
+    "R9" and "value" from the receipt alone, with no access to internals.
+  - The concrete findings ADD information; they do not replace or weaken the
+    generic REPAIR_DELTA_MISMATCH code, and `receipt["verification"]` still
+    carries the full verdict.
+  - Every new test is mutation-verified: breaking the concrete-finding emission
+    makes the criterion-5 test fail.
+  - The perturbation is expressed as an untrusted execution environment acting on
+    the bytes the writer produced.  No seam is added to `run_round`; faking a
+    deviation must remain structurally impossible.
+  - `py -3 -S -m unittest discover -s tests` stays green and
+    `py -3 -m tools.dev_gate --envelope tasks/PR1-C5-M7-REJECT.yaml` exits 0.
+
+change_budget:
+  expected_files: 5
+  expected_modules: [tools, tests, tasks, docs]
+  cross_module: false          # one module in tools/; gates/ untouched
+  contract_change: false       # additive finding detail; no signature or schema change
+  evidence_semantics_change: false
+
+exceptions:
+  # Scope of the grant, deliberately narrow: drift is permitted ONLY for commits
+  # made on feat/c5-m7-untrusted-execution by THIS task. Drift caused by another
+  # branch, a rebase onto a moved master, or a new merge is NOT covered.
+  #
+  # Unavoidable for this task shape: a committed envelope makes its own base.sha
+  # stale the moment it lands, and admit has no "ignore drift caused by the
+  # task's own commits" concept. Same handling as tasks/PR1-C5-RUN-ROUND.yaml,
+  # which the Owner accepted on 2026-09-27.
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "Yenefa 2026-09-27 会话指令「先 merge #95，然后开 M7」"
+  # allow_dirty is NOT claimed: every commit lands with a clean tree.
+
+escalation:
+  owner: Yenefa

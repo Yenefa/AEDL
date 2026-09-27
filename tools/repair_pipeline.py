@@ -463,8 +463,12 @@ class PolicyInvalidError(RepairContractError):
     pass
 
 
-def _finding(code: str, detail: str, object_id: Optional[str] = None) -> Finding:
-    return Finding(code=code, stage=PHASE_PRECHECK, object_id=object_id, detail=detail)
+def _finding(code: str, detail: str, object_id: Optional[str] = None,
+             stage: str = PHASE_PRECHECK) -> Finding:
+    # `stage` gained an optional parameter in PR1-C5-M7: a delta mismatch is
+    # found in DELTA_CHECK, not in PRECHECK.  It defaults to the previous value
+    # so every existing call site is unaffected.
+    return Finding(code=code, stage=stage, object_id=object_id, detail=detail)
 
 
 def _reject(code: str, detail: str, object_id: Optional[str] = None):
@@ -3231,6 +3235,144 @@ def _stage_write_succeeded(staged: Mapping) -> bool:
             and staged.get("changed") is True)
 
 
+def _delta_identity_label(identity) -> str:
+    """Name one object the way a reviewer would.
+
+    ``role`` is only interesting when it is a synthesized role such as
+    ``new:R9``.  For an object that already existed, the identity carries a
+    plain UUID, and printing that beside the reference is noise rather than
+    information -- the reference is what a reviewer recognises.
+    """
+    if not isinstance(identity, Mapping):
+        return "an unnamed object"
+    reference = identity.get("reference")
+    role = (identity.get("component_uuid") or identity.get("label_uuid")
+            or identity.get("pin_uuid"))
+    if isinstance(role, str) and role.startswith("new:"):
+        return "%s (%s)" % (reference, role) if reference else role
+    return str(reference or role or "an unnamed object")
+
+
+def _delta_object_id(identity) -> str:
+    """The stable handle for this object, preferring a readable role."""
+    if not isinstance(identity, Mapping):
+        return "unknown"
+    role = (identity.get("component_uuid") or identity.get("label_uuid")
+            or identity.get("pin_uuid"))
+    if isinstance(role, str) and role.startswith("new:"):
+        return role
+    return str(identity.get("reference") or role or "unknown")
+
+
+def _delta_findings(verdict):
+    """Turn a FAIL delta verdict into findings that NAME the deviation.
+
+    PR1-C5-M7, Owner criterion 5.  ``compare_delta`` already reports exactly
+    what diverged, but the round receipt only forwarded ``verdict["reasons"]``,
+    which is the single generic code REPAIR_DELTA_MISMATCH.  A reader could
+    therefore learn THAT the round was refused and nothing about WHY -- the
+    difference between "failed" and "failed because R9 resolved to 20k when 10k
+    was authorized".
+
+    The verdict uses TWO entry shapes and both must be read correctly:
+
+    * a FIELD-level change on an object that exists on both sides, where
+      ``field`` names the field and ``before``/``after`` are the two values::
+
+          {"field": "value", "before": "10k", "after": "20k", "identity": ...}
+
+      Such an entry is self-contained and is reported directly.
+
+    * an OBJECT-level divergence for something added or removed, where
+      ``field`` is ``"$"`` and ``before``/``after`` are whole descriptors, the
+      authorized one arriving in ``missing`` and the observed one in
+      ``unexpected``.  These are paired by identity and their descriptors diffed.
+
+    Reading only the first shape loses the field name and both values, which is
+    exactly the specificity criterion 5 asks for, so both are handled.
+
+    These findings are ADDITIVE: the generic code is kept and the full verdict
+    still travels under ``receipt["verification"]``.
+    """
+    missing = list(verdict.get("missing") or [])
+    unexpected = list(verdict.get("unexpected") or [])
+    missing_by_key = {canonical_json_bytes(row.get("identity")): row
+                      for row in missing}
+
+    findings = []
+    paired_keys = set()
+
+    for row in unexpected:
+        identity = row.get("identity")
+        label = _delta_identity_label(identity)
+        object_id = _delta_object_id(identity)
+        field = row.get("field")
+        if field and field != "$":
+            # field-level: this entry already carries the field and both values
+            detail = ("%s field %r was authorized as %r but observed as %r"
+                      % (label, field, row.get("before"), row.get("after")))
+        else:
+            key = canonical_json_bytes(identity)
+            paired_keys.add(key)
+            counterpart = missing_by_key.get(key)
+            authorized = (counterpart or {}).get("after")
+            observed = row.get("after")
+            if isinstance(authorized, dict) and isinstance(observed, dict):
+                differing = sorted(f for f in set(authorized) | set(observed)
+                                   if authorized.get(f) != observed.get(f))
+                detail = ("%s differs from what was authorized: %s" % (
+                    label, "; ".join(
+                        "%s authorized=%r but observed=%r"
+                        % (f, authorized.get(f), observed.get(f))
+                        for f in differing) or "no differing field"))
+            else:
+                detail = "%s was observed but not authorized" % label
+        findings.append(_finding(REASON_DELTA_MISMATCH, detail,
+                                 object_id=object_id, stage=PHASE_DELTA_CHECK))
+
+    for row in missing:
+        key = canonical_json_bytes(row.get("identity"))
+        if key in paired_keys:
+            continue  # already reported as the object-level pair above
+        identity = row.get("identity")
+        label = _delta_identity_label(identity)
+        field = row.get("field")
+        if field and field != "$":
+            detail = ("%s field %r was authorized as %r but was not observed"
+                      % (label, field, row.get("before")))
+        else:
+            detail = "%s was authorized but not observed" % label
+        findings.append(_finding(REASON_DELTA_MISMATCH, detail,
+                                 object_id=_delta_object_id(identity),
+                                 stage=PHASE_DELTA_CHECK))
+
+    return findings
+
+
+def _delta_refusal(verdict):
+    """Map a failed DELTA_CHECK verdict to (status, cause_status, reasons).
+
+    The pairing is the whole point, so it is separated from run_round to be
+    testable on its own.  ``STATUS_ROLLBACK`` together with
+    ``cause_status=STATUS_BLOCKED`` is what projects the round as REJECTED:
+    what verification found violated is the AUTHORIZATION itself, so the public
+    outcome is "rejected" rather than "unavailable".
+
+    Getting this wrong is silent and was in fact wrong once: refusing with
+    ``cause_status=STATUS_ROLLBACK`` yields EXECUTION_UNAVAILABLE, so a genuinely
+    rejected round would have been published as an execution problem instead of
+    a refusal.  An earlier version of this code documented the intended pairing
+    in a comment without implementing it, and only the end-to-end run against a
+    real writer exposed it.
+
+    Terminology (Owner ruling 2026-09-27): ROLLBACK here means the
+    un-promoted stage result is discarded.  It does NOT mean a committed state
+    was restored -- this round never committed, so there is nothing to restore.
+    """
+    return (STATUS_ROLLBACK, STATUS_BLOCKED,
+            list(verdict.get("reasons") or []) + _delta_findings(verdict))
+
+
 def run_round(round_request):
     """Drive exactly one repair round: PRECHECK -> STAGE_APPLY -> DELTA_CHECK.
 
@@ -3263,9 +3405,12 @@ def run_round(round_request):
     def reach(phase):
         receipt["phases"].append({"phase": phase, "status": "reached"})
 
-    def refuse(phase, status, reasons):
+    def refuse(phase, status, reasons, cause_status=None):
+        # cause_status is separate from status on purpose: a ROLLBACK caused by a
+        # BLOCKED authorization must publish as REJECTED, not as UNAVAILABLE.
         receipt["phases"].append({"phase": phase, "status": "refused"})
-        receipt.update(status=status, phase=phase, cause_status=status,
+        receipt.update(status=status, phase=phase,
+                       cause_status=cause_status or status,
                        terminal=True, reasons=list(reasons))
         return receipt
 
@@ -3429,10 +3574,12 @@ def run_round(round_request):
         return refuse(PHASE_DELTA_CHECK, STATUS_UNKNOWN, verdict["reasons"])
     if verdict["status"] != "PASS":
         # The write is real but the stage is not the authorized stage, so it is
-        # discarded rather than promoted.  cause_status is BLOCKED because what
-        # verification found violated is the authorization itself; that pairing
-        # is what projects this round as REJECTED rather than as unavailable.
-        return refuse(PHASE_DELTA_CHECK, STATUS_ROLLBACK, verdict["reasons"])
+        # discarded rather than promoted.  The generic verdict reason is kept AND
+        # the concrete divergence is added (PR1-C5-M7 criterion 5), so a reader
+        # of this receipt learns what actually deviated and not merely that
+        # something did.
+        status, cause, reasons = _delta_refusal(verdict)
+        return refuse(PHASE_DELTA_CHECK, status, reasons, cause_status=cause)
     reach(PHASE_DELTA_CHECK)
 
     # Verified at stage, not committed: no terminal status exists yet.

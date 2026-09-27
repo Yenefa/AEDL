@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 118 条。完整正文在各自条目文件中；本索引只做导航。
+共 119 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -175,3 +175,4 @@
 
 - [`AI-20260927-OPENCODE-26F93624EFDFF840AB36B6DBF1BB3D4C`](ai-usage/AI-20260927-OPENCODE-26F93624EFDFF840AB36B6DBF1BB3D4C.md) — C5 `run_round` MVP —— 把已存在的 observe / proposal / bind_policy / apply / verify / feedback 串成一轮
 - [`AI-20260927-OPENCODE-47A962EA618E12E790D73A2CFE6D66C5`](ai-usage/AI-20260927-OPENCODE-47A962EA618E12E790D73A2CFE6D66C5.md) — C5 CP2 correction + CP3 `_host_patch` + `policy_id` 收口 + CP4-A authorization resolver
+- [`AI-20260927-OPENCODE-C90BA7F59551FE9CF7D0F807A03DB2CC`](ai-usage/AI-20260927-OPENCODE-C90BA7F59551FE9CF7D0F807A03DB2CC.md) — M7 verified rejection loop —— 被授权 A 却交付 B 的轮次必须被拒绝，且拒绝证据要指名偏差
