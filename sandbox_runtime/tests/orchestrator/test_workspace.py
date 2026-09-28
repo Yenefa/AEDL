@@ -366,3 +366,21 @@ class CandidateIsolationAdversarial(unittest.TestCase):
         with self.assertRaises(WorkspaceEscapeError) as caught:
             self.ws.write_candidate_bytes(self.run, "cand-link", "x.txt", b"x")
         self.assertIn("link or junction", str(caught.exception))
+
+    def test_the_ledger_path_itself_is_confined(self):
+        """The load-bearing check, pinned directly.
+
+        M8 -- removing `record_action`'s pre/post boundary checks -- survives, and
+        that is by design rather than a coverage hole: `ledger_path` already
+        confines the same path, and the ledger sits directly in the candidate root
+        so there is no intermediate directory for `record_action`'s own `mkdir` to
+        traverse. The two cannot disagree.
+
+        So rather than write a test that cannot fail, the check that actually
+        carries the confinement is asserted on its own, and mutation M9 removes
+        exactly this line.
+        """
+        self._hardlink(self.a / ".actions.jsonl", self.b / "b-only.txt")
+        with self.assertRaises(WorkspaceEscapeError) as caught:
+            self.ws.ledger_path(self.run, "candidate-a")
+        self.assertIn("hard link", str(caught.exception))

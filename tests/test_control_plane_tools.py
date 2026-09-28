@@ -754,3 +754,22 @@ class DevGateInterpreterTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "broken")
         self.assertEqual(receipt["exit_code"], 2)
         self.assertIn("empty", receipt["detail"])
+
+    def test_the_gate_refuses_a_nonexistent_interpreter_by_name(self):
+        """The gap my own mutation run found.
+
+        `probe_interpreter` was tested DIRECTLY, so the suite passed whether or
+        not `run_gate` ever called it -- mutation M3 removed the call and every
+        test still passed. The behaviour that matters is the GATE refusing, with
+        a reason naming the value, instead of a TypeError from inside a check
+        after the run has started.
+        """
+        receipt = dev_gate.run_gate(
+            root=str(self._repo()),
+            interpreter="Z:\\definitely\\not\\a\\python.exe")
+        self.assertEqual(receipt["status"], "broken")
+        self.assertEqual(receipt["exit_code"], 2)
+        self.assertIn("Z:", receipt["detail"])
+        # and it refused BEFORE running anything, which is the point of a preflight
+        self.assertNotIn("checks", receipt,
+                         "the gate started running checks with a bad interpreter")
