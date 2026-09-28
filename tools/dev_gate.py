@@ -140,9 +140,92 @@ def aggregate_checks(checks: dict) -> tuple:
     return "pass", 0
 
 
+
+def interpreter_argv(interpreter: str | None) -> list:
+    """Normalise the interpreter choice to ONE shape: a list, never a string.
+
+    The bug this exists for: `resolve_python()` returns an argv LIST (`['py','-3']`)
+    while argparse hands `--interpreter` a plain STRING, and every check does
+    `py + [...]`. So the documented option raised
+
+        TypeError: can only concatenate str (not "list") to str
+
+    before the gate ran a single check. The default path hid it, because
+    `resolve_python()` happens to return a list.
+
+    The two options mean DIFFERENT things, deliberately, and are documented as
+    such rather than one being silently reinterpreted as the other:
+
+        --interpreter   a path to ONE executable. Spaces are SAFE, so
+                        `C:\Program Files\Python311\python.exe` works. A naive
+                        `value.split()` would break exactly that case.
+        AEDL_PYTHON      an argv prefix, split on whitespace, so `py -3` works.
+
+    Returns a list even for a bad value; whether the value WORKS is decided by
+    `probe_interpreter`, so that the failure names the option rather than
+    surfacing as a TypeError from inside a check.
+    IDEMPOTENT, and that is not a nicety. A first version did
+    `str(interpreter).strip()` unconditionally, so handing it an
+    ALREADY-normalised list produced `["['python']"]` -- a silent garbage
+    interpreter instead of an error. A function described as the single
+    normalisation point has to be safe to call twice, or a second call site
+    becomes a latent bug. Found by probing the fix, not by a failing test.
+    """
+    if interpreter is None:
+        return resolve_python()
+    if isinstance(interpreter, (list, tuple)):
+        parts = [str(part).strip() for part in interpreter]
+        if not parts or not all(parts):
+            raise ValueError("the interpreter argv was given an empty value: %r"
+                             % (interpreter,))
+        return parts
+    text = str(interpreter).strip()
+    if not text:
+        raise ValueError("--interpreter was given an empty value")
+    # No splitting: a path may legitimately contain spaces, and splitting it
+    # would turn a valid interpreter into a nonexistent one plus stray argv.
+    return [text]
+
+
+def probe_interpreter(argv: list) -> str | None:
+    """Return a NAMED reason if this interpreter cannot run, else None.
+
+    A bad `--interpreter` used to surface as a TypeError from inside
+    `check_syntax`, which names neither the option nor the value. This runs
+    `--version` once, at the entry point, so the receipt says what is wrong.
+    """
+    if not isinstance(argv, list) or not argv or not all(
+            isinstance(part, str) for part in argv):
+        return "the interpreter is not an argv list of strings: %r" % (argv,)
+    try:
+        probe = subprocess.run(argv + ["--version"], capture_output=True,
+                               timeout=60)
+    except FileNotFoundError:
+        return "no interpreter at %r (it does not exist, or is not on PATH)" % argv[0]
+    except OSError as exc:
+        return "the interpreter at %r could not be started: %s" % (argv[0], exc)
+    except subprocess.TimeoutExpired:
+        return "the interpreter at %r did not answer --version within 60s" % argv[0]
+    if probe.returncode != 0:
+        return ("the interpreter at %r answered --version with exit code %d"
+                % (argv[0], probe.returncode))
+    return None
+
+
 def check_syntax(py, root) -> dict:
     """compileall over the repo's own sources; toolchain dirs (.venv/.pio/
-    node_modules) are excluded so a local virtualenv cannot fail the gate."""
+    node_modules) are excluded so a local virtualenv cannot fail the gate.
+
+    The shape assertion is the durable half of the fix. `interpreter_argv` is the
+    normalisation point, but a future caller can still hand this a string, and the
+    failure would again be a TypeError from a `+`. A named refusal at the boundary
+    costs one line and cannot be misread.
+    """
+    if not isinstance(py, list):
+        raise TypeError(
+            "check_syntax expects an interpreter ARGV LIST, got %s -- use "
+            "tools.dev_gate.interpreter_argv() to normalise it"
+            % type(py).__name__)
     cmd = py + ["-m", "compileall", "-q", "-x", COMPILEALL_EXCLUDE,
                 "gates", "tools", "tests", "sandbox_runtime"]
     return _run(cmd, root, timeout=300)
@@ -463,7 +546,17 @@ def run_gate(root=None, envelope=None, dry_run=False, receipt_path=None, interpr
         status = "pending"
         exit_code = 1
     else:
-        py = interpreter or resolve_python()
+        # ONE normalisation point, and a named preflight. Both halves of the
+        # crash: the shape mismatch and the "which option was wrong" silence.
+        try:
+            py = interpreter_argv(interpreter)
+        except ValueError as exc:
+            return {"schema_version": "dev-gate.v1", "status": "broken",
+                    "exit_code": 2, "detail": "dev_gate: %s" % exc}
+        unusable = probe_interpreter(py)
+        if unusable:
+            return {"schema_version": "dev-gate.v1", "status": "broken",
+                    "exit_code": 2, "detail": "dev_gate: %s" % unusable}
         syntax = check_syntax(py, root)
         main, excl_main = check_main_tests(py, root)
         sandbox, excl_sand = check_sandbox_tests(root)
