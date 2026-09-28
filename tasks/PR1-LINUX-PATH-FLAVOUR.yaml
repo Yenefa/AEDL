@@ -1,0 +1,105 @@
+task: PR1-LINUX-PATH-FLAVOUR
+
+base:
+  branch: fix/linux-path-flavour
+  sha: 097b94d
+
+goal: |
+  Make `_is_candidate_design_root` genuinely separator-independent, so a path means
+  the same thing on the platform it is read on.
+
+  Master is red. PR #104 (e2d2e21) shipped
+  `PathComparisonHygieneTests::test_the_helper_agrees_on_both_path_flavours`, and that
+  test FAILS on the linux runner -- so #104 was merged with a red CI, and so was
+  #103. This is the third red merge in a row and the first one whose cause is
+  actually legible in the log.
+
+  The test is RIGHT and the helper is wrong. The test's docstring says the helper "is
+  pinned for BOTH renderings explicitly", which is #104's own intent; the helper's
+  docstring explains the exact failure mode it then reproduces. Deleting or relaxing
+  the test would remove the only guard standing between this codebase and the
+  separator bug #104 exists to fix.
+
+scope: |
+  In scope:
+  - tests/test_repair_pipeline.py:
+      * `_is_candidate_design_root` parses with the flavour the VALUE implies rather
+        than the flavour of the platform it runs on. A `PurePath` keeps its own
+        flavour; a plain string is read as Windows-flavoured when it carries a
+        backslash or a drive letter, and POSIX-flavoured otherwise.
+      * the docstring updated to say what the helper now actually does, including the
+        one case the heuristic gets wrong.
+  - tasks/PR1-LINUX-PATH-FLAVOUR.yaml
+  - docs/compliance/ai-usage/**, docs/compliance/AI_USAGE_LOG.md
+
+  Out of scope, explicitly:
+  - **The CI runner.** PR #105 failed at `Set up job`, which is a DIFFERENT problem
+    (runner provisioning) and not caused by this. Not fixed here, and not conflated
+    with it.
+  - **PR #103 and #104's own red runs.** Those are history; this fixes the defect that
+    made #104 red, which is the one still reachable.
+  - No change to `tools/**`, `gates/**`, `src/**`, `sandbox_runtime/**`,
+    `docs/evidence/**`.
+  - No change to any production code. This helper lives in a test file and is used by
+    tests only.
+
+dependencies: []
+
+allowed_paths:
+  - tests/test_repair_pipeline.py
+  - tasks/PR1-LINUX-PATH-FLAVOUR.yaml
+  - docs/compliance/DECISIONS.md
+  - docs/compliance/ai-usage/**
+  - docs/compliance/AI_USAGE_LOG.md
+
+forbidden_paths:
+  - gates/**
+  - tools/**
+  - src/**
+  - sandbox_runtime/**
+  - docs/evidence/**
+  - delivery/**
+  - notes/**
+  - .github/**
+
+acceptance: |
+  - `_is_candidate_design_root` accepts all four renderings the test names, and the
+    acceptance is demonstrated under the POSIX flavour as well as the native one, so
+    the next person does not have to own a Linux runner to check it. The POSIX
+    simulation is committed as a test, not left in a scratch script.
+  - All three negatives the test names stay rejected under BOTH flavours.
+  - The one input the heuristic gets wrong -- a POSIX string containing a literal
+    backslash -- is either handled correctly or documented as a trade-off in the
+    docstring AND pinned by a test, so the limitation is a decision rather than a
+    surprise.
+  - A mutation that restores `Path(path).parts` is KILLED by the suite. A green test
+    here is worthless without that, because the whole defect is invisible on the
+    platform it was written on: the identical code passes on Windows.
+  - `py -3 -S -m unittest discover -s tests` still passes, at or above 1179 tests.
+  - `gates/**` untouched.
+
+known_limitations:
+  - "TO_VERIFY: the fix is verified under a SIMULATED POSIX flavour on a Windows
+     machine, because no Linux runner is reachable from here. The simulation forces
+     the same `PurePosixPath` that `Path` resolves to on linux, so it is faithful for
+     this helper -- but the authoritative confirmation is a green CI run, which is
+     NOT_RUN until the runner provisions."
+  - "A POSIX path string containing a literal backslash inside a filename is read as
+     Windows-flavoured. Pathological for a candidate design root; documented and
+     pinned rather than left implicit."
+
+change_budget:
+  expected_files: 4
+  expected_modules: [tests, tasks, docs]
+  cross_module: false
+  contract_change: false
+  evidence_semantics_change: false
+
+exceptions:
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "Yenefa 2026-09-28 会话：「停止所有人工review纪律，全量推进」"
+  # allow_dirty is NOT claimed.
+
+escalation:
+  owner: Yenefa

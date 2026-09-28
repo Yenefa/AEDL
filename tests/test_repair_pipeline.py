@@ -15,7 +15,7 @@ import shutil
 import sys
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from unittest import mock
 
 from gates.repair_verification import _manifest as c2_manifest
@@ -117,12 +117,51 @@ def _is_candidate_design_root(path):
         AssertionError: 'VERIFIED' != 'UNKNOWN'
         AssertionError: 'live_design_still_equals_snapshot' not found in []
 
-    Comparing `Path.parts` compares the same thing the filesystem does, on every
-    platform. One helper rather than two string comparisons, so the next copy
-    cannot reintroduce the same slip in a different spelling.
+    The second version compared `Path(path).parts`, which fixed that -- and was
+    STILL platform-dependent, one level less visibly. `Path` is `WindowsPath` on
+    Windows and `PosixPath` on linux, so the same string is four components on one
+    platform and a single filename on the other:
+
+        PosixPath("C:\\x\\cand\\design").parts == ("C:\\x\\cand\\design",)
+
+    So the helper rejected a perfectly ordinary Windows path when read on linux, and
+    the test that pins it for both renderings failed on CI:
+
+        FAIL: test_the_helper_agrees_on_both_path_flavours
+        AssertionError: False is not true : rejected 'C:\\x\\cand\\design'
+        Ran 1167 tests ... FAILED (failures=1, skipped=19)
+
+    Neither the test nor the intent was wrong here -- the test is named for exactly
+    this property. The fix is to parse with the flavour the VALUE implies rather than
+    the flavour of the platform doing the parsing. Every input is normalised through
+    its string form first, INCLUDING a PurePath: trusting a PurePath's own flavour is
+    wrong, because `PurePosixPath("C:\\x\\cand\\design")` is a self-contradictory
+    value -- a POSIX object holding Windows separators -- and honouring its flavour
+    is precisely how the two platforms disagreed. A string carrying a backslash or a
+    drive letter is read as Windows-flavoured; anything else as POSIX.
+
+    KNOWN LIMITATION, pinned by a test rather than left implicit: a POSIX string
+    containing a literal backslash inside a filename is read as Windows-flavoured,
+    because "does this contain a backslash" is the only signal available without
+    knowing the producer's intent. That is pathological for a candidate design root,
+    and the alternative -- guessing wrong the other way -- would silently accept a
+    non-design path, which is the failure this helper exists to prevent.
+
+    This is a TAIL check, not an absoluteness check: it asks whether the last two
+    components are `cand/design`, so a RELATIVE `cand/design` is accepted. That was
+    true of every version, it is what the injected-fault callers want (they hand a
+    root, not an arbitrary path), and tightening it here would be changing the
+    contract rather than fixing the platform bug.
     """
     try:
-        parts = Path(path).parts
+        # Normalise through the STRING form for every input, including a PurePath.
+        # Trusting a PurePath's own flavour is wrong: PurePosixPath("C:\\x\\cand\\
+        # design") is a self-contradictory value -- POSIX object, Windows separators
+        # -- and honouring its flavour is how the two platforms disagreed.
+        text = str(path)
+        windows_flavoured = "\\" in text or (len(text) > 1 and text[1] == ":")
+        parts = (PureWindowsPath(text) if windows_flavoured
+                 else PurePosixPath(text)).parts
     except TypeError:
         return False
     return len(parts) >= 2 and parts[-2:] == ("cand", "design")
@@ -3696,6 +3735,201 @@ class PathComparisonHygieneTests(unittest.TestCase):
                       "/tmp/x/elsewhere/design"):
             self.assertFalse(_is_candidate_design_root(other),
                              "accepted %r" % (other,))
+
+
+class PathFlavourIndependenceTests(unittest.TestCase):
+    """The helper must not inherit the flavour of the platform reading it.
+
+    Added after CI rejected `C:\\x\\cand\\design` on linux while Windows accepted it.
+    The defect is invisible on the platform it was written on, so these tests pin the
+    property in a way that does not depend on which platform runs them -- otherwise
+    the next person needs a linux runner to check a cross-platform claim, and the
+    claim quietly stops being verified at all.
+    """
+
+    def test_a_path_object_and_its_string_agree(self):
+        """The ambient Path class must not be what decides the answer.
+
+        `PosixPath("C:\\\\x\\\\cand\\\\design")` and `WindowsPath("C:\\\\x\\\\cand\\\\design")`
+        are the same name read two ways, and the helper must return the same verdict
+        for both. Before the fix this differed by platform, which is the whole bug.
+        """
+        from pathlib import PurePosixPath, PureWindowsPath
+        windows_text = "C:\\x\\cand\\design"
+        self.assertEqual(
+            _is_candidate_design_root(PurePosixPath(windows_text)),
+            _is_candidate_design_root(PureWindowsPath(windows_text)),
+            "the same path read as POSIX and as Windows gave different verdicts")
+        self.assertTrue(_is_candidate_design_root(PurePosixPath(windows_text)))
+        self.assertTrue(_is_candidate_design_root(PureWindowsPath(windows_text)))
+
+    def test_a_backslash_string_is_read_as_windows_wherever_the_test_runs(self):
+        """The exact case CI failed on, asserted without needing linux.
+
+        A string with a backslash is a four-component Windows path. Read through
+        `PosixPath` -- which is what `Path` is on the runner -- it collapses to one
+        component and the helper said no.
+        """
+        from pathlib import PurePosixPath
+        self.assertTrue(_is_candidate_design_root("C:\\x\\cand\\design"))
+        # and the collapse that caused it is named, so the reason is on the record
+        self.assertEqual(len(PurePosixPath("C:\\x\\cand\\design").parts), 1)
+        self.assertGreaterEqual(len(PureWindowsPath("C:\\x\\cand\\design").parts), 2)
+
+    def test_a_drive_letter_alone_selects_the_windows_flavour(self):
+        """Forward slashes with a drive letter are still a Windows path."""
+        self.assertTrue(_is_candidate_design_root("C:/x/cand/design"))
+        self.assertFalse(_is_candidate_design_root("C:/x/cand/stage"))
+
+    def test_a_backslash_alone_selects_the_windows_flavour(self):
+        """The backslash signal must be load-bearing ON ITS OWN.
+
+        Found by mutation, not by a failing test: dropping the backhalf of the
+        detection (`"\\\\" in text or ...` -> drive letter only) left the whole suite
+        green, because every string the other tests use carries BOTH a backslash and
+        a drive letter. This case has a backslash and no drive letter, which is the
+        only way to tell the two signals apart.
+        """
+        relative = "x\\cand\\design"
+        self.assertNotIn(":", relative, "this case must have no drive letter")
+        self.assertIn("\\", relative, "this case must have a backslash")
+        self.assertTrue(_is_candidate_design_root(relative))
+        # and the collapse that would happen without the signal, named:
+        self.assertEqual(PurePosixPath(relative).parts, (relative,))
+        self.assertEqual(PureWindowsPath(relative).parts, ("x", "cand", "design"))
+
+    def test_a_drive_relative_path_needs_the_drive_letter_signal(self):
+        """`C:cand/design` is the one input where the drive letter changes the answer.
+
+        With no separator at all, the two flavours disagree:
+
+            PureWindowsPath("C:cand/design").parts == ("C:", "cand", "design")
+            PurePosixPath("C:cand/design").parts   == ("C:cand", "design")
+
+        so the tail matches under one and not the other. Found by mutation as well:
+        dropping the drive-letter half of the detection also left the suite green,
+        because `C:/x/cand/design` yields `('cand', 'design')` under BOTH flavours and
+        so cannot tell the two signals apart.
+
+        The string below carries NO backslash, which is the whole point -- a
+        drive-relative path with backslashes is already caught by the other signal,
+        and using one here is what let this mutation survive the first time.
+        """
+        drive_relative = "C:cand/design"
+        self.assertNotIn("\\", drive_relative, "must have no backslash")
+        self.assertEqual(drive_relative[1], ":", "must carry a drive letter")
+        self.assertTrue(_is_candidate_design_root(drive_relative))
+        self.assertEqual(PureWindowsPath(drive_relative).parts,
+                         ("C:", "cand", "design"))
+        self.assertEqual(PurePosixPath(drive_relative).parts,
+                         ("C:cand", "design"))
+
+    def test_the_documented_limitation_is_pinned_not_implicit(self):
+        """A POSIX name containing a literal backslash is read as Windows-flavoured.
+
+        Documented in the helper's docstring, and pinned here so it stays a
+        DECISION. If this assertion is ever changed, the docstring has to change with
+        it -- which is the point.
+        """
+        self.assertFalse(_is_candidate_design_root("/tmp/x/cand/de\\sign"),
+                         "the documented backslash heuristic changed; update the "
+                         "docstring and this test together")
+
+    def test_the_helper_is_a_tail_check_not_an_absoluteness_check(self):
+        """A RELATIVE `cand/design` is accepted, and that is the contract.
+
+        Every version of this helper has asked only whether the last two components
+        are `cand/design`. Asserting otherwise here would be changing the contract
+        rather than fixing the platform bug -- and the callers hand it a root, not an
+        arbitrary path. Recorded so the behaviour is a decision, not an accident.
+        """
+        self.assertTrue(_is_candidate_design_root("cand/design"))
+        self.assertTrue(_is_candidate_design_root(PurePosixPath("cand/design")))
+
+    def test_the_verdicts_survive_rebinding_path_to_the_posix_class(self):
+        """The one test that can kill the ORIGINAL defect from a Windows machine.
+
+        Mutation M1 restores the pre-fix `Path(path).parts`. On Windows that
+        mutation SURVIVES this whole suite, because `Path` IS `WindowsPath` here and
+        the buggy code is accidentally correct on the platform it was written on.
+        That is not a gap in the tests -- it is the bug. A green suite on Windows
+        carried no information about it, which is exactly why it shipped.
+
+        So the ambient `Path` is rebound to the POSIX class and the renderings are
+        re-asserted. If the helper consults the platform's Path, this fails; if it
+        parses with the flavour the VALUE implies, `Path` is never consulted and this
+        passes. That makes the cross-platform property checkable without owning a
+        linux runner, which is the whole point: the authoritative check is still CI,
+        but it is no longer the ONLY check.
+
+        Found by RUNNING THIS ON LINUX (WSL), not by reading it. The first version of
+        this test opened with a sanity assertion that `Path("C:\\\\x\\\\cand\\\\design")
+        .parts == ("C:\\\\", "x", "cand", "design")` -- true on Windows, false on linux,
+        where `Path` is already `PosixPath`. So the test verifying platform
+        independence was itself platform-dependent, and it would have shipped a NEW
+        red CI run while claiming to fix one. The sanity check now asserts only that
+        the rebinding is actually in effect, which is true everywhere.
+        """
+        from unittest import mock
+        from pathlib import PurePosixPath as _Posix
+
+        module = sys.modules[__name__]
+        with mock.patch.object(module, "Path", _Posix):
+            # the rebinding is genuinely in effect -- no hardcoded tuples, because
+            # any tuple I hardcode here is a Windows assumption waiting to go red
+            self.assertIs(module.Path, _Posix)
+            for candidate in (PurePosixPath("/tmp/x/cand/design"),
+                              PureWindowsPath("C:\\x\\cand\\design"),
+                              "/tmp/x/cand/design",
+                              "C:\\x\\cand\\design"):
+                self.assertTrue(_is_candidate_design_root(candidate),
+                                "rejected %r with Path bound to the POSIX class"
+                                % (candidate,))
+            for other in ("C:\\x\\cand\\snapshot", "/tmp/x/elsewhere/design"):
+                self.assertFalse(_is_candidate_design_root(other),
+                                 "accepted %r with Path bound to the POSIX class"
+                                 % (other,))
+
+    def test_a_backslash_string_collapses_under_posix_and_not_under_windows(self):
+        """The CI failure, stated with explicit flavour classes so it is portable.
+
+        The first version of the rebinding test asserted these tuples via the
+        ambient `Path`, which made the portability test itself platform-dependent.
+        Naming `PurePosixPath` and `PureWindowsPath` directly makes the same claim
+        with no assumption about which one `Path` happens to be.
+        """
+        collapsed = PurePosixPath("C:\\x\\cand\\design").parts
+        expanded = PureWindowsPath("C:\\x\\cand\\design").parts
+        self.assertEqual(len(collapsed), 1,
+                         "PosixPath should see one filename here; if this changes, "
+                         "the CI failure it explains has a different cause")
+        self.assertEqual(expanded[-2:], ("cand", "design"))
+
+    def test_the_helper_does_not_consult_the_ambient_path_at_all(self):
+        """Stated as a property, so the test above is not the only thing holding it.
+
+        `Path` is rebound to something that raises. If the helper touched it, this
+        raises; a helper that parses with the flavour the value implies never looks.
+        """
+        from unittest import mock
+
+        def explode(*_args, **_kwargs):
+            raise AssertionError("the helper consulted the ambient Path")
+
+        with mock.patch.object(sys.modules[__name__], "Path", explode):
+            self.assertTrue(_is_candidate_design_root("C:\\x\\cand\\design"))
+            self.assertTrue(_is_candidate_design_root("/tmp/x/cand/design"))
+            self.assertFalse(_is_candidate_design_root("/tmp/x/cand/stage"))
+
+    def test_nothing_is_accepted_that_is_not_a_design_root(self):
+        """The permissive direction is the dangerous one, so it is checked hardest."""
+        for rejected in ("", "design", "cand", "/", "C:\\", "design/cand",
+                         "/tmp/x/cand/designs", "/tmp/x/cand/design.bak",
+                         "C:\\x\\cand\\designs", "C:\\x\\cand",
+                         None, 3, object()):
+            self.assertFalse(_is_candidate_design_root(rejected),
+                             "accepted %r" % (rejected,))
+
 
 
 class CommitPredicateTests(unittest.TestCase):

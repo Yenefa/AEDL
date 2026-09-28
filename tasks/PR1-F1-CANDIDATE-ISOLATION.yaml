@@ -1,8 +1,17 @@
 task: PR1-F1-CANDIDATE-ISOLATION
 
 base:
-  branch: fix/f1-candidate-isolation
+  branch: fix/review-f6-f1
   sha: e2d2e21
+  # The branch name in the original envelope was wrong, and the way it was wrong
+  # is worth a trace. I created `fix/dev-gate-interpreter` and committed the
+  # envelope there; the fix commit then landed on `feat/arh-harness` instead --
+  # a branch another session in this same repository is actively building on,
+  # which was itself built on top of my un-merged 339f661. So both envelopes now
+  # name one branch off master, with the two fixes in separate commits.
+  # `sha` is unchanged: e2d2e21 is the real merge base.
+  # `feat/arh-harness` is left exactly as it is, including my 9852a3a on it --
+  # removing that means resetting a branch someone else is using.
 
 goal: |
   Confine every candidate-scoped operation to THE CANDIDATE, not to the workspace,

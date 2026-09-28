@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 128 条。完整正文在各自条目文件中；本索引只做导航。
+共 130 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -187,3 +187,7 @@
 - [`AI-20260928-OPENCODE-76DB9B9EC4A1703B7C2C8B2B1C30969B`](ai-usage/AI-20260928-OPENCODE-76DB9B9EC4A1703B7C2C8B2B1C30969B.md) — 裁定 3 —— 把「`violations == []` 不构成 evidence；ERC/DRC 若落地必须绑定并记录 `ignored_checks`」落盘为 ADR-014
 - [`AI-20260928-OPENCODE-787EDCFDB16A56688A50C97A85C1DE5C`](ai-usage/AI-20260928-OPENCODE-787EDCFDB16A56688A50C97A85C1DE5C.md) — ARH RFC 增补：Verifier Capability Pre-measurement + Decision Sheet
 - [`AI-20260928-OPENCODE-8651841DEF357F134049F6F9FA652DCE`](ai-usage/AI-20260928-OPENCODE-8651841DEF357F134049F6F9FA652DCE.md) — ARH Agent Repair Harness 六路研究与 RFC 综合
+- [`AI-20260928-OPENCODE-92503CBF192B51EC0ECAEBF2B1859A4F`](ai-usage/AI-20260928-OPENCODE-92503CBF192B51EC0ECAEBF2B1859A4F.md) — F1 candidate isolation and F6 dev_gate interpreter, from the independent review of e2d2e21
+## 2026-09-29
+
+- [`AI-20260929-OPENCODE-A3A148D0CFF3603CF461C089ADCBD6DC`](ai-usage/AI-20260929-OPENCODE-A3A148D0CFF3603CF461C089ADCBD6DC.md) — the Linux-only path-flavour failure on master left by PR #104
