@@ -1,0 +1,10 @@
+historical record dirs        : 30
+  without package+result pair : 15
+load_package rebuilt OK       : 0
+load_package REFUSED          : 15
+load_result rebuilt OK        : 0
+load_result REFUSED           : 0
+first refusal                 : Y4-001-C-r1: Y4Error: public package is noncanonical or derived fields differ
+
+artifact hashes (name, package.sha256, result.sha256) -- bytes untouched:
+  Y4-001-C-r1  9767134b33a708cb785d86b2953346cdfb0e425103a767ce2e7994df3485e5db  15bddde6c53005aabe66ac860ca0608232113c9ab9c5d13733d83af4c76b9b83

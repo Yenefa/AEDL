@@ -1,0 +1,34 @@
+[
+  {
+    "c1_parsed_has_rotation_key": true,
+    "c1_parsed_op": {
+      "at": "U1.44",
+      "name": "BOOT0",
+      "op": "add_net_label",
+      "rotation": 0,
+      "scope": "local"
+    },
+    "c1_proposal_sha256": "bb9c5c669759c9699f5934fbcb21c74fb8d5a0444d3ada500a954726c66ae137",
+    "c4_normalized_rotation_mode": "EXPLICIT_0",
+    "label": "raw absent",
+    "raw_has_rotation_key": false
+  },
+  {
+    "c1_parsed_has_rotation_key": true,
+    "c1_parsed_op": {
+      "at": "U1.44",
+      "name": "BOOT0",
+      "op": "add_net_label",
+      "rotation": 0,
+      "scope": "local"
+    },
+    "c1_proposal_sha256": "bb9c5c669759c9699f5934fbcb21c74fb8d5a0444d3ada500a954726c66ae137",
+    "c4_normalized_rotation_mode": "EXPLICIT_0",
+    "label": "raw explicit 0",
+    "raw_has_rotation_key": true
+  }
+]
+
+C1 erases presence (both parsed ops carry rotation=0): True
+C1 proposal_sha256 collapses absent and explicit 0: True
+C4 normalization after C1 parse is EXPLICIT_0 for both: ['EXPLICIT_0', 'EXPLICIT_0']

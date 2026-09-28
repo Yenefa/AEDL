@@ -65,10 +65,12 @@
         "op": "add_net_label",
         "required": ["op", "name", "at"],
         "optional": { "scope": ["local"], "rotation": [0] },
-        "defaults": { "scope": "local", "rotation": 0 },
+        "defaults": { "scope": "local" },
         "constraints": [
           "at must be a REF.PIN anchor, never a coordinate or expression",
-          "omitted optional fields are normalised to the defaults above before the proposal digest is computed"
+          "scope is normalised to its default above before the proposal digest is computed",
+          "rotation presence is preserved and is execution-semantic: an omitted rotation stays omitted and means the native pin-derived orientation, while an explicit rotation:0 stays explicit; the two have different canonical Proposal identity and must never be normalised into each other",
+          "place_component rotation/mirror/unit keep their default normalisation; this rule applies to add_net_label.rotation only"
         ]
       },
       {
@@ -165,13 +167,14 @@
     "AddNetLabelOp": {
       "type": "object",
       "additionalProperties": false,
+      "description": "The presence of 'rotation' is execution-semantic: omitting it means the native pin-derived orientation, while an explicit 0 writes 0. The two are different canonical Proposal identities and must not be normalised into each other.",
       "required": ["op", "name", "at"],
       "properties": {
         "op": { "const": "add_net_label" },
         "name": { "$ref": "#/$defs/BoundedText" },
         "at": { "$ref": "#/$defs/PinAnchor" },
         "scope": { "const": "local" },
-        "rotation": { "const": 0 }
+        "rotation": { "const": 0, "description": "When present it must be 0 and stays explicit in the parsed Proposal; when absent it stays absent." }
       }
     },
     "PlaceComponentOp": {

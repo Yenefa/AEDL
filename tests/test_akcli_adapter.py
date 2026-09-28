@@ -1066,6 +1066,79 @@ class RouteAndBindingTests(AdapterCase):
         self.assertEqual(result["status"], "BLOCKED")
 
 
+class RotationPresenceTests(AdapterCase):
+    """GH-86: rotation *presence* is execution-semantic to the pinned writer.
+
+    The pinned akcli branches on `"rotation" in op`
+    (akcli/writers/handlers/labels.py:78-88): an op that omits rotation takes the
+    pin-derived angle, while an explicit `rotation: 0` writes 0.  PRECHECK therefore
+    has to compare presence, not only the default-filled value: an op-list whose
+    rotation key is absent is NOT the authorized proposal of an op that carries an
+    explicit zero, and vice versa.  Both mismatch directions must be refused before
+    the writer starts (0 write calls, stage bytes untouched).
+    """
+
+    def _disk_ops(self, ops):
+        with open(self.oplist_path, "w", encoding="utf-8", newline="\n") as handle:
+            json.dump({"protocol_version": 2, "target_format": "kicad", "ops": ops}, handle)
+
+    def _run(self, proposal_ops, disk_ops):
+        self._disk_ops(disk_ops)
+        before = self.stage_bytes()
+        result = adapter.apply_stage(self.stage_request(self.host_patch(ops=proposal_ops)))
+        return result, before
+
+    def test_absent_rotation_on_both_sides_is_allowed(self):
+        ops = [{"op": "add_net_label", "name": "BOOT0", "at": "U1.44"}]
+        result, _ = self._run(ops, ops)
+        self.assertEqual(result["status"], "APPLIED_TO_STAGE", result["reasons"])
+        self.assertEqual(self.call_log(), ["cli:applied"])
+
+    def test_explicit_zero_rotation_on_both_sides_is_allowed(self):
+        ops = [{"op": "add_net_label", "name": "BOOT0", "at": "U1.44", "rotation": 0}]
+        result, _ = self._run(ops, ops)
+        self.assertEqual(result["status"], "APPLIED_TO_STAGE", result["reasons"])
+        self.assertEqual(self.call_log(), ["cli:applied"])
+
+    def test_proposal_absent_disk_explicit_zero_is_blocked_before_the_writer(self):
+        proposal = [{"op": "add_net_label", "name": "BOOT0", "at": "U1.44"}]
+        disk = [{"op": "add_net_label", "name": "BOOT0", "at": "U1.44", "rotation": 0}]
+        result, before = self._run(proposal, disk)
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("REPAIR_INPUT_DRIFT", self.codes(result))
+        self.assertEqual(self.call_log(), [])
+        self.assertEqual(self.stage_bytes(), before)
+
+    def test_proposal_explicit_zero_disk_absent_is_blocked_before_the_writer(self):
+        proposal = [{"op": "add_net_label", "name": "BOOT0", "at": "U1.44", "rotation": 0}]
+        disk = [{"op": "add_net_label", "name": "BOOT0", "at": "U1.44"}]
+        result, before = self._run(proposal, disk)
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("REPAIR_INPUT_DRIFT", self.codes(result))
+        self.assertEqual(self.call_log(), [])
+        self.assertEqual(self.stage_bytes(), before)
+
+    def test_place_component_rotation_presence_stays_neutral(self):
+        """The pinned component writer uses op.get(k, default), so presence is not
+        execution-semantic there; this card must not be widened to components.py."""
+        absent = {"op": "place_component", "lib_id": "Device:R", "designator": "R9",
+                  "x_mil": 1350, "y_mil": 10150, "value": "10k",
+                  "footprint": "Resistor_SMD:R_0603_1608Metric"}
+        explicit = dict(absent, rotation=0, mirror="none", unit=1)
+        result, _ = self._run([explicit], [absent])
+        self.assertEqual(result["status"], "APPLIED_TO_STAGE", result["reasons"])
+
+    def test_the_normalized_label_encodes_presence_without_changing_the_value(self):
+        absent = adapter._normalize_operation(
+            {"op": "add_net_label", "name": "N", "at": "U1.1"}, "probe")
+        explicit = adapter._normalize_operation(
+            {"op": "add_net_label", "name": "N", "at": "U1.1", "rotation": 0}, "probe")
+        self.assertEqual(absent["rotation"], 0)
+        self.assertEqual(explicit["rotation"], 0)
+        self.assertNotEqual(absent, explicit)
+        self.assertNotEqual(absent.get("rotation_mode"), explicit.get("rotation_mode"))
+
+
 class StubPerturbationTests(AdapterCase):
     """C4-P2/P7 perturbations the live writer cannot be made to produce.
 
@@ -1766,6 +1839,60 @@ class NativePerturbationTests(_NativeToolchainMixin, unittest.TestCase):
         self.assertNotEqual(
             self._source_sha256(os.path.join(split, "fault.kicad_sch")),
             self._source_sha256(os.path.join(single, "fault.kicad_sch")))
+
+
+class NativeRotationPresenceTests(_NativeToolchainMixin, unittest.TestCase):
+    """GH-86 at the real toolchain: rotation presence is execution-semantic.
+
+    The frozen DC-04 op-list omits `rotation` on both `add_net_label` ops, and the
+    pinned writer derives the label angle from the pin in that case
+    (akcli/writers/handlers/labels.py:78-88).  A disk op-list carrying an explicit
+    `rotation: 0` is therefore not the authorized proposal of an op that omits it,
+    and vice versa.  Both directions must be refused in PRECHECK: the real `draw`
+    command is never started and the stage stays byte-identical.
+    """
+
+    def _ops_with_explicit_zero(self, case):
+        ops = []
+        for row in self._fixture_ops(case):
+            if row.get("op") == "add_net_label":
+                row = dict(row, rotation=0)
+            ops.append(row)
+        return ops
+
+    def _apply_mismatch(self, case, proposal_ops, disk_ops, name):
+        cli = self._akcli()
+        toolchain = self._measure(cli, case)
+        stage = self._stage(case, name, ops=disk_ops)
+        body = self._patch(toolchain, proposal_ops, case, stage)
+        before = self._source_sha256(os.path.join(stage, "fault.kicad_sch"))
+        calls, recorder = self._runs()
+        with recorder:
+            result = adapter.apply_stage(self._stage_request(
+                body, stage, os.path.join(self.root, "artifacts-" + name)))
+        return result, calls, stage, before
+
+    def test_proposal_absent_disk_explicit_zero_is_refused_before_the_real_writer(self):
+        case = "DC-04"
+        result, calls, stage, before = self._apply_mismatch(
+            case, self._fixture_ops(case), self._ops_with_explicit_zero(case),
+            "presence-absent-vs-zero")
+        self.assertEqual(result["status"], "BLOCKED", result["reasons"])
+        self.assertIn("REPAIR_INPUT_DRIFT", [row["code"] for row in result["reasons"]])
+        self.assertEqual(self._draws(calls), [])
+        self.assertIsNone(result["tool"]["exit_code"])
+        self.assertEqual(self._source_sha256(os.path.join(stage, "fault.kicad_sch")), before)
+
+    def test_proposal_explicit_zero_disk_absent_is_refused_before_the_real_writer(self):
+        case = "DC-04"
+        result, calls, stage, before = self._apply_mismatch(
+            case, self._ops_with_explicit_zero(case), self._fixture_ops(case),
+            "presence-zero-vs-absent")
+        self.assertEqual(result["status"], "BLOCKED", result["reasons"])
+        self.assertIn("REPAIR_INPUT_DRIFT", [row["code"] for row in result["reasons"]])
+        self.assertEqual(self._draws(calls), [])
+        self.assertIsNone(result["tool"]["exit_code"])
+        self.assertEqual(self._source_sha256(os.path.join(stage, "fault.kicad_sch")), before)
 
 
 class NativeP3QualificationTests(_NativeToolchainMixin, unittest.TestCase):

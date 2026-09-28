@@ -565,3 +565,172 @@ Falsification: 还原修复 → R13 真实红（'PASS' != 'FAIL'，M1 签名）�
 
 **后坐力（必须写清）**：M1 的新 commit 使 `cfea050` 上的双环境补偿验证与一次性
 infrastructure exception **按各自条款失效**，且 Percy 必须在新 SHA 上重审。
+
+### Current state — 2026-09-23（GH-86 C4 rotation-presence 修复 + C1 integration finding）
+
+- 分支：`fix-pr1-c4-rotation-presence`（worktree `_wt_c4_rotation_presence`），base = master `d282c0b`（含 #87 M1）。
+- Envelope：`tasks/PR1-C4-ROTATION-PRESENCE.yaml`；Owner grant：issue #86 `#issuecomment-5778545662`（APPROVED）。
+- Admission：**ADMIT / exit 0**（`--allow-dirty`；envelope_sha256 `5f5980359eb0ef69…`；依赖 `PR-87 merged`）。
+- 代码（唯一改动）：`tools/akcli_adapter.py` 的 `_normalize_operation` `add_net_label` 分支新增 presence 标记
+  `rotation_mode`（`DERIVED_FROM_PIN` / `EXPLICIT_0`），只参与 PRECHECK 比较，从不交给 writer。
+- 测试：`tests.test_akcli_adapter.RotationPresenceTests` 6 例（四组合 + place_component 中性护栏 + presence 编码单测）。
+  - 证伪对照（未修代码）：**3 FAIL / 6**，两个 mismatch case 实测被放行（`APPLIED_TO_STAGE`）。
+  - 修复后：**6 OK**；`tests.test_akcli_adapter` **92 OK (skipped=13)**。
+- **INTEGRATION FINDING（未修，待 Owner 决定）**：C1 `tools.repair_pipeline._parse_op`（`:838-848`）
+  同样把 absent 归一成显式 `rotation: 0`；probe 实测 absent 与 explicit 0 的 `proposal_sha256` **完全相同**
+  （`bb9c5c66…`）。若 C5 从 C1 解析产物序列化「实际执行」的 op-list，proposer 的「省略→派生角度」会被静默
+  改成 0，C4 修复无法补救。`tools/repair_pipeline.py` 属 GH-86 forbidden，未改一行。
+  建议：新开 C1 卡（presence-preserving parse）或规定 C5 必须从 raw proposer bytes 序列化执行 op-list。
+- Development Gate：**PASS / exit 0**（8/8，excluded=[]；main 823 OK / sandbox 283 OK / scope 6 files / binding bound / ledger 112 in sync）。
+- AI 台账：`AI-20260923-DSH-251F2643C9CD46A196B62569F4FAA63F`。
+- **native C4 已补跑（2026-09-23，pinned akcli 0.21.0 @ `toolchain/py311`，Python 3.11.15）**：
+  原 `NOT_RUN` 解除 —— 原生回归（NativeQualification / NativePerturbation / NativeP3）**12 OK**；
+  本卡新增 `NativeRotationPresenceTests`（两个 mismatch 方向写前拒绝、draw 0 次、字节不变）**2 OK**；
+  angle probe 实测：冻结 DC-04（rotation absent）写出 `+3V3 angle=90 / BOOT angle=270`，
+  同一 op-list 显式 `rotation: 0` 写出 `angle=0 / 0` ⇒ presence 在原生层即执行语义。
+  证据：`notes/gh-86/NATIVE-EVIDENCE.md` + `probe_native_rotation_presence.txt`。
+  dev_gate 中原生用例仍是 opt-in SKIP（skipped=15），故正式回执不包含 native。
+- 状态：`PENDING_HUMAN_REVIEW`；未 push、未开 PR。
+- **change_budget 说明（如实）**：envelope 原写 `expected_files: 7`，本 candidate 实际 **12** 个文件。
+  增量全部来自 Owner 直接指示的两项（C1 integration finding 记录、native C4 证据），且全部落在既有
+  7 条 allowed path 条目内（`notes/gh-86/**`、`docs/compliance/ai-usage/**` 为 glob）——
+  **无越界路径、无额外代码路径**（唯一代码改动仍是 `tools/akcli_adapter.py`）。按 AGENTS.md §2.2，
+  此增量属人类指示的扩量，已如实登记，未静默扩大。
+
+- **Owner 决策（2026-09-23 工作会话）**：
+  1. **#86 不吸收 C1 finding** —— GH-86 授权只覆盖 C4，且明确 forbid `tools/repair_pipeline.py`；
+     C1 另开窄域 contract erratum，不把 #86 重新膨胀。
+  2. **C5 恢复条件更正（治理纠偏）**：旧的 `#86 closed → resume C5` 指令**作废**。新口径 =
+     **`#86 closed → C4 blocker removed；C5 remains BLOCKED by the newly discovered C1`**
+     **`presence-binding defect（PR1-C1-ROTATION-PRESENCE）`**。在 C1 erratum merge 前 C5 继续 `BLOCKED`。
+  3. **C1 方案选 1（presence-preserving parse）**，不选方案 2（C5 从 raw proposer bytes 执行）；
+     理由是方案 2 并未省掉 contract change，只是把第二套 proposal identity 藏到更难审计处。
+     C1 卡 `contract_change: true`：JSON schema 不加字段，但 canonical Proposal representation /
+     `proposal_sha256` 的等价关系改变。
+- **benchmark census（第一轮，未落盘）**：DC-01..05 重新定位为 **C6 qualification set**，不是效果
+  benchmark；修复动作驱动 ΔScore ≈ 2/5（DC-01/DC-02），其余主考 B（不过度定性）；SchGen 旧数据
+  10/10 ABSTAINED、mean ΔJ=0、5 个低 J 但 0 个有支持性自动修复。**不扩规则救 ΔScore**；census 暂不写仓库
+  （不越 GH-86 scope），待 C1 卡建立后再决定是否给独立只读 evaluation note。
+
+### Current state — 2026-09-24（PR1-C1-ROTATION-PRESENCE 实施完成，待 human review）
+
+- 分支：`feat-pr1-c1-rotation-presence`（worktree `_wt_c1_rotation_presence`）；**base 已重锚**为
+  `b42280bd6afcc8030cb25685c3a84d21ffc38fba`（PR-88 merge 后的 master），分支已 rebase 到它。
+- **两个前置证明（Owner 要求缺一不可）**：
+  - dependency proof：PR-88 `state=MERGED`，`mergedAt=2026-09-24T02:20:24Z`，`mergeCommit=b42280b`；
+  - refreshed base proof：重新 fetch 后 `origin/master = b42280b`（与 mergeCommit 相同，期间无其他 commit）。
+- **Admission：ADMIT / exit 0**（`--allow-dirty`；receipt 同时显示 `baseline ok | b42280b` 与
+  `dependencies ok | PR-88 merged`）。conditional scope grant 的两个条件均已满足后才执行。
+- 三层改动：`src/repair/patch_schema_v1.json`（defaults 去 rotation + constraints 改写；`$defs` 结构不变）、
+  `docs/competition/internal/AEDL_PR1_实现合同_20260907.md`（Operation v1 表格 + 规范化段落）、
+  `tools/repair_pipeline.py`（`_parse_op` add_net_label 分支 presence-preserving）。
+- 验证：`tests.test_repair_contract` **109 OK**；`discover -s tests` **842 OK (skipped=16)**（C1 前 825，+17）；
+  **R4 证伪**：放回旧补 0 行为 → **5 RED**，还原后 SHA256 逐位一致 → GREEN。
+- **NP1 原生纵向证明**（pinned akcli 0.21.0）：absent → C1 无 rotation 键 / `proposal_sha d125a19d` /
+  写出 **90,270**；explicit 0 → C1 有 rotation:0 / `proposal_sha c8d48556` / 写出 **0,0**。
+- **H1 历史控制**：15 份历史 package 在新 schema 下 **0 OK / 15 REFUSED**（「输入包先失效」实测成立）；
+  历史 artifact sha256 已登记、bytes 未改写；兼容层按 Q4-C 另开 follow-up。
+- 预算偏差：`expected_files: 10`，实际 **14**；增量来自 acceptance 强制的 NP1/H1 探针，均在 allowed 条目内。
+- **环境修复（repo-local，可回滚）**：`dev_gate.changed_files()` 走 `git diff HEAD --name-only`，
+  而 `core.quotepath` 默认 true 会把非 ASCII 路径转义，使本卡的合同文件被误判为越界；
+  该文件确在 allowed_paths 内。已执行 `git config core.quotepath false`（共享 `.git/config`，非 global；
+  未改任何被跟踪文件）；回滚 `git config --unset core.quotepath`。修复后 `scope_check` pass。
+- AI 台账：`AI-20260924-DSH-5214132684B03A9C290A20056371AAB6`。
+- 状态：`PENDING_HUMAN_REVIEW`；**已 commit `cb98f27983d1f4e3cd158e4c13c201beebbbd8f9` / 已 push /
+  PR #89 OPEN**（base `master`，MERGEABLE；remote HEAD == local HEAD 已核）。
+  后续 state-sync commit 会推进 HEAD，最新值以 `git ls-remote` / PR #89 为准。
+- C5：**继续 `BLOCKED`**，直到本卡 merge；旧 C5 receipts/evidence 视为 **stale**。
+
+### Current state — 2026-09-24（C5 恢复：rebase → 重锚 → fresh admission）
+
+- **PR #89 已 merge**：`state=MERGED`，`mergedAt=2026-09-24T03:58:46Z`，
+  `mergeCommit=5ade5b8d1090f9c08d5d63f032bc83afa83e56fd`（= 当时的 origin/master，已重新 fetch 核实）。
+- **C5 已 rebase 到 5ade5b8**：7 个 C5 commit 重放成功，master 落后数 = 0。
+  唯一冲突是**生成物** `docs/compliance/AI_USAGE_LOG.md`（ADR-012 已知类别）→ 未手工合并，
+  改为 rebase 后 `build_ai_usage_index build` 重新生成（114 entries / check OK）。
+- **重新吸收确认（逐处核对）**：C1 presence-preserving `_parse_op`（`tools/repair_pipeline.py:853-868`）、
+  C4 `rotation_mode`（`tools/akcli_adapter.py:981-984`）、C5 `runtime_bindings`（`repair_pipeline.py:1818`）
+  三者同时存在，无残留冲突标记。
+- **base 重锚**：`tasks/PR1-C5.yaml` 的 `base.sha` 由 `669aa16` → `5ade5b8`。
+- **旧 C5 receipts / evidence 全部作废（stale）**：rebase 前的 `_admit_PR1-C5*.json`、dev_gate 回执与
+  任何绑定到 `669aa16`/`2460d5d` 的结论，一律不得作为恢复依据。
+- **fresh admission：ADMIT / exit 0**（`--allow-drift`；envelope_sha256 `26745131c252…`；HEAD `39c5808`）。
+- **dev_gate：pass / exit 0**（8/8，excluded=[]）：main **899 OK (skipped=16)**；sandbox 283 OK；
+  secret 528；ledger 114 in sync；scope 0 files（clean）；binding bound（HEAD `39c5808`）。
+- **S1b 第 4 步状态（尚未开始）**：`tools/repair_pipeline.py` 中
+  `bind_policy` / `_bound_policy` / `_host_patch` / `build_expected_after` / `PolicyPort` = **0 处**。
+  冻结合同接口：§8 L209 `bind_policy(host_context, proposal, native_before) -> BoundPolicyResult`、
+  L230 `BoundPolicyResult={status, bound_policy|null, host_patch|null, reasons}`（无真实批准依据即 BLOCKED）；
+  另有 C2 erratum §12 的强制义务：`build_expected_after` 必须按同一规则计算 expected label `rotation`
+  （省略 → pin 派生；显式 0 → 0）——C1 修复后二者才可区分。
+### Current state — 2026-09-24（S1b 第 4 步 checkpoint 1 完成：`build_expected_after`）
+
+- **Owner 裁决**：APPROVED —— C5 内实现**版本钉死**的纯几何 compatibility kernel（行为等价复刻 akcli 0.21.0），
+  生产路径**不 import akcli**；不扩合同；复用 C2 AST semantics；用 native differential evidence 证明等价。
+- **前置侦察（真 blocker，已拆）**：C4 的 `native_before` observation **不含 pin orientation**
+  （实测 pin row keys = `electrical_type/identity/name/no_connect/partition_key`；`definition_rows` 无角度），
+  而 pinned writer 的 `label_angle_away(pin.orientation, comp.rotation, comp.mirror)` 需要它。
+  解决：pin 几何从 `observation["source_objects"] → lib_symbols AST` 取，复用 C5 已 import 的 `_c2_source_*`。
+  **未改 C4、未扩合同、未自建第二套 parser。**
+- **实现**（`tools/repair_pipeline.py`）：`PINNED_AKCLI_VERSION="0.21.0"` +
+  `_pinned_akcli_0210_transform_point` / `_pinned_akcli_0210_pin_world` / `_pinned_akcli_0210_label_angle_away`；
+  AST 查找 `_lib_symbols_ast` / `_source_scalar_string` / `_pin_local_geometry` / `_anchor_component`；
+  纯函数 `build_expected_after(observation, proposal, rule=None, runtime=None)`。
+- **验收（真实运行）**：`ExpectedAfterGeometryTests` **13 OK**；`tests.test_repair_pipeline` **73 OK (skipped=3)**；
+  全量 `discover` **915 OK (skipped=19)**；`dev_gate` **pass / exit 0**（8/8，scope 2 files in scope）。
+- **native oracle（先测再钉，非假设）**：DC-04 absent → `+3V3 (34.29,254) 90` / `BOOT (34.29,261.62) 270`；
+  DC-05 absent → `EN (267.97,33.02) 90` / `GND (267.97,40.64) 270`；`build_expected_after` 派生值**逐项一致**。
+  explicit 0 → point 不变、rotation=0；absent 与 explicit 0 的 expected semantics **不同**。
+- **fail-closed 负例 6 条**：无 owner anchor / 同 reference 两次 placement / 缺失 pin number /
+  同 reference 两组件 / 重复 lib symbol / 重复 pin number / 缺 lib_symbols → 全部 `HostContextError`，
+  **无 fallback、无“取第一个”**。
+- **differential proof（opt-in）**：`transform_point` 120 组、`label_angle_away` 48 组，与 pinned
+  `akcli.geometry.transform` **逐项一致** → 3 OK。
+- **范围自查**：诊断探针曾写在未授权的 `notes/pr1-c5-s1b/`，`scope_check` 报出后已移出仓库到 host scratch
+  `_c5_s1b_probes/`；仓库内 clean，探针未入库（命令与结果见 AI 台账）。
+- **未做**：checkpoint 2 未开始（Owner 要求 checkpoint 1 认可后再进入）。
+### Current state — 2026-09-24（S1b 第 4 步 checkpoint 2 完成：`_bound_policy`）
+
+- **Owner 裁定**：APPROVED —— expected_after observation 组装归 CP2（不回补 CP1）；
+  CP2 只做 policy specialization，**不做 authorization**；transaction identity 不泄漏进 BoundPolicy；
+  同 lib_id 定义摘要必须存在且全体一致。
+- **职责边界**：CP1 = 计算新增工程语义；CP2 = 把 before + CP1 additions + runtime bindings + 冻结规则
+  投影成 C2 可验证的完整 16 项 BoundPolicy。
+- **实现**（`tools/repair_pipeline.py`）：`_expected_observation` / `_refresh_expected_bookkeeping` /
+  `_library_definition_digests` / `_pin_node` / `_pin_electrical_type` / `_bound_policy`；
+  依赖 C2 **公开** helper `normalize_observation` / `observation_delta` / `protected_projection_sha256`
+  （**未复制** `_delta()` / `_projection()`）。
+- **单一真源**：runtime bindings = 唯一 runtime-value source；CP1 additions = 唯一 label 几何来源；
+  新组件行的 library 摘要取自同 lib_id 既有实例（全体一致才用），assembly 布尔取自冻结规则。
+- **验收（10 条，真实运行）**：`BoundPolicyTests` **13 OK**；`tests.test_repair_pipeline` **86 OK (skipped=3)**；
+  全量 `discover` **928 OK (skipped=19)**；`dev_gate` **pass / exit 0**（8/8，scope 2 files in scope）。
+  - 字段集精确 = frozen 16 项；无 `run/candidate/round/patch/proposal_sha256` 泄漏；
+  - `rotation_source` 已剥掉，semantics 精确 `{name, scope, point_nm, rotation}`；absent → 90/270；
+  - identity maps `is` runtime bindings 原对象；缺 binding / 未知 binding 均 fail-closed；
+  - 无 grant/ALLOW；`_bound_policy` 源码不含授权调用（inspect 断言）；
+  - expected_after 直接通过 `normalize_observation(expected=True)`；delta/protected digest 与 C2 复算一致。
+- **未做**：CP3 `_host_patch`、CP4 `bind_policy` 均未开始（按 Owner 要求停在 CP2 gate）。
+- **CP4 必须验收项（已登记）**：0.21.0 运行时闭环 —— actual host toolchain identity != pinned 0.21.0 →
+  BLOCKED/UNKNOWN，**绝不调用 qualified kernel**。
+### Current state — 2026-09-24（CP2 correction pass 完成，Owner `CHANGES_REQUIRED` 三项已修）
+
+- **B1 删除绑定 slot ≠ UUID（功能 bug）**：原实现拿 `object_identity_map` 的 **slot key** 去过滤 source objects，
+  而冻结语义是 `slot → {uuid, kind, descriptor_sha256}`（C2 消费 `.values()` 并按 `entry["uuid"]` 匹配）——
+  E1/E3 的删除路径**一个也删不掉**，且原测试用 `removals={}` 完全没覆盖。
+  现改为逐条 declaration fail-closed：uuid 恰好命中 1 个 before source object、kind 一致、
+  `canonical_sha256("protected", obj["descriptor"])` 一致、两条不得绑同一对象；
+  **每条声明都必须真的删掉一个对象**。
+- **B2 sentinel 写错**：`"0"*64` → 冻结值 `canonical_sha256("context", {"role": "EXPECTED_AFTER_NOT_YET_WRITTEN"})`
+  （C2 erratum §10，STRUCTURAL PLACEHOLDER ONLY）。
+- **B3 `operation_constraints` 为空**：新增 `_canonical_authorized_ops` + `_operation_constraints`：
+  counts / 准确删除对象（uuid+kind+descriptor）/ 新组件与新 label 属性 / stage_order
+  （`delete_object → place_component → add_net_label`）/ `canonical_authorized_ops`。
+  ops 由冻结规则声明**经 C1 自己的 `_parse_op`** 生成（形状不漂移）；label op **刻意不带 rotation 键**，
+  presence-sensitive —— 绝不把静态 policy 的 `rotation: 0` 翻成 proposal 的显式 0；
+  并与 CP1 additions 数量交叉校验。**比较留给 CP4 `bind_policy`**（CP2 只生成许可）。
+- **验证**：`BoundPolicyTests` **21 OK**（13 → +8）；`tests.test_repair_pipeline` **94 OK (skipped=3)**；
+  全量 `discover` **936 OK (skipped=19)**；`dev_gate` **pass / exit 0**（8/8，scope 2 files in scope）。
+  新增测试含 E1/E3 风格 removal 正例（UUID 消失、delta `after == {"absent": True}`、C2 复算一致）、
+  wrong UUID / wrong descriptor / wrong kind 三负例、sentinel exact-value 回归、canonical ops 快照、
+  frozen proposal 有序相等、explicit-rotation proposal **不相等**。
+- **下一步**：checkpoint 3 —— `_host_patch`（纯构造器；任何 ALLOW 不得来自 Proposal 字段）。

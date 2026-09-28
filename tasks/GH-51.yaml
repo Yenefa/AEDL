@@ -1,0 +1,91 @@
+task: GH-51
+
+base:
+  branch: fix/sandbox-test-paths-junction-winerror183
+  sha: 2be69da8a40dbfd8d4318d0a220d6bfc384512da  # rebaseline (2026-09-27, 2nd): rebaseline 提交本身
+    # 基线沿革：5ade5b8d（origin/master @ 分支创建）→ bfdd980e（实现提交 + 验证终态）
+    # → 2be69da8（本 rebaseline 提交）。第 2 次重锚的原因：重锚提交自身又使 HEAD 前进，
+    # 同一 TOCTOU 约束在数学上要求 base.sha == 提交后 HEAD，即「把 base.sha 写成包含
+    # 自身的提交哈希」——不可构造。这是 Issue #83 所述结构性不可达的同一族问题，
+    # 在 envelope-first 流程下的表现形态。此处选择**不**继续追逐零漂移：
+    # 记录 2be69da8 为基线并以预授权的 allow_drift 通过（漂移 = 本任务的
+    # envelope rebaseline 提交，范围可枚举、可审计），照 GH-31 amendment 2 /
+    # GH-49 先例。若 Owner 认为应改为「允许 base.sha <= HEAD 的显式 rebaseline
+    # 声明字段」，那是 tools/admit.py 的合同变更，需另开 Issue，不在本任务范围。
+    # rebaseline 理由与先例：dev_gate 的 binding_check 是 TOCTOU 二次校验，admission
+    # 记录的 head_sha 与 gate 时的 HEAD 必须一致；实现提交后 HEAD 前进 → 必须 re-admit
+    # （CONTROL_PLANE §3 binding_check）。照 tasks/GH-31.yaml amendment 2（44bcea9
+    # 「merge origin/master 后的验证终态 HEAD」）与 tasks/GH-49.yaml（「HEAD 位于本基线
+    # 之上是任务实现提交的正常状态」）的既有做法：把 base.sha 重锚到已验证的实现提交，
+    # 而不是靠反复漂移硬扛。
+    # base.branch 写的是本任务分支名而非 master：tools/admit.py:205-209 把
+    # envelope.base.branch 与当前分支做等值比较，写 master 会直接 BLOCKED
+    # （沿用 tasks/GH-31.yaml 先例）。
+
+goal: |
+  让 sandbox_runtime/tests/policy/test_paths.py 在 Windows 上稳定通过：
+  Issue #51 报告 mklink /J 建好 junction 之后，第 41 行
+  `root.mkdir(parents=True)` 抛 FileExistsError [WinError 183]
+  (ERROR_ALREADY_EXISTS)，测试在进入 containment 断言之前就 ERROR，
+  GH-20 的 junction 回归保护因此失去覆盖。
+
+scope: |
+  In scope（仅测试脚手架，不改任何被测行为）:
+  - sandbox_runtime/tests/policy/test_paths.py：
+    (1) junction 创建加重试 + 创建后「是否真的可穿越」的就绪校验
+        （os.path.samefile，跨 Python 版本可用；3.9 的 os.path.islink
+        对 junction 返回 False，不能用）；
+    (2) 对 WinError 183/145（ERROR_ALREADY_EXISTS / ERROR_DIR_NOT_EMPTY）
+        做有界退避重试的 mkdir 助手；
+    (3) 为该重试助手加一条确定性回归测试（monkeypatch 模拟先失败后成功）。
+  Out of scope:
+  - aedl_sandbox.policy.paths.is_within 的实现与语义（这是被测对象，不得改）；
+  - sandbox_runtime 下任何其他文件、gates/**、src/**、delivery/**、
+    notes/m2-*/**、.gitattributes、任何 Evidence 字节；
+  - 不做 Windows 平台守卫来回避断言：不把真实失败降级成 skip；
+    只有「mklink 不可用」才 skip（沿用既有语义）。
+
+dependencies: []
+
+allowed_paths:
+  - sandbox_runtime/tests/policy/test_paths.py
+  - tasks/GH-51.yaml
+
+forbidden_paths:
+  - gates/**
+  - src/**
+  - delivery/**
+  - docs/evidence/**
+  - notes/m2-*
+  - .gitattributes
+  - sandbox_runtime/aedl_sandbox/**
+
+acceptance: |
+  - py -3.9 + uv 下 sandbox 全量单测通过，且不新增 skip / xfail；
+  - 该测试文件单独连跑 20 次全绿（Issue 原始报告环境本机不可得，
+    因此以「可重复执行 + 回归测试覆盖重试逻辑」作为可验证口径）；
+  - 新增的回归测试在不打补丁的情况下会失败（先确认它能捕获回归），
+    打上补丁后通过；
+  - py -3 -m tools.dev_gate --envelope tasks/GH-51.yaml exit 0，
+    scope_check / binding_check 均在 checks 内且非 excluded。
+
+change_budget:
+  expected_files: 2
+  expected_modules: [sandbox_runtime, tasks]
+  cross_module: false
+  contract_change: false
+  evidence_semantics_change: false
+
+exceptions:
+  # Agent 不能 self-authorize。两项均照 tasks/GH-31.yaml 先例，由 Owner 在
+  # 2026-09-27 会话内明确授权（「你需要的授权都给你，这波不写 ai usage，
+  # 然后开工 51」），decision_ref 如实记录该会话指令，不冒充 GitHub 线程批准。
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "Yenefa 2026-09-27 会话指令「你需要的授权都给你……然后开工 51」；脏树来源 = envelope 本体与实现未提交（定稿 run 必然状态），同 GH-31/R1/CPL/W1-Y1 先例"
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "Yenefa 2026-09-27 会话指令「你需要的授权都给你……然后开工 51」；drift 仅由本任务的实现提交与本 envelope 的 rebaseline 提交产生，不覆盖任何第三方或无关提交（同 GH-31 amendment 2 / GH-49 rebaseline 先例）"
+
+escalation:
+  owner: Yenefa

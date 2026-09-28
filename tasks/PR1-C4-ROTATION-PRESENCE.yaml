@@ -1,0 +1,143 @@
+# Task Envelope — PR1-C4-ROTATION-PRESENCE  GH-86 C4 INPUT-DRIFT fix
+# 来源：Issue #86 [FINDING][P0] C4 INPUT-DRIFT — add_net_label rotation presence is
+#       erased by normalization but remains execution-semantic to the pinned writer.
+# Owner grant（人类，APPROVED）：GH-86#issuecomment-5778545662
+#   scope 可以 grant；独立 C4 envelope；不扩到 place_component；contract_change=false；
+#   四种 presence case + mismatch writer-zero-call + bytes unchanged；
+#   admission 返回 ADMIT 之前不得修改 tools/akcli_adapter.py 任何一行。
+# 实施顺序前置：#87 M1 已 merge（master bb38da1），本卡从 master d282c0b 起。
+# 先例：tasks/PR1-C4-PRECHECK.yaml（同类 C4 execution-semantics fix，同 allow_dirty/allow_drift 形态）。
+
+task: PR1-C4-ROTATION-PRESENCE
+
+base:
+  branch: fix-pr1-c4-rotation-presence
+  sha: d282c0bfdd2174e5c159a57a8e1ed4f65db37ebc
+
+goal: |
+  修复 C4 adapter 的一处执行语义缺陷：PRECHECK 只比较「规范化后」的 operation，
+  而 _normalize_operation 的 add_net_label 分支无条件返回 "rotation": 0，
+  把「rotation 键是否存在」这一信息抹掉。
+
+  缺陷事实链（tools/akcli_adapter.py，当前 master d282c0b）：
+  - :968-975 add_net_label 规范化无条件 "rotation": 0，且 row.get("rotation", 0) != 0
+    只校验值，不校验存在性 ⇒ absent 与 explicit 0 规范化后逐字段相等。
+  - :1119-1130 PRECHECK 把 proposal 与 on-disk op-list 两侧都过同一个抹除函数再比较
+    ⇒ absent 与 explicit 0 被判「相同」，放行。
+  - :1154-1155 / :1201-1209 STRICT 执行的是原始 oplist_path（规范化从不参与执行）。
+  - pinned writer 依据 akcli/writers/handlers/labels.py:78-88（AKCLI_VERSION 0.21.0，
+    AKCLI_UPSTREAM_COMMIT 68c2df5e...）：
+        if "rotation" in op:   orientation = int(op["rotation"])
+        elif pin is not None:  orientation = geometry.label_angle_away(...)
+    适配器强制 REF.PIN 锚点（_REFERENCE_PIN），故 pin 恒存在 ⇒ 省略走派生分支，
+    显式 0 走 0。两个「规范化等价」的 op 写出不同角度。
+
+  违反的不变量：PRECHECK 判定为相同的 authorized operation，必须具有相同的 writer
+  execution semantics。这是「规范化等价 ≠ 执行等价」，不是格式洁癖。
+
+  修法（Owner 指定，约 3 行，纯比较侧）：把 presence 编码进被比较的值，例如
+  rotation_mode = "EXPLICIT_0" if "rotation" in row else "DERIVED_FROM_PIN"，
+  与 "rotation": 0 并列返回。该产物只用于 PRECHECK 两侧比较与 len(proposed)，
+  从不交给 writer（STRICT 用 oplist_path，EXCEPTION 用 on_disk）⇒ 只改变相等关系，
+  不改变外部 Operation/proposal/op-list schema。
+
+  本卡只修 add_net_label.rotation。place_component 的 rotation/mirror/unit 明确排除：
+  pinned writers/handlers/components.py:41-43 用 op.get(k, default)，其 default
+  （0 / "none" / 1）与 adapter 规范化值一致 ⇒ presence 在执行语义上中性。不按「对称性」扩范围。
+
+scope: |
+  Writable paths are whitelisted in allowed_paths; everything else is FOREIGN (read-only).
+  只改 tools/akcli_adapter.py 的 add_net_label 规范化（presence-sensitive）与
+  tests/test_akcli_adapter.py 的对应回归；不改外部契约、不改 C1、不改 gates、不改夹具。
+
+  Impact Analysis
+
+  Direct modifications:   tools/akcli_adapter.py（_normalize_operation 的 add_net_label
+                          分支新增 presence 标记；其余逻辑不动）、
+                          tests/test_akcli_adapter.py（四组合 presence 回归 +
+                          place_component presence 中性护栏 + 规范化单测）、
+                          tasks/PR1-C4-ROTATION-PRESENCE.yaml、
+                          notes/gh-86/**（纵向 probe 记录）、
+                          docs/HANDOFF.md、docs/compliance/ai-usage/<ID>.md、AI_USAGE_LOG.md
+  Potentially affected:   C4-PRECHECK 的 op-list 相等判定；任何依赖「absent 与 explicit 0
+                          等价」的既有用例（须逐条复核并如实说明，不得为通过而放宽断言）
+  Explicitly not touched: tools/repair_pipeline.py（C1，Owner grant 明确禁止）、
+                          gates/**、src/**、sandbox_runtime/**、tools/host_toolchain.py、
+                          tests/fixtures/**、docs/evidence/**、delivery/**、.gitattributes
+  Risk: LOW（改动只在比较侧；失败类别与 reason code 不变，仅让原本漏放的输入在写前被 BLOCKED）
+
+  change_budget:
+    expected_files: 7
+    expected_modules: [tools, tests, tasks, notes, docs]
+    cross_module: false
+    contract_change: false            # 外部 Operation / proposal / op-list schema 一律不变
+    evidence_semantics_change: false
+
+dependencies:
+  - ref: PR-87
+    required_state: merged            # Owner grant 的实施顺序前置：#87 M1 先 merge
+
+allowed_paths:
+  - tools/akcli_adapter.py
+  - tests/test_akcli_adapter.py
+  - tasks/PR1-C4-ROTATION-PRESENCE.yaml
+  - notes/gh-86/**
+  - docs/HANDOFF.md
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/compliance/ai-usage/**
+
+forbidden_paths:
+  - gates/**
+  - src/**
+  - sandbox_runtime/**
+  - tests/fixtures/**
+  - tools/host_toolchain.py
+  - tools/repair_pipeline.py
+  - docs/evidence/**
+  - delivery/**
+  - .gitattributes
+
+acceptance: |
+  - 四种 presence case 必须锁死（Issue #86 原文口径，Owner 未放松）：
+        proposal absent     / disk absent       → allowed
+        proposal explicit 0 / disk explicit 0   → allowed
+        proposal absent     / disk explicit 0   → BLOCKED before the writer
+        proposal explicit 0 / disk absent       → BLOCKED before the writer
+  - 两个 mismatch 必须证明 writer 未启动：self.call_log() == []（0 次写调用）且
+    stage 目标字节逐字节不变
+  - allowed 两例不得退化为「一律 BLOCKED」：absent/absent 与 explicit0/explicit0 必须仍
+    走到 writer 且成功（APPLIED_TO_STAGE），证明修复只收紧真正的语义漂移
+  - place_component 的 rotation/mirror/unit presence 中性护栏：显式与省略在
+    规范化后仍相等（该 op 的 writer 用 op.get(k, default)，presence 中性），
+    防止本卡被「对称性」扩到 components.py
+  - 失败类别与 reason code 相对修前不变：两个 mismatch 落 REPAIR_INPUT_DRIFT / PRECHECK，
+    不引入新码、不改既有码语义
+  - tests.test_akcli_adapter 全绿；全量 discover 不回归；dev_gate 带本 envelope 通过
+  - 反向对照（证伪）：在未修的代码上，两个 mismatch case 必须红（即修复前它们是
+    被放行的）——如实记录，不得只跑修复后
+  - 纵向 probe（只读/测试层面）：raw proposal → C1 parse → C4 comparison → writer
+    semantics，明确记录 C1 的 _parse_op 会不会提前把 absent 变成 explicit 0；若 probe
+    证明 C1 会破坏最终执行语义，STOP → 单独报告 integration finding → 请求扩 scope/新卡，
+    不得顺手改 C1（tools/repair_pipeline.py 为 forbidden）
+  - 台账 + HANDOFF 如实追加；状态 PENDING_HUMAN_REVIEW
+
+change_budget:
+  expected_files: 7
+  expected_modules: [tools, tests, tasks, notes, docs]
+  cross_module: false
+  contract_change: false
+  evidence_semantics_change: false
+
+exceptions:
+  # Agent cannot self-authorize. 脏树来源 = envelope 本体存在于工作树（C1/C3/C4 先例：
+  # 文件无法包含自身提交）。授权链 = GH-86 Owner decision APPROVED（人类原文见 issue 评论）。
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "GH-86#issuecomment-5778545662 Owner decision APPROVED：scope 可以 grant；独立 C4 envelope；admit 前不得修改实现；envelope 本体必须在工作树，同 PR1-C4-PRECHECK 先例"
+  # 分支首个提交后 HEAD 必然离开 base.sha，与 PR1-C4-PRECHECK 同一情形、同一授权链。
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "同上；base d282c0b 为分支起点（master，含 #87 M1），提交后按先例重锚"
+
+escalation:
+  owner: Yenefa

@@ -1,0 +1,205 @@
+# Task Envelope — PR1-C1-ROTATION-PRESENCE   *** ADMITTED — IMPLEMENTED — PENDING_HUMAN_REVIEW ***
+#
+# 性质：C1 窄域 contract erratum（presence-preserving parse）。
+# 来源：GH-86 阶段 4 纵向 probe 的 integration finding（notes/gh-86/INTEGRATION-FINDING.md；issue #86）。
+# Owner 决策（2026-09-23，human）：选方案 1（C1 presence-preserving）；contract_change: true。
+# Contract-level review（Astra，2026-09-23）：**CHANGES_REQUIRED_BEFORE_GRANT** ——
+#   B1 合同正文必须同卡 amend；B2 Y4 历史政策必须冻结（影响 30/30 记录）；B3 依赖指向不存在的 PR；
+#   B4 验收必须覆盖 HostPatch → stage op-list → C4 完整路径，并统一 C5 解锁条件。
+#   本文件已按该 review 重写；处置记录见 notes/pr1-c1-rotation-presence/REVIEW-AND-ACCEPTANCE.md。
+#
+# 关键范围：本卡**不能只改 tools/repair_pipeline.py**。src/repair/patch_schema_v1.json:65-73
+#   位于 public_op_schema（:49）之下、由 load_public_op_schema() 投影给 proposer，是 proposer-visible
+#   的公开合同；docs/competition/internal/AEDL_PR1_实现合同_20260907.md:98 是同一规则的合同层表述。
+#   三者（schema 文本 + 合同正文 + parser）必须同批落地。
+#
+# 当前状态（2026-09-24）：ADMITTED（ADMIT / exit 0）→ IMPLEMENTED（三层同批）→ PENDING_HUMAN_REVIEW。
+#   交付：PR #89（base master）。实现 commit cb98f27983d1f4e3cd158e4c13c201beebbbd8f9；
+#   其后为 state-sync 提交（本文件的 header 状态同步）。**最新 HEAD 以 PR #89 / git ls-remote 为准，
+#   本文件不追写 SHA**（避免每次状态同步都让记录过期）。
+#
+# historical pre-admission state（2026-09-23；已被上文取代，保留供审计）：
+#   本文件当时为 DRAFT —— 未 admission、未写实现，且 exceptions 刻意留空
+#   （Owner grant 之前不得填 granted_by/decision_ref）；tools/repair_pipeline.py 与 src/repair/**
+#   当时未被修改。该状态在 PR-88 merge + conditional grant 条件满足后结束。
+#
+# C5 解锁条件（统一口径，见 acceptance §D）：
+#   C4 fix human-reviewed & merged → C1 更新基线与真实依赖 → Owner grant → C1 ADMIT → implemented
+#   → regressions PASS → 纵向 C1→C4 proof PASS → human review → merged → 才允许 C5 基于最新 master
+#   重新 admission（旧 C5 receipts/evidence 视为 stale）。**本卡 merge 前 C5 保持 BLOCKED。**
+#
+# Owner decision（2026-09-23 工作会话，human）：**conditional scope grant** ——
+#   原则批准 rev2 的 9-path scope 与合同变更方向；**C4 修复 PR merge 前不得 admission / implementation**。
+#   C4 merge 后必须先：① 真实 C4 PR 编号写入 dependencies（本稿已提前写入 PR-88）
+#   ② rebase 到含该 merge 的 master ③ 更新 base SHA ④ 保持 rev2 的 9-path scope、
+#   contract_change: true 与既定 acceptance ⑤ 再运行 tools.admit。admission PASS 后方可实现 C1。
+#   两个前置证明（2026-09-24 复核，缺一不可）：
+#     (a) dependency proof —— PR-88 state=MERGED，mergedAt=2026-09-24T02:20:24Z，
+#         mergeCommit=b42280bd6afcc8030cb25685c3a84d21ffc38fba；
+#     (b) refreshed base proof —— 重新 fetch 后 origin/master = b42280b，与 mergeCommit 相同
+#         （期间无其他 commit 落 master）；本卡 base.sha 已重锚到该值，分支已 rebase 到它。
+#   exceptions 已按该 grant 补录 allow_dirty / allow_drift（admission 阶段）。
+
+task: PR1-C1-ROTATION-PRESENCE
+
+base:
+  branch: feat-pr1-c1-rotation-presence
+  sha: b42280bd6afcc8030cb25685c3a84d21ffc38fba
+
+goal: |
+  修复 C1 的 **proposal identity 缺陷**：parse_proposal 把 add_net_label 省略的 rotation 归一成
+  显式 rotation=0，于是「省略」与「显式 0」得到**相同的 canonical Proposal / proposal_sha256**。
+  真正进入 HostPatch、被 C4 验证与 patch digest 绑定的是 proposal + proposal_sha256，不是 raw_sha256。
+
+  三层同批落地（缺一不可）：
+  1. **public schema 文本** src/repair/patch_schema_v1.json:65-73（proposer-visible）；
+  2. **实现合同正文** docs/competition/internal/AEDL_PR1_实现合同_20260907.md:98（Operation v1 表格 +
+     规范化段落）—— 现文「缺省的三个固定原生参数按上述值规范化后计算 Proposal digest」有歧义，
+     必须消除；
+  3. **parser** tools/repair_pipeline.py:838-848。
+
+  合同必须明确的三条：
+    add_net_label.scope:    omitted → local（保持归一化）
+    add_net_label.rotation: omitted → **保持 absent**，表示 native pin-derived orientation
+                            explicit 0 → 保留 rotation:0；二者 canonical Proposal identity 不同
+    place_component.rotation/mirror/unit: omitted → 0 / none / 1（保持归一化）
+
+  事实链（master d282c0b）：:838-848 无条件 return "rotation": rotation；:738 proposal_sha256 =
+  canonical_sha256("proposal", proposal.to_dict())；:649 to_dict() 原样返回 oplist。
+  probe 实测两者 proposal_sha256 均为 bb9c5c669759c9699f5934fbcb21c74fb8d5a0444d3ada500a954726c66ae137。
+
+  **不得发明新的 public 字段**：rotation_mode 是 C4 内部 comparison semantics，不得进入 Proposal、
+  public projection 或实际 writer op-list。
+
+scope: |
+  Writable paths are whitelisted in allowed_paths; everything else is FOREIGN (read-only).
+  窄域：只改 C1 的 add_net_label presence 语义（schema 文本 + 合同正文 + parser）与其验收测试；
+  **不写实现直到 grant + ADMIT**。
+
+  内容限制（F 节）：tools/repair_pipeline.py 只允许修改 add_net_label 的 label parser 分支；
+  不得借同一路径实现 C5（run_round / bind_policy / rollback / promotion 一律不做）。
+  仓库外历史 Y4 artifacts（如 gh56-y4-dry/**）与本卡所有未列路径均只读。
+  AI index 由既有生成器更新。
+
+  Impact Analysis
+
+  Direct modifications:   src/repair/patch_schema_v1.json（public_op_schema 的 add_net_label defaults/constraints）、
+                          docs/competition/internal/AEDL_PR1_实现合同_20260907.md（Operation v1 表格 + 规范化段落）、
+                          tools/repair_pipeline.py（_parse_op add_net_label 分支）、
+                          tests/test_repair_contract.py（presence/digest 合同断言）、
+                          tasks/PR1-C1-ROTATION-PRESENCE.yaml、notes/pr1-c1-rotation-presence/**、
+                          docs/HANDOFF.md、docs/compliance/ai-usage/**、AI_USAGE_LOG.md
+  Potentially affected:   proposal_sha256 的既有断言（test_defaults_are_normalised_before_digest）；
+                          Y4 历史 package/result 重建路径（tools/y4_dry_runner.py:195 / :353，只读、不在本卡范围）；
+                          暂停的 C5 @ 2460d5d（runtime_bindings 消费 proposal.proposal_sha256）
+  Explicitly not touched: tools/akcli_adapter.py（C4，属 #86）、tools/y4_dry_runner.py、tools/host_toolchain.py、
+                          src/repair/topology_policy_v1.json、gates/**、src/hardware/**、src/firmware/**、src/m1/**、
+                          sandbox_runtime/**、tests/test_akcli_adapter.py、tests/test_y4_dry_runner.py、
+                          tests/fixtures/**、notes/y4/**、docs/evidence/**、delivery/**、.gitattributes
+  Risk: MEDIUM-HIGH（改 canonical Proposal identity 的等价关系；已核实 30/30 历史 Y4 记录含
+                    absent-rotation 标签操作，历史验证政策必须先冻结）
+
+  change_budget:
+    expected_files: 10
+    expected_modules: [src, tools, tests, tasks, notes, docs]
+    cross_module: true             # src schema + 合同正文 + tools parser + tests
+    contract_change: true          # canonical Proposal representation / proposal_sha256 等价关系改变
+    evidence_semantics_change: false   # 前提：历史证据不被重解释、不被改写（见 acceptance §D H1）
+
+# B3 处置：承载 C4 修复的真实 PR = PR-88（head ebf9c72，2026-09-23 开，2026-09-24 merge）。
+# 依赖绑定该真实 PR；merge 前它机械阻断 admission（Owner「C4 merge 前不得 admission」条件）。
+# 注：#86 是 OPEN Issue（provenance），不是 PR，不可作为 merged 依赖。
+dependencies:
+  - ref: PR-88
+    required_state: merged
+
+allowed_paths:
+  - src/repair/patch_schema_v1.json
+  - docs/competition/internal/AEDL_PR1_实现合同_20260907.md
+  - tools/repair_pipeline.py
+  - tests/test_repair_contract.py
+  - tasks/PR1-C1-ROTATION-PRESENCE.yaml
+  - notes/pr1-c1-rotation-presence/**
+  - docs/HANDOFF.md
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/compliance/ai-usage/**
+
+forbidden_paths:
+  - tools/akcli_adapter.py
+  - tools/y4_dry_runner.py
+  - tools/host_toolchain.py
+  - gates/**
+  - src/repair/topology_policy_v1.json
+  - src/hardware/**
+  - src/firmware/**
+  - src/m1/**
+  - sandbox_runtime/**
+  - tests/test_akcli_adapter.py
+  - tests/test_y4_dry_runner.py
+  - tests/fixtures/**
+  - notes/y4/**
+  - docs/evidence/**
+  - delivery/**
+  - .gitattributes
+
+acceptance: |
+  **A. 合同与解析（S1 / R1 / R2 / N1 / N2）**
+  - S1：public projection（public_op_schema）已移除 add_net_label 的 rotation default 并明确 presence 语义；
+        $defs/AddNetLabelOp 与 PlaceComponentOp 的**结构不变**（现有 required 不含 rotation、属性存在时 const 0，
+        已允许两种输入形状）；place_component 合同文本不变。
+  - R1：absent 在 ops / oplist / to_dict() 及序列化往返后**仍无** rotation；explicit 0 始终保留。
+  - R2：两者 Proposal digest 不同；raw_sha256 口径不变；HostPatch 正确绑定相应 proposal / proposal_sha256。
+  - N2：旧断言按**合同修订**拆分，不是「重签 fixture」（该测试无冻结 hash 字面量）：
+        ① rotation presence 使两 digest 不等；② scope absent/explicit local 仍相等；
+        ③ place_component 省略与显式默认值仍相等。
+  - N1(负)：非零 / null / bool / 字符串等非法 rotation；非 local scope；注入 public rotation_mode 均继续拒绝。
+
+  **B. 完整传递路径（R3 / R3− / P1 / P2）**
+  - R3：必须走完整路径并逐段证明 presence 未被再次丢弃：
+        raw Proposal → parse_proposal() → to_dict() → HostPatch.proposal / proposal_sha256
+        → 序列化并重读 stage op-list → C4 PRECHECK → writer 输入语义；
+        两端分别到达 DERIVED_FROM_PIN / EXPLICIT_0。
+        测试中的 HostPatch 与 op-list **必须由 C1 解析结果构造**，不得用 raw 数据重新拼装绕过缺陷。
+  - R3−(负)：两个方向的 proposal/disk presence mismatch 均在 PRECHECK 阻断，writer 调用 0 次，stage 字节不变。
+  - P1(正)：固定 rotation presence，scope absent / explicit local 的 parsed shape、digest、C4 comparison 相等。
+  - P2(正)：place_component 的 rotation/mirror/unit 分别及组合省略，与显式默认值等价。
+
+  **C. 证伪与原生（R4 / NP1）**
+  - R4：临时恢复旧 parser 补 0 行为 → 至少一个指定 regression 因 presence/hash 断言失败而 **RED**；
+        恢复修复后 GREEN。
+  - NP1：经新 C1→C4 路径，DC-04 absent 输出 90/270、explicit 0 输出 0/0；scope 两种形式字节等价。
+        **即使某个 pin 的派生角度恰为 0，也必须保留两种 presence identity，不得按最终角度反推或合并输入。**
+
+  **D. 历史与治理（H1 / B3 / H）**
+  - H1：旧 Y4 bytes/hash 不变；历史环境仍可验证；新 context/package identity 与旧版本明确区分。
+        历史政策（B2/Q4-C）：历史 package、raw output、parsed Proposal、digest、record **原字节不可改写**；
+        历史记录用**冻结的 parser/schema/runner/commit** 验证；新结果使用新合同身份，不混入旧实验记录；
+        最新 executable 无法重建旧记录 ≠ 旧记录损坏或应改 UNKNOWN。已核实 30/30 记录含 absent-rotation
+        标签操作、runner_version 全为 y4-dry.v5（无 parser/commit identity 字段）—— 新旧 dispatch 必须靠
+        外部冻结 provenance，未来运行须冻结可区分的合同身份。兼容层**不在本卡**（独立 follow-up）。
+  - B3：admission 前必须把承载 C4 修复的**真实 PR 编号**填入 dependencies（required_state: merged），
+        并把 base 重锚到含该 merge 的 master；Issue #86 仅作 provenance。
+  - H：C5 解锁条件统一为 —— C4 fix human-reviewed & merged → C1 更新基线与真实依赖 → Owner grant →
+        C1 ADMIT → implemented → regressions PASS → 纵向 C1→C4 proof PASS → human review → merged →
+        才允许 C5 基于最新 master 重新 admission；旧 C5 receipts/evidence 视为 stale。
+        **本卡 merge 前 C5 保持 BLOCKED。**
+
+  **E. 门禁**
+  - tests.test_repair_contract 全绿；既有 C4 回归 tests.test_akcli_adapter 不回归；全量 discover 不回归；
+    dev_gate 带本 envelope 通过。
+  - N3（交接，不实施）：C5 侧已有 C2 erratum §12 的 expected label rotation 派生义务；本卡只交接该约束，
+    不修改 policy / C2 / C5，也不得把静态 policy 的 rotation: 0 当成所有标签的实际方向。
+  - 台账 + HANDOFF 如实追加；状态 PENDING_HUMAN_REVIEW。
+
+exceptions:
+  # Owner 2026-09-23 conditional scope grant；C4 修复 PR-88 已于 2026-09-24 merge，条件满足后补录。
+  # Agent 不能自授权；同 PR1-C4-PRECHECK / PR1-C5-ERRATUM 先例。
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "Owner 2026-09-23 工作会话 conditional scope grant（PR1-C1-ROTATION-PRESENCE rev2）：C4 修复 PR-88 merge 后按 rebase → 更新 base SHA → admission 执行；envelope 本体必须在工作树，同 PR1-C4-PRECHECK 先例"
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "同上；base 已重锚到 C4 merge 后的 master b42280b（PR-88 merged 2026-09-24T02:20:24Z），提交后按先例重锚"
+
+escalation:
+  owner: Yenefa

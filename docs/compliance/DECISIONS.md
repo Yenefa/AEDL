@@ -479,3 +479,152 @@
   - 必须先处理仍追加旧式台账的开放 PR（含 #34），再对最终 master 迁移、build、check，并重跑全部测试与门禁。#50 已合入 master `4d5a8f4`，本轮已收编其两条旧记录；过程与当前计数见 `ai-usage/README.md`。旧提交计数不能用作后续 head 的证据。
   - 新增记录后忘记 build 会被 check 拦下，但 check 无法凭空发现没有导入的外部旧台账；最终迁移必须独立核对源条目集合。
   - 后续复查条件：若 per-entry 文件数量增长到使目录枚举显著变慢（>500 条），再评估按月分目录；当前规模不做。
+
+## ADR-014 — 「零违规」不构成证据：ERC/DRC 若落地必须绑定并记录 `ignored_checks`
+
+- 日期：2026-09-28
+- 状态：**Accepted**（Owner 2026-09-28 裁定「3.处理」，在 PR #99 被关闭的同一轮）
+
+- 问题：
+  - 一个验证器若只检查「违规数为零」，这个判据可以被**把规则设为 ignore** 轻易满足。
+  - 实测（KiCad 10.0.5，M2 板）给出直接证据：工程文件与板同名关联时，DRC 连续 12 次稳定报
+    `violations: []`，而该报告的 `ignored_checks` 列出了 5 类被禁用的规则
+    （`missing_courtyard`、`track_not_centered_on_via`、`tuning_profile_track_geometries`、
+    `footprint_filters_mismatch`、`footprint_type_mismatch`）。**一块真的存在 courtyard 缺失、
+    track 未对中 via、footprint 与符号不匹配的板，也会报 `violations: []`。**
+  - 这不是从形式验证论文推来的类比，而是**在本项目自己的板、自己的工具上直接演示出来的
+    空证明实例**。
+  - 同一轮实测的另一半：判定是「板 × 关联工程 × 规则严重度设置」的联合函数。工程未关联时
+    条数在 35/36/37 之间波动，关联后稳定为 0。**无论哪种配置，DRC 都不适合作为 `COMMIT` 门禁。**
+  - 另一会话（ZCODE）产出的设计评审独立得出同向结论，并把它标为 F11。
+
+- 本仓库已经犯过这个错：
+  - 被关闭的 PR #99 在自己的证据产物里报了 `error: {total: 0, by_type: {}}`，
+    而实测该 fixture 的 ERC 报告 `ignored_checks` **非空**，含 4 条：
+    `single_global_label`、`four_way_junction`、`simulation_model_issue`、`footprint_filter`。
+    **即：零错误这个数字，在不知道哪些规则被关掉的前提下是没有意义的。**
+  - 同一份产物还记录了一个恒为 0 的 `exit_code`：不传 `--exit-code-violations` 时，
+    即使有 37 条违规 ERC 也返回 0；带上该标志则返回 5。
+
+- 候选方案：
+  1. 维持「零违规即通过」——已被上述实测直接证伪。
+  2. 把 ERC/DRC 移出 `deferred` 并纳入门禁——与合同 §21/§351 冲突，且继承同一不确定性。
+  3. **保持 `deferred: NOT_RUN`，并把「零违规不是证据」写成一条对 PR-2 有约束力的硬约束。**
+
+- 决策：
+  - 采用方案 3。ERC / DRC / 语义 runner / 形式证据**继续永久保持 `deferred: NOT_RUN`**，
+    依合同 §21（属 PR-2）与 §424（deferred ERC 不得被伪写 PASS）。PR-1 的 thin verifier
+    只覆盖「变更局部功能等价性」一层（合同 §373 的四项检查），**不扩张**。
+  - **约束（对 PR-2 有约束力）**：任何以「违规数为零」为判据的检查，必须同时
+    (1) 绑定并记录 `ignored_checks`（键与描述）；
+    (2) 记录 `included_severities`；
+    (3) 把工程文件摘要纳入 toolchain（工程是否与板同名关联会改变判定）。
+    三者缺一即该判据无效，**不得**据此得出 PASS。
+  - 记录一条 ERC/DRC 判据时必须附**实测依据**（`stability_evidence`）：哪台机器、哪个工具版本、
+    哪块载体、几次重复、哪些字段会变。没有实测依据的 evidence 规则不允许上线。
+  - 取证命令必须显式钉全部相关标志。已知五类陷阱，逐条实测：
+    不带 `--exit-code-violations` 时有违规也返回 0；`--save-board` / `--refill-zones`
+    会改写输入 PCB（禁用）；`pcb export svg` 不带 `--mode-*` 时默认行为已弃用；
+    `--output` 在 `--mode-single` 下是文件、在 `--mode-multi` 下是目录；
+    输出内嵌绝对本机路径（入库前必须剥离）。
+  - 报告**不是 artifact**。把一次采集结果当产物求哈希，会得到「同一设计两个不同身份」。
+    故证据身份分五类：`raw`（provenance）/ `semantic`（唯一可作比较依据）/
+    `execution` / `context` / **`report`（观测，不可作身份）**。
+  - 一个已知但尚未实现的免费版本守卫：ERC/DRC 报告自带 `$schema`
+    （`erc.v1.json` / `drc.v1.json`），且该 schema 是 `additionalProperties: false`，
+    字段增删必升版。**把 `$schema` 值纳入 expected 常量并 fail-closed 检查，
+    可在不解析内容的前提下发现 schema 漂移。**（本轮未实现。）
+
+- 影响：
+  - PR-1 的 KICAD_VERIFY 只跑四项必需检查，ERC 留在 `deferred`，本决策不改变已合并的行为。
+  - PR-2 实现 ERC 时必须先满足上述三条绑定要求，且必须带实测依据。
+  - 「delta 是否满足 requirements_contract」是**另一个**空证明方向：当前 C5 链路验证的是
+    「变更是否等于授权的变更」，没有任何一环验证「变更是否满足需求」。列为 P1，
+    且只能覆盖可自动判定的需求项。
+
+- 复查条件：
+  - KiCad 升级并改变 ERC/DRC 报告结构（`$schema` 升版）时复查。
+  - `stability_evidence` 目前只有一块载体、一个 KiCad 版本；第二载体解封后必须复现，
+    否则它不具备强制化资格。
+  - 若将来把 ERC 纳入门禁，必须先证明它在**已知缺陷**上有检出率——现有实测是：
+    标准 ERC 对 DC-04 缺陷类的检出率为 **0**（缺陷态 error 数为 0）。
+
+- Evidence / Reference：
+  - 被关闭的 PR #99 及其关闭评论（记录了本决策的由来，以及本仓库犯下的具体错误）
+  - `tasks/PR1-C5-KICAD-VERIFY.yaml` 的 `design_frozen_by_owner` 裁定 3
+  - 实测来源：KiCad 10.0.5（sha256 `fc142e3b…`）本机运行；ERC JSON 顶层键为
+    `$schema / coordinate_units / date / ignored_checks / included_severities /
+    kicad_version / sheets / source`
+  - 另一会话产出的 KICAD_VERIFY 设计评审 v2（§1.5 受控 A/B、§1.4 schema、F11）
+  - 合同 §21 / §351 / §373 / §424
+- 团队自主判断：本条由 Owner 直接裁定（2026-09-28 会话「3.处理」），
+  依据是本项目自己工具链上的实测，不是外部偏好。
+- AI 参与：实测与 ADR 文本由 OPENCODE 会话产出，见
+  `AI-20260928-OPENCODE-76DB9B9EC4A1703B7C2C8B2B1C30969B`（该条目同时记录了被关闭的
+  PR #99 的四个实测缺陷，含本决策的由来）。
+
+## ADR-015 — 单写者锁的实现解释：固定内容锚点 + OS 字节范围锁
+
+- 日期：2026-09-28
+- 状态：**Accepted**（Owner 2026-09-28 裁定「锁单独开一个 PR，本轮如实标记不可达」，
+  随后裁定推进主线；本条记录该 PR 落地时对合同 :376 的解释）
+
+- 问题：
+  - 合同 :376 规定：`candidate/.repair.lock` 为**内容固定、不因 unlock 删除**的锁文件。
+  - **内容固定 + 永不删除 ⇒ 文件是否存在无法表示「是否持锁」**，所以排除机制必须另有来源。
+  - 合同同时把「单写者锁仍由本事务持有」列为 commit 谓词的第九个合取项（:346），
+    并要求 PRECHECK「获取 candidate 单写者锁」（:369）。
+  - 实测：本仓库**没有任何锁原语**。`lock_path` 只作为 `workspace` 的一个路径字段被校验过
+    （`tools/repair_pipeline.py`），从未被获取；`msvcrt|flock|LockFileEx|filelock|
+    portalocker` 在 AEDL 代码中 `NOT_FOUND`。
+  - 猜错是双向的：要么两个写者同时进入同一个 candidate（正是 COMMIT 要防的灾难，
+    因为两者都通过谓词后都会 replace 同一份 design 字节），要么锁比合同更严导致死锁。
+
+- 候选方案：
+  1. 文件存在即持锁，unlock 时删除 —— 直接违反 :376（内容固定、不因 unlock 删除）。
+  2. 用 `mkdir` 的原子性做互斥 —— 不是「锁文件」，且 :376 明确说的是文件。
+  3. **固定内容锚点 + OS 字节范围锁**（本条采纳）。
+  4. 不实现锁，把合取项报为未满足 —— Owner 已裁定锁单独落地，故不采纳。
+
+- 决策：
+  - 采用方案 3：
+    - `<candidate>/.repair.lock` 是**固定内容锚点**（本轮为
+      `aedl-repair-single-writer-lock-v1\n`），O_EXCL 创建一次，**字节永不改变，
+      永不删除**。:376 字面满足。
+    - **排除性来自锚点上的 OS 字节范围锁**，Windows 用 `msvcrt.locking(LK_NBLCK)`，
+      POSIX 用 `fcntl.flock`，均非阻塞。进程死亡时由 OS 释放，因此**崩溃不可能留下
+      陈旧锁** —— 这正是合同 :390 的保证边界「进程异常/可检测 I/O 故障与重启恢复」
+      能够成立的原因，而不必虚构 :390 明确拒绝声称的突然断电/磁盘物理损坏保证。
+  - **失败关闭**：拿不到 OS 原语、或锚点内容与冻结值不符，都**拒绝**。
+    绝不使用进程内 fallback —— 一个无法排除其它进程的机制不是锁。
+  - 锁在 PRECHECK 之前获取、在 `finally` 中释放；恢复（:385 的恢复会**写** design 文件）
+    必须在持锁状态下进行，否则两个轮次会同时恢复同一个 candidate。
+  - **Windows 实测**（不是推断）：持锁时锚点**既不能 `open` 也不能 `read`**
+    （字节范围锁同时挡住两者）。所以冲突会先出现在内容校验那一步，两处都必须
+    报「another writer holds the lock」而不是「锚点无法准备」——后者会把读者
+    引向错误的文件。
+  - 锚点被外部改写时**拒绝并保留原内容**，不重写：那个内容是证据。
+
+- 影响：
+  - 谓词第九项（:346）从「恒为假、结构性不可达」变为可满足，COMMIT 因此第一次真正可达。
+  - 一个轮次在同进程内连续跑两次是安全的；锁不跨进程残留。
+  - 本条是**对合同 :376 的解释**，不是合同原文。若 Owner 认为 :376 指的是别的东西，
+    回退成本是局部的：`_SingleWriterLock` 是唯一依赖该机制的类。
+
+- 复查条件：
+  - 若平台不提供可移植的字节范围锁语义（当前只有 Windows 与 POSIX 两条路径实测过），
+    或需要跨主机分布式锁，则本条失效并须重新裁定。
+  - 若合同 :376 被修订或澄清，本条须重写。
+
+- Evidence / Reference：
+  - 实测：Windows 上锚点被持锁时 `open` 与 `read` 均抛 `PermissionError`；
+    释放后同一进程可再次获取；锚点内容在 unlock 后不变。
+  - 变异检验 `mut_writer.py` 15/15，其中 X1（锁恒成功）、X2（不释放）、
+    X3（不校验锚点内容）、X15（缺 lock_path 时假定而非拒绝）各自被检出；
+    X2 在 CPython 下是**等价变异**（局部对象被引用计数回收时句柄即关闭），已如实标注。
+  - 合同 :369 / :376 / :384 / :385 / :386 / :387 / :390
+- 团队自主判断：Owner 裁定锁的**排期**（单独 PR）与推进授权；机制解释由 AI 依据
+  合同 :376 的字面约束与本机实测作出，**已在三处显式标注为解释**，并采用失败关闭，
+  使得猜错的代价是「轮次拒绝」而不是「静默的双写者」。
+- AI 参与：本条由 OPENCODE 会话产出，实测与代码见
+  `AI-20260928-OPENCODE-449C2176753ED1792897B0855526CD92`。

@@ -971,8 +971,17 @@ def _normalize_operation(row, label):
         anchor = _text(_required(row, "at", label), "label anchor")
         if not _REFERENCE_PIN.match(anchor):
             raise AdapterInputError("%s must anchor at REF.PIN" % label)
+        # "rotation" *presence*, not its value, selects the writer's orientation
+        # branch (pinned akcli writers/handlers/labels.py:78-88): an op that omits
+        # the key takes the pin-derived angle, while an explicit 0 writes 0.  The
+        # marker only feeds PRECHECK's equality test -- normalization never reaches a
+        # writer (STRICT executes the raw op-list path, EXCEPTION the parsed disk
+        # dict) -- so it changes which operations count as the authorized proposal
+        # without changing any value the toolchain sees.
+        rotation_mode = "EXPLICIT_0" if "rotation" in row else "DERIVED_FROM_PIN"
         return {"op": kind, "name": _text(_required(row, "name", label), "label name"),
-                "at": anchor, "scope": "local", "rotation": 0}
+                "at": anchor, "scope": "local", "rotation": 0,
+                "rotation_mode": rotation_mode}
     if row.get("rotation", 0) != 0 or row.get("mirror", "none") != "none" or row.get("unit", 1) != 1:
         raise AdapterInputError("%s only permits rotation=0, mirror=none, unit=1" % label)
     return {"op": kind, "lib_id": _text(_required(row, "lib_id", label), "library id"),
