@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 127 条。完整正文在各自条目文件中；本索引只做导航。
+共 128 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -180,6 +180,7 @@
 - [`AI-20260927-OPENCODE-C90BA7F59551FE9CF7D0F807A03DB2CC`](ai-usage/AI-20260927-OPENCODE-C90BA7F59551FE9CF7D0F807A03DB2CC.md) — M7 verified rejection loop —— 被授权 A 却交付 B 的轮次必须被拒绝，且拒绝证据要指名偏差
 ## 2026-09-28
 
+- [`AI-20260928-OPENCODE-24CD5F786A3A44D5EBAD75202238C40E`](ai-usage/AI-20260928-OPENCODE-24CD5F786A3A44D5EBAD75202238C40E.md) — ARH V1 harness 实现：五模块 + LLMRepairPort + 141 单测
 - [`AI-20260928-OPENCODE-260FFBD44D4C44DD609BF543455D8142`](ai-usage/AI-20260928-OPENCODE-260FFBD44D4C44DD609BF543455D8142.md) — PR1-C5-VERIFY-STAGE: wire the contract's own verify_stage into the phase machine
 - [`AI-20260928-OPENCODE-449C2176753ED1792897B0855526CD92`](ai-usage/AI-20260928-OPENCODE-449C2176753ED1792897B0855526CD92.md) — PR1-C5-COMMIT-WRITER: the lock, the journal write, the atomic replace, the restore, and a round that really commits
 - [`AI-20260928-OPENCODE-491235ACC61A23B74BD6158B824D15DF`](ai-usage/AI-20260928-OPENCODE-491235ACC61A23B74BD6158B824D15DF.md) — PR1-C5-COMMIT: land the commit predicate and the journal read path; declare the writer absent

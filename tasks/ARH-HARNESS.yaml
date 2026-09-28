@@ -94,7 +94,8 @@ acceptance: |
   - forbidden_paths 中无任何文件被修改（scope_check 证明）。
 
 change_budget:
-  expected_files: 16
+  expected_files: 18        # 实测 18：src 8 + tests 9 + 1 条 AI usage；+2 为
+                            # fixtures.py / test_arh_schema.py，模块集不变
   expected_modules: [sandbox_runtime.arh, sandbox_runtime.tests, tasks, docs]
   cross_module: false
   contract_change: false          # protocol/state 语义不动；arh 是新增包
