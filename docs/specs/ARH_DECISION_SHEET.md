@@ -1,7 +1,8 @@
 # ARH Decision Sheet — RFC §7 拍板清单（一页版）
 
-> 关联：`docs/specs/AEDL_AGENT_RUNTIME_RFC.md`（§5 分歧 D1–D7 / §6 开放问题 / §7 拍板清单）
-> 状态：`PENDING_HUMAN_REVIEW` ｜ 生成：2026-09-28 ｜ 分支：`docs/agent-runtime-rfc`
+> 关联：`docs/specs/AEDL_AGENT_RUNTIME_RFC.md`（§5 分歧 D1–D7 / §6 开放问题 / §7 拍板清单）｜ **ADR-016**
+> 状态：**D1–D7 与 B1–B5 已批复**（Owner 2026-09-28 会话原文：「批复，没有本阶段不做的，全量全速全质推进！开始」，按本表 Recommended 执行）；文档本身 `PENDING_HUMAN_REVIEW`
+> 生成：2026-09-28 ｜ 分支：`docs/agent-runtime-rfc`
 > 用法：逐条批复（APPROVED / REJECTED + 一句理由）。
 > **A 组（D1–D4）是 benchmark 口径不是功能选择，必须在 Phase 1 写第一行 harness 代码之前定**——晚定 = §4.5 冻结项失效 = 重跑。B 组可随实现评审同批。
 
@@ -97,6 +98,14 @@
 
 ## C. 本阶段明确不做（防跑偏）
 
+> **状态更新（2026-09-28 Owner 批复，原文见页首）**：C 组不再作为阶段门禁。
+> - C-1 的**顺序要素**升格进 ADR-016（拍板 → 文本类冻结 → implementation），提速但不跳步；
+> - C-2（G1 对账）、C-3（竞赛叙事改名）、C-4（Multi-Agent / aedl-eval 拆分）转为**按需立项**，不再预先排除；
+> - C-5：push 待明确指令执行，**merge 到 master 永远留给人类**（AGENTS §3.7/§14，不因批复解除）；
+> - **V1 单 Repair Agent 属 RFC 科学设计（实验变量控制），不随 C 组解除**；改多 Agent = 换实验，须先改 RFC/ADR。
+>
+> 以下原文保留，作为解除前的历史记录：
+
 1. **不写 implementation 代码**——顺序固定为：本表拍板 → ADR → §4.5 冻结 → implementation branch。
 2. **不实现 G1 grant 对账**——那是 "Execution Authority Binding"（V2 Security Hardening），单独任务 + ADR，不伪装成已有能力，也**不做当前 demo**；V1 可演示的只有权威字段 schema 拒绝。
 3. **不改竞赛叙事措辞**——"autonomous design" → "Verified Agentic Engineering Loop" 属 §8 竞赛材料口径，须单独触发 `FUSION_MAP` / `SUBMISSION_CHECKLIST` 层面处理，不塞进本轮两个文档。
@@ -109,11 +118,17 @@
 
 | # | 决定 | 批复（APPROVED / REJECTED / 修改后 APPROVED） | 人 | 日期 |
 |---|---|---|---|---|
-| D1 | | | | |
-| D2 | | | | |
-| D3 | | | | |
-| D4 | | | | |
-| D5 | | | | |
-| D6 | | | | |
-| D7 | | | | |
-| B1–B5 | | | | |
+| D1 | 维持 `(code, message)` 冻结指纹 + Harness 预算兜底；severity/details 属 V2 契约变更 | **APPROVED**（按 Recommended） | Owner（会话批复） | 2026-09-28 |
+| D2 | 计数统一在 Harness 预校验层；`invalid_proposals == 0` **保留**为 `converged_strict` 必要条件 | **APPROVED**（按 Recommended） | Owner（会话批复） | 2026-09-28 |
+| D3 | 40 行 / 最近 1 轮折叠（标 TO_VERIFY），pilot A/B 40 vs 100 | **APPROVED**（按 Recommended） | Owner（会话批复） | 2026-09-28 |
+| D4 | 双层预算：图内复用既有熔断；图外 LLM 预算由 Harness 强制，独立 ARH-N6 模块 | **APPROVED**（按 Recommended） | Owner（会话批复） | 2026-09-28 |
+| D5 | `receipts_digest = {event_type, hash12}`（以代码为准），[04] 表格实现时修订 | **APPROVED**（按 Recommended） | Owner（会话批复） | 2026-09-28 |
+| D6 | allowlist 字段投影，禁 `engine.document` 全量 dump | **APPROVED**（按 Recommended） | Owner（会话批复） | 2026-09-28 |
+| D7 | V1 不引入 READ grant；读能力 = 工具白名单 + 作用域；V2 前置 = G1 对账 | **APPROVED**（按 Recommended） | Owner（会话批复） | 2026-09-28 |
+| B1 | 接入放行 = §2.5 五项 BLOCKING（N2/N3/N4/N6/N8）+ G1/G8 不启用 | **APPROVED** | Owner（会话批复） | 2026-09-28 |
+| B2 | `RepairContext` 按内部契约处理，进 OPEN_OUTPUTS 时再升 ADR | **APPROVED** | Owner（会话批复） | 2026-09-28 |
+| B3 | A 层 preflight BLOCKED 缺陷只测 fail-closed、不进收敛率分母 | **APPROVED** | Owner（会话批复） | 2026-09-28 |
+| B4 | 先 pilot（只验流程）→ 拿 `p̂` 与方差 → 再定主实验档位 | **APPROVED** | Owner（会话批复） | 2026-09-28 |
+| B5 | `approved_by` 白名单列为生产接入前置；脚本化 APPROVED 仅限评测环境 | **APPROVED** | Owner（会话批复） | 2026-09-28 |
+
+> 批复渠道：本会话（无 Issue/PR 线程），原文引用见页首；决议全文见 `docs/compliance/DECISIONS.md` ADR-016。
