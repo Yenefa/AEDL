@@ -3861,17 +3861,23 @@ class PathFlavourIndependenceTests(unittest.TestCase):
         passes. That makes the cross-platform property checkable without owning a
         linux runner, which is the whole point: the authoritative check is still CI,
         but it is no longer the ONLY check.
+
+        Found by RUNNING THIS ON LINUX (WSL), not by reading it. The first version of
+        this test opened with a sanity assertion that `Path("C:\\\\x\\\\cand\\\\design")
+        .parts == ("C:\\\\", "x", "cand", "design")` -- true on Windows, false on linux,
+        where `Path` is already `PosixPath`. So the test verifying platform
+        independence was itself platform-dependent, and it would have shipped a NEW
+        red CI run while claiming to fix one. The sanity check now asserts only that
+        the rebinding is actually in effect, which is true everywhere.
         """
         from unittest import mock
         from pathlib import PurePosixPath as _Posix
 
-        # sanity: the rebinding really does change what Path() means
-        self.assertEqual(Path("C:\\x\\cand\\design").parts,
-                         ("C:\\", "x", "cand", "design"))
-        self.assertEqual(_Posix("C:\\x\\cand\\design").parts,
-                         ("C:\\x\\cand\\design",))
-
-        with mock.patch.object(sys.modules[__name__], "Path", _Posix):
+        module = sys.modules[__name__]
+        with mock.patch.object(module, "Path", _Posix):
+            # the rebinding is genuinely in effect -- no hardcoded tuples, because
+            # any tuple I hardcode here is a Windows assumption waiting to go red
+            self.assertIs(module.Path, _Posix)
             for candidate in (PurePosixPath("/tmp/x/cand/design"),
                               PureWindowsPath("C:\\x\\cand\\design"),
                               "/tmp/x/cand/design",
@@ -3883,6 +3889,21 @@ class PathFlavourIndependenceTests(unittest.TestCase):
                 self.assertFalse(_is_candidate_design_root(other),
                                  "accepted %r with Path bound to the POSIX class"
                                  % (other,))
+
+    def test_a_backslash_string_collapses_under_posix_and_not_under_windows(self):
+        """The CI failure, stated with explicit flavour classes so it is portable.
+
+        The first version of the rebinding test asserted these tuples via the
+        ambient `Path`, which made the portability test itself platform-dependent.
+        Naming `PurePosixPath` and `PureWindowsPath` directly makes the same claim
+        with no assumption about which one `Path` happens to be.
+        """
+        collapsed = PurePosixPath("C:\\x\\cand\\design").parts
+        expanded = PureWindowsPath("C:\\x\\cand\\design").parts
+        self.assertEqual(len(collapsed), 1,
+                         "PosixPath should see one filename here; if this changes, "
+                         "the CI failure it explains has a different cause")
+        self.assertEqual(expanded[-2:], ("cand", "design"))
 
     def test_the_helper_does_not_consult_the_ambient_path_at_all(self):
         """Stated as a property, so the test above is not the only thing holding it.
