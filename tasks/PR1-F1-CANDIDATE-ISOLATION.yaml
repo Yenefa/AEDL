@@ -1,0 +1,141 @@
+task: PR1-F1-CANDIDATE-ISOLATION
+
+base:
+  branch: fix/f1-candidate-isolation
+  sha: e2d2e21
+
+goal: |
+  Confine every candidate-scoped operation to THE CANDIDATE, not to the workspace,
+  and stop the content hash from walking into another candidate.
+
+  An independent review of e2d2e21 reported F1 (P1): a junction inside candidate A
+  reaching candidate B defeats the containment check. Re-derived by me, and it has
+  TWO consequences, the second worse than the reported one.
+
+  A. Containment. `CandidateWorkspace._root` is the whole workspace and
+     `_ensure_confined` does `resolved.relative_to(self._root)`. A destination
+     still inside the workspace therefore passes -- including another candidate and
+     another candidate's ledger. Measured: the write is ALLOWed and the bytes land
+     in both `candidate-a/redirect/design.txt` and `candidate-b/design.txt`.
+
+  B. Hash traversal, which containment cannot fix. `candidate_hash` walks
+     `root.rglob("*")`, and rglob FOLLOWS a Windows directory junction. Measured:
+
+         hash(candidate-a) before the junction : cebd096cd88dbcca
+         hash(candidate-a) after  the junction : c1555a69510bbade
+         after editing B's file                 : 72ecff9007f13e4d
+         rglob inside A sees                    : a-only.txt, peek/b-only.txt
+
+     So A's content identity depends on B's contents, silently, with no exception
+     and no artifact. That is worse than the stray write: a content-addressed
+     receipt bound to A's hash is invalidated by someone editing a DIFFERENT
+     candidate, and two distinct candidates can be made to collide.
+
+  C. The ledger is unchecked entirely. `record_action` and `get_recorded_action`
+     do `path.parent.mkdir(parents=True, exist_ok=True)` and then open the file,
+     with no confinement call at all. A junction at the ledger path reaches
+     another candidate's ledger the same way.
+
+scope: |
+  In scope:
+  - sandbox_runtime/src/aedl_sandbox/workspace.py:
+      * a candidate-scoped boundary: resolve the candidate root, and require every
+        candidate-scoped path to resolve INSIDE it;
+      * `record_action` and `get_recorded_action` confined like the rest, instead
+        of not at all;
+      * `candidate_hash` walking with `os.walk(followlinks=False)` plus an explicit
+        reparse-point / symlink check on every directory, so a junction inside a
+        candidate cannot contribute files to its identity. Refusing is better than
+        silently skipping: a candidate that CONTAINS a link is a state an operator
+        has to know about, and silently excluding it would make the hash
+        disagree with the bytes on disk without saying so.
+  - sandbox_runtime/tests/**: adversarial tests for each of the three, using a
+    real junction, plus a portable fallback where the platform cannot make one.
+  - tasks/PR1-F1-CANDIDATE-ISOLATION.yaml
+  - docs/compliance/ai-usage/**, docs/compliance/AI_USAGE_LOG.md, and
+    docs/compliance/DECISIONS.md if a decision is actually made.
+
+  Out of scope, explicitly:
+  - **F2** (a self-consistent forged receipt is accepted). Same module family but a
+    different defect: it is about WHO may write trusted storage, not about path
+    confinement. It is already marked `@unittest.expectedFailure`. Fixing it needs
+    a producer-authentication design, not a path check, and the review is explicit
+    that "不要仅增加更多自报字段或另一层无密钥哈希". Its own task.
+  - **F3** (a newer FAIL does not revoke an older PASS). `trust/store.py`, a
+    different file, and a one-line logic change with its own regression set. Its
+    own task.
+  - No change to `gates/**`, `src/**`, `docs/evidence/**`, `notes/**`, `delivery/**`.
+  - No change to the trust store, the orchestrator, or promotion policy.
+
+dependencies: []
+
+allowed_paths:
+  - sandbox_runtime/src/aedl_sandbox/workspace.py
+  - sandbox_runtime/tests/**
+  - tasks/PR1-F1-CANDIDATE-ISOLATION.yaml
+  - docs/compliance/DECISIONS.md
+  - docs/compliance/ai-usage/**
+  - docs/compliance/AI_USAGE_LOG.md
+
+forbidden_paths:
+  - gates/**
+  - src/**
+  - docs/evidence/**
+  - delivery/**
+  - notes/**
+  - .github/**
+  - tools/**
+  - tests/**
+
+acceptance: |
+  - A junction inside candidate A reaching candidate B makes
+    `write_candidate_bytes` REFUSE, naming both the requested path and the
+    boundary it escaped. The test uses a real junction, not a mock.
+  - The refused write leaves candidate B byte-identical. Asserted by digest, so
+    the test cannot pass by the write failing for an unrelated reason.
+  - `candidate_hash("run-1", "candidate-a")` REFUSES when candidate A contains a
+    junction, rather than returning a hash that includes B's files. The test
+    asserts the refusal AND that no hash was returned.
+  - Without the junction, `candidate_hash` is unchanged from before -- the fix must
+    not perturb the ordinary path. Pinned against a known-good digest.
+  - `record_action` and `get_recorded_action` are confined: a ledger path reached
+    through a junction is refused.
+  - The junction check is PORTABLE. `Path.is_symlink()` does not cover a Windows
+    junction, and this repository's lane is Python 3.9 where `Path.is_junction`
+    does not exist. The test skips on a platform that cannot make a link, and says
+    which, rather than passing vacuously.
+  - Every existing sandbox test still passes. The ordinary escape tests -- leaving
+    the WORKSPACE entirely -- must keep passing, since the candidate boundary is
+    strictly tighter and must not have replaced the workspace one.
+  - A hard link inside a candidate to a file outside it is detected too, or the
+    reason it is not is recorded. Contract 378 in the PR-1 contract asks for the
+    link count to be checked; this is the same property on the Sandbox side.
+  - TOCTOU between the check and the write is NOT closed, and that is recorded
+    rather than implied away: `write_candidate_bytes` checks, writes, then checks
+    again, so an escape is DETECTED after the fact but the bytes have already
+    landed. Closing it needs descriptor-relative no-follow opens, which Windows
+    does not offer the way POSIX does. The envelope says so.
+
+known_limitations:
+  - "TOCTOU: the pre/post check pair detects an escape after it happened; it does
+     not prevent the first write. Fully closing it needs openat/O_NOFOLLOW-style
+     descriptor-relative opens, which Windows does not provide equivalently."
+  - "A candidate that legitimately contains a symbolic link to shared read-only
+     content will now be refused. That is a behaviour CHANGE and is the safe
+     direction, but it is a change, so it is called out rather than buried."
+
+change_budget:
+  expected_files: 5
+  expected_modules: [sandbox_runtime, tasks, docs]
+  cross_module: false
+  contract_change: false
+  evidence_semantics_change: false
+
+exceptions:
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "Yenefa 2026-09-28 会话：「停止所有人工review纪律，全量推进」"
+  # allow_dirty is NOT claimed.
+
+escalation:
+  owner: Yenefa
