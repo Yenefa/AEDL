@@ -237,6 +237,38 @@ Harness 校验顺序（**两道都在 `propose` 之前**，因为带病提交必
 
 > **全部条款为口径设计，本 RFC 未运行任何 benchmark（NOT_RUN）** [05 全文]。
 
+### 4.0 Verifier Capability Pre-measurement（前置测量，非评分维度）
+
+> 增补依据：Owner 2026-09-28 批准（"增加 verifier effectiveness pre-stage"）。
+> **本节不修改 §4.1–§4.5 的任何指标、组合规则或 §4.5 冻结项。**
+
+**动机。** §4.2 注入硬条件①要求 fault"可检出（注入后 `F_0` 含对应 finding），不满足即剔除"。该条件保证了能力测量的有效性，但副作用是：**漏检的 fault 在 benchmark 开跑前已被静默剔除，本协议在结构上永远测不出 verifier 自身的漏检率**，O-12 因此只能引用文献、不能变成测量。而 `converged_strict` 的一切数字都以"verifier 能看见"为前提——不测这个前提，收敛率就是无条件的错误自动化（[05 D1.5] SWE-bench 弱测试虚高 6.4pp 的同型风险；[02 §7] O-12）。
+
+**定位。** Stage 0 前置测量：**不含任何 Agent/LLM**，只跑 fault injection → verifier → 检出判定。Stage 1（§4.1–§4.5 repair benchmark）只用 detected faults——与现有条件①**组合规则完全一致**。唯一改变：条件①从"过滤器"升级为"**过滤器 + 计数器**"，被剔除的 fault 按类留痕，不再消失。
+
+**协议**
+
+1. **时点**：fault set 构建期间（与 §4.5 冻结项 1 同一工序），早于任何 Agent 接入与任何 benchmark run。
+2. **谓词**：**复用条件①的谓词，不另立标准**——注入后 `F_0` 是否含该 fault 对应的 finding（fault → expected finding 的映射在冻结项 1 的 killable 校验中本来就需要）。
+3. **输入**：候选 fault 全集 + 确定性 verifier（不接模型、不接候选修复）。
+4. **产物**：与 `fault_set_v1.json`（只收合格 fault，冻结项 1 不变）**并列**的 screening 留痕——每个候选 fault 的注入结果、条件① 判定、accept/reject 及原因，随 fault set 同批以 sha256 钉死。**不新增、不改写 §4.5 冻结项**：其口径 = 冻结项 1 已有的 killable 校验谓词，只是把被剔除者的判定也记下来。
+5. **输出（按 §4.2 的五个 fault class 分列）**：
+
+   | 指标 | 定义 | 口径约束 |
+   |---|---|---|
+   | `verifier_recall[class]` | `detected / injected` | 分母 = 该类注入总数（含被剔除者），**不是** fault_set_v1 内数量 |
+   | `verifier_missed[class]` | `injected - detected` | missed 明细须可回溯到 screening 留痕 |
+   | `VERIFIER_BLIND_CLASS` | `detected = 0` 的类 | **不得静默删除该类**；Stage 1 对该类零贡献，报告必须写"本 benchmark 不覆盖该类" |
+
+6. **条件性声明（与 Stage 1 绑定报告）**：§4.1–§4.4 的一切收敛指标都是 **conditional on detectability**（"给定 verifier 能看见"）。recall 表是让这个前提可见的唯一方式，**两者必须一起出现**；只报收敛率不报 recall = 违反本节。
+7. **与三个核心指标的对应**：verifier recall（本节）/ repair convergence（§4.1 既有指标）/ trust boundary integrity（§4.1 既有 `invalid_proposals` + `policy_denied_runs` + never-grant 违规尝试，本节不新增第三套计数）。三者并列报告，"可信"不得只用其一支撑。
+
+**范围锁定（本节不做什么）**
+
+- 不改 §4.1 指标定义、不改 §4.2 组合规则、不改 §4.5 冻结项；recall **不进** `converged_strict`、不进能力分母、不作为 scoring 维度。
+- 不测 false positive / clean-baseline 侧：基线候选本身可能含真实 findings，"误报"判定口径未定义 → O-28。
+- recall 结果本身 **NOT_RUN**：表格框架就位不等于已有数字；O-12 在 Stage 0 实际跑出前保持开放。
+
 ### 4.1 指标定义
 
 **数据源规则（D0.1）**：逐轮指标一律从 `receipt_root/<run_id>/<event_hash>.json` 读，**不读** `SandboxState.findings`（只保留最后一轮快照，regression 差集口径会错）[05 §0]。
@@ -332,7 +364,7 @@ Harness 校验顺序（**两道都在 `propose` 之前**，因为带病提交必
 
 ---
 
-## 6. 开放问题（`UNKNOWN` / `TO_VERIFY` / `NOT_RUN` 原样保留，共 27 条）
+## 6. 开放问题（`UNKNOWN` / `TO_VERIFY` / `NOT_RUN` 原样保留，共 28 条）
 
 > 综合过程不改写这些状态；实现与对外主张时必须原样引用。
 
@@ -365,6 +397,7 @@ Harness 校验顺序（**两道都在 `propose` 之前**，因为带病提交必
 | O-25 | UNKNOWN | 真实 `VerifierPort` 的 `Finding.details` 是否回显候选文件内容（决定 T-10 注入带宽）；当前只有 fixture double | [06 §4] |
 | O-26 | UNKNOWN | `approver_role` / `actor_id` 是否已有仓外审计校验层（仓内未见） | [06 §4] |
 | O-27 | NOT_RUN | [06] 无任何执行验证，所有"防线有效"结论都是静态阅读 | [06 §4] |
+| O-28 | TO_VERIFY | verifier 误报侧（false positive / precision）度量口径未定义：基线候选本身可能含真实 findings，"何为误报"未界定 → §4.0 Stage 0 只测 recall，不测 precision | [§4.0 范围锁定] |
 
 ---
 
