@@ -1,0 +1,152 @@
+task: PR1-F6-DEV-GATE-INTERPRETER
+
+base:
+  branch: fix/review-f6-f1
+  sha: e2d2e21
+  # The branch name in the original envelope was wrong, and the way it was wrong
+  # is worth a trace. I created `fix/dev-gate-interpreter` and committed the
+  # envelope there; the fix commit then landed on `feat/arh-harness` instead --
+  # a branch another session in this same repository is actively building on,
+  # which was itself built on top of my un-merged 339f661. So both envelopes now
+  # name one branch off master, with the two fixes in separate commits.
+  # `sha` is unchanged: e2d2e21 is the real merge base.
+  # `feat/arh-harness` is left exactly as it is, including my 9852a3a on it --
+  # removing that means resetting a branch someone else is using.
+
+goal: |
+  Fix a crash in the repository's own development gate: passing the public
+  `--interpreter` option always raises before any check runs.
+
+  An independent technical review of the fixed commit e2d2e21 (finding F6)
+  reported, and I reproduced:
+
+    py -3 -m tools.dev_gate --interpreter python
+    status  : broken
+    exit_code: 2
+    detail  : TypeError: can only concatenate str (not "list") to str
+
+  The cause, confirmed by reading `tools/dev_gate.py`:
+
+    resolve_python()  returns an ARGV LIST   -> ['py', '-3']   (measured)
+    argparse          gives a plain STRING  -> 'python'
+    run_gate:466      py = interpreter or resolve_python()
+    check_syntax:146  cmd = py + ["-m", "compileall", ...]
+
+  so a string plus a list. The default path works only because `resolve_python()`
+  happens to return a list, which hides the shape mismatch until someone uses the
+  documented option.
+
+  This is in `tools/`, which every envelope of this session has treated as
+  writable, and in a file I have edited repeatedly today without noticing.
+
+scope: |
+  In scope:
+  - tools/dev_gate.py: one normalisation point for the interpreter, plus a
+    preflight that turns a bad path into a NAMED refusal instead of a TypeError
+    from deep inside a check.
+  - tests/test_control_plane_tools.py: tests for the normalisation, including an
+    absolute path CONTAINING A SPACE, which the review specifically asked for.
+  - tasks/PR1-F6-DEV-GATE-INTERPRETER.yaml
+  - docs/compliance/ai-usage/**, docs/compliance/AI_USAGE_LOG.md
+
+  Out of scope, explicitly:
+  - **F1, F2, F3, F5** live in `sandbox_runtime/`; **F4** and **F7** live in
+    `gates/` and `notes/`. `sandbox_runtime/**`, `gates/**`, `src/**` and
+    `docs/evidence/**` are all forbidden here. They are recorded in this
+    envelope's `verified_findings` with the status I measured, so they are not
+    lost, and each gets its own task.
+  - No change to what the gate CHECKS. This is a crash before the first check,
+    not a verdict.
+
+dependencies: []
+
+allowed_paths:
+  - tools/dev_gate.py
+  - tests/test_control_plane_tools.py
+  - tasks/PR1-F6-DEV-GATE-INTERPRETER.yaml
+  - docs/compliance/ai-usage/**
+  - docs/compliance/AI_USAGE_LOG.md
+
+forbidden_paths:
+  - gates/**
+  - src/**
+  - sandbox_runtime/**
+  - docs/evidence/**
+  - delivery/**
+  - notes/**
+  - .github/**
+  - tools/repair_pipeline.py
+
+acceptance: |
+  - `--interpreter <path>` runs the gate instead of crashing. The receipt is a
+    normal receipt with `status: pass` or `fail`, never `broken`.
+  - An absolute path CONTAINING A SPACE is accepted, because a naive
+    `value.split()` would break it. The review asked for this case by name.
+  - A path that is not a working interpreter is refused with a NAMED reason that
+    names the path, not a TypeError and not a generic failure.
+  - `AEDL_PYTHON` keeps its existing argv-prefix meaning, so `"py -3"` still
+    works. The two options have DIFFERENT documented meanings rather than one
+    being silently reinterpreted:
+      --interpreter   a path to ONE executable (spaces safe)
+      AEDL_PYTHON      an argv prefix, split on whitespace
+  - Every check that concatenates the interpreter receives the same shape, and a
+    test asserts the normalisation is idempotent and never returns a bare string.
+  - The full suite stays green and `tools.dev_gate` still exits 0 on this
+    repository with no arguments.
+
+verified_findings:
+  # An independent review of e2d2e21 (2026-09-28) reported seven findings. I
+  # re-ran the ones whose truth changes what I write down, rather than recording
+  # someone else's claim as fact. Status as I measured it, not as reported:
+  #
+  #   F1 P1  cross-candidate write through a junction INSIDE the workspace.
+  #          CONFIRMED by me. `CandidateWorkspace._root` is the whole workspace
+  #          and `_ensure_confined` does `resolved.relative_to(self._root)`, so a
+  #          junction inside candidate A reaching candidate B passes. My marker
+  #          landed in BOTH candidate-a/redirect/design.txt and
+  #          candidate-b/design.txt. I first reported this as NOT reproducing,
+  #          because I checked candidate-b/design/design.txt while the write went
+  #          to candidate-b/design.txt -- one level too deep. Recorded because
+  #          nearly dismissing a real P1 on a wrong path is itself the lesson.
+  #          NOT fixed here: sandbox_runtime/** is forbidden. Highest severity.
+  #   F2 P1  a self-consistent forged receipt is accepted. Known to the
+  #          repository already and marked `@unittest.expectedFailure`; the
+  #          review confirms it is still open. Not re-derived by me.
+  #   F3 P1  a newer FAIL cannot revoke an older PASS. CONFIRMED by reading the
+  #          code: store.py:398 skips every non-PASS record BEFORE the sequence
+  #          comparison at 403-407, so the selection is the latest PASS, not the
+  #          latest verdict. Not fixed here: sandbox_runtime/** is forbidden.
+  #   F4 P1  ERC/DRC sub-gates read a STALE report as PASS when the tool run
+  #          failed. NOT re-derived by me, but note: ADR-014, written earlier in
+  #          this session, PREDICTED exactly this failure mode and bound the
+  #          repair on recording `ignored_checks`, `included_severities` and the
+  #          design digest. The constraint is recorded and unimplemented.
+  #          gates/** is forbidden here.
+  #   F5 P2  the requirements API accepts an intent path outside the repo root.
+  #          CONFIRMED by reading the code: `_read_intent` does
+  #          `(root / intent_path).resolve()` and opens it with no containment
+  #          check. gates/** is forbidden here.
+  #   F6 P2  `--interpreter` crashes. CONFIRMED and REPRODUCED. This task.
+  #   F7 P2  frozen evidence binds CRLF/LF digests inconsistently with the
+  #          canonical bytes. NOT re-derived by me. notes/** and docs/evidence/**
+  #          are forbidden here. Same class as the LF/CRLF defect this session
+  #          already hit twice.
+  #
+  # Nothing above is recorded as fixed. The review's own framing is adopted: a
+  # green suite must not be allowed to hide an expectedFailure.
+
+change_budget:
+  expected_files: 4
+  expected_modules: [tools, tests, tasks, docs]
+  cross_module: false
+  contract_change: false
+  evidence_semantics_change: false
+
+exceptions:
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "Yenefa 2026-09-28 会话：「停止所有人工review纪律，全量推进」"
+  # allow_dirty is NOT claimed.
+
+escalation:
+  owner: Yenefa

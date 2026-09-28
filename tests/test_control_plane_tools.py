@@ -596,3 +596,180 @@ class BundleReceiptDiscoveryTests(unittest.TestCase):
             summaries = receipt_summaries(out)
             self.assertEqual(len(summaries), 1)
             self.assertEqual(summaries[0]["file"], "admit-receipt.json")
+
+
+class DevGateInterpreterTests(unittest.TestCase):
+    """Review finding F6: `--interpreter` crashed before any check ran.
+
+    Reproduced before fixing:
+
+        py -3 -m tools.dev_gate --interpreter python
+        -> status broken, exit_code 2,
+           "TypeError: can only concatenate str (not \"list\") to str"
+
+    The default path never showed it, because `resolve_python()` happens to return
+    a list.
+
+    NOTE on test shape, because getting this wrong is how the bug survived a green
+    suite: `run_gate` short-circuits `--dry-run` BEFORE the interpreter path, so a
+    dry-run test never reaches the line that broke. The first version of this class
+    had two dry-run subprocess tests and would have passed with the bug still
+    present. So the crash site itself is exercised in-process, and exactly one real
+    end-to-end run covers argparse.
+    """
+
+    def _repo(self):
+        from pathlib import Path as _Path
+        return _Path(dev_gate.__file__).resolve().parents[1]
+
+    def test_the_crash_site_composes_without_a_type_error(self):
+        """`py + [...]` in check_syntax is where it broke; go there directly."""
+        import sys
+        argv = dev_gate.interpreter_argv(sys.executable)
+        self.assertIsNone(dev_gate.probe_interpreter(argv))
+        result = dev_gate.check_syntax(argv, self._repo())
+        self.assertIn("status", result)
+        self.assertNotEqual(result.get("status"), "broken",
+                            "check_syntax reported broken: %s" % result)
+
+    def test_the_option_works_end_to_end_through_argparse(self):
+        """The only thing that proves the public option survives argparse.
+
+        OPT-IN, and not because it is slow. It spawns a full
+        `python -m tools.dev_gate`, and that gate runs `main_tests` -- the suite
+        this test lives in. So the test invoked the gate, which invoked the test,
+        which invoked the gate: unbounded, and it was killed at 600s.
+
+        That is the same shape of defect the independent review raised as F4 and
+        F7 -- a check that looks like it verifies something and is structurally
+        unsound. Not wrong in intent, wrong in placement.
+
+        So it runs only with AEDL_DEV_GATE_CLI=1, the pattern this repository
+        already uses for `AEDL_PR1_NATIVE=1`, and it SKIPS with the reason rather
+        than passing vacuously. The crash-site coverage stays unconditional.
+        """
+        import json as _json
+        import os
+        import subprocess
+        import sys
+        if os.environ.get("AEDL_DEV_GATE_CLI") != "1":
+            self.skipTest(
+                "opt-in: this spawns a full dev_gate, which runs main_tests, which "
+                "is this suite -- nesting the gate inside the gate it runs is "
+                "unbounded. The crash site itself is covered unconditionally by "
+                "test_the_crash_site_composes_without_a_type_error.")
+        result = subprocess.run(
+            [sys.executable, "-m", "tools.dev_gate", "--interpreter",
+             sys.executable],
+            cwd=str(self._repo()), capture_output=True, text=True, timeout=1800)
+        combined = result.stdout + result.stderr
+        self.assertNotIn("TypeError", combined,
+                         "the shape mismatch is back:\n%s" % combined[-600:])
+        self.assertNotEqual(result.returncode, 2,
+                            "the gate is BROKEN with --interpreter:\n%s"
+                            % combined[-600:])
+        receipt = _json.loads(result.stdout[result.stdout.index("{"):])
+        self.assertEqual(receipt["schema_version"], "dev-gate.v1")
+        # the checks really ran, rather than being skipped as a dry-run would
+        self.assertNotIn("dry-run", receipt["checks"].get("syntax", {}).get(
+            "detail", "") or "")
+        self.assertTrue(receipt["checks"], "no checks were recorded")
+
+    def test_a_path_containing_a_space_is_accepted(self):
+        """The review asked for this case by name.
+
+        A naive `value.split()` -- which is how `AEDL_PYTHON` is handled, correctly,
+        because that option IS an argv prefix -- would turn
+        `C:\\Program Files\\...\\python.exe` into a nonexistent executable plus
+        two stray arguments. `--interpreter` is a single executable path, so it is
+        not split.
+        """
+        spaced = r"C:\\Program Files\\Python311\\python.exe"
+        self.assertEqual(dev_gate.interpreter_argv(spaced), [spaced],
+                         "a path with a space was split")
+        self.assertIn(" ", dev_gate.interpreter_argv(spaced)[0])
+
+    def test_the_normalisation_is_idempotent(self):
+        """Found by probing the fix, not by a failing test.
+
+        The first version did `str(interpreter).strip()` unconditionally, so
+        passing an ALREADY-normalised list produced `["['python']"]` -- a silent
+        garbage interpreter rather than an error. A function described as the single
+        normalisation point has to be safe to call twice.
+        """
+        once = dev_gate.interpreter_argv("python")
+        self.assertEqual(once, ["python"])
+        self.assertEqual(dev_gate.interpreter_argv(once), once)
+        real = dev_gate.resolve_python()
+        self.assertEqual(dev_gate.interpreter_argv(real), real)
+
+    def test_it_never_returns_a_bare_string(self):
+        """The shape is the whole bug, so it is asserted directly."""
+        for value in (None, "python", ["python"], ["py", "-3"]):
+            self.assertIsInstance(dev_gate.interpreter_argv(value), list,
+                                  "%r normalised to the wrong shape" % (value,))
+
+    def test_a_blank_value_is_refused_rather_than_defaulting(self):
+        """Silently falling back would hide the operator's mistake."""
+        for blank in ("", "   "):
+            with self.assertRaises(ValueError):
+                dev_gate.interpreter_argv(blank)
+        with self.assertRaises(ValueError):
+            dev_gate.interpreter_argv([])
+
+    def test_a_bad_path_is_refused_by_name(self):
+        """It used to surface as a TypeError from inside a check, naming neither
+        the option nor the value."""
+        reason = dev_gate.probe_interpreter(
+            [r"Z:\\definitely\\not\\a\\python.exe"])
+        self.assertIsNotNone(reason)
+        self.assertIn("Z:", reason, "the reason must name the value it refused")
+        self.assertIn("does not exist", reason)
+
+    def test_a_real_interpreter_passes_the_preflight(self):
+        import sys
+        self.assertIsNone(dev_gate.probe_interpreter([sys.executable]))
+
+    def test_a_non_interpreter_is_refused_not_assumed(self):
+        """Something that exists and exits non-zero is still not a Python."""
+        reason = dev_gate.probe_interpreter(["cmd", "/c", "exit 3"])
+        self.assertIsNotNone(reason)
+        self.assertIn("exit code 3", reason)
+
+    def test_the_boundary_asserts_the_shape_it_needs(self):
+        """The durable half of the fix.
+
+        `interpreter_argv` is the normalisation point, but a future caller can
+        still hand a check a string, and the failure would again be a TypeError
+        from a `+`. A named refusal at the boundary costs one line and cannot be
+        misread.
+        """
+        with self.assertRaises(TypeError) as caught:
+            dev_gate.check_syntax("python", self._repo())
+        self.assertIn("interpreter_argv", str(caught.exception))
+
+    def test_a_blank_interpreter_is_refused_by_run_gate_itself(self):
+        """The refusal has to survive the call, not just the helper."""
+        receipt = dev_gate.run_gate(root=str(self._repo()), interpreter="   ")
+        self.assertEqual(receipt["status"], "broken")
+        self.assertEqual(receipt["exit_code"], 2)
+        self.assertIn("empty", receipt["detail"])
+
+    def test_the_gate_refuses_a_nonexistent_interpreter_by_name(self):
+        """The gap my own mutation run found.
+
+        `probe_interpreter` was tested DIRECTLY, so the suite passed whether or
+        not `run_gate` ever called it -- mutation M3 removed the call and every
+        test still passed. The behaviour that matters is the GATE refusing, with
+        a reason naming the value, instead of a TypeError from inside a check
+        after the run has started.
+        """
+        receipt = dev_gate.run_gate(
+            root=str(self._repo()),
+            interpreter="Z:\\definitely\\not\\a\\python.exe")
+        self.assertEqual(receipt["status"], "broken")
+        self.assertEqual(receipt["exit_code"], 2)
+        self.assertIn("Z:", receipt["detail"])
+        # and it refused BEFORE running anything, which is the point of a preflight
+        self.assertNotIn("checks", receipt,
+                         "the gate started running checks with a bad interpreter")
