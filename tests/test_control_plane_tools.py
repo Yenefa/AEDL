@@ -635,13 +635,29 @@ class DevGateInterpreterTests(unittest.TestCase):
     def test_the_option_works_end_to_end_through_argparse(self):
         """The only thing that proves the public option survives argparse.
 
-        One real run, not three: the other claims are covered in-process above,
-        and a full gate takes about a minute, so a suite that pays for three of
-        them buys nothing.
+        OPT-IN, and not because it is slow. It spawns a full
+        `python -m tools.dev_gate`, and that gate runs `main_tests` -- the suite
+        this test lives in. So the test invoked the gate, which invoked the test,
+        which invoked the gate: unbounded, and it was killed at 600s.
+
+        That is the same shape of defect the independent review raised as F4 and
+        F7 -- a check that looks like it verifies something and is structurally
+        unsound. Not wrong in intent, wrong in placement.
+
+        So it runs only with AEDL_DEV_GATE_CLI=1, the pattern this repository
+        already uses for `AEDL_PR1_NATIVE=1`, and it SKIPS with the reason rather
+        than passing vacuously. The crash-site coverage stays unconditional.
         """
         import json as _json
+        import os
         import subprocess
         import sys
+        if os.environ.get("AEDL_DEV_GATE_CLI") != "1":
+            self.skipTest(
+                "opt-in: this spawns a full dev_gate, which runs main_tests, which "
+                "is this suite -- nesting the gate inside the gate it runs is "
+                "unbounded. The crash site itself is covered unconditionally by "
+                "test_the_crash_site_composes_without_a_type_error.")
         result = subprocess.run(
             [sys.executable, "-m", "tools.dev_gate", "--interpreter",
              sys.executable],
@@ -738,3 +754,22 @@ class DevGateInterpreterTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "broken")
         self.assertEqual(receipt["exit_code"], 2)
         self.assertIn("empty", receipt["detail"])
+
+    def test_the_gate_refuses_a_nonexistent_interpreter_by_name(self):
+        """The gap my own mutation run found.
+
+        `probe_interpreter` was tested DIRECTLY, so the suite passed whether or
+        not `run_gate` ever called it -- mutation M3 removed the call and every
+        test still passed. The behaviour that matters is the GATE refusing, with
+        a reason naming the value, instead of a TypeError from inside a check
+        after the run has started.
+        """
+        receipt = dev_gate.run_gate(
+            root=str(self._repo()),
+            interpreter="Z:\\definitely\\not\\a\\python.exe")
+        self.assertEqual(receipt["status"], "broken")
+        self.assertEqual(receipt["exit_code"], 2)
+        self.assertIn("Z:", receipt["detail"])
+        # and it refused BEFORE running anything, which is the point of a preflight
+        self.assertNotIn("checks", receipt,
+                         "the gate started running checks with a bad interpreter")
