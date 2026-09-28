@@ -103,6 +103,31 @@ def native_before(symbol=SYMBOL, status="PASS", observation=None):
             "tool": {"symbol_digest": symbol}}
 
 
+def _is_candidate_design_root(path):
+    """Is this the candidate's design directory? SEPARATOR-INDEPENDENT.
+
+    The first version of these tests asked:
+
+        str(root).rstrip("\\/").endswith("cand\\design")  # separator-literal: ok
+
+    which matches on Windows, where `str(Path)` renders backslashes, and NEVER
+    matches on POSIX, where it renders forward slashes. So the injected fault was
+    a no-op on CI and the test asserted the opposite of what happened. CI:
+
+        AssertionError: 'VERIFIED' != 'UNKNOWN'
+        AssertionError: 'live_design_still_equals_snapshot' not found in []
+
+    Comparing `Path.parts` compares the same thing the filesystem does, on every
+    platform. One helper rather than two string comparisons, so the next copy
+    cannot reintroduce the same slip in a different spelling.
+    """
+    try:
+        parts = Path(path).parts
+    except TypeError:
+        return False
+    return len(parts) >= 2 and parts[-2:] == ("cand", "design")
+
+
 def _round_source():
     """The source of the WHOLE round: the locking wrapper plus its body.
 
@@ -3600,6 +3625,79 @@ class ThinVerificationMappingTests(unittest.TestCase):
              "KICAD_VERIFY", "COMMIT"))
 
 
+class PathComparisonHygieneTests(unittest.TestCase):
+    """A separator-dependent path comparison is invisible on the platform it was
+    written on. This makes the class detectable on every platform.
+
+    The concrete failure, caught by CI and not by 1191 local tests:
+
+        if str(root).rstrip("\\/").endswith("cand\\design"):  # separator-literal: ok
+
+    matches on Windows, where `str(Path)` renders backslashes, and NEVER matches
+    on POSIX, where it renders forward slashes. So the injected fault was a no-op
+    and the test asserted the opposite of what happened:
+
+        AssertionError: 'VERIFIED' != 'UNKNOWN'
+        AssertionError: 'live_design_still_equals_snapshot' not found in []
+
+    Nothing local can catch that, because the bug is the platform. So the suite
+    carries a test about the suite: scan the repository's own sources for the
+    smell, and fail on it. `# separator-literal: ok` is the explicit opt-out.
+    """
+
+    OPT_OUT = "separator-literal: ok"
+
+    def test_no_source_compares_a_path_against_a_hardcoded_separator(self):
+        import re as _re
+        from pathlib import Path as _Path
+        repo = _Path(pipeline.__file__).resolve().parents[1]
+        # A backslash inside a startswith/endswith literal, followed by a letter
+        # that is NOT one of Python's escape letters. \n, \r, \x, \t, \u, \N, \b,
+        # \f, \v, \a and \0 are ESCAPES -- newline and BOM checks are legitimate,
+        # and they were the six false positives of the first, too-broad rule.
+        # Anything else after a backslash in a path comparison is a separator
+        # that will not match on another platform.
+        #
+        # A guard that cries wolf gets deleted, and a deleted guard is worse than
+        # none, because it looks like coverage.
+        pattern = _re.compile(
+            r"(?:startswith|endswith)\(\s*[rb]*[\"'][^\"']*"
+            r"\\(?![nrtfvabxuNU0\"'])[A-Za-z_]")
+        offenders = []
+        for source in sorted(list(repo.glob("tools/*.py"))
+                             + list(repo.glob("tests/*.py"))
+                             + list(repo.glob("gates/*.py"))):
+            body = source.read_text(encoding="utf-8", errors="replace")
+            for number, line in enumerate(body.splitlines(), 1):
+                if self.OPT_OUT in line:
+                    continue
+                if pattern.search(line):
+                    offenders.append("%s:%d: %s"
+                                     % (source.relative_to(repo), number,
+                                        line.strip()[:88]))
+        self.assertEqual(
+            offenders, [],
+            "a path compared against a hardcoded separator -- correct on the "
+            "platform it was written on, never matching on another:\n  %s"
+            % "\n  ".join(offenders))
+
+    def test_the_helper_agrees_on_both_path_flavours(self):
+        """The replacement must not be a differently-spelled version of the same
+        mistake, so the helper is pinned for BOTH renderings explicitly."""
+        from pathlib import PurePosixPath, PureWindowsPath
+        for candidate in (PurePosixPath("/tmp/x/cand/design"),
+                          PureWindowsPath("C:\\x\\cand\\design"),
+                          "/tmp/x/cand/design",
+                          "C:\\x\\cand\\design"):
+            self.assertTrue(_is_candidate_design_root(candidate),
+                            "rejected %r" % (candidate,))
+        for other in (PurePosixPath("/tmp/x/cand/stage"),
+                      PureWindowsPath("C:\\x\\cand\\snapshot"),
+                      "/tmp/x/elsewhere/design"):
+            self.assertFalse(_is_candidate_design_root(other),
+                             "accepted %r" % (other,))
+
+
 class CommitPredicateTests(unittest.TestCase):
     """Contract 335-347, the pipeline's ONLY commit predicate (line 349: a
     conjunction, with no "high confidence" / "warning only" / "most checks PASS"
@@ -4916,18 +5014,20 @@ class Contract378Tests(unittest.TestCase):
             self.root / "absent", "fault.kicad_sch")
         self.assertTrue(reasons)
         self.assertIn("not a directory", " ".join(r.detail for r in reasons))
-class CommitReceiptTests(unittest.TestCase):
-    """Drives a real round to a thin PASS and inspects what it publishes.
+class CommitReceiptFixture:
+    """The thin-PASS round fixture, as a MIXIN and deliberately not a TestCase.
 
-    COMPOSITION, not inheritance. The first version subclassed
-    VerifyStageWiringTests to reuse its fixture, which re-ran all 19 of the
-    parent's tests inside this class: 27 tests where 8 were mine, the wiring
-    runtime doubled, and any parent failure would be reported twice.
+    A mixin rather than a base TestCase, because three classes need this fixture
+    and inheriting from a TestCase makes each of them RE-RUN its tests. That is
+    not hypothetical: `CommitWriterFailureTests` and
+    `RoundLevelLockAndIdentityTests` both subclassed `CommitReceiptTests`, so its
+    16 tests ran three times over -- and two broken tests were reported as SIX
+    failures, which made the CI report look like six defects and would hide a
+    third and fourth behind the noise.
 
-    Composition keeps what actually mattered -- the parent's real thin-PASS
-    fixture, its stubbed collaborators and its request builder, rather than a
-    hand-rolled second copy that drifts -- without re-executing its suite.
-    `__getattr__` forwards, so the test bodies are unchanged.
+    It is a separate mixin for the same reason the earlier
+    `VerifyStageWiringTests` delegation was changed to composition: the reasoning
+    was written down and then discarded when inheritance was more convenient.
     """
 
     def setUp(self):
@@ -4961,6 +5061,10 @@ class CommitReceiptTests(unittest.TestCase):
 
     def _pass_receipt(self):
         return self._run_with(verify_stage=lambda request: self._thin("PASS"))
+
+
+class CommitReceiptTests(CommitReceiptFixture, unittest.TestCase):
+    """Drives a real round to a thin PASS and inspects what it publishes."""
 
     def test_commit_keeps_the_contracts_closed_shape(self):
         """Contract 404: commit:{attempted, replaced, verified}. Three keys.
@@ -5195,7 +5299,12 @@ class CommitReceiptTests(unittest.TestCase):
             passed while exercising nothing.
             """
             seen_roots.append(str(root))
-            if str(root).rstrip("\\/").endswith("cand\\design"):
+            # `_is_candidate_design_root`, not a stringified comparison: the
+            # first version used endswith("cand\\design"), which never matches  # separator-literal: ok
+            # on POSIX, so the fault was never injected and the test asserted the
+            # opposite of what happened. Only CI runs on a different platform
+            # from the one it was written on, and only CI caught it.
+            if _is_candidate_design_root(root):
                 raise OSError("the design root is on a disconnected volume")
             return real_build(root, target)
 
@@ -5260,7 +5369,7 @@ class CommitReceiptTests(unittest.TestCase):
 
         def tamper(root, target):
             manifest = real_build(root, target)
-            if str(root).rstrip("\\/").endswith("cand\\design"):
+            if _is_candidate_design_root(root):
                 # a valid manifest that simply does not describe what the
                 # snapshot recorded
                 rows = [dict(row) for row in manifest["files"]]
@@ -5336,7 +5445,7 @@ class CommitReceiptTests(unittest.TestCase):
 
 
 
-class CommitWriterFailureTests(CommitReceiptTests):
+class CommitWriterFailureTests(CommitReceiptFixture, unittest.TestCase):
     """Fault injection at the round level: a commit that FAILS must not claim to
     have succeeded.
 
@@ -5456,7 +5565,8 @@ class CommitWriterFailureTests(CommitReceiptTests):
             "a refused commit still wrote a durable intent")
 
 
-class RoundLevelLockAndIdentityTests(CommitReceiptTests):
+class RoundLevelLockAndIdentityTests(CommitReceiptFixture,
+                                 unittest.TestCase):
     """Three properties about the ROUND, which no primitive test can see.
 
     X1  a round that finds the lock held by someone else must refuse
