@@ -9,7 +9,7 @@
 >
 > 三层结构：**本文件（work units，默认浏览入口）** → [`AI_USAGE_LOG.md`](AI_USAGE_LOG.md)（逐条索引，脚本生成，禁手改） → `docs/compliance/ai-usage/<ID>.md`（逐条真源）。
 >
-> - 覆盖核验（2026-09-23，PR #58 与 master 冲突合并后重建索引；WU-37 一览行与明细并入）：本文件引用 **100** 条记录；`AI_USAGE_LOG.md` 当前 **112** 条。二者**不逐条相等且本就不应相等**——本文件按**工作单元**聚合，只收录已归入 WU 的条目；未归入任何 WU 的条目只存在于 `AI_USAGE_LOG.md` 与 `ai-usage/<ID>.md` 层。本文件侧保证**无重复、无虚构 ID**；ID 有效性与索引同步由 `tools.build_ai_usage_index check` 与 `dev_gate.ai_usage_ledger` fail-closed 校验。
+> - 覆盖核验（2026-09-28，PR #58 再次与 master 冲突合并后重建索引；WU-37 一览行与明细并入）：本文件引用 **100** 条记录；`AI_USAGE_LOG.md` 当前 **126** 条。二者**不逐条相等且本就不应相等**——本文件按**工作单元**聚合，只收录已归入 WU 的条目；未归入任何 WU 的条目只存在于 `AI_USAGE_LOG.md` 与 `ai-usage/<ID>.md` 层。本文件侧保证**无重复、无虚构 ID**；ID 有效性与索引同步由 `tools.build_ai_usage_index check` 与 `dev_gate.ai_usage_ledger` fail-closed 校验。
 > - 本文件只做聚合与引用，**不改写任何条目正文**；条目正文的修订请直接改 `ai-usage/<ID>.md` 并重建索引。
 > - **`Human owner` 只在该工作单元的记录中明确出现时才具名**；未具名一律写 `TO_VERIFY`，不默认归属给任何人。
 > - `Human final decision`：`yes` = 有批准 / merge / 裁决记录；`pending` = 条目仍为 `PENDING_HUMAN_REVIEW` 且无 merge 记录；`TO_VERIFY` = 记录未具名。
@@ -56,7 +56,7 @@
 | WU-34 | 2026-09-09 / 09-11 | GH-56 Y4-dry 公共输入打包、五例协议修订与 r12 harness 终验（r13 收尾中） | GENERATE_CODE / GENERATE_TEST / DOCUMENT / DEBUG | Yenefa | yes — 2026-09-10 批准 dry scoring 与五例修订；2026-09-11 审查结论 REQUEST_CHANGES，r13 收尾后倾向 APPROVE；实现审核仍 PENDING_HUMAN_REVIEW | 1 |
 | WU-35 | 2026-09-11 | GH-56 自主预冻结战役（r10–r15）：语义闭环、冻结前准备、证据修复、独立复核与 G6 可达性审计 | GENERATE_CODE / GENERATE_TEST / DOCUMENT / DEBUG / RESEARCH | Yenefa（G1–G11 决策与 G10/G11 明确授权） | yes — G11 授权入账；G10 授权更新权威文档；无 merge/冻结授权 | 1 |
 | WU-36 | 2026-09-11 | GH-56 r19/r20 修正版审计与提交 + PR #60 复核取证 | RESEARCH / REVIEW / DOCUMENT | Yenefa（授权提交 GH-56 变更集；PR #60 复核结论由其判定） | pending — 条目 PENDING_HUMAN_REVIEW；PR #61 待人工评审 | 1 |
-| WU-37 | 2026-09-09 / 09-13 | E5 招募登记（3 人确认）+ 第一段改期至 09-28 | DOCUMENT | Percy（招募结果口述；改期裁定） | pending — 条目 PENDING_HUMAN_REVIEW；PR #58 待人工评审 | 1 |
+| WU-37 | 2026-09-09 / 09-13 / 09-28 | E5 招募登记（两批共 6 人）+ 第一段改期至 09-28 + 09-28 执行记录 | DOCUMENT | Percy（招募结果口述；改期裁定） | pending — 条目 PENDING_HUMAN_REVIEW；PR #58 待人工评审 | 1 |
 | WU-38 | 2026-09-10 | W2 TASK-B6 —— 再分发 / 隐私 / 证据三条发布边界 | RESEARCH / DOCUMENT | Percy（按 r3 任务卡指派并执行） | pending — 条目 PENDING_HUMAN_REVIEW；B-1/B-2/B-3 待 owner 裁定 | 1 |
 | WU-39 | 2026-09-13 | GH-56 PR #60 A2-L D 基线（LIO 初版 → A-2′ 端口）与 master 合并后台账重建 | GENERATE_CODE / GENERATE_TEST / DEBUG / DOCUMENT / REVIEW | Yenefa（D1=C / D2=A / A-2′ 路线、WU-39 与 push 授权由其给出） | pending — 条目 PENDING_HUMAN_REVIEW；PR #60 待人工复核 v0.6 | 2 |
 | WU-40 | 2026-09-12 | B5 前置 —— C3–C6 独立验收扰动判据（28 条，判据先于实现） | RESEARCH / DOCUMENT | Percy（决定先做 B5 前置；裁定公开方式/位置/冻结时点） | pending — 条目 PENDING_HUMAN_REVIEW；PR 待人工评审 | 1 |
