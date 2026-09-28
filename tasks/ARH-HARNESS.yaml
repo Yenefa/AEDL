@@ -105,7 +105,11 @@ exceptions:
   allow_drift:
     granted_by: Owner
     decision_ref: "会话 2026-09-28：「批复，没有本阶段不做的，全量全速全质推进！开始」"
-  # allow_dirty 不主张：envelope 先提交，admit 时工作区必须干净。
+  allow_dirty:
+    permitted: true
+    reason: "existing unaccepted work-in-progress — Owner 在途未提交修改 tools/dev_gate.py（FOREIGN：不暂存、不提交、不修改）"
+    authority: task-envelope
+  # allow_dirty 仅覆盖上述已指认的 FOREIGN 文件；本任务自身产出必须全部已提交。
 
 escalation:
   owner: Yenefa
