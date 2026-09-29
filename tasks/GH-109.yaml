@@ -119,24 +119,24 @@ change_budget:
   evidence_semantics_change: false
 
 exceptions:
+  # Both grants below cover ONE thing only: this envelope's own commit. A new
+  # envelope is a dirty entry until it is committed, and committing it moves HEAD
+  # off base.sha, so admitting a freshly-opened task is impossible without these.
+  # That is the whole extent of them.
+  #
+  # Neither is used to reach around a real baseline conflict. If master moves, or
+  # if a second dirty path appears, that needs its own Owner decision -- not these.
+  #
+  # NOTE: the envelope parser is line-based and reads `key: value` on a single
+  # line, so the reasoning lives in these comments rather than in `reason` /
+  # `decision_ref`, which must stay one line each.
   allow_dirty:
     permitted: true
-    reason: "this envelope's own commit. The baseline check is fail-closed on any
-      dirty entry, and a new envelope is dirty until it is committed -- so
-      admitting a task requires admitting a tree this task just changed. The
-      authority is scoped to THIS file only: the commit that introduced it, and
-      nothing else. A second dirty path is not covered by this grant."
+    reason: "this envelope's own commit only; a second dirty path is not covered"
     authority: task-envelope
   allow_drift:
     granted_by: Yenefa
-    decision_ref: >-
-      PR #108 completion report (Owner-side, 2026-09-29), which names both defects
-      FOREIGN to ARH-HARNESS and states 「建议另立任务修复」; and the Owner session
-      directive of the same date 「继续推进可以推进的」. base.sha stays at the
-      c6d52d9 merge commit because THAT is the state to fix; the drift being
-      tolerated is only the envelope's own commit sitting on top of it.
-  # Neither grant is used to reach around a real baseline conflict. A drift that
-  # came from master moving would need its own Owner decision, not this one.
+    decision_ref: "PR #108 report 2026-09-29 「建议另立任务修复」 + Owner session 「继续推进可以推进的」"
 
 escalation:
   owner: Yenefa
