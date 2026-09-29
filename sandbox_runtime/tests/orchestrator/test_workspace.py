@@ -4,12 +4,70 @@ from __future__ import annotations
 
 import hashlib
 import os
+import stat as _stat
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from aedl_sandbox.workspace import CandidateWorkspace, WorkspaceEscapeError
+
+
+class _RewrittenStat:
+    """A stat result with selected fields replaced; everything else delegates.
+
+    `os.stat_result` is immutable, and pathlib needs a genuine one, so this is a
+    view rather than a subclass. Only `st_nlink` is ever substituted -- the real
+    `st_mode` is kept, so nothing that inspects the file type is fooled.
+    """
+
+    def __init__(self, real, nlink):
+        self._real = real
+        self._nlink = nlink
+
+    def __getattr__(self, name):
+        if name == "st_nlink":
+            return self._nlink
+        return getattr(self._real, name)
+
+
+def _posix_directory_link_counts():
+    """Report every DIRECTORY as `nlink = 2`, the way a POSIX kernel does.
+
+    A Linux directory has `st_nlink == 2 + (number of subdirectories)`; Windows
+    reports 1. Forcing the POSIX value here is what makes the GH-109 exemption
+    testable on Windows instead of silently vacuous there. Only directories are
+    rewritten, so files keep their true link count and the aliasing guard stays
+    live.
+    """
+    real = os.stat
+
+    def fake(path, *args, **kwargs):
+        info = real(path, *args, **kwargs)
+        if _stat.S_ISDIR(info.st_mode):
+            return _RewrittenStat(info, 2)
+        return info
+
+    return mock.patch("os.stat", fake)
+
+
+def _nlink_two_for(target):
+    """Report one specific FILE as `nlink = 2`, as a planted hard link would.
+
+    The counterpart to `_posix_directory_link_counts`: same simulated count, but
+    on a file, where the guard must still fire.
+    """
+    real = os.stat
+    wanted = os.fspath(target)
+
+    def fake(path, *args, **kwargs):
+        info = real(path, *args, **kwargs)
+        if os.fspath(path) == wanted and not _stat.S_ISDIR(info.st_mode):
+            return _RewrittenStat(info, 2)
+        return info
+
+    return mock.patch("os.stat", fake)
 
 
 class CandidateWorkspaceTests(unittest.TestCase):
@@ -166,6 +224,66 @@ class CandidateWorkspaceTests(unittest.TestCase):
         self.assertEqual(first, same)
         self.assertNotEqual(first, other)
 
+    # ------------------------------------------------------------------ GH-109
+    def test_a_directory_is_not_refused_for_its_posix_link_count(self):
+        """A directory's `st_nlink` is a SUBDIRECTORY count on POSIX, not an alias
+        count, so it must not be read as one. Regression for GH-109.
+
+        This is the test that makes the fix verifiable AT ALL, because the defect
+        is invisible on the platform these tests were written on. NTFS does not
+        report directory link counts, so on Windows a directory's `st_nlink` is 1
+        and `nlink > 1` never fires for one -- the identical code passes. A green
+        Windows run therefore proves nothing about the Linux behaviour, which is
+        how 56 linux failures reached `master` unnoticed in the first place.
+
+        So the kernel's own POSIX semantics are FORCED here rather than waited for:
+        every directory is reported as `nlink = 2, S_IFDIR`, which is exactly what
+        Linux reports for a fresh directory that has never held a subdirectory.
+        That makes this test fail on Windows if the exemption is ever removed, and
+        pass on Linux for the same reason -- one assertion, both platforms.
+
+        Files are deliberately NOT rewritten, so the half of the guard that is
+        still supposed to fire is left to the tests below.
+        """
+        ws = CandidateWorkspace(self.base / "posix-ws")
+        with _posix_directory_link_counts():
+            # create_candidate confines a DIRECTORY it has just made. This is the
+            # call that failed on Linux, before anything was written.
+            candidate = ws.create_candidate("run-1", "cand-1")
+            self.assertTrue(candidate.is_dir())
+            # ... and a write whose PARENT directories are also freshly made.
+            ws.write_candidate_bytes("run-1", "cand-1", "deep/nested/design.json",
+                                     b'{"x": 1}')
+            # ... and a second candidate, so the check is not passing by accident
+            # on a single cached resolution.
+            self.assertTrue(ws.create_candidate("run-1", "cand-2").is_dir())
+        self.assertTrue((candidate / "deep" / "nested" / "design.json").is_file(),
+                        "the write must have landed, not merely been permitted")
+
+    def test_a_file_with_two_names_is_still_refused_under_posix_semantics(self):
+        """The other half, and the reason the exemption is safe to grant.
+
+        Narrowing the check to non-directories must not have narrowed it to
+        "things that look harmless". A REGULAR FILE reported with `nlink = 2` --
+        the hard link planted in candidate A at a file in candidate B, the route
+        `resolve()` cannot see -- must still be refused, and the refusal must still
+        name the hard links.
+
+        Pinned next to the exemption above so the two cannot be separated: the same
+        simulated `nlink = 2` is accepted for a directory and refused for a file,
+        and the ONLY thing distinguishing them is the file/directory bit.
+        """
+        ws = CandidateWorkspace(self.base / "alias-ws")
+        candidate = ws.create_candidate("run-1", "cand-1")
+        victim = candidate / "planted.json"
+        victim.write_bytes(b'{"original": true}')
+        with _nlink_two_for(victim):
+            with self.assertRaises(WorkspaceEscapeError) as caught:
+                ws.write_candidate_bytes("run-1", "cand-1", "planted.json", b"X")
+        self.assertIn("hard link", str(caught.exception))
+        self.assertEqual(victim.read_bytes(), b'{"original": true}',
+                         "the aliased bytes must be untouched by the refusal")
+
 
 if __name__ == "__main__":
     unittest.main()
@@ -273,7 +391,19 @@ class CandidateIsolationAdversarial(unittest.TestCase):
         # left alone -- so an rmtree cleanup silently does nothing and the test
         # then errors on its own last assertion. os.rmdir removes the junction
         # itself rather than following it.
-        os.rmdir(str(self.a / "peek"))
+        #
+        # ...and a SYMLINK needs os.unlink instead, because POSIX `rmdir` on a
+        # symlink fails ENOTDIR: a symlink is not a directory, whatever it points
+        # at. `_junction` creates a symlink wherever symlinks are available and a
+        # junction only where they are not, so the two removals are not
+        # interchangeable. This line was unreachable before GH-109 -- the
+        # WorkspaceEscapeError this test asserts was raised in setUp, so
+        # candidate_hash never got as far as hashing, and the masked ENOTDIR
+        # underneath it had never run.
+        if (self.a / "peek").is_symlink():
+            os.unlink(str(self.a / "peek"))
+        else:
+            os.rmdir(str(self.a / "peek"))
         self.assertFalse((self.a / "peek").exists())
         self.assertTrue((self.b / "b-only.txt").exists(),
                         "removing the junction must not touch its target")

@@ -160,6 +160,30 @@ class CandidateWorkspace:
         So a file with more than one name is refused: contract 378's
         「文件 link count/别名与实际身份」, applied on the Sandbox side. A path that
         does not exist yet has no count to check, and cannot already be an alias.
+
+        DIRECTORIES ARE EXEMPT, and that exemption is the whole difference between
+        this working and not working. A directory's `st_nlink` is not a link count
+        on POSIX: the kernel reports `2 + (number of subdirectories)`, because
+        `.` and every subdirectory are names for it. So a directory that has never
+        held a subdirectory still reports 2, and reading that as "this is a second
+        name for bytes living elsewhere" refuses EVERY directory on Linux --
+        including the candidate root `create_candidate` has just made, which is
+        why the first candidate operation failed there. Measured on WSL2
+        Ubuntu-24.04 at merge c6d52d9: 56 of 57 linux failures, all from this one
+        comparison.
+
+        The exemption costs nothing, because a hard link to a DIRECTORY cannot be
+        made by an unprivileged process at all (`link(2)` returns EPERM), and a
+        privileged one has no need to hide inside a candidate. Directory aliasing
+        is caught where it actually happens instead: `resolved` has already been
+        fully resolved by the `Path.resolve()` above, so a symlinked or junctioned
+        directory is compared by its REAL target, and `_candidate_boundary` refuses
+        a candidate root that is ITSELF a link before this point is ever reached.
+
+        Windows is why this went unnoticed: NTFS does not report directory link
+        counts, so `st_nlink` there is 1 for a directory and the identical code
+        passes. A defect invisible on the platform it was written on is the reason
+        the exemption is pinned by a test that fails on Windows too.
         """
         resolved = Path(path).resolve()
         try:
@@ -169,10 +193,16 @@ class CandidateWorkspace:
                 f"path {path} escapes the {what} {boundary}"
             ) from exc
         try:
-            links = os.stat(str(resolved)).st_nlink
+            info = os.stat(str(resolved))
         except OSError:
             # does not exist yet, or is not stat-able: nothing to alias
             return resolved
+        if _stat.S_ISDIR(info.st_mode):
+            # A directory's st_nlink is a subdirectory count on POSIX, not an
+            # alias count. Refusing on it rejects every directory, which is not a
+            # security posture but an outage. See the docstring.
+            return resolved
+        links = info.st_nlink
         if links > 1:
             raise WorkspaceEscapeError(
                 f"path {path} has {links} hard links, so it is a second name for "

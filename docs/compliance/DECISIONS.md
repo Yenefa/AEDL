@@ -812,3 +812,75 @@
   显式白名单，而不是恢复「静默跳过」。
 - 如果出现 descriptor-relative no-follow 的跨平台方案，第 1 条的前后检查可以被真正的
   原子打开取代。
+
+---
+
+## ADR-017 修正 A：目录的 `st_nlink` 不是别名计数（GH-109，2026-09-29）
+
+- 状态：amendment（修正已随 PR 合入前提交，待人工 review）
+- AI 参与：AI-20260929-OPENCODE-4DF0E253EF9FDABD36AF6D7ECF0E97FC
+- 关联：ADR-017 §4；`sandbox_runtime/src/aedl_sandbox/workspace.py`；
+  `tasks/GH-109.yaml`；Issue #109
+
+### 问题
+
+ADR-017 §4 决定「`st_nlink > 1` 的**文件** → 拒绝」。实现写成了对**所有路径**
+无条件检查，而这两者不是一回事。
+
+POSIX 下**目录**的 `st_nlink` 是 `2 + 子目录数`（`.` 与每个子目录都是它的名字），
+所以一个从未含过子目录的新目录也报 2。把它当别名计数读，于是 **Linux 上每一个
+目录都被拒绝**，包括 `create_candidate` 刚刚建好的候选根。实测（基线 `c6d52d9`，
+WSL2 Ubuntu-24.04）：sandbox 套件 438 项中 **56 项失败**（2 failures + 54 errors），
+全部同源。
+
+Windows 的 NTFS 不报告目录链接数（恒为 1），所以同一份代码在 Windows 全绿 ——
+缺陷在它被书写的平台上不可见，这也是它能进入 `master` 的原因。
+
+### 决策
+
+**目录豁免该检查；文件维持拒绝。** 豁免不削弱守卫，理由是它没有覆盖到任何东西：
+
+- 非特权进程**根本无法**对目录建硬链接（`link(2)` 返回 `EPERM`），所以
+  「目录有多个名字」不是一种可利用的别名。
+- 目录别名在真正发生的地方已被覆盖：`resolved` 在此之前已被
+  `Path.resolve()` **完全解析**，指向或 junction 出去的目录是以其**真实目标**
+  参与边界比较的；`_candidate_boundary` 另外在到达此处之前就拒绝
+  「自身是链接」的候选根。
+- 逃逸原语是**文件**（设计文件、ledger），它们全部仍是文件，仍被拒绝。
+
+这是**实现向决策回归**，不是决策变更：ADR-017 §4 与合同 :378 原文写的都是
+「**文件** link count」。因此 `contract_change: false`。
+
+### 团队自主判断
+
+- 豁免的是**检查的适用范围**，不是检查的强度；两侧都由测试钉住
+  （目录必须豁免 / 文件仍必须拒绝），区分二者的只有文件目录位。
+- 该缺陷在 Windows 上不可见，所以它的测试**在 Windows 上强制 POSIX 语义**
+  （把目录报成 `nlink=2, S_IFDIR`）才使 Windows 的绿有证明力。
+  两个变异体在 Windows 上均被杀：删 `S_ISDIR` 分支 → 目录测试以与 Linux
+  完全相同的异常失败；把 `links > 1` 改成 `links > 99` → 文件测试报
+  `WorkspaceEscapeError not raised`。
+- 「在看不见缺陷的平台上强制可见的语义」是本条修正里可复用的做法，与
+  `PR1-LINUX-PATH-FLAVOUR`（POSIX flavour 模拟）是同一原则的两次应用。
+
+### 影响
+
+- **行为变更**：Linux 上候选操作从「全部拒绝」恢复为可用。这是修复，不是放宽。
+- 这 54 项此前是 `setUp` 内的 **error**，不是断言失败 —— 也就是说候选隔离守卫在
+  Linux 上**从未被执行过**。修好后它们开始真正运行，并立即暴露出一个被掩盖的
+  第三个缺陷（`os.rmdir` 移除 symlink，POSIX 报 `ENOTDIR`）。该修复作为
+  GH-109 的范围修正 A1 记录，并已先呈交 Owner。
+- **CI 已验证**：PR #111 在真实 Linux runner 上 `success`
+  （run `36531475351`，`4m25s`）：main `Ran 1223 tests, OK (skipped=29)`，
+  sandbox `Ran 440 tests, OK (skipped=1, expected failures=1)`。
+  `master` 在此之前已连红 4 次。
+- 不改信任存储、晋升策略或编排器。
+
+### known_limitations
+
+- 目录的「多名字」在 POSIX 上无法被无特权进程制造，因此该豁免在**本语义下**
+  安全；若将来引入容器/命名空间/用户命名空间等使 `link(2)` 对目录可用的机制，
+  本条需复查。
+- `st_nlink` 之外的别名手段（bind mount、overlay）不在此检查覆盖范围内，
+  本条也不声称覆盖。
+
