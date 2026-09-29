@@ -83,11 +83,26 @@ skipped 与 xfail 计数**修复前后完全一致**（1 / 1），没有新 skip
 
 ### 已知限制（NOT_RUN / TO_VERIFY）
 
-- **CI 权威信号 NOT_RUN**：`minimal-ci` 在本机跑不了，最终以 PR 上的绿灯为准。
+- **CI 权威信号：已在真实 Linux runner 上 PASS**（PR #111，
+  run `36531475351`，job `Development gate (self-hosted)`，`4m25s`，
+  结论 `success`）。日志确认为 Linux 执行环境
+  （`/home/github-runner/`、`cpython-3.11.16-linux-x86_64-gnu`、`/tmp/`），且
+  数字与本机 WSL2 逐位一致：
+  - main → `Ran 1223 tests in 59.064s, OK (skipped=29)`
+  - sandbox → `Ran 440 tests in 2.809s, OK (skipped=1, expected failures=1)`
+
+  这补上了本条最初记为 `NOT_RUN` 的那一格：它是在 CI 跑完之后回填的，
+  不是预先声称。
 - 本机 Linux 为 WSL2：sandbox 腿由 uv 钉在 Python 3.11，与 CI 完全一致；
-  main 腿本地 3.12 vs CI 3.9，差一个版本，属「强但非逐位相同」。
-- sandbox 套件跑在 `/mnt/c`（DrvFs）而非原生 Linux 文件系统上，
-  差异已记录。
+  main 腿本地 3.12 vs CI 3.9，差一个版本——**但 CI 的 1223/440 数字与本机
+  相同**，故此差异未掩盖任何失败。
+- sandbox 套件本机跑在 `/mnt/c`（DrvFs）而非原生 Linux 文件系统上；
+  CI 跑在 runner 的原生 `/tmp` 上，两处都绿，差异已被权威腿覆盖。
+- **`dev_gate` 的 `scope_check` 对已提交工作是空转的**：它用
+  `git diff HEAD`（仅未暂存）计算 `changed_files`，工作区干净时恒报
+  `changed 0 file(s)`。所以它**不构成**「这 7 个文件都在范围内」的独立证据；
+  范围另用 `base.sha` 与 `path_in_scope` 单独核对（0 违规）。
+  该弱点位于 `tools/**`，本 envelope 禁止改动，值得单独立项。
 - **交叉平台污染（实测）**：WSL 与 Windows 共享 `sandbox_runtime/.venv`，
   Linux 侧 uv 写入 POSIX `lib64` symlink，导致 Windows 侧 uv
   `failed to remove file ...\.venv\lib64: 拒绝访问`，需

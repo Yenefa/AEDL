@@ -870,6 +870,10 @@ Windows 的 NTFS 不报告目录链接数（恒为 1），所以同一份代码�
   Linux 上**从未被执行过**。修好后它们开始真正运行，并立即暴露出一个被掩盖的
   第三个缺陷（`os.rmdir` 移除 symlink，POSIX 报 `ENOTDIR`）。该修复作为
   GH-109 的范围修正 A1 记录，并已先呈交 Owner。
+- **CI 已验证**：PR #111 在真实 Linux runner 上 `success`
+  （run `36531475351`，`4m25s`）：main `Ran 1223 tests, OK (skipped=29)`，
+  sandbox `Ran 440 tests, OK (skipped=1, expected failures=1)`。
+  `master` 在此之前已连红 4 次。
 - 不改信任存储、晋升策略或编排器。
 
 ### known_limitations
