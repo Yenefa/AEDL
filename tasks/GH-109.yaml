@@ -1,0 +1,127 @@
+task: GH-109
+
+base:
+  branch: fix/linux-nlink-and-cmd-probe
+  sha: c6d52d97333e1d7ae79853f2ba395bb02c5d7047
+
+goal: |
+  Make the `linux` leg of `minimal-ci` pass on `master` by fixing the two platform
+  bugs that PR #108 measured, reproduced, and recommended fixing in a separate
+  task. This is that separate task.
+
+  The red is pre-existing `master` code, not something PR #108 introduced -- but
+  a green linux leg is the only usable verification signal this project currently
+  lacks, so it is worth doing on its own merits.
+
+  Defect 1 (56 of the 57 linux failures): `_ensure_within` in
+  `sandbox_runtime/src/aedl_sandbox/workspace.py` refuses any path with
+  `st_nlink > 1`. On POSIX a DIRECTORY's `st_nlink` is `2 + subdirectory count`,
+  not an alias count, so every directory is refused and `create_candidate` fails on
+  its first operation. Windows does not report directory link counts, so the same
+  code passes there and the defect is invisible on the platform it was written on.
+
+  Defect 2 (the 57th): `test_control_plane_tools.py` probes for "a non-interpreter"
+  with `["cmd", "/c", "exit 3"]`. `cmd` is not on PATH on Linux, so the correctly
+  named refusal does not contain "exit code 3" and the assertion fails. The TOOL is
+  right; the TEST carries the platform assumption.
+
+scope: |
+  In scope:
+  - `sandbox_runtime/src/aedl_sandbox/workspace.py`
+      * `_ensure_within` applies the `st_nlink` check to NON-DIRECTORIES only.
+      * the docstring says WHY a directory's `st_nlink` is not evidence of
+        aliasing, with the POSIX rule named, so the next reader does not
+        "simplify" the guard away.
+  - `sandbox_runtime/tests/orchestrator/test_workspace.py`
+      * a regression test that fails ON WINDOWS if the check is re-broadened to
+        directories, because Windows cannot see this defect natively. Without it a
+        Windows green proves nothing about the fix.
+  - `tests/test_control_plane_tools.py`
+      * the non-interpreter probe is chosen for the running platform. The
+        assertion ("exit code 3" must be named) is NOT weakened.
+  - `tasks/GH-109.yaml`
+  - `docs/compliance/ai-usage/**`, `docs/compliance/AI_USAGE_LOG.md`
+  - `docs/compliance/DECISIONS.md` (amend ADR-017 with the POSIX semantics)
+
+  Out of scope, explicitly:
+  - `tools/dev_gate.py` and everything else under `tools/**`. `probe_interpreter`
+    behaves correctly; the defect is in the test's platform assumption. Changing
+    the tool to satisfy a wrong test is the wrong direction.
+  - `.github/**`. The Verification Policy, the required test set, the secret scan,
+    the runner environment and the skip conditions are all untouched, so the
+    two-owner GH-20 confirmation in `ci.yml` is NOT triggered. If the linux leg is
+    still red after these two fixes, the remainder is a NEW defect and gets a NEW
+    issue -- this task does not widen to chase a green leg.
+  - `gates/**`, `docs/evidence/**`, `src/**`, `delivery/**`, `notes/**`.
+  - Any `sandbox_runtime/**` file other than the two named above.
+  - Any `tests/**` file other than `tests/test_control_plane_tools.py`.
+  - The `5b2556b` commit on `fix/dev-gate-interpreter`, which stays with the Owner.
+
+dependencies: []
+
+allowed_paths:
+  - sandbox_runtime/src/aedl_sandbox/workspace.py
+  - sandbox_runtime/tests/orchestrator/test_workspace.py
+  - tests/test_control_plane_tools.py
+  - tasks/GH-109.yaml
+  - docs/compliance/DECISIONS.md
+  - docs/compliance/ai-usage/**
+  - docs/compliance/AI_USAGE_LOG.md
+
+forbidden_paths:
+  - gates/**
+  - docs/evidence/**
+  - src/**
+  - tools/**
+  - .github/**
+  - delivery/**
+  - notes/**
+
+acceptance: |
+  - `python3 -S -m unittest discover -s tests` on WSL2 Ubuntu-24.04 is green.
+    Measured BEFORE the fix: `Ran 1223 tests, FAILED (failures=1, skipped=29)`.
+  - `uv run python -m unittest discover -s sandbox_runtime/tests -p "test_*.py"`
+    on WSL2 Ubuntu-24.04 is green. Measured BEFORE the fix:
+    `Ran 438 tests, FAILED (failures=2, errors=54, skipped=1)`.
+  - The 54 `setUp` errors become EXECUTED ASSERTIONS THAT PASS. They were errors
+    inside `setUp`, so the candidate-isolation guards were never reached on Linux;
+    a fall from 56 to 0 that leaves them skipping does NOT satisfy this. No
+    adversarial workspace test may skip for a NEW reason.
+  - A mutation restoring the unconditional `st_nlink > 1` check is KILLED ON
+    WINDOWS. The defect is invisible there, so a Windows-invisible green is
+    worthless without this.
+  - Every existing hard-link test (design file, ledger, `ledger_path`) still
+    refuses with "hard link" in the message, on BOTH platforms. The fix narrows
+    the check's POPULATION; it must not weaken it for files.
+  - The Windows leg does not regress: full `python -m tools.dev_gate` green
+    locally, sandbox >= 438 tests, main >= 1223 tests.
+  - ADR-017 amended to record the POSIX `st_nlink` semantics and the resulting
+    scoping of the check to non-directories.
+  - `gates/**` and `docs/evidence/**` untouched.
+
+known_limitations:
+  - "The authoritative signal is a green `minimal-ci` run on the PR. That is
+     NOT_RUN from this machine and is left to the runner."
+  - "Local Linux verification is WSL2 Ubuntu-24.04: the sandbox leg is pinned to
+     Python 3.11 by uv, exactly as CI pins it, so that leg is faithful. The MAIN
+     leg runs Python 3.12 locally where CI uses 3.9, so a green local main leg is
+     strong but not byte-identical to CI. Stated rather than assumed away."
+  - "The sandbox suite is run from a /mnt/c path, which is a DrvFs mount rather than
+     a native Linux filesystem. `st_nlink` and symlink resolution behave with POSIX
+     semantics there, which is what made the reproduction valid, but it is a
+     difference from the runner and is recorded rather than glossed."
+
+change_budget:
+  expected_files: 6
+  expected_modules: [sandbox-workspace, main-tests, tasks, compliance]
+  cross_module: true
+  contract_change: false
+  evidence_semantics_change: false
+
+exceptions:
+  # Neither allow_dirty nor allow_drift is claimed. An Agent cannot self-authorize
+  # either one (CONTROL_PLANE §4), and neither is needed: the tree is clean and the
+  # base is the exact merge commit.
+
+escalation:
+  owner: Yenefa
