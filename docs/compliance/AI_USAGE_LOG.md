@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 130 条。完整正文在各自条目文件中；本索引只做导航。
+共 131 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -191,3 +191,4 @@
 ## 2026-09-29
 
 - [`AI-20260929-OPENCODE-A3A148D0CFF3603CF461C089ADCBD6DC`](ai-usage/AI-20260929-OPENCODE-A3A148D0CFF3603CF461C089ADCBD6DC.md) — the Linux-only path-flavour failure on master left by PR #104
+- [`AI-20260929-OPENCODE-BD1868C795E46D85B1883D3AD87012B7`](ai-usage/AI-20260929-OPENCODE-BD1868C795E46D85B1883D3AD87012B7.md) — P0 第一步 —— KICAD_VERIFY 变成纯证据生产者，裁决交给 policy

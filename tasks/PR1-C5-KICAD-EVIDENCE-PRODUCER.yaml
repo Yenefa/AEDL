@@ -1,0 +1,151 @@
+task: PR1-C5-KICAD-EVIDENCE-PRODUCER
+
+base:
+  branch: feat/c5-kicad-evidence-producer
+  sha: 8ade9b6
+
+goal: |
+  Make KICAD_VERIFY an EVIDENCE PRODUCER, and let a policy decide.
+
+  Target shape, from the Owner:
+
+      KICAD_VERIFY
+       |
+       + tool identity
+       + ERC evidence
+       + netlist evidence
+       + render evidence
+       + limits
+       |
+      policy decides
+
+  and explicitly NOT `ERC=0 -> PASS`. Today the producer IS the decider and ERC
+  evidence cannot exist at all, so a transaction can only reach COMMITTED in the
+  degenerate case where verification was skipped.
+
+  The measurement that motivates it, real kicad-cli 10.0.5 on the real board:
+
+      violations            : 39, severity mix {'warning': 39}
+      ignored_checks        : 4
+      included_severities   : ["error", "warning", "exclusion"]
+      error-severity count  : 0
+      netlist               : 21 components, 29 nets
+      render                : m2_board.svg, 646994 bytes
+      drc                   : 0 violations, 0 unconnected, 0 parity
+
+  Zero errors and thirty-nine warnings. `ERC=0 -> PASS` on THIS board means passing a
+  board with 39 warnings and 4 suppressed checks. The difference between "zero errors"
+  and "clean" lives entirely in `ignored_checks` and the severity mix.
+
+scope: |
+  In scope:
+  - gates/repair_verification.py: the KiCad slice becomes an evidence PRODUCER. It
+    emits tool identity, ERC evidence, netlist evidence, render evidence and declared
+    limits, and stops collapsing them into a single PASS/UNKNOWN. The PASS invariant at
+    :2016-2018 stops requiring `deferred == NOT_RUN`, because that conjunct is what
+    makes real evidence impossible.
+  - gates/: a policy layer that consumes the evidence bundle and DECIDES, recording
+    which evidence it decided on and which declared limits were in force.
+  - tools/repair_pipeline.py: the round carries the bundle and the policy decision;
+    `defaults.deferred_checks` stops rejecting a real ERC outcome (:1067-1069).
+  - tools/: the COMMIT predicate's conjuncts are re-checked against the POLICY
+    DECISION plus the bundle digest, not against a producer's self-assessment.
+  - tests/**: adversarial tests for each, run against the REAL board with real
+    kicad-cli where the tool is available, and skipped-with-reason where it is not.
+  - tasks/PR1-C5-KICAD-EVIDENCE-PRODUCER.yaml
+  - docs/compliance/ai-usage/**, AI_USAGE_LOG.md, DECISIONS.md
+
+  This is a CONTRACT CHANGE and is declared as one: `contract_change: true`.
+  Contract line 21 / line 351 put ERC in PR-2 and PR #99 was closed for including it;
+  the Owner's 2026-09-29 instruction supersedes that scoping (AGENTS.md section 0), and
+  `gates/**` is therefore in scope for the first time since PR #98.
+
+  Out of scope, explicitly:
+  - **F2 / F3 / F4.** The Owner's instruction parks them. F2 is a producer-
+    authentication design, F3 is `trust/store.py`, F4 is the stale ERC/DRC read in
+    `gates/run_gates.py` -- and note F4 is ADJACENT to this work, because reading a
+    stale report as PASS is the same family as `ERC=0 -> PASS`. It stays parked, and the
+    bundle binds reports to the bytes they were produced from so the two cannot be
+    confused later.
+  - **Agent Runtime, benchmark, feedback learning, planner.** Parked by the Owner.
+  - No change to `src/hardware/**`. The board is the subject of the transaction, never
+    edited by it outside the contract's own stage.
+  - No change to `sandbox_runtime/**`, `docs/evidence/**`, `delivery/**`, `notes/**`.
+
+dependencies: []
+
+allowed_paths:
+  - gates/repair_verification.py
+  - gates/*.py
+  - tools/repair_pipeline.py
+  - tools/*.py
+  - tests/test_repair_pipeline.py
+  - tests/test_c5_kicad_evidence.py
+  - tasks/PR1-C5-KICAD-EVIDENCE-PRODUCER.yaml
+  - docs/compliance/DECISIONS.md
+  - docs/compliance/ai-usage/**
+  - docs/compliance/AI_USAGE_LOG.md
+
+forbidden_paths:
+  - src/**
+  - sandbox_runtime/**
+  - docs/evidence/**
+  - delivery/**
+  - notes/**
+  - .github/**
+
+acceptance: |
+  - The producer emits a bundle carrying all five parts, and each is BOUND to the
+    bytes it was produced from: tool identity, ERC evidence, netlist evidence, render
+    evidence, declared limits. A bundle whose parts do not all bind to the same design
+    digest is refused rather than reported.
+  - The declared limits are READ FROM THE TOOL, not invented: `ignored_checks` and
+    `included_severities` come out of KiCad's own report, and a report missing either is
+    a refusal. A producer that cannot say what it skipped may not claim a clean result.
+  - The producer does NOT decide. A test asserts that mutating the evidence so the
+    verdict should flip does NOT change the producer's own output -- the verdict lives
+    only in the policy's.
+  - A policy decision PASSes a board with zero error-severity violations and 39
+    warnings ONLY if the declared limits and severity mix are carried in the recorded
+    decision. `ERC=0 -> PASS` with the limits dropped is a mutation that must be
+    killed.
+  - The PASS invariant no longer requires `deferred == NOT_RUN`, and a test proves a
+    round whose ERC actually RAN can reach COMMITTED -- which is impossible today and is
+    the P0.
+  - Every existing test still passes, with no relaxation: the 4 required checks, both
+    coverage records, both parser agreements, the delta-hash equality, the empty diff
+    lists and the unchanged dependencies all still gate a PASS. This change makes real
+    evidence POSSIBLE, it does not make the existing invariants optional.
+  - The akcli-backed APPLY is labelled NOT_RUN wherever it is not actually run. The
+    pinned akcli is absent from this machine; claiming otherwise is a truthfulness
+    failure, not a shortcut.
+  - The whole thing is exercised against the REAL board with REAL kicad-cli 10.0.5 at
+    least once, and the receipts are kept.
+
+known_limitations:
+  - "The pinned akcli is NOT on this machine, so the APPLY half of the transaction is
+     driven through the repository's own adapter worker rather than the pinned
+     toolchain. That is the sanctioned fallback, and it is labelled NOT_RUN for the
+     akcli-backed path rather than presented as covered."
+  - "kicad-cli 10.0.5 is the only KiCad measured here. Behaviour on other versions is
+     TO_VERIFY, and the bundle records the version so a mismatch is visible rather
+     than silent."
+  - "The 39 ERC warnings on the current board are NOT fixed by this change and are not
+     a defect of it. They are the reason the policy needs the limits: a policy that
+     only counts errors would pass this board. Fixing the warnings is separate work."
+
+change_budget:
+  expected_files: 8
+  expected_modules: [gates, tools, tests, tasks, docs]
+  cross_module: true
+  contract_change: true
+  evidence_semantics_change: true
+
+exceptions:
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "Yenefa 2026-09-29 会话：「P0：完成 C5 最后一公里」—— 明确要求 KICAD_VERIFY 作为证据生产者、policy 决定，并要求闭环一次真实 PCB transaction；该指令按 AGENTS.md 第 0 节优先于合同 line 21/351 的 PR-2 分工"
+  # allow_dirty is NOT claimed.
+
+escalation:
+  owner: Yenefa
