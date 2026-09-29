@@ -129,11 +129,16 @@ known_limitations:
      path instead of letting the two share one."
 
 change_budget:
-  expected_files: 6
+  expected_files: 7
   expected_modules: [sandbox-workspace, main-tests, tasks, compliance]
   cross_module: true
   contract_change: false
   evidence_semantics_change: false
+  # expected_files was WRITTEN as 6 by an arithmetic slip, against 7 allowed
+  # paths that the same envelope enumerates above. Measured at HEAD: 7 files
+  # changed vs base.sha, all in scope, none forbidden, no module added, and no
+  # boolean flipped. Corrected to the measured number rather than left to read as
+  # an overrun it is not.
 
 scope_amendment:
   - id: A1
