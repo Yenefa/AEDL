@@ -1,0 +1,115 @@
+task: ARH-HARNESS
+
+base:
+  branch: feat/arh-harness
+  sha: fa2fbe1   # 批复与 ADR-016 落盘的 commit（任务批准时的基线）
+
+goal: |
+  实现 AEDL Agent Runtime Harness（ARH）V1 的**离线核心**：五模块 + LLMRepairPort，
+  使 LLM 能以 proposal-only 方式接入既有 RepairPort 契约，同时权威字段被 schema
+  拒绝（RFC §2.5 的 N2 BLOCKING），全程不触碰 frozen protocol/state/orchestrator。
+
+  依据：ADR-016（D1–D7 已批复）、docs/specs/AEDL_AGENT_RUNTIME_RFC.md、
+  docs/specs/ARH_DECISION_SHEET.md。单一结果：arh 包 + 单测全绿，
+  dev_gate（含 scope/binding）通过，测试全程零网络。
+
+scope: |
+  In scope:
+  - sandbox_runtime/src/aedl_sandbox/arh/**：
+      * schema.py — RepairProposal / RepairContext 数据结构与确定性编码
+        （RFC §3.2 字段表 + §3.3 输出契约；不发明 AEDL 不存在的数据）
+      * model_adapter.py — ModelAdapter 协议 + FakeModelAdapter + OpenAI 兼容适配器
+        （HTTP 传输函数可注入；测试只用 fake transport，真实网络 NOT_RUN）
+      * context_builder.py — L0 组装（§3.2 字段与裁剪顺序：绝不裁
+        findings/allowlist/action_schema/deny_list）、L1 指针化、L2 禁止清单
+      * repair_agent.py — prompt 组装、proposal 解析与三重静态校验：
+        权威字段拒绝（N2）、design_action 词表（SUBJECT_SPECS 白名单）、
+        evidence_ids 集合校验（cited ⊆ available、required ⊆ cited）
+      * llm_repair_port.py — RepairPort 实现：propose() → context → agent → 校验 →
+        落成 PolicyRequest；action/action_id 由 Harness 固定语义，
+        capability_grants 恒空、actor 固定 actor_kind="agent"（D7/G1 不启用）
+      * trajectory.py — append-only JSONL TrajectoryRecorder（独立目录，
+        不写 receipt_root、不被 TrustPort 读取——N4）
+      * budget.py — ARH-N6 Budget&Stop 独立模块：调用数 / token / wall-clock /
+        连续无效提案 / 连续格式错误五类阈值，超限即停（D4）
+  - sandbox_runtime/tests/arh/** — 上述全部单测（unittest，与仓库一致，零网络）
+  - tasks/ARH-HARNESS.yaml、docs/compliance/ai-usage/**、docs/compliance/AI_USAGE_LOG.md
+
+  Out of scope, explicitly:
+  - **不修改** protocol.py / state.py / orchestrator.py / adapters.py / policy/** /
+    trust/** / workspace.py / cli.py（ADR-016：RepairPort 经既有构造参数注入）
+  - 不接真实 LLM 网络调用（真实 provider 一律 NOT_RUN，仅 fake transport 单测）
+  - 不实现 G1 grant 对账，不启用任何 capability（恒 fail-closed）
+  - 不实现 benchmark runner / fault 注入 / Stage 0（另立任务）
+  - 不给 Agent 任何 execute/shell/写工具（never-grant，RFC §2.3）
+  - 不改 docs/specs/**（RFC 与 Decision Sheet 已冻结；新决定 → 新 ADR）
+  - gates/**、docs/evidence/**、src/**、tools/**、.github/** 不碰
+
+dependencies: []
+  # 无外部依赖。注意 tools/admit.py 按 TRAILING DIGITS 解析依赖 ref，
+  # 本任务 id 不带数字，dependencies 为空即可。
+
+allowed_paths:
+  - sandbox_runtime/src/aedl_sandbox/arh/**
+  - sandbox_runtime/tests/arh/**
+  - tasks/ARH-HARNESS.yaml
+  - docs/compliance/ai-usage/**
+  - docs/compliance/AI_USAGE_LOG.md
+
+forbidden_paths:
+  - gates/**
+  - src/**
+  - tools/**
+  - .github/**
+  - docs/evidence/**
+  - delivery/**
+  - docs/specs/**
+  - docs/research/**
+  - sandbox_runtime/src/aedl_sandbox/protocol.py
+  - sandbox_runtime/src/aedl_sandbox/state.py
+  - sandbox_runtime/src/aedl_sandbox/orchestrator.py
+  - sandbox_runtime/src/aedl_sandbox/adapters.py
+  - sandbox_runtime/src/aedl_sandbox/workspace.py
+  - sandbox_runtime/src/aedl_sandbox/cli.py
+  - sandbox_runtime/src/aedl_sandbox/policy/**
+  - sandbox_runtime/src/aedl_sandbox/trust/**
+
+acceptance: |
+  - `uv run --frozen --project sandbox_runtime python -m unittest discover
+    -s sandbox_runtime/tests -p "test_*.py"` 全绿，既有测试零削弱。
+  - `python -m tools.dev_gate --envelope tasks/ARH-HARNESS.yaml` exit 0
+    （syntax / main_tests / sandbox_tests / secret_scan / ai_usage_ledger /
+    scope_check / binding_check 一并通过）。
+  - **N2 可观测证据**：proposal 携带 actor / capability_grants / run_id /
+    action_id / action / verified_bundle_* 任一权威字段 → 拒绝且**不调用
+    propose**；存在反向测试（去掉拒绝逻辑则测试红）。
+  - **D2 口径可达**：非白名单 design_action、多余 subject 键 → 走
+    invalid_proposals 计数路径，与 policy 判决严格分列。
+  - evidence 集合校验失败（cited ⊄ available、required ⊄ cited）→ 拒绝。
+  - **N4 证据**：trajectory 写入独立目录，测试断言其产物不含 receipt 结构、
+    不落 receipt_root。
+  - **N6/D4 证据**：五类预算阈值各自独立触发即停，并记 invalid_run 语义；
+    图内熔断（max_repairs/fingerprint）不被 ARH 触碰或放宽。
+  - 全部测试零网络：所有模型调用经 FakeModelAdapter 或注入 transport。
+  - forbidden_paths 中无任何文件被修改（scope_check 证明）。
+
+change_budget:
+  expected_files: 18        # 实测 18：src 8 + tests 9 + 1 条 AI usage；+2 为
+                            # fixtures.py / test_arh_schema.py，模块集不变
+  expected_modules: [sandbox_runtime.arh, sandbox_runtime.tests, tasks, docs]
+  cross_module: false
+  contract_change: false          # protocol/state 语义不动；arh 是新增包
+  evidence_semantics_change: false
+
+exceptions:
+  allow_drift:
+    granted_by: Owner
+    decision_ref: "会话 2026-09-28：「批复，没有本阶段不做的，全量全速全质推进！开始」"
+  allow_dirty:
+    permitted: true
+    reason: "existing unaccepted work-in-progress — Owner 在途未提交修改 tools/dev_gate.py（FOREIGN：不暂存、不提交、不修改）"
+    authority: task-envelope
+  # allow_dirty 仅覆盖上述已指认的 FOREIGN 文件；本任务自身产出必须全部已提交。
+
+escalation:
+  owner: Yenefa

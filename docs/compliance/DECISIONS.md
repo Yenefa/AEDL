@@ -629,6 +629,97 @@
 - AI 参与：本条由 OPENCODE 会话产出，实测与代码见
   `AI-20260928-OPENCODE-449C2176753ED1792897B0855526CD92`。
 
+## ADR-016 — ARH：LLM Repair Agent 以 proposal-only 接入既有 Trust Plane，benchmark 口径先冻结后实现
+
+- 日期：2026-09-28
+- 状态：**Accepted**（Owner 2026-09-28 会话批复原文：「批复，没有本阶段不做的，全量全速全质推进！开始」；
+  D1–D7 与 B1–B5 按 `docs/specs/ARH_DECISION_SHEET.md` Recommended 全数通过）
+
+- 问题：
+  - 要把真实 LLM 接回 AEDL，让它依据 verifier findings 反复修复，同时**不破坏**已建成的
+    Trust Plane（authorization / HostPatch / transaction / compare_delta / fresh read-back /
+    post-condition / evidence / 人工晋升）。
+  - 三条现成路径各有一个致命面：直接拿 coding harness 当 runtime（其 ACI 假设 Agent 拥有
+    shell 与代码写权，等于允许 LLM 直接 `sed` 一个 `.kicad_sch`）；从零造 Agent framework
+    （重复造轮子）；整体迁到现成 agent framework（SDK 可换，AEDL 契约不可换）。
+  - 实验方法学问题：D1/D2/D4 是 benchmark 口径不是功能选择，先写代码后定口径 = 数据作废
+    （RFC §4.5 冻结依赖）；且 RFC §4.2 注入条件①会静默剔除 verifier 漏检的 fault，
+    使漏检率在协议结构上不可测（O-12）。
+
+- 候选方案：
+  1. coding harness（mini-SWE-agent / SWE-agent / OpenHands）直接作为 AEDL runtime —— 否决。
+  2. 迁移到现成 agent framework（OpenAI Agents SDK 等）作为运行时 —— 否决。
+  3. 自研完整 Agent framework —— 否决（V1 不需要）。
+  4. **薄的 AEDL-native ARH**（本条采纳）：保留 LangGraph + RepairPort + Trust/Transaction 层，
+    新增五个薄模块，吸收 coding harness 的 Model/Environment/Trajectory/ACI **设计经验**而不
+    继承其权限模型。
+
+- 决策：
+  - 架构五行走齐：`LangGraph KEEP`（外层 routing/checkpoint，ADR-008 边界不变）、
+    `RepairPort KEEP`（frozen 签名 `propose(run_id, candidate_id, findings) -> PolicyRequest`
+    是 LLM 的唯一出口）、`Trust Plane KEEP`、`Coding harness REFERENCE ONLY`、
+    `ARH = THIN AEDL-NATIVE`（ModelAdapter / ContextBuilder / RepairAgent /
+    TrajectoryRecorder / Budget&Stop）。细则以
+    `docs/specs/AEDL_AGENT_RUNTIME_RFC.md` 为准。
+  - V1：**单 Repair Agent、proposal-only**（无 execute / shell / 任何写工具），产出
+    `RepairProposal`，由 Harness 构造 `PolicyRequest`（`actor`/`capability_grants`/
+    `run_id`/`action_id`/`action` 等权威字段 agent 不可携带，出现即 schema 拒绝）。
+    真实 LLM 接入前置 = RFC §2.5 五项 BLOCKING（N2/N3/N4/N6/N8）落地 + G1/G8 保持不启用。
+  - **D1**：fingerprint 维持 `(code, message)`，`state.py` 不动；「换措辞绕过 stall」记为
+    V1 已知限制，由 Harness 预算/去重兜底；severity 过滤或 `details` 入指纹属 V2 契约变更。
+  - **D2**：`invalid_proposals` 由 Harness 预校验层统一计数（含输出侧丢弃的重试），与
+    `policy_denied_runs` 严格分列；**保留**其为 `converged_strict` 必要条件。
+  - **D3**：上下文窗口取保守值（`code_window` 40 行 / attempt_history 最近 1 轮折叠），
+    全标 `TO_VERIFY`，pilot 中 A/B 40 vs 100。
+  - **D4**：双层预算——图内完全复用 `max_repairs`/fingerprint/`repair_count`（不新造、不放宽）；
+    图外 LLM 预算（调用数/token/wall-clock/连续无效提案/格式错误）由 Harness 强制，超限记
+    `INVALID_RUN`。Budget&Stop 为**独立模块**（ARH-N6），不 fold 进其他文件。
+  - **D5**：`receipts_digest` 用 `{event_type, hash12}`（以 `state.encode_receipt` 现有字段为准）。
+  - **D6**：allowlist 是字段**投影**，禁止 `engine.document` / `current_state()` 全量进 prompt。
+  - **D7**：V1 不引入 READ grant；读能力 = Harness 工具白名单 + 作用域；V2 引入 grant 的
+    前置 = G1 对账实现。
+  - **Stage 0**：`Verifier Capability Pre-measurement`（RFC §4.0）作为 fault set 构建的
+    前置工序，谓词复用 §4.2 条件①（= 冻结项 1 的 killable 校验），唯一改变是「过滤器 →
+    过滤器 + 计数器」；Stage 1 收敛指标 conditional on detectability，recall 表与收敛率
+    **绑定报告**；recall 不进 scoring。
+  - **顺序**：拍板（本条）→ §4.5 文本类冻结项即刻冻结（引用本 ADR 所在 commit）→
+    implementation。fault set、随机性/模型参数类冻结项因 `NOT_RUN` 尚未冻结，Stage 0
+    执行时补齐后方可进入主实验。
+  - **位置**：ARH 落 `sandbox_runtime/src/aedl_sandbox/arh/`（新增包；`protocol.py`、
+    `state.py` 语义不改）；benchmark 工具链与 runtime 预算分账（runner/fault 生成/评测
+    独立于 500–1000 行的 harness runtime 预算）。
+
+- 影响：
+  - `protocol.py` / `state.py` / LangGraph 节点结构不动；orchestrator 未来仅在装配点接收
+    一个 `RepairPort` 实现。
+  - benchmark 文本类口径自本条冻结，改 = 重跑（§4.5）。
+  - RFC 红队分账的 8 项**现有**缺口（G1–G8）不因本条被宣称已修复：G1 对账（「Execution
+    Authority Binding」）单独立项，未实现前 V1 不启用任何 capability（恒 fail-closed）。
+  - 对外主张纪律：只能声称「V1 设计上 Agent 无写权限、权威字段 schema 拒绝」（可演示），
+    **不得**声称「已证明 Agent 无法绕过」——执行验证 `NOT_RUN`。
+
+- 复查条件：
+  - 五项 BLOCKING 未全部落地前，真实 LLM 不接入（RFC §2.5）。
+  - 若需启用任何 capability、或变更 fingerprint 语义 → 本条相应部分失效，须新 ADR。
+  - Stage 0 recall 若出现 `VERIFIER_BLIND_CLASS` 且落在核心 fault class 上 → benchmark
+    主张范围重议。
+  - 若 `protocol.py` 冻结被解冻或 RepairPort 签名变更 → 重议 ARH 出口契约。
+
+- Evidence / Reference：
+  - `docs/specs/AEDL_AGENT_RUNTIME_RFC.md`（§1–§7，含 §4.0 与 O-01..O-28）
+  - `docs/specs/ARH_DECISION_SHEET.md`（拍板回执，2026-09-28）
+  - `docs/research/agent-runtime/01..06`（六路研究，各带来源）
+  - `AI-20260928-OPENCODE-8651841DEF357F134049F6F9FA652DCE`（六路研究 + RFC 综合）、
+    `AI-20260928-OPENCODE-787EDCFDB16A56688A50C97A85C1DE5C`（§4.0 + Decision Sheet）
+  - ADR-008（LangGraph 边界）、ADR-014/ADR-015（同期纪律）
+  - 一切 benchmark 数字：**NOT_RUN**（本条只冻结口径，不含任何结果）
+
+- 团队自主判断：架构四选一（A coding harness / B 迁框架 / C 自造 framework / D 薄 ARH）由
+  Owner 在 RFC 评审中裁定选 D；「V1 不上 Multi-Agent、单 Agent 是要验证的实验本身」为 Owner
+  先前裁定；D1–D7 的 Recommended 为 AI 依据六份研究报告给出，**批准动作是人的**。
+- AI 参与：OPENCODE 主会话 + 7 个子代理（6 研究 + 1 综合）产出 RFC 与报告；本条 ADR 文本
+  由 OPENCODE 起草，记录于上述两条 AI usage 条目，`PENDING_HUMAN_REVIEW`。
+
 ## ADR-017: 候选边界是**候选**，不是 workspace；别名文件不是候选内容
 
 - 状态：accepted（未合并，pending human review）
