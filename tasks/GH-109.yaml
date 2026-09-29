@@ -36,6 +36,11 @@ scope: |
       * a regression test that fails ON WINDOWS if the check is re-broadened to
         directories, because Windows cannot see this defect natively. Without it a
         Windows green proves nothing about the fix.
+      * **SCOPE AMENDMENT (see the amendment block at the end of this envelope):**
+        the planted link is removed with `os.unlink` when `_junction` produced a
+        symlink, and `os.rmdir` when it produced a Windows junction. Added because
+        this acceptance criterion -- that the 54 `setUp` errors become EXECUTED
+        assertions that pass -- cannot be satisfied while this line fails.
   - `tests/test_control_plane_tools.py`
       * the non-interpreter probe is chosen for the running platform. The
         assertion ("exit code 3" must be named) is NOT weakened.
@@ -49,13 +54,17 @@ scope: |
     the tool to satisfy a wrong test is the wrong direction.
   - `.github/**`. The Verification Policy, the required test set, the secret scan,
     the runner environment and the skip conditions are all untouched, so the
-    two-owner GH-20 confirmation in `ci.yml` is NOT triggered. If the linux leg is
-    still red after these two fixes, the remainder is a NEW defect and gets a NEW
-    issue -- this task does not widen to chase a green leg.
+    two-owner GH-20 confirmation in `ci.yml` is NOT triggered.
   - `gates/**`, `docs/evidence/**`, `src/**`, `delivery/**`, `notes/**`.
   - Any `sandbox_runtime/**` file other than the two named above.
   - Any `tests/**` file other than `tests/test_control_plane_tools.py`.
   - The `5b2556b` commit on `fix/dev-gate-interpreter`, which stays with the Owner.
+  - **Any further defect.** This envelope originally promised that a red leg after
+    these fixes would become a NEW issue rather than a widened scope. That promise
+    was kept for every defect EXCEPT the one this amendment names, which was
+    masked by defect 1 and could not be observed until defect 1 was fixed. A
+    further defect appearing now is a new issue; this line is not being relaxed
+    twice.
 
 dependencies: []
 
@@ -110,6 +119,14 @@ known_limitations:
      a native Linux filesystem. `st_nlink` and symlink resolution behave with POSIX
      semantics there, which is what made the reproduction valid, but it is a
      difference from the runner and is recorded rather than glossed."
+  - "The WSL2 run and the Windows run SHARE `sandbox_runtime/.venv` through the
+     DrvFs mount, and this was measured rather than assumed: the Linux `uv` wrote
+     a POSIX `lib64` symlink into the Windows venv, after which the Windows `uv`
+     failed with `error: failed to remove file ...\\.venv\\lib64: access denied`
+     until the link was removed with `cmd /c rmdir`. The Windows venv is a
+     gitignored build artefact and no tracked file was affected, but a future
+     cross-platform run should point `UV_PROJECT_ENVIRONMENT` at a per-platform
+     path instead of letting the two share one."
 
 change_budget:
   expected_files: 6
@@ -117,6 +134,43 @@ change_budget:
   cross_module: true
   contract_change: false
   evidence_semantics_change: false
+
+scope_amendment:
+  - id: A1
+    path: sandbox_runtime/tests/orchestrator/test_workspace.py
+    adds: "os.unlink for a symlink, os.rmdir for a junction, when removing the link this test plants"
+    reason: |
+      This is a third defect, and it was MASKED by defect 1 rather than found
+      independently. `test_a_junction_inside_a_candidate_refuses_its_content_hash`
+      asserts that `candidate_hash` REFUSES a candidate containing a link, and
+      that refusal happened inside `setUp` -- so on Linux the test errored before
+      `candidate_hash` ever hashed anything, and the `os.rmdir` on line 394 was
+      never reached. It has therefore never executed on Linux for as long as
+      defect 1 existed.
+
+      Fixing defect 1 is what made it visible: the acceptance criterion for this
+      task is that the 54 `setUp` errors become EXECUTED ASSERTIONS THAT PASS, and
+      that criterion cannot be met while this line raises `ENOTDIR`. The amendment
+      is a consequence of the fix, not a substitute for it.
+
+      It is the same class as defect 2 -- a Windows-only assumption in a test that
+      Windows cannot fail. `_junction` builds a symlink wherever symlinks are
+      available and a junction only where they are not, so the correct removal is
+      not portable and the original author's `os.rmdir` (correct, and measured, for
+      the Windows junction) is wrong for the symlink case.
+
+      Why this is not ordinary scope creep: the file is already in `allowed_paths`,
+      `expected_files` does not change, no `change_budget` boolean flips, and no
+      production code is touched. It is also the ONLY amendment, and the
+      "any further defect" line above stays in force -- a red leg after this is a
+      new issue.
+
+      Recorded here rather than made silently, and the Owner was asked before it
+      was taken.
+    authority: "Owner session 2026-09-29 「继续」, given the amendment was put to them first"
+    issues_if_rejected: >-
+      If a reviewer rejects A1, the fix is a 4-line revert and the linux leg goes
+      red again with exactly one error. Nothing else in this envelope depends on it.
 
 exceptions:
   # Both grants below cover ONE thing only: this envelope's own commit. A new

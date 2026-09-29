@@ -5,6 +5,7 @@ Pure-logic tests only: no git, gh, uv or interpreter required at test time
 """
 
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -731,8 +732,27 @@ class DevGateInterpreterTests(unittest.TestCase):
         self.assertIsNone(dev_gate.probe_interpreter([sys.executable]))
 
     def test_a_non_interpreter_is_refused_not_assumed(self):
-        """Something that exists and exits non-zero is still not a Python."""
-        reason = dev_gate.probe_interpreter(["cmd", "/c", "exit 3"])
+        """Something that exists and exits non-zero is still not a Python.
+
+        The probe has to name something that EXISTS ON THE PLATFORM THE TEST RUNS
+        ON, or the test measures the platform instead of the behaviour. This
+        asserted `cmd`, which is Windows-only: on linux `cmd` is not on PATH,
+        `probe_interpreter` correctly answered "no interpreter at 'cmd'", and the
+        assertion below failed on a refusal that was right for the wrong reason.
+
+        So the shell is chosen per platform and the ASSERTION is left exactly as
+        strict: the refusal still has to name the exit code, which only a command
+        that really ran to completion can produce. A bare `/bin/false` would make
+        this portable but would no longer test that a RUNNING non-interpreter is
+        refused, which is the actual point.
+        """
+        if os.name == "nt":
+            shell = ["cmd", "/c", "exit 3"]
+        else:
+            # `sh -c "exit 3" --version`: the first operand after the command
+            # string is $0, so --version lands there and never reaches `exit`.
+            shell = ["sh", "-c", "exit 3"]
+        reason = dev_gate.probe_interpreter(shell)
         self.assertIsNotNone(reason)
         self.assertIn("exit code 3", reason)
 
