@@ -219,9 +219,20 @@ followup: "真实调用结果按「有边界的探针」记录（模型 deepseek
 # exit must fail execution while retaining its receipt; HIR domain/run/candidate
 # identities must match the verifier's independently supplied context; targeted
 # regressions and the complete dev_gate pass; regenerate a consistent bundle;
-# push and merge #115 with a merge commit after current-head CI succeeds.
+# push and merge #115 with a merge commit after required local dev_gate and
+# independent Windows/Linux verification pass; report remote CI's actual state.
 # The merge includes #113's existing commits, already included in reviewed #115.
 # No separate approval or merge action is authorized for an unrelated PR.
 # Evidence Needed: NO (development receipts only). AIC Score Target: NONE.
 # Third-party/ADR/Fusion/Open Outputs/Submission triggers: none; implement the
 # existing ADR-019 refusal and provenance rules without a new architecture.
+#
+# Observed verification disposition (same Owner authorization, no new waiver):
+# CI run 36728889091 attempts 1/2/3 all failed during runner setup while
+# downloading astral-sh/setup-uv's action archive from codeload.github.com.
+# No code check ran remotely. The earlier CI-success plan is therefore replaced
+# by the actually completed Windows dev_gate (8/8) and independent WSL Linux
+# main/sandbox suites (1223/513). CI workflow/required checks are unchanged;
+# master has no enforced required check. The Owner's explicit fix-and-merge
+# instruction remains the merge authority; remote CI is reported as an
+# infrastructure failure, never relabelled PASS. Benchmark remains out of scope.
