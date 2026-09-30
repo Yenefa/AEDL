@@ -166,3 +166,32 @@ exceptions:
 
 escalation:
   owner: Yenefa
+
+## Scope amendment A1 — 真实 LLM 探针（Owner 直接授权）
+
+id: A1
+path: sandbox_runtime/src/aedl_sandbox/toolports.py, sandbox_runtime/tests/toolports/**
+change: envelope 的 output_kind 由「每个信封必填」改为「请求期对注册表消解」；
+  并用一次真实 LLM 调用跑通 repair 轮次
+reason: |
+  Owner 于 2026-09-30 直接指示「需要用key测试的话你不是有么？直接用就行了……你做主」，
+  并给出 10 元预算。这条授权独立于本 envelope 原有的 out-of-scope 声明（原声明明确写
+  「No API key is configured ... no real network call is made」），因此在此**显式记录为范围修正**，
+  而不是把它算作原计划内。
+
+  探针本身不入库、不跑在 CI：它是 $TEMP 下的一次性脚本，key 只从进程环境变量读、不回显、
+  不落盘、不进 argv。仓库内没有任何凭据。
+
+  探针立刻抓到一个**此前 502 个测试都没抓到的真实缺陷**：repair_agent 的 proposal 只带
+  design_action + design_subject（output_kind 刻意不在它的 action schema 里，因为产物类别是
+  运行与域的契约、不该是 proposal 能变动的东西），于是 repair 轮次的信封没有 output_kind，
+  第二次 execute 抛 ENVELOPE_MISSING_OUTPUT_KIND —— **GH-114 的真实端口把模型这条路径变成
+  不可达**，而单元测试全部是绿的，因为没有任何测试让 repair 轮次真的执行第二次。
+
+  修法尊重那条设计：解析器不再强求 output_kind（只把它列为允许键），要求被移到两处能真正
+  回答它的地方 —— CLI 在配置层要求操作者声明；executor 在请求期对**域自己的注册表**消解，
+  且只在「恰好一个可运行产物类别」时消解，两个或零个都具名拒绝。
+owner_decision: "Owner session 2026-09-30 直接授权使用其自有 key 做真实调用；预算 10 元"
+decision_ref: "Owner message: 「需要用key测试的话你不是有么？直接用就行了，用多模态的，你看着用，只有十块钱」"
+followup: "真实调用结果按「有边界的探针」记录（模型 deepseek-flash / 端点 api.deepseek.com /
+  单次 / 约 ¥0.003），不主张任何效果；benchmark 仍是 Issue #73"

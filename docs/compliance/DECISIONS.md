@@ -1080,3 +1080,47 @@ compiler 与 verifier 按设计是两个不同 id；把 compiler 的 id 写进 a
 - **风险**：读者可能把「一轮能跑完」误读为「agent 修好了东西」。PR 必须同段写明相反的话。
 - **已知缺口**：软保留引脚的 `approval_status` 授权判定留在 policy 层，executor 只记录
   不判定——它没有携带该授权，也不得凭空假定。
+
+### 复查与追加（同日，真实 LLM 探针，Owner 直接授权）
+
+**范围**：Owner 指示可直接使用其自有 key 做真实调用（预算 10 元）。探针一次性、位于
+`%TEMP%`、不入库、不进 CI；key 只从**进程环境变量**读，不回显、不落盘、不进 argv。
+本条独立于本 envelope 原有的 out-of-scope 声明，已作为 **GH-114 scope amendment A1** 记录。
+
+**探针方法**：走真实生产路径（`build_test_only_policy_port` → 注册表派生的 `ToolPorts` →
+`build_arh_orchestrator(model=OpenAICompatibleAdapter(真实 transport))` → `run()`），
+只把 verifier 桥成「首轮必挂」，作为**唯一**让 repair 节点运行、因而让真实模型调用发生的理由。
+
+**结果（模型 `deepseek-flash`，端点 `api.deepseek.com`）**：
+
+- 轨迹序列：`round_start` → **`model_call`** → `attempt(outcome=accepted)`；
+  usage input **2348** / output **211** / cache_read 2176；延迟 **1359 ms**；单次约 **¥0.003**。
+- 模型诊断：`PROBE_BRIDGE_FORCES_REPAIR: ... re-emit the frozen, allowlisted component
+  selection.` —— **正确引用了 finding code**；action `DESIGN_SELECT_COMPONENT`。
+- **三道静态校验 `outcome: accepted`**：真实模型的 proposal 过得了。
+- 终态 `REPAIR_STALLED`（桥接 verifier 恒挂，符合预期）。
+
+**由此推翻了一条此前的 UNKNOWN**：「真实模型输出是否过得了三道静态校验」在**这一次调用、
+这一个模型**上答案是**过得了**。这是**有边界的**结论，不是「模型质量已确认」：n=1、单一模型、
+单一 prompt 形态、单一端点，且探针只证明**校验可过**，不证明**修得对**（无 ground truth，
+Issue #73）。
+
+**探针抓到的真实缺陷（ADR-019 决策 5 的修正）**：
+
+`repair_agent` 的 proposal 只带 `design_action` + `design_subject`——`output_kind` **刻意不在**
+它的 action schema 里，因为产物类别是运行与域的契约、不该是 proposal 能变动的。于是 repair
+轮次的信封没有 `output_kind`，第二次 `execute` 抛 `ENVELOPE_MISSING_OUTPUT_KIND`。
+**GH-114 的真实端口把模型这条路径变成不可达，而 502 个测试全绿**——因为没有任何测试让 repair
+轮次真的执行第二次。这是「绿灯证明了 harness 符合自己的规格，没证明任何东西在跑」的同一个
+故障形态，在我的新代码里又出现了一次。
+
+**修正**（决策 5 的修订，并新增决策 8）：解析器**不再强求** `output_kind`，只把它列为允许键；
+要求被移到两个能真正回答它的地方——CLI 在**配置层**要求操作者声明，executor 在**请求期**对
+域自己的注册表消解，且**只在恰好一个可运行产物类别时**消解，两个或零个都具名拒绝。
+新增两个测试覆盖这两条（回归 + 歧义拒绝），sandbox 502 → 504。
+
+### 已知限制（追加）
+
+- **探针结论的边界**：n=1、单一模型（`deepseek-flash`）、单一 prompt 形态。它证明
+  「校验可过」，**不证明「修得对」**。任何把它读成效果主张的用法都是过度解读。
+- 该次调用**不是** benchmark，也**不进入**任何 Evidence 台账：它是开发期的有界探针。

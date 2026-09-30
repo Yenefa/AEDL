@@ -67,18 +67,76 @@ class EnvelopeSchemaTests(TempRootTest):
         self.assertEqual(caught.exception.code, "ENVELOPE_UNEXPECTED_KEYS")
         self.assertIn("smuggled", caught.exception.details["unexpected_keys"])
 
-    def test_missing_output_kind_is_refused_rather_than_guessed(self) -> None:
+    def test_a_repaired_envelope_may_omit_the_kind(self) -> None:
+        """A repair PROPOSAL cannot restate it, so the parser must not demand it.
+
+        output_kind is deliberately outside the model's action schema (it is the
+        RUN's contract with its domain, not something a proposal may vary), and
+        the orchestrator re-drives execution from the proposal's envelope. A live
+        probe caught the consequence of getting this wrong: every repaired round
+        failed to execute with ENVELOPE_MISSING_OUTPUT_KIND.
+        """
         envelope = fixtures.design_envelope_for(self.base)
         del envelope["output_kind"]
-        with self.assertRaises(ToolPlanError) as caught:
-            fixtures.split(envelope)
-        self.assertEqual(caught.exception.code, "ENVELOPE_MISSING_OUTPUT_KIND")
+        action, subject, resolved = fixtures.split(envelope)
+        self.assertEqual(action, "DESIGN_SELECT_COMPONENT")
+        self.assertEqual(resolved, "")
 
-    def test_blank_output_kind_is_refused(self) -> None:
-        envelope = fixtures.design_envelope_for(self.base, output_kind="   ")
+    def test_the_executor_resolves_the_kind_from_the_registry(self) -> None:
+        """Absent kind + exactly one runnable kind = the only thing it could mean."""
+        envelope = fixtures.design_envelope_for(self.base)
+        del envelope["output_kind"]
+        executor, _verifier = self._ports(envelope=envelope)
+        request = fixtures.execute_request(self.base, envelope)
+        result = executor.execute(request)
+        self.assertTrue(result.success, [f.code for f in result.findings])
+        self.assertEqual(result.actor_id, "in-repo-hir")
+
+    def test_ambiguous_kinds_are_refused_rather_than_picked(self) -> None:
+        """Two runnable kinds and no declaration is a refusal, not an invention."""
+        from aedl_sandbox.toolports import ToolExecutor
+
+        document = adapters.test_only_document()
+        document["compilers"].append(
+            {
+                "compiler_id": "in-repo-hir-second",
+                "compiler_version": "1.0.0",
+                "output_kind": "hir-report",
+                "required_coverage_ids": ["STRUCTURE"],
+            }
+        )
+        document["verifiers"].append(
+            {
+                "verifier_id": "in-repo-hir-second-verifier",
+                "verifier_version": "1.0.0",
+                "artifact_kind": "hir-report",
+                "coverage_ids": ["STRUCTURE"],
+            }
+        )
+        engine = fixtures.engine_for(document, self.base)
+        from aedl_sandbox.toolports import InRepoHirBackend, registry_from_document
+
+        mapping = dict(adapters.IN_REPO_TOOL_BACKENDS)
+        mapping["in-repo-hir-second"] = adapters.BACKEND_IN_REPO_HIR
+        mapping["in-repo-hir-second-verifier"] = adapters.BACKEND_IN_REPO_HIR
+        registry = registry_from_document(
+            engine.document,
+            backends={adapters.BACKEND_IN_REPO_HIR: InRepoHirBackend(engine.document)},
+            backend_for_tool=mapping,
+        )
+        executor = ToolExecutor(registry, backend=adapters.BACKEND_IN_REPO_HIR)
+        envelope = fixtures.design_envelope_for(self.base)
+        del envelope["output_kind"]
+        result = executor.execute(fixtures.execute_request(self.base, envelope))
+        self.assertFalse(result.success)
+        self.assertEqual([f.code for f in result.findings], ["EXECUTOR_TOOL_NOT_RESOLVED"])
+        self.assertIn("ambiguous", result.findings[0].message)
+
+    def test_a_non_text_output_kind_is_refused(self) -> None:
+        envelope = fixtures.design_envelope_for(self.base, output_kind=17)
         with self.assertRaises(ToolPlanError) as caught:
             fixtures.split(envelope)
-        self.assertEqual(caught.exception.code, "ENVELOPE_MISSING_OUTPUT_KIND")
+        self.assertEqual(caught.exception.code, "ENVELOPE_OUTPUT_KIND_NOT_TEXT")
 
     def test_orchestrator_actions_are_not_design_actions(self) -> None:
         envelope = fixtures.design_envelope_for(self.base, action="COMPILE_HIR", subject={})

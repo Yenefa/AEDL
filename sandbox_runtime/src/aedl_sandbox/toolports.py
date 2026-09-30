@@ -113,7 +113,13 @@ DESIGN_SUBJECT_KEY = "design_subject"
 #: contract of the RUN rather than a field a proposal could vary.
 ENVELOPE_OUTPUT_KIND_KEY = "output_kind"
 
-#: The complete envelope schema. Closed on purpose -- see design_envelope.
+#: The complete envelope schema, CLOSED on purpose -- see design_envelope.
+#: output_kind appears here because it is permitted at this layer, but it is not
+#: REQUIRED of every envelope: a repair proposal carries only the two contract
+#: keys, and a round re-drives execution from that proposal. Requiring the kind
+#: of every envelope would make every repaired round unexecutable, which a live
+#: probe caught. The requirement is enforced where it can be met -- at request
+#: time, against the domain's registry (ToolExecutor._request_output_kind).
 _ENVELOPE_KEYS = (DESIGN_ACTION_KEY, DESIGN_SUBJECT_KEY, ENVELOPE_OUTPUT_KIND_KEY)
 
 #: The design actions that describe a candidate. The orchestrator's own actions
@@ -452,12 +458,19 @@ def design_envelope(
         )
     # Blank is treated as missing, for the same reason the API key is: an empty
     # value would travel one layer further and fail somewhere less legible.
-    if not isinstance(output_kind, str) or not output_kind.strip():
+    if output_kind is None:
+        # Absent is NOT the same as malformed. A repair proposal carries only
+        # design_action + design_subject -- output_kind is deliberately outside
+        # the model's action schema -- so a repaired envelope has no kind to
+        # restate and a round re-drives execution from it. Refusing here would
+        # make every repair round unexecutable; the requirement is enforced
+        # against the domain's registry instead, where the answer lives.
+        output_kind = ""
+    if not isinstance(output_kind, str):
         raise ToolPlanError(
-            "ENVELOPE_MISSING_OUTPUT_KIND",
-            "the envelope declares no %r. The artifact kind decides which "
-            "registered compiler may produce it, so it cannot be left for the "
-            "executor to guess." % ENVELOPE_OUTPUT_KIND_KEY,
+            "ENVELOPE_OUTPUT_KIND_NOT_TEXT",
+            "%r must be a string when present, got %r"
+            % (ENVELOPE_OUTPUT_KIND_KEY, output_kind),
         )
     if action not in _PLAN_ACTIONS:
         raise ToolPlanError(
@@ -1061,8 +1074,38 @@ class ToolExecutor:
     def _one_or_them(registrations: "tuple[ToolRegistration, ...]") -> str:
         return "it" if len(registrations) == 1 else "them"
 
+    def _request_output_kind(self, request: PolicyRequest, candidates) -> str:
+        """The artifact kind this request declares, resolved or refused.
+
+        A repair PROPOSAL carries only design_action + design_subject, because
+        output_kind is deliberately not part of the model's action schema: the
+        artifact kind is the RUN's contract with its domain and must not be
+        something a proposal can vary. So a repaired envelope cannot restate it,
+        and reading the model's silence as "missing" would make every repair
+        round fail to execute -- which is exactly what a live probe caught.
+
+        The resolution is therefore: if the request declares a kind, use it. If it
+        does not, and the domain's registry offers EXACTLY ONE runnable output
+        kind, take that one -- it is the only thing the request could have meant,
+        and it is still the DOMAIN's declaration rather than the executor's
+        invention. Two or more kinds, or none, is a refusal by name.
+        """
+        declared = dict(request.subject).get(ENVELOPE_OUTPUT_KIND_KEY)
+        if isinstance(declared, str) and declared.strip():
+            return declared
+        kinds = sorted({r.artifact_kind for r in candidates})
+        if len(kinds) == 1:
+            return kinds[0]
+        raise ToolNotResolved(
+            "this request declares no %r and the domain registers %d runnable "
+            "artifact kinds (%s), so which one this round produces is genuinely "
+            "ambiguous. A repair proposal does not carry the kind by design; a "
+            "domain with more than one must state it another way."
+            % (ENVELOPE_OUTPUT_KIND_KEY, len(kinds), kinds)
+        )
+
     def _resolve(self, request: PolicyRequest) -> ToolRegistration:
-        design_action, design_subject, output_kind = design_envelope(request)
+        design_action, design_subject, _declared_kind = design_envelope(request)
         # runnable_only: a registered tool with no backend in this process is
         # NOT a candidate to execute. It is reported as unresolvable rather than
         # quietly skipped, because skipping would let the design "execute"
@@ -1089,10 +1132,10 @@ class ToolExecutor:
                 "tool the policy does not authorize."
                 % (self._backend, self._registry._names(registered))
             )
-        # The declared artifact kind decides, and there is no fallback to "the
-        # only candidate": picking a compiler on the design's behalf is a choice
-        # this port has no authority to make.
-        declared = output_kind
+        # The artifact kind decides. There is no fallback among COMPILERS: two
+        # compilers that both produce the declared kind is a refusal, never a
+        # silent pick.
+        declared = self._request_output_kind(request, candidates)
         matching = [r for r in candidates if r.artifact_kind == declared]
         if len(matching) == 1:
             return matching[0]

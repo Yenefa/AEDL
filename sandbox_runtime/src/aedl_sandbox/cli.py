@@ -33,7 +33,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from . import adapters
 from .orchestrator import APPROVED, REJECTED, SandboxOrchestrator
 from .protocol import PolicyRequest
-from .toolports import ToolNotResolved, ToolPlanError
+from .toolports import ENVELOPE_OUTPUT_KIND_KEY, ToolNotResolved, ToolPlanError
 from .workspace import CandidateWorkspace
 
 FIXTURE_SCENARIOS = ("repair_then_pass",)
@@ -219,6 +219,25 @@ def _run_arh(
                 "status": "REFUSED",
                 "reason": exc.message,
                 "code": exc.code,
+                "subject_file": str(subject_path),
+            }
+        )
+        return 2
+    # The OPERATOR's subject must declare the artifact kind. A repair proposal
+    # does not carry one (by design -- see toolports.design_envelope), so this
+    # check belongs here, where the run is configured, and not in the envelope
+    # parser, where it would also reject a repaired round.
+    if not str(subject.get(ENVELOPE_OUTPUT_KIND_KEY) or "").strip():
+        _print(
+            {
+                "status": "REFUSED",
+                "reason": (
+                    "the subject file declares no %r. The artifact kind decides "
+                    "which registered compiler may produce the candidate, so it "
+                    "is part of how this run is configured."
+                    % ENVELOPE_OUTPUT_KIND_KEY
+                ),
+                "code": "ENVELOPE_MISSING_OUTPUT_KIND",
                 "subject_file": str(subject_path),
             }
         )
