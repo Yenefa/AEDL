@@ -1,0 +1,86 @@
+{
+  "task": "GH-110",
+  "domain": "M2-SHT30-ADDRESS",
+  "real_model": true,
+  "result": "REPAIR_VERIFIED",
+  "terminal_reason": null,
+  "phase": "HUMAN_REVIEW",
+  "repair_count": 1,
+  "model_budget": {
+    "calls": 1,
+    "input_tokens": 2543,
+    "output_tokens": 437,
+    "cache_read_tokens": 1408,
+    "cache_write_tokens": 0,
+    "total_tokens": 4388,
+    "elapsed_s": 10.078000000008615,
+    "consecutive_invalid": 0,
+    "total_invalid": 0,
+    "consecutive_format_errors": 0,
+    "total_format_errors": 0,
+    "limits": {
+      "max_calls": 3,
+      "max_total_tokens": 24000,
+      "max_wall_clock_s": 300,
+      "max_consecutive_invalid": 3,
+      "max_consecutive_format_errors": 3
+    }
+  },
+  "observations": [
+    {
+      "run_id": "gh110-episode",
+      "candidate_id": "cand-60b00ab46835ad03",
+      "source_sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0",
+      "netlist_sha256": "09005262c19ad4cdc18ce510badece729d1535639e0403244f3717942bd39bf7",
+      "contract_sha256": "5802cbace183161361e1f3e5be868650f84ab336d53a7f30475de4d5af6fb2f6",
+      "rule_id": "SHT30_ADDRESS",
+      "scope": "netlist.U2.2 only",
+      "expected": {
+        "net": "GND"
+      },
+      "observed": {
+        "net": null,
+        "no_connect": false
+      },
+      "status": "FAIL"
+    },
+    {
+      "run_id": "gh110-episode",
+      "candidate_id": "cand-799550e9a67b7153",
+      "source_sha256": "65ac445c70f3d79d01e485038745b308875a92f4142e22d98714b19a78a05c1a",
+      "netlist_sha256": "b5e95d32f10c459dc36bf97da00794534887062c4807e7137f0fa2502e97f66b",
+      "contract_sha256": "5802cbace183161361e1f3e5be868650f84ab336d53a7f30475de4d5af6fb2f6",
+      "rule_id": "SHT30_ADDRESS",
+      "scope": "netlist.U2.2 only",
+      "expected": {
+        "net": "GND"
+      },
+      "observed": {
+        "net": "GND",
+        "no_connect": false
+      },
+      "status": "PASS"
+    }
+  ],
+  "transactions": [
+    {
+      "status": "COMMITTED",
+      "phase": "COMMIT"
+    }
+  ],
+  "candidate_root": "C:\\dev\\aedl-episodes\\gh110-real-final\\run\\gh110-episode\\candidate\\cand-799550e9a67b7153",
+  "human_review": "PENDING_HUMAN_REVIEW",
+  "manufacturing_release": false,
+  "limits": [
+    "one model, one existing DC-02 native fixture, one independent netlist rule",
+    "ERC/DRC, PCB/firmware contract coverage and physical operation NOT_RUN",
+    "EDD-001 inputs and native tool registrations remain incomplete",
+    "trajectory and development receipts are not formal gate Evidence"
+  ],
+  "model_id": "deepseek-flash",
+  "model_latency_ms": 2500,
+  "failed_findings_before": 1,
+  "failed_findings_after": 0,
+  "total_real_calls_this_task": 2,
+  "first_real_run": "C:/dev/aedl-episodes/gh110-real-01"
+}

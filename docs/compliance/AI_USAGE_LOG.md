@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 135 条。完整正文在各自条目文件中；本索引只做导航。
+共 136 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -198,3 +198,6 @@
 - [`AI-20260930-CODEX-3C1578CA69ADEC87A49A6B696B248893`](ai-usage/AI-20260930-CODEX-3C1578CA69ADEC87A49A6B696B248893.md) — GH-114 / PR #115: reject backend version, command exit and HIR identity mismatches
 - [`AI-20260930-OPENCODE-6C7D42EE50B9282866D9A5CBBF6D74CF`](ai-usage/AI-20260930-OPENCODE-6C7D42EE50B9282866D9A5CBBF6D74CF.md) — Real ExecutorPort + VerifierPort: make one ARH repair round complete (GH-114)
 - [`AI-20260930-OPENCODE-B819BC9023315D7833B2E771DA0CC5F5`](ai-usage/AI-20260930-OPENCODE-B819BC9023315D7833B2E771DA0CC5F5.md) — GH-112: wire the ARH LLM repair agent into the real runtime (assembly, derived action schema, operator allowlist, env-only API key), stopping at the API boundary
+## 2026-10-01
+
+- [`AI-20261001-CODEX-77994966A120AF272A72C9C6EEEE6963`](ai-usage/AI-20261001-CODEX-77994966A120AF272A72C9C6EEEE6963.md) — GH-110 live harness fixes and real native repair episode

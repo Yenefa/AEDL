@@ -21,11 +21,9 @@ The design rule, stated because it is contestable
 A verifier's realness comes from WHERE ITS CRITERIA COME FROM -- the domain's own
 pinned policy registry, a frozen command vector, and artifact bytes read back
 from disk -- not from the language it is written in. Every checker under gates/
-is Python, and the only third-party tool any of them invokes is kicad-cli, which
-is not present on this machine (probed: kicad-cli, arduino-cli, pio, idf.py,
-gcc, clang, cmake, ngspice, iverilog -- all missing). A port that demanded
-kicad-cli would therefore remain a named failure with no observable difference
-from the stub it replaces.
+is Python. This module covers HIR structure; the separately bounded native
+episode uses akcli and a pinned KiCad executable with the existing C5 verifier.
+Tool availability is measured at assembly, never inferred from PATH alone.
 
 Design consequences
 -------------------
@@ -48,6 +46,7 @@ the candidate root, and never mutates a policy document.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import shutil
@@ -1096,9 +1095,12 @@ class ToolExecutor:
     when the tool's backend is unbacked, or when the backend itself refuses.
     """
 
-    def __init__(self, registry: ToolRegistry, *, backend: str, timeout_s: float = 60.0) -> None:
+    def __init__(self, registry: ToolRegistry, *, backend: str, timeout_s: float = 60.0,
+                 output_kind: str | None = None, approved_plans: dict | None = None) -> None:
         self._registry = registry
         self._backend = backend
+        self._output_kind = output_kind
+        self._approved_plans = approved_plans
         self._timeout_s = timeout_s
 
     @staticmethod
@@ -1122,6 +1124,10 @@ class ToolExecutor:
         invention. Two or more kinds, or none, is a refusal by name.
         """
         declared = dict(request.subject).get(ENVELOPE_OUTPUT_KIND_KEY)
+        if self._output_kind is not None:
+            if declared is not None and declared != self._output_kind:
+                raise ToolNotResolved("request output kind conflicts with the run binding")
+            return self._output_kind
         if isinstance(declared, str) and declared.strip():
             return declared
         kinds = sorted({r.artifact_kind for r in candidates})
@@ -1259,6 +1265,11 @@ class ToolExecutor:
                     ),
                 )
             artifacts = (Path(request.candidate_root) / artifact_name,)
+        if self._approved_plans is not None:
+            action, subject, _ = design_envelope(request)
+            self._approved_plans[str(Path(request.candidate_root).resolve())] = (
+                action, copy.deepcopy(subject)
+            )
         return ExecutionResult(
             success=True,
             action_id=request.action_id,
@@ -1271,10 +1282,9 @@ class ToolExecutor:
 class ToolVerifier:
     """VerifierPort over a registry: resolves the named verifier, then checks.
 
-    The design it checks against is FROZEN AT ASSEMBLY from the operator's
-    subject. It does not read the candidate's own declaration of what the design
-    was, because a verifier that learns the expected answer from the thing it is
-    checking is not verifying anything.
+    Expectations come from host decisions, never from the artifact. Assembled
+    pairs bind each successfully executed request to its candidate; stand-alone
+    verifiers keep the operator's fixed expectation.
     """
 
     def __init__(
@@ -1285,11 +1295,13 @@ class ToolVerifier:
         verifier_id: str,
         design_action: str,
         design_subject: Mapping[str, Any],
+        approved_plans: dict | None = None,
     ) -> None:
         self._registry = registry
         self._backend = backend
         self._design_action = design_action
         self._design_subject = dict(design_subject)
+        self._approved_plans = approved_plans
         self._registration = registry.resolve_verifier(verifier_id)
         registry.backend_for(self._registration)
 
@@ -1298,12 +1310,17 @@ class ToolVerifier:
     ) -> VerificationResult:
         """Read-only check. Never writes inside the candidate root."""
         try:
+            action, subject = self._design_action, self._design_subject
+            if self._approved_plans is not None:
+                binding = self._approved_plans.get(str(Path(candidate_root).resolve()))
+                if binding is not None:
+                    action, subject = binding
             backend = self._registry.backend_for(self._registration)
             payload, findings = backend.check(
                 self._registration,
                 Path(candidate_root),
-                design_action=self._design_action,
-                design_subject=self._design_subject,
+                design_action=action,
+                design_subject=subject,
             )
         except ToolNotResolved as exc:
             findings = (
@@ -1391,6 +1408,7 @@ def build_tool_ports(
     verifier_id: str,
     design_action: str,
     design_subject: Mapping[str, Any],
+    output_kind: str | None = None,
 ):
     """Build the executor/verifier pair. THIN and in one place, on purpose.
 
@@ -1398,14 +1416,17 @@ def build_tool_ports(
     test starts exercising a shape the runtime does not use. Every resolution
     failure raises here, at assembly, rather than mid-round.
     """
+    approved_plans: dict = {}
     return (
-        ToolExecutor(registry, backend=executor_backend),
+        ToolExecutor(registry, backend=executor_backend, output_kind=output_kind,
+                     approved_plans=approved_plans),
         ToolVerifier(
             registry,
             backend=verifier_backend,
             verifier_id=verifier_id,
             design_action=design_action,
             design_subject=design_subject,
+            approved_plans=approved_plans,
         ),
     )
 
@@ -1479,6 +1500,7 @@ def build_in_repo_ports(
     design_action: str,
     design_subject: Mapping[str, Any],
     backend_for_tool: Mapping[str, str] | None = None,
+    output_kind: str | None = None,
 ) -> "tuple[ToolExecutor, ToolVerifier]":
     """Assemble the real executor/verifier pair over an engine's OWN registry.
 
@@ -1522,4 +1544,5 @@ def build_in_repo_ports(
         verifier_id=IN_REPO_VERIFIER_ID,
         design_action=design_action,
         design_subject=design_subject,
+        output_kind=output_kind,
     )
