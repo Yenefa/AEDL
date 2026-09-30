@@ -1,0 +1,162 @@
+task: GH-112
+
+base:
+  branch: feat/arh-live-wiring
+  sha: a92971619b76d6831b1736352c8b52e9459e9df0
+
+goal: |
+  Wire the ARH LLM repair agent into the real runtime so one CLI command can
+  drive a full `propose -> policy -> execute -> verify` round, stopping exactly
+  one step short of configuring a real API key.
+
+  Today the agent cannot be used at all: nothing outside `arh/` references it,
+  and the only `RepairPort` implementation the CLI can reach is
+  `adapters._TestOnlyRepair`. The 141 green ARH tests prove the harness matches
+  its own spec; they prove nothing about anything running.
+
+  The injection point already exists and is already hardcoded by type
+  (`SandboxOrchestrator.__init__` takes `repair: RepairPort` and isinstance-checks
+  it), so RFC section 2.5 N8 looks already satisfied. What is missing is the
+  assembly around it, not the contract.
+
+  This task delivers REACHABILITY, not EFFECTIVENESS. Saying otherwise would be
+  an unsupported claim.
+
+scope: |
+  In scope:
+  - `sandbox_runtime/src/aedl_sandbox/adapters.py`
+      * a `ContextInputsProvider` implementation that PROJECTS run state per
+        RFC 3.2 / D6 (never an `engine.document` dump)
+      * `action_schema` DERIVED from `policy.engine.SUBJECT_SPECS`, so the actions
+        offered to the model and the actions the validator knows cannot drift
+      * a real assembly function building `LLMRepairPort` with an explicit
+        `TrajectoryRecorder`, a `BudgetStop`, and an explicitly supplied
+        transport (the adapter has no default transport by design: real I/O is
+        only reachable if runtime wiring hands one in)
+  - `sandbox_runtime/src/aedl_sandbox/cli.py`
+      * one subcommand that assembles the above and runs the orchestrator
+      * the API key is read from an ENVIRONMENT VARIABLE ONLY. Passing it as an
+        argument is REFUSED, because argv reaches process listings and shell
+        history. A missing or blank key is a NAMED fail-closed refusal raised
+        before any assembly, naming the variable to set.
+  - `sandbox_runtime/tests/arh/**`
+      * assembly tests over `FakeModelAdapter` and an injected transport: zero
+        network, ASSERTED rather than assumed
+      * a test that a missing key refuses by name
+      * a test that `action_schema` cannot drift from `SUBJECT_SPECS`
+  - `tasks/GH-112.yaml`
+  - `docs/compliance/ai-usage/**`, `docs/compliance/AI_USAGE_LOG.md`
+  - `docs/compliance/DECISIONS.md`
+
+  Out of scope, explicitly:
+  - **No API key is configured, stored, or read from a file, and no real network
+    call is made.** The task ends AT the API boundary, by instruction: the key is
+    a configuration decision (whose account, whose cost), not an engineering one.
+  - No change to `arh/**` internals unless a test proves one unreachable. The
+    harness is not the thing being changed; the assembly around it is.
+  - No change to `orchestrator.py` -- the injection point exists and is already
+    type-checked.
+  - No change to `policy/**`, `trust/**`, `state.py`, `protocol.py`.
+  - `gates/**`, `docs/evidence/**`, `tools/**`, `.github/**`, `src/**` untouched.
+    The Verification Policy is therefore unchanged and the two-owner GH-20
+    confirmation is NOT triggered.
+  - No benchmark, and no claim that the agent repairs anything real.
+
+dependencies: []
+
+allowed_paths:
+  - sandbox_runtime/src/aedl_sandbox/adapters.py
+  - sandbox_runtime/src/aedl_sandbox/cli.py
+  - sandbox_runtime/tests/arh/**
+  - tasks/GH-112.yaml
+  - docs/compliance/DECISIONS.md
+  - docs/compliance/ai-usage/**
+  - docs/compliance/AI_USAGE_LOG.md
+
+forbidden_paths:
+  - gates/**
+  - docs/evidence/**
+  - tools/**
+  - .github/**
+  - src/**
+  - delivery/**
+  - notes/**
+  - sandbox_runtime/src/aedl_sandbox/orchestrator.py
+  - sandbox_runtime/src/aedl_sandbox/protocol.py
+  - sandbox_runtime/src/aedl_sandbox/state.py
+  - sandbox_runtime/src/aedl_sandbox/policy/**
+  - sandbox_runtime/src/aedl_sandbox/trust/**
+  - sandbox_runtime/src/aedl_sandbox/arh/**
+
+acceptance: |
+  - A single CLI subcommand assembles a `SandboxOrchestrator` whose `repair` port
+    is a real `LLMRepairPort`, with policy / executor / verifier / trust /
+    workspace hardcoded by the ASSEMBLY, never chosen by the agent (N8).
+  - A test drives the assembled orchestrator end to end with a
+    `FakeModelAdapter` and an injected transport, and NO network call is made --
+    asserted, not assumed.
+  - The API key is read from the environment only; passing it as an argument is
+    REFUSED, so it cannot reach a process listing or shell history.
+  - A missing or blank key is refused BY NAME, before any assembly, and the
+    refusal says which variable to set.
+  - `action_schema` derives from `policy.engine.SUBJECT_SPECS` and a test fails
+    if the two can disagree. An action offered to the model but unknown to the
+    validator is a silent 100% rejection rate at runtime.
+  - `allowlist` is PROJECTED, not defaulted empty: an empty `allowed_components`
+    makes every component proposal fail closed, so the wiring either sources it
+    from the run's own state or says loudly that it cannot.
+  - A mutation swapping the real `LLMRepairPort` back for `_TestOnlyRepair` is
+    KILLED by the suite. A wiring test that cannot fail is worse than none.
+  - No existing test weakened, skipped, or deleted to make this pass.
+  - `python -m tools.dev_gate --envelope tasks/GH-112.yaml` exits 0.
+  - Full sandbox and main suites stay green on Windows and on Linux (WSL2), at
+    or above the current 440 / 1223.
+
+known_limitations:
+  - "UNKNOWN: real-model output quality. Every test runs against
+     FakeModelAdapter. Whether a real model produces proposals that survive
+     repair_agent's three static checks is NOT_RUN and cannot be answered before
+     a key exists. This task delivers REACHABILITY, not EFFECTIVENESS, and must
+     not be described as the latter."
+  - "UNKNOWN: benchmark. There is no ground truth in this repository, so nothing
+     here can claim the agent repairs anything. Issue #73 is open."
+  - "The `allowlist` projection is the part with genuine design latitude. It is
+     recorded as a decision with its reasoning, not presented as mechanical."
+  - "TO_VERIFY: RFC section 2.5 N8 is read here as already satisfied by the
+     existing isinstance-checked constructor. That reading is stated, not assumed
+     -- the five BLOCKING items are an Owner release decision and this task does
+     not make it."
+
+change_budget:
+  expected_files: 7
+  expected_modules: [sandbox-adapters, sandbox-cli, sandbox-tests, tasks, compliance]
+  cross_module: true
+  contract_change: false
+  evidence_semantics_change: false
+  # contract_change: false is a CONSTRAINT, not a default. The frozen
+  # RepairPort.propose signature is the contract; this task plugs into it rather
+  # than widening it. If the implementation turns out to need a signature change,
+  # that is a STOP-and-escalate, never a quiet edit.
+
+exceptions:
+  # Opening authorisation, recorded rather than assumed: the Owner session of
+  # 2026-09-30 authorised proceeding without further checkpoints
+  # (「一直推进吧，别停下来问我，放行，都放行，做好版本管理就行，做到配置api前」).
+  # That is a grant to OPEN and BUILD, not to merge: the merge stays a human act.
+  #
+  # Both grants below cover ONE thing only -- this envelope's own commit. A new
+  # envelope is a dirty entry until committed, and committing it moves HEAD off
+  # base.sha. Neither reaches around a real baseline conflict.
+  #
+  # NOTE: the envelope parser is line-based and reads `key: value` on one line,
+  # so the reasoning lives in comments and the values stay single-line.
+  allow_dirty:
+    permitted: true
+    reason: "this envelope's own commit only; a second dirty path is not covered"
+    authority: task-envelope
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "Owner session 2026-09-30 「放行，都放行」"
+
+escalation:
+  owner: Yenefa
