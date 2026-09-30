@@ -32,6 +32,8 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 
 from . import adapters
 from .orchestrator import APPROVED, REJECTED, SandboxOrchestrator
+from .protocol import PolicyRequest
+from .toolports import ToolNotResolved, ToolPlanError
 from .workspace import CandidateWorkspace
 
 FIXTURE_SCENARIOS = ("repair_then_pass",)
@@ -141,44 +143,34 @@ def _resume_fixture(
     return 0
 
 
-class _UnresolvedPort(RuntimeError):
-    """A port this command cannot honestly supply yet.
+# GH-114 deleted _UnresolvedPort, _UnresolvedExecutor and _UnresolvedVerifier
+# from this module. They existed because no real ExecutorPort or VerifierPort
+# did; the ports are now built from the domain's own tool registry (see
+# _domain_for and adapters.build_in_repo_tool_ports). They are DELETED rather
+# than left unused, because an unreachable stub is how a temporary becomes
+# permanent -- and the class that raised them has no remaining raiser.
 
-    Raised on USE, not on construction, so the wiring itself is exercisable and
-    testable while the missing piece stays impossible to miss at run time.
+
+#: Domain sources a run may be evaluated against. "real" is EDD-001's frozen
+#: contracts (which register no tools, so this is a named refusal today);
+#: "test-only" is the synthetic complete fixture document, reachable only by
+#: asking for it by name so a synthetic policy is never silently in play.
+POLICY_SOURCES = ("real", "test-only")
+
+
+def _domain_for(policy_source: str, repo_root: Path, run_root: Path):
+    """Return (policy engine, bundle root) for the operator's chosen domain.
+
+    The bundle root is what the trust port validates and what the policy engine's
+    path containment is anchored to. Keeping the pair together is deliberate: a
+    synthetic policy checked against the real evidence tree, or the reverse,
+    would be a mixed-binding run that looks like a pass and means nothing.
     """
-
-
-class _UnresolvedExecutor:
-    """No real ExecutorPort exists in this repository yet.
-
-    `_TestOnlyExecutor` exists and would make this command run to completion.
-    It is deliberately NOT used: it would write and "verify" against synthetic
-    doubles and report a round that never happened. Failing here is the honest
-    state, and it is a SEPARATE piece of work from the repair wiring.
-    """
-
-    def execute(self, request):
-        raise _UnresolvedPort(
-            "no real ExecutorPort is implemented yet; only the TEST_ONLY double "
-            "exists, and wiring that in would report a repair round that never "
-            "ran. The ARH repair port is wired -- see build_arh_orchestrator -- "
-            "but nothing can execute or verify a candidate for real yet."
-        )
-
-
-class _UnresolvedVerifier:
-    """No real VerifierPort exists. Same reasoning as _UnresolvedExecutor."""
-
-    def verify(self, run_id, candidate_id, candidate_root):
-        raise _UnresolvedPort(
-            "no real VerifierPort is implemented yet; only the TEST_ONLY double "
-            "exists. See _UnresolvedExecutor."
-        )
-
-
-_UNRESOLVED_EXECUTOR = _UnresolvedExecutor()
-_UNRESOLVED_VERIFIER = _UnresolvedVerifier()
+    if policy_source == "test-only":
+        bundle_root = run_root / "test-only-bundle"
+        adapters.materialize_test_only_bundle(bundle_root)
+        return adapters.build_test_only_policy_port(run_root), bundle_root
+    return adapters.build_real_edd001_policy_port(repo_root), repo_root
 
 
 def _run_arh(
@@ -189,6 +181,7 @@ def _run_arh(
     model: str,
     allowlist_path: Path,
     subject_path: Path,
+    policy_source: str = "real",
 ) -> int:
     """Assemble and run a real orchestrator with the ARH repair port.
 
@@ -198,6 +191,7 @@ def _run_arh(
     participates in none of that.
     """
     from .arh.model_adapter import OpenAICompatibleAdapter, urllib_default_transport
+    from .toolports import design_envelope
 
     # Before anything is built or written.
     api_key = _require_api_key()
@@ -205,9 +199,59 @@ def _run_arh(
     allowlist = json.loads(allowlist_path.read_text(encoding="utf-8"))
     subject = json.loads(subject_path.read_text(encoding="utf-8"))
 
-    run_root.mkdir(parents=True, exist_ok=True)
-    run_dir = run_root / "run" / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
+    # The design envelope is read here, before the ports are built, so a subject
+    # that is not an envelope (or that carries keys the policy never validates)
+    # is refused BEFORE any directory, database or trajectory file exists.
+    try:
+        design_action, design_subject, _output_kind = design_envelope(
+            PolicyRequest(
+                run_id=run_id,
+                domain_id="EDD-001",
+                action_id="assemble",
+                action="execute_candidate",
+                candidate_root=run_root,
+                subject=subject,
+            )
+        )
+    except ToolPlanError as exc:
+        _print(
+            {
+                "status": "REFUSED",
+                "reason": exc.message,
+                "code": exc.code,
+                "subject_file": str(subject_path),
+            }
+        )
+        return 2
+
+    # EVERYTHING that can refuse happens BEFORE the first byte is written. The
+    # order below is the point: key, envelope, domain, then the tool registry.
+    # An earlier version created the run directory first, and a refused run left
+    # runs/run/<id>/ behind -- a directory that looks like an attempt.
+    #
+    # Which domain the run evaluates against is the OPERATOR's choice, stated on
+    # the command line, never the model's and never inferred. The default is the
+    # real EDD-001 domain; the fixture document is reachable only by naming it,
+    # so a synthetic policy cannot be in play without a flag that says so.
+    engine, bundle_root = _domain_for(policy_source, repo_root, run_root)
+    try:
+        executor, verifier = adapters.build_in_repo_tool_ports(
+            engine, design_action=design_action, design_subject=design_subject
+        )
+    except ToolNotResolved as exc:
+        _print(
+            {
+                "status": "REFUSED",
+                "reason": str(exc),
+                "note": (
+                    "the domain's policy registry decides which tools exist. "
+                    "EDD-001 currently registers none, so there is nothing to "
+                    "execute or verify a candidate with. No run directory was "
+                    "created."
+                ),
+            }
+        )
+        return 2
 
     model_adapter = OpenAICompatibleAdapter(
         base_url=base_url,
@@ -219,6 +263,9 @@ def _run_arh(
         transport=urllib_default_transport,
     )
 
+    run_dir = run_root / "run" / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+
     db_path = run_dir / "checkpoint.sqlite"
     with SqliteSaver.from_conn_string(str(db_path)) as checkpointer:
         orchestrator = adapters.build_arh_orchestrator(
@@ -229,8 +276,10 @@ def _run_arh(
             model=model_adapter,
             subject=subject,
             allowlist=allowlist,
-            executor=_UNRESOLVED_EXECUTOR,
-            verifier=_UNRESOLVED_VERIFIER,
+            policy=engine,
+            executor=executor,
+            verifier=verifier,
+            trust=adapters.build_trust_port(bundle_root, run_dir / "receipts"),
         )
         state = orchestrator.run()
         pending = orchestrator.pending_interrupt()
@@ -299,6 +348,14 @@ def main(argv: list[str] | None = None) -> int:
         help="JSON file the OPERATOR writes: the frozen design subject for the round.",
     )
     arh_parser.add_argument(
+        "--policy-source",
+        choices=list(POLICY_SOURCES),
+        default="real",
+        help="which domain to evaluate against: 'real' is EDD-001's frozen "
+        "contracts (the default, and a named refusal while it registers no "
+        "tools); 'test-only' is the synthetic complete fixture document",
+    )
+    arh_parser.add_argument(
         "--max-repairs", type=int, default=3,
         help="repair rounds the orchestrator may run (graph-level bound; the ARH "
         "budget is a separate, independent bound)",
@@ -314,6 +371,7 @@ def main(argv: list[str] | None = None) -> int:
             return _run_arh(
                 args.repo_root, args.run_root, args.run_id, args.base_url,
                 args.model, args.allowlist_path, args.subject_path,
+                args.policy_source,
             )
         except MissingApiKey as exc:
             _print({"status": "REFUSED", "reason": str(exc), "env_var": ARH_API_KEY_ENV})

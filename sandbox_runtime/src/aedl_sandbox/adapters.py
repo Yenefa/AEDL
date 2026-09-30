@@ -48,6 +48,11 @@ from .protocol import (
     VerificationResult,
     VerificationStatus,
 )
+from .toolports import (
+    BACKEND_IN_REPO_HIR,
+    build_in_repo_ports,
+    design_envelope,
+)
 from .workspace import CandidateWorkspace
 
 TEST_ONLY_COMPONENT_MPN = "TEST-ONLY-LDO-3V3"
@@ -55,6 +60,16 @@ TEST_ONLY_COMPONENT_ROLE = "power_regulator"
 TEST_ONLY_EVIDENCE_ID = "TEST_ONLY_EVIDENCE_1"
 TEST_ONLY_COMPILER_ID = "test-only-compiler"
 TEST_ONLY_VERIFIER_ID = "test-only-verifier"
+
+# GH-114: the in-repo artifact class. These ids are registered in the policy
+# document (see test_only_document) so the policy layer authorizes them; the
+# implementations live in toolports.py and are wired into cli.py run-arh.
+# Mapping a tool id to a backend is assembly-time knowledge, and this module is
+# where the assembly lives.
+IN_REPO_COMPILER_ID = "in-repo-hir"
+IN_REPO_VERIFIER_ID = "in-repo-hir-verifier"
+IN_REPO_TOOL_VERSION = "1.0.0"
+IN_REPO_COVERAGE_ID = "STRUCTURE"
 
 TEST_ONLY_NOTE = (
     "TEST_ONLY synthetic material for sandbox orchestration mechanics; "
@@ -89,6 +104,17 @@ class _FailClosedPolicyPort:
     def __init__(self, reason_code: str, findings: tuple[Finding, ...]) -> None:
         self._reason_code = reason_code
         self._findings = findings
+
+    @property
+    def reason_code(self) -> str:
+        """Why this port refuses everything. Public so an assembly that needs the
+        domain's document can say WHICH refusal it hit (GH-114) instead of
+        reporting an object that mysteriously lacks one."""
+        return self._reason_code
+
+    @property
+    def findings(self) -> tuple[Finding, ...]:
+        return self._findings
 
     def evaluate(self, request: PolicyRequest) -> PolicyDecision:
         return PolicyDecision(
@@ -133,6 +159,17 @@ class PolicyEnginePort:
     @property
     def engine(self) -> SandboxPolicyEngine:
         return self._engine
+
+    @property
+    def document(self) -> Any:
+        """The parsed policy document this port evaluates against.
+
+        Exposed because the tool registry is DERIVED from it (GH-114): a port
+        that would not show its document would force the assembly to re-parse
+        the same contracts, which is how two copies of a registry start to
+        disagree.
+        """
+        return self._engine.document
 
     @property
     def verified_bundle_sha256(self) -> str:
@@ -387,6 +424,18 @@ def test_only_document() -> dict[str, JsonValue]:
                 "output_kind": "kicad_sch",
                 "required_coverage_ids": ["ERC"],
             },
+            # GH-114: the artifact class this repository can ACTUALLY produce.
+            # Registered so the policy layer authorizes it explicitly rather
+            # than the ports deciding for themselves what they may run: the
+            # design's declared output_kind is matched against these entries.
+            # It is not a claim that in-repo-hir is an EDD-001 tool -- the real
+            # EDD-001 document registers no compiler and no verifier at all.
+            {
+                "compiler_id": IN_REPO_COMPILER_ID,
+                "compiler_version": IN_REPO_TOOL_VERSION,
+                "output_kind": "hir",
+                "required_coverage_ids": [IN_REPO_COVERAGE_ID],
+            },
         ],
         "verifiers": [
             {
@@ -394,6 +443,12 @@ def test_only_document() -> dict[str, JsonValue]:
                 "verifier_version": "1.0.0",
                 "artifact_kind": "kicad_sch",
                 "coverage_ids": ["ERC", "DRC", "CONTRACT"],
+            },
+            {
+                "verifier_id": IN_REPO_VERIFIER_ID,
+                "verifier_version": IN_REPO_TOOL_VERSION,
+                "artifact_kind": "hir",
+                "coverage_ids": [IN_REPO_COVERAGE_ID],
             },
         ],
         "prerequisites": {
@@ -695,8 +750,10 @@ def build_arh_orchestrator(
     model: ModelAdapter,
     subject: Mapping[str, Any],
     allowlist: Mapping[str, Any],
+    policy: Any,
     executor: Any,
     verifier: Any,
+    trust: Any = None,
     max_repairs: int = 3,
     budget: BudgetStop | None = None,
     run_dir: Path | str | None = None,
@@ -742,11 +799,19 @@ def build_arh_orchestrator(
         budget=budget if budget is not None else BudgetStop(BudgetConfig()),
     )
     return SandboxOrchestrator(
-        policy=build_real_edd001_policy_port(repo_root),
+        policy=policy,
         executor=executor,
         verifier=verifier,
         repair=repair,
-        trust=build_trust_port(repo_root, workspace_root / "receipts"),
+        # The trust port is tied to the domain the run evaluates against:
+        # receipt_root always lives under the run, but bundle_repo_root is the
+        # operator's chosen domain root. A synthetic policy paired with the real
+        # evidence tree (or the reverse) would be a mixed-binding run.
+        trust=(
+            trust
+            if trust is not None
+            else build_trust_port(repo_root, workspace_root / "receipts")
+        ),
         workspace=workspace,
         run_id=run_id,
         domain_id=domain_id,
@@ -754,4 +819,54 @@ def build_arh_orchestrator(
         subject=subject,
         max_repairs=max_repairs,
         checkpointer=checkpointer,
+    )
+
+
+# ---------------------------------------------------------------------------
+# GH-114: the real executor/verifier pair.
+# ---------------------------------------------------------------------------
+
+#: Tool id -> backend name. The policy document says WHICH tools this domain
+#: authorizes; this says HOW each is run. A registered tool absent from here
+#: still resolves to NO backend and refuses at assembly by name, which is the
+#: fail-closed direction.
+IN_REPO_TOOL_BACKENDS: Mapping[str, str] = {
+    IN_REPO_COMPILER_ID: BACKEND_IN_REPO_HIR,
+    IN_REPO_VERIFIER_ID: BACKEND_IN_REPO_HIR,
+    # The synthetic TEST_ONLY tools are declared by the fixture policy document,
+    # so a registry built over that document reports them as authorized. They
+    # remain unrunnable unless a caller says what runs them, and this mapping is
+    # that statement: the fixture pair keeps the in-repo backend, which is what
+    # the repair_then_pass scenario has always effectively been.
+    #
+    # This is NOT the CLI's mapping. run-arh builds a registry over the REAL
+    # EDD-001 document, which registers neither of these tools, so nothing from
+    # the fixture reaches a live run.
+    TEST_ONLY_COMPILER_ID: BACKEND_IN_REPO_HIR,
+    TEST_ONLY_VERIFIER_ID: BACKEND_IN_REPO_HIR,
+}
+
+
+def build_in_repo_tool_ports(
+    engine: Any,
+    *,
+    design_action: str,
+    design_subject: Mapping[str, Any],
+):
+    """Assemble the real executor/verifier pair over an engine's OWN registry.
+
+    The engine's document is the only source of the tool set: nothing here names
+    a compiler or verifier the policy has not registered. Assembly failures raise
+    ToolNotResolved, so an unauthorized artifact class is a configuration error
+    rather than a mid-round surprise.
+
+    The selection logic itself lives in toolports.build_in_repo_ports so that the
+    CLI and the tests assemble the pair through ONE function; two assembly sites
+    is how a test starts exercising a shape the runtime never uses.
+    """
+    return build_in_repo_ports(
+        engine,
+        design_action=design_action,
+        design_subject=design_subject,
+        backend_for_tool=IN_REPO_TOOL_BACKENDS,
     )

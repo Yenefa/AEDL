@@ -169,6 +169,11 @@ class AssemblyTests(unittest.TestCase):
             model=model,
             subject={"subject_id": "T1"},
             allowlist=fixtures.allowlist(),
+            # The policy port is the CALLER's choice (GH-114): this test is about
+            # the repair wiring, so it supplies the TEST_ONLY document rather
+            # than the real EDD-001 contracts, and repo_root below is an empty
+            # directory that the real port would fail closed on anyway.
+            policy=adapters.build_test_only_policy_port(self.base),
             executor=_StubExecutor(),
             verifier=_StubVerifier(),
         )

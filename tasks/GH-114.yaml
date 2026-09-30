@@ -1,8 +1,8 @@
 task: GH-114
 
 base:
-  branch: feat/arh-live-wiring
-  sha: 5a847f593d0301d43171004b6429e1d6c09d2c07
+  branch: feat/arh-executor-verifier
+  sha: c98023faeddd4a2e416b6507fb180a47be881ae4
 
 goal: |
   Make one ARH repair round actually COMPLETE. GH-112 wired the LLM repair agent
