@@ -2,7 +2,7 @@ task: GH-114
 
 base:
   branch: feat/arh-executor-verifier
-  sha: c98023faeddd4a2e416b6507fb180a47be881ae4
+  sha: a29b86f9d4985193872cfbe664c2495f2cd151b9
 
 goal: |
   Make one ARH repair round actually COMPLETE. GH-112 wired the LLM repair agent
@@ -134,8 +134,8 @@ known_limitations:
      something'. The PR must state the opposite in the same paragraph."
 
 change_budget:
-  expected_files: 9
-  expected_modules: [sandbox-toolports, sandbox-adapters, sandbox-cli, sandbox-tests, tasks, compliance]
+  expected_files: 5
+  expected_modules: [sandbox-toolports, sandbox-tests, tasks, compliance]
   cross_module: true
   contract_change: false
   evidence_semantics_change: false
@@ -144,25 +144,19 @@ change_budget:
   # never widened. Needing a signature change is a STOP-and-escalate.
 
 exceptions:
-  # Same two grants GH-112 needed, for the same two mechanical reasons:
-  # (1) this envelope is a NEW file, so the repo is dirty until its own commit;
-  # (2) committing it moves HEAD off base.sha, because a new task cannot be
-  #     admitted against a commit that does not exist yet.
-  #
-  # Both grants cover ONE thing only -- this envelope's own commit. Neither
-  # reaches around a real baseline conflict, and neither authorizes a merge:
-  # the Owner session of 2026-09-30 authorized opening and building this task
-  # (「放行，都放行」), which is a grant to OPEN and BUILD, not to merge.
-  #
-  # NOTE: the envelope parser is line-based and reads key: value on one line,
-  # so the reasoning lives in comments and the values stay single-line.
+  # A2 replaces the original envelope-only grants with the Owner's explicit
+  # authorization for the five-file review-fix continuation. Dirty state and
+  # descendant commits are covered only for this continuation, never for
+  # unrelated changes or baseline conflicts. Merge authorization is recorded
+  # separately below; these admission flags do not themselves authorize merge.
   allow_dirty:
-    permitted: true
-    reason: "this envelope's own commit only; a second dirty path is not covered"
-    authority: task-envelope
+    granted_by: Yenefa
+    decision_ref: "Owner session 2026-09-30: 你直接修复，我review过了和你说的没差，你做完直接合并"
+    reason: "A2 five-file review fixes, their tests and compliance records only"
   allow_drift:
     granted_by: Yenefa
-    decision_ref: "Owner session 2026-09-30 「放行，都放行」"
+    decision_ref: "Owner session 2026-09-30: 你直接修复，我review过了和你说的没差，你做完直接合并"
+    reason: "A2 descendant fix commits from reviewed baseline a29b86f only"
 
 escalation:
   owner: Yenefa
@@ -195,3 +189,39 @@ owner_decision: "Owner session 2026-09-30 直接授权使用其自有 key 做真
 decision_ref: "Owner message: 「需要用key测试的话你不是有么？直接用就行了，用多模态的，你看着用，只有十块钱」"
 followup: "真实调用结果按「有边界的探针」记录（模型 deepseek-flash / 端点 api.deepseek.com /
   单次 / 约 ¥0.003），不主张任何效果；benchmark 仍是 Issue #73"
+
+## Scope amendment A2 — Owner-reviewed fail-closed fixes and authorized merge
+
+# Goal: fix the three reproduced PR #115 findings, validate and merge the PR.
+# Owner decision: APPROVED for this bounded work and merge after checks pass.
+# Decision ref: current Owner message on 2026-09-30:
+#   「你直接修复，我review过了和你说的没差，你做完直接合并」
+# This is human authorization, not an Agent-created GitHub review approval.
+# AI Usage review-status fields remain PENDING_HUMAN_REVIEW.
+#
+# Initial admission: BLOCKED (exit 1): old base c98023f != reviewed HEAD a29b86f.
+# Observed need: resume on the Owner-reviewed PR head and admit the bounded fixes.
+# Human decision already supplied above: rebase the envelope's baseline to
+# a29b86f (no Git rebase or history rewrite), record these grants, then re-admit.
+#
+# Impact Analysis
+# Direct modifications: toolports.py; tests/toolports/test_tool_ports.py;
+#   tasks/GH-114.yaml; one new CODEX AI Usage entry; generated AI_USAGE_LOG.md.
+# Potentially affected: registry resolution, executor results, HIR verification,
+#   CLI/orchestrator assembly and review-bundle receipt summaries.
+# Explicitly not touched: frozen port signatures, policy/trust/arh code, gates,
+#   tools, hardware/delivery, formal Evidence, benchmark/GH-73 and dependencies.
+# Risk: MEDIUM. Reject previously accepted version/exit/identity mismatches.
+# Budget: five files, four modules; cross_module=true; contract_change=false;
+#   evidence_semantics_change=false. Bundle output remains outside the repo.
+#
+# Acceptance: registered and actual backend versions must agree; nonzero tool
+# exit must fail execution while retaining its receipt; HIR domain/run/candidate
+# identities must match the verifier's independently supplied context; targeted
+# regressions and the complete dev_gate pass; regenerate a consistent bundle;
+# push and merge #115 with a merge commit after current-head CI succeeds.
+# The merge includes #113's existing commits, already included in reviewed #115.
+# No separate approval or merge action is authorized for an unrelated PR.
+# Evidence Needed: NO (development receipts only). AIC Score Target: NONE.
+# Third-party/ADR/Fusion/Open Outputs/Submission triggers: none; implement the
+# existing ADR-019 refusal and provenance rules without a new architecture.

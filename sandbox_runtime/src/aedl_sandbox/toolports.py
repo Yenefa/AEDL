@@ -227,9 +227,17 @@ class ToolRegistry:
         self,
         registrations: "list[ToolRegistration]",
         backends: Mapping[str, "ToolBackend"],
+        *,
+        domain_id: str | None = None,
     ) -> None:
         self._backends = MappingProxyType(dict(backends))
         self._registrations = tuple(registrations)
+        self._domain_id = domain_id
+
+    @property
+    def domain_id(self) -> str | None:
+        """The pinned document's domain, independent of artifact declarations."""
+        return self._domain_id
 
     @property
     def registrations(self) -> "tuple[ToolRegistration, ...]":
@@ -249,6 +257,13 @@ class ToolRegistry:
                 "nothing here can run it. That is a refusal, not a reason to run "
                 "a different tool."
                 % (registration.key if registration else "<unknown>", name)
+            )
+        if registration is not None and getattr(backend, "version", None) != registration.version:
+            raise ToolNotResolved(
+                "tool %s declares version %r, but backend %r reports version %r. "
+                "Running a different or unknown version would be a substitution, "
+                "not a resolution."
+                % (registration.key, registration.version, name, getattr(backend, "version", None))
             )
         return backend
 
@@ -404,7 +419,7 @@ def registry_from_document(
                 command=tuple(command_table.get(tool_id, ())),
             )
         )
-    return ToolRegistry(registrations, backends)
+    return ToolRegistry(registrations, backends, domain_id=document.domain_id)
 
 
 # ---------------------------------------------------------------------------
@@ -1020,6 +1035,21 @@ def run_command(
         "stdout_bytes": len(stdout),
         "stderr_bytes": len(stderr),
     }
+    if completed.returncode != 0:
+        return receipt, (
+            Finding(
+                code="TOOL_EXIT_NONZERO",
+                message="%s exited with status %d; the invocation failed"
+                % (registration.key, completed.returncode),
+                source="toolports",
+                details={
+                    "tool_id": registration.tool_id,
+                    "tool_version": registration.version,
+                    "exit_code": completed.returncode,
+                    "command": list(registration.command),
+                },
+            ),
+        )
     return receipt, ()
 
 
@@ -1042,14 +1072,15 @@ class CommandBackedExecutor:
         self, registration: ToolRegistration, request: PolicyRequest
     ) -> "tuple[dict[str, Any], tuple[Finding, ...]]":
         receipt, findings = run_command(registration, timeout_s=self._timeout_s)
-        if findings:
-            return receipt, findings
-        receipt_path = Path(request.candidate_root) / (
-            "tool-%s-receipt.json" % registration.tool_id
-        )
-        receipt_path.parent.mkdir(parents=True, exist_ok=True)
-        receipt_path.write_bytes(_canonical_bytes(receipt))
-        return receipt, ()
+        # A failed invocation is still recorded, but never reported as a
+        # successful compilation. No receipt exists when the tool never ran.
+        if receipt:
+            receipt_path = Path(request.candidate_root) / (
+                "tool-%s-receipt.json" % registration.tool_id
+            )
+            receipt_path.parent.mkdir(parents=True, exist_ok=True)
+            receipt_path.write_bytes(_canonical_bytes(receipt))
+        return receipt, findings
 
 
 # ---------------------------------------------------------------------------
@@ -1155,6 +1186,7 @@ class ToolExecutor:
     def execute(self, request: PolicyRequest) -> ExecutionResult:
         try:
             registration = self._resolve(request)
+            backend = self._registry.backend_for(registration)
         except ToolNotResolved as exc:
             return ExecutionResult(
                 success=False,
@@ -1168,7 +1200,6 @@ class ToolExecutor:
                     ),
                 ),
             )
-        backend = self._registry.backend_for(registration)
         try:
             payload, findings = backend.compile(registration, request)
         except ToolPlanError as exc:
@@ -1260,19 +1291,25 @@ class ToolVerifier:
         self._design_action = design_action
         self._design_subject = dict(design_subject)
         self._registration = registry.resolve_verifier(verifier_id)
+        registry.backend_for(self._registration)
 
     def verify(
         self, run_id: str, candidate_id: str, candidate_root: Path
     ) -> VerificationResult:
         """Read-only check. Never writes inside the candidate root."""
-        backend = self._registry.backend_for(self._registration)
         try:
+            backend = self._registry.backend_for(self._registration)
             payload, findings = backend.check(
                 self._registration,
                 Path(candidate_root),
                 design_action=self._design_action,
                 design_subject=self._design_subject,
             )
+        except ToolNotResolved as exc:
+            findings = (
+                Finding(code="VERIFIER_TOOL_NOT_RESOLVED", message=str(exc), source="toolports"),
+            )
+            payload = None
         except ToolPlanError as exc:
             findings = (
                 Finding(
@@ -1288,6 +1325,35 @@ class ToolVerifier:
                 Finding(code=exc.code, message=exc.message, source="toolports"),
             )
             payload = None
+        if not findings and self._registration.artifact_kind == ARTIFACT_KIND_HIR:
+            # The plan can be correct while the file belongs to another domain,
+            # run or candidate. Bind its identities to the pinned document and
+            # this verification request, never to values read from the artifact.
+            if not self._registry.domain_id or not isinstance(payload, Mapping):
+                findings = (
+                    Finding(
+                        code="VERIFY_ARTIFACT_IDENTITY_UNBOUND",
+                        message="HIR verification needs a pinned domain and an artifact identity",
+                        source="toolports",
+                    ),
+                )
+            else:
+                expected = {
+                    "domain_id": self._registry.domain_id,
+                    "run_id": run_id,
+                    "candidate_id": candidate_id,
+                }
+                findings = tuple(
+                    Finding(
+                        code="VERIFY_ARTIFACT_IDENTITY_MISMATCH",
+                        message="artifact %s %r does not match this verification's identity %r"
+                        % (field, payload.get(field), value),
+                        source="toolports",
+                        details={"field": field, "expected": value, "actual": payload.get(field)},
+                    )
+                    for field, value in expected.items()
+                    if payload.get(field) != value
+                )
         if findings:
             return VerificationResult(
                 status=VerificationStatus.FAIL,

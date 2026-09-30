@@ -11,16 +11,19 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from aedl_sandbox import adapters
 from aedl_sandbox.protocol import ExecutorPort, VerifierPort
 from aedl_sandbox.toolports import (
     HIR_ARTIFACT_NAME,
+    CommandBackedExecutor,
     ToolBackendError,
     ToolNotResolved,
     ToolPlanError,
     ToolRegistry,
     ToolRegistration,
+    ToolExecutor,
     build_in_repo_ports,
     design_envelope,
     registry_from_document,
@@ -248,6 +251,21 @@ class RegistryTests(TempRootTest):
 class ExecutorRefusalTests(TempRootTest):
     """A refusal is a failed ExecutionResult with a named finding -- never a PASS."""
 
+    def test_registered_compiler_version_must_match_the_actual_backend(self) -> None:
+        document = adapters.test_only_document()
+        compiler = next(
+            r for r in document["compilers"] if r["compiler_id"] == "in-repo-hir"
+        )
+        compiler["compiler_version"] = "9.9.9"
+        executor, _verifier = self._ports(engine=fixtures.engine_for(document, self.base))
+        request = fixtures.execute_request(self.base, fixtures.design_envelope_for(self.base))
+        result = executor.execute(request)
+        self.assertFalse(result.success)
+        self.assertEqual([f.code for f in result.findings], ["EXECUTOR_TOOL_NOT_RESOLVED"])
+        self.assertIn("9.9.9", result.findings[0].message)
+        self.assertIn("1.0.0", result.findings[0].message)
+        self.assertEqual(list(request.candidate_root.iterdir()), [])
+
     def test_unknown_output_kind_is_refused_by_the_executor(self) -> None:
         envelope = fixtures.design_envelope_for(self.base, output_kind="kicad_pcb")
         executor, _verifier = self._ports(envelope=envelope)
@@ -305,6 +323,18 @@ class ExecutorRefusalTests(TempRootTest):
 
 
 class ExecutorWiringTests(TempRootTest):
+    def test_assembly_refuses_a_verifier_backend_at_the_wrong_version(self) -> None:
+        document = adapters.test_only_document()
+        verifier = next(
+            r for r in document["verifiers"] if r["verifier_id"] == "in-repo-hir-verifier"
+        )
+        verifier["verifier_version"] = "9.9.9"
+        with self.assertRaises(ToolNotResolved) as caught:
+            self._ports(engine=fixtures.engine_for(document, self.base))
+        self.assertIn("9.9.9", str(caught.exception))
+        self.assertIn("1.0.0", str(caught.exception))
+        self.assertEqual(list(self.base.iterdir()), [])
+
     def test_assembled_ports_satisfy_the_frozen_protocols(self) -> None:
         executor, verifier = self._ports()
         self.assertIsInstance(executor, ExecutorPort)
@@ -370,6 +400,48 @@ class VerifierIndependenceTests(TempRootTest):
         result = verifier.verify("run-1", root.name, root)
         self.assertEqual(result.status.value, "FAIL")
         self.assertIn("VERIFY_PLAN_MISMATCH", [f.code for f in result.findings])
+
+    def test_backend_version_is_rechecked_before_verification(self) -> None:
+        verifier, root = self._run()
+        backend = verifier._registry.backend_for(verifier._registration)
+        with patch.object(backend, "version", "9.9.9"):
+            result = verifier.verify("run-1", root.name, root)
+        self.assertEqual(result.status.value, "FAIL")
+        self.assertEqual([f.code for f in result.findings], ["VERIFIER_TOOL_NOT_RESOLVED"])
+
+    def _assert_identity_tamper_refused(self, field, value) -> None:
+        verifier, root = self._run()
+        payload = fixtures.read_artifact(root)
+        payload[field] = value
+        fixtures.write_artifact(root, payload)
+        before = fixtures.artifact_path(root).read_bytes()
+        result = verifier.verify("run-1", root.name, root)
+        self.assertEqual(result.status.value, "FAIL")
+        mismatches = [f for f in result.findings if f.code == "VERIFY_ARTIFACT_IDENTITY_MISMATCH"]
+        self.assertEqual([f.details["field"] for f in mismatches], [field])
+        self.assertEqual(fixtures.artifact_path(root).read_bytes(), before)
+
+    def test_artifact_from_another_domain_is_refused(self) -> None:
+        self._assert_identity_tamper_refused("domain_id", "unrelated-domain")
+
+    def test_artifact_from_another_run_is_refused(self) -> None:
+        self._assert_identity_tamper_refused("run_id", "old-run")
+
+    def test_artifact_from_another_candidate_is_refused(self) -> None:
+        self._assert_identity_tamper_refused("candidate_id", "other-candidate")
+
+    def test_artifact_identity_is_bound_to_the_verification_request(self) -> None:
+        verifier, root = self._run()
+        for run_id, candidate_id, field in (
+            ("other-run", root.name, "run_id"),
+            ("run-1", "other-candidate", "candidate_id"),
+        ):
+            with self.subTest(field=field):
+                result = verifier.verify(run_id, candidate_id, root)
+                self.assertEqual(result.status.value, "FAIL")
+                self.assertEqual(result.candidate_id, candidate_id)
+                mismatches = [f for f in result.findings if f.code == "VERIFY_ARTIFACT_IDENTITY_MISMATCH"]
+                self.assertEqual([f.details["field"] for f in mismatches], [field])
 
     def test_hand_edited_digest_fails(self) -> None:
         verifier, root = self._run()
@@ -486,6 +558,40 @@ class CommandToolTests(TempRootTest):
         self.assertEqual(receipt["exit_code"], 0)
         self.assertEqual(len(receipt["stdout_sha256"]), 64)
         self.assertFalse(receipt["command"][0].endswith("shell"))
+
+    def test_nonzero_exit_is_a_failure_with_an_invocation_receipt(self) -> None:
+        import sys
+
+        receipt, findings = run_command(
+            self._registration([sys.executable, "-c", "import sys; sys.exit(7)"])
+        )
+        self.assertEqual(receipt["exit_code"], 7)
+        self.assertEqual(len(receipt["stdout_sha256"]), 64)
+        self.assertEqual([f.code for f in findings], ["TOOL_EXIT_NONZERO"])
+        self.assertEqual(findings[0].details["exit_code"], 7)
+
+    def test_failed_command_never_becomes_a_successful_execution(self) -> None:
+        import sys
+
+        registration = self._registration([sys.executable, "-c", "import sys; sys.exit(7)"])
+        registry = ToolRegistry([registration], {"command": CommandBackedExecutor()})
+        executor = ToolExecutor(registry, backend="command")
+        for stale_artifact in (False, True):
+            with self.subTest(stale_artifact=stale_artifact):
+                request = fixtures.execute_request(
+                    self.base, fixtures.design_envelope_for(self.base),
+                    candidate="command-stale" if stale_artifact else "command-empty",
+                )
+                if stale_artifact:
+                    fixtures.artifact_path(request.candidate_root).write_bytes(b"old artifact")
+                result = executor.execute(request)
+                self.assertFalse(result.success)
+                self.assertEqual(result.artifacts, ())
+                self.assertEqual([f.code for f in result.findings], ["TOOL_EXIT_NONZERO"])
+                receipt_path = request.candidate_root / "tool-cli-tool-receipt.json"
+                self.assertEqual(json.loads(receipt_path.read_text())["exit_code"], 7)
+                if stale_artifact:
+                    self.assertEqual(fixtures.artifact_path(request.candidate_root).read_bytes(), b"old artifact")
 
     def test_tool_that_writes_nothing_is_still_not_a_pass(self) -> None:
         registration = ToolRegistration(
