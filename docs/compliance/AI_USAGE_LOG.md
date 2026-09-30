@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 133 条。完整正文在各自条目文件中；本索引只做导航。
+共 134 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -195,4 +195,5 @@
 - [`AI-20260929-OPENCODE-BD1868C795E46D85B1883D3AD87012B7`](ai-usage/AI-20260929-OPENCODE-BD1868C795E46D85B1883D3AD87012B7.md) — P0 第一步 —— KICAD_VERIFY 变成纯证据生产者，裁决交给 policy
 ## 2026-09-30
 
+- [`AI-20260930-OPENCODE-6C7D42EE50B9282866D9A5CBBF6D74CF`](ai-usage/AI-20260930-OPENCODE-6C7D42EE50B9282866D9A5CBBF6D74CF.md) — Real ExecutorPort + VerifierPort: make one ARH repair round complete (GH-114)
 - [`AI-20260930-OPENCODE-B819BC9023315D7833B2E771DA0CC5F5`](ai-usage/AI-20260930-OPENCODE-B819BC9023315D7833B2E771DA0CC5F5.md) — GH-112: wire the ARH LLM repair agent into the real runtime (assembly, derived action schema, operator allowlist, env-only API key), stopping at the API boundary
