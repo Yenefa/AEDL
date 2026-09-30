@@ -27,7 +27,14 @@ from aedl_sandbox.policy import (
     PolicyDocumentError,
     SandboxPolicyEngine,
 )
+from aedl_sandbox.policy.engine import SUBJECT_SPECS
 from aedl_sandbox.trust import FileTrustStore
+
+from .arh.budget import BudgetConfig, BudgetStop
+from .arh.llm_repair_port import LLMRepairPort
+from .arh.model_adapter import ModelAdapter
+from .arh.schema import ContextInputs
+from .arh.trajectory import TrajectoryRecorder
 
 from .orchestrator import SandboxOrchestrator
 from .protocol import (
@@ -41,6 +48,11 @@ from .protocol import (
     VerificationResult,
     VerificationStatus,
 )
+from .toolports import (
+    BACKEND_IN_REPO_HIR,
+    build_in_repo_ports,
+    design_envelope,
+)
 from .workspace import CandidateWorkspace
 
 TEST_ONLY_COMPONENT_MPN = "TEST-ONLY-LDO-3V3"
@@ -48,6 +60,16 @@ TEST_ONLY_COMPONENT_ROLE = "power_regulator"
 TEST_ONLY_EVIDENCE_ID = "TEST_ONLY_EVIDENCE_1"
 TEST_ONLY_COMPILER_ID = "test-only-compiler"
 TEST_ONLY_VERIFIER_ID = "test-only-verifier"
+
+# GH-114: the in-repo artifact class. These ids are registered in the policy
+# document (see test_only_document) so the policy layer authorizes them; the
+# implementations live in toolports.py and are wired into cli.py run-arh.
+# Mapping a tool id to a backend is assembly-time knowledge, and this module is
+# where the assembly lives.
+IN_REPO_COMPILER_ID = "in-repo-hir"
+IN_REPO_VERIFIER_ID = "in-repo-hir-verifier"
+IN_REPO_TOOL_VERSION = "1.0.0"
+IN_REPO_COVERAGE_ID = "STRUCTURE"
 
 TEST_ONLY_NOTE = (
     "TEST_ONLY synthetic material for sandbox orchestration mechanics; "
@@ -82,6 +104,17 @@ class _FailClosedPolicyPort:
     def __init__(self, reason_code: str, findings: tuple[Finding, ...]) -> None:
         self._reason_code = reason_code
         self._findings = findings
+
+    @property
+    def reason_code(self) -> str:
+        """Why this port refuses everything. Public so an assembly that needs the
+        domain's document can say WHICH refusal it hit (GH-114) instead of
+        reporting an object that mysteriously lacks one."""
+        return self._reason_code
+
+    @property
+    def findings(self) -> tuple[Finding, ...]:
+        return self._findings
 
     def evaluate(self, request: PolicyRequest) -> PolicyDecision:
         return PolicyDecision(
@@ -126,6 +159,17 @@ class PolicyEnginePort:
     @property
     def engine(self) -> SandboxPolicyEngine:
         return self._engine
+
+    @property
+    def document(self) -> Any:
+        """The parsed policy document this port evaluates against.
+
+        Exposed because the tool registry is DERIVED from it (GH-114): a port
+        that would not show its document would force the assembly to re-parse
+        the same contracts, which is how two copies of a registry start to
+        disagree.
+        """
+        return self._engine.document
 
     @property
     def verified_bundle_sha256(self) -> str:
@@ -380,6 +424,18 @@ def test_only_document() -> dict[str, JsonValue]:
                 "output_kind": "kicad_sch",
                 "required_coverage_ids": ["ERC"],
             },
+            # GH-114: the artifact class this repository can ACTUALLY produce.
+            # Registered so the policy layer authorizes it explicitly rather
+            # than the ports deciding for themselves what they may run: the
+            # design's declared output_kind is matched against these entries.
+            # It is not a claim that in-repo-hir is an EDD-001 tool -- the real
+            # EDD-001 document registers no compiler and no verifier at all.
+            {
+                "compiler_id": IN_REPO_COMPILER_ID,
+                "compiler_version": IN_REPO_TOOL_VERSION,
+                "output_kind": "hir",
+                "required_coverage_ids": [IN_REPO_COVERAGE_ID],
+            },
         ],
         "verifiers": [
             {
@@ -387,6 +443,12 @@ def test_only_document() -> dict[str, JsonValue]:
                 "verifier_version": "1.0.0",
                 "artifact_kind": "kicad_sch",
                 "coverage_ids": ["ERC", "DRC", "CONTRACT"],
+            },
+            {
+                "verifier_id": IN_REPO_VERIFIER_ID,
+                "verifier_version": IN_REPO_TOOL_VERSION,
+                "artifact_kind": "hir",
+                "coverage_ids": [IN_REPO_COVERAGE_ID],
             },
         ],
         "prerequisites": {
@@ -569,4 +631,242 @@ def build_test_only_fixture_orchestrator(
         subject=test_only_design_subject(1),
         max_repairs=max_repairs,
         checkpointer=checkpointer,
+    )
+
+
+# ---------------------------------------------------------------------------
+# ARH live wiring (GH-112)
+#
+# Everything above this line is TEST_ONLY or a public M/L port builder. What
+# follows is the assembly that makes the ARH repair agent reachable from a real
+# process at all. Until it existed, nothing outside `arh/` referenced the
+# harness and the only RepairPort the CLI could reach was `_TestOnlyRepair`.
+# ---------------------------------------------------------------------------
+
+#: The action prefix a repair PROPOSAL may name. The orchestrator's own actions
+#: (PREFLIGHT / COMPILE_HIR / VERIFY_ARTIFACT / ...) are dispatched by
+#: `adapters` on requests it builds itself; a proposal naming one of those would
+#: be asking the agent to drive machinery it has no authority over, so they are
+#: not offered. Offering them is not a wider capability -- each is individually
+#: policy-gated -- but it is a wider SURFACE than the contract intends, and the
+#: cheap thing is to not build it.
+PROPOSAL_ACTION_PREFIX = "DESIGN_"
+
+
+def derive_proposal_action_schema() -> dict[str, list[str]]:
+    """The design actions a proposal may name, derived from `SUBJECT_SPECS`.
+
+    DERIVED, never hand-written, and that is the whole point.
+    `repair_agent` refuses any action absent from `action_schema` AND any action
+    absent from `SUBJECT_SPECS`; if the two were maintained separately, the
+    failure mode is a proposal the model was TOLD to emit that is then rejected
+    100% of the time -- a silent, total rejection rate that looks exactly like a
+    model that cannot follow instructions. One source, so they cannot disagree.
+
+    Field names come from the same table that validates them, so the advertised
+    shape and the enforced shape are the same object.
+    """
+    return {
+        action: [name for name, _ in SUBJECT_SPECS[action]]
+        for action in sorted(SUBJECT_SPECS)
+        if action.startswith(PROPOSAL_ACTION_PREFIX)
+    }
+
+
+class ArhContextInputs:
+    """Projects run state into `ContextInputs` for one repair round (RFC 3.2, D6).
+
+    A PROJECTION, deliberately not an `engine.document` dump: the harness is
+    handed the fields the round needs and nothing else, so there is no path by
+    which the full contract document -- and everything it carries -- reaches a
+    prompt.
+
+    `allowlist` and `subject_frozen` are supplied by the OPERATOR at assembly
+    time, not derived from anything the model or the run can influence. That
+    asymmetry is the point: the model chooses WHICH action to propose and WITH
+    WHAT arguments, and is confined to the choices the operator declared. An
+    allowlist the agent could widen would be no allowlist at all.
+    """
+
+    def __init__(
+        self,
+        *,
+        workspace: CandidateWorkspace,
+        domain_id: str,
+        subject: Mapping[str, Any],
+        allowlist: Mapping[str, Any],
+        contract_ref: Mapping[str, Any] | None = None,
+        fingerprint_state: Mapping[str, Any] | None = None,
+        verification_ref: Mapping[str, Any] | None = None,
+    ) -> None:
+        if not isinstance(allowlist, Mapping):
+            raise TypeError("allowlist must be a mapping")
+        # Fail closed AT ASSEMBLY rather than at the first proposal. An empty
+        # allowed_components is accepted by `repair_agent` and then rejects every
+        # component proposal, so a misconfigured allowlist would present as a
+        # model that cannot follow instructions. Refusing here names the cause.
+        components = allowlist.get("allowed_components")
+        if not components:
+            raise ValueError(
+                "allowlist.allowed_components is empty, so every component "
+                "proposal would fail closed. Declare the components this run may "
+                "select at assembly time; the harness will not invent them."
+            )
+        if not allowlist.get("evidence_ids"):
+            raise ValueError(
+                "allowlist.evidence_ids is empty, so no proposal could cite "
+                "evidence and the harness requires cited evidence to be a subset "
+                "of the available set. Declare this run's evidence ids."
+            )
+        self._workspace = workspace
+        self._domain_id = domain_id
+        self._subject = dict(subject)
+        self._allowlist = dict(allowlist)
+        self._contract_ref = dict(contract_ref or {})
+        self._fingerprint_state = dict(fingerprint_state or {})
+        self._verification_ref = dict(verification_ref or {})
+
+    def __call__(
+        self, run_id: str, candidate_id: str, findings: tuple[Finding, ...]
+    ) -> ContextInputs:
+        return ContextInputs(
+            domain_id=self._domain_id,
+            candidate_root=self._workspace.candidate_root(run_id, candidate_id),
+            contract_ref=dict(self._contract_ref),
+            subject_frozen=dict(self._subject),
+            fingerprint_state=dict(self._fingerprint_state),
+            verification_ref=dict(self._verification_ref),
+            allowlist=dict(self._allowlist),
+            action_schema=derive_proposal_action_schema(),
+        )
+
+
+def build_arh_orchestrator(
+    workspace_root: Path | str,
+    run_id: str,
+    checkpointer: Any,
+    *,
+    repo_root: Path | str,
+    model: ModelAdapter,
+    subject: Mapping[str, Any],
+    allowlist: Mapping[str, Any],
+    policy: Any,
+    executor: Any,
+    verifier: Any,
+    trust: Any = None,
+    max_repairs: int = 3,
+    budget: BudgetStop | None = None,
+    run_dir: Path | str | None = None,
+    domain_id: str = "EDD-001",
+) -> SandboxOrchestrator:
+    """Assemble a REAL orchestrator whose repair port is the ARH agent.
+
+    The port set is chosen HERE, at assembly time, and nowhere else. That is
+    RFC 2.5 N8: the agent influences the CONTENT of a proposal and nothing
+    about which implementations exist. `SandboxOrchestrator` additionally
+    isinstance-checks every port it is handed, so a misassembled port is a
+    TypeError at construction rather than a surprise mid-run.
+
+    `executor` and `verifier` are REQUIRED and have NO default. The doubles
+    `_TestOnlyExecutor` / `_TestOnlyVerifier` exist and would make this function
+    convenient, and that is exactly why they are not wired in here: a live
+    repair round that silently executed and verified against test doubles would
+    report success it never earned. Supplying them is the caller's explicit
+    choice, so the gap is visible in the signature instead of buried in a
+    default. They are a separate piece of work.
+
+    `model` is passed in rather than constructed here, for the same reason plus
+    one: the adapter's transport is a required argument with no default, so a
+    caller who passes a real transport has chosen real I/O and a caller who
+    passes a fake one cannot accidentally make a request. No network call
+    happens in this function.
+    """
+    workspace_root = Path(workspace_root)
+    workspace = CandidateWorkspace(workspace_root)
+    run_dir = Path(run_dir) if run_dir is not None else workspace_root / "run" / run_id
+    # N4: the recorder owns its own directory under the run dir. It is never the
+    # receipt root, so a trajectory can never be read back as a verdict.
+    trajectory = TrajectoryRecorder(run_dir, run_id)
+    repair = LLMRepairPort(
+        model=model,
+        inputs_provider=ArhContextInputs(
+            workspace=workspace,
+            domain_id=domain_id,
+            subject=subject,
+            allowlist=allowlist,
+        ),
+        trajectory=trajectory,
+        budget=budget if budget is not None else BudgetStop(BudgetConfig()),
+    )
+    return SandboxOrchestrator(
+        policy=policy,
+        executor=executor,
+        verifier=verifier,
+        repair=repair,
+        # The trust port is tied to the domain the run evaluates against:
+        # receipt_root always lives under the run, but bundle_repo_root is the
+        # operator's chosen domain root. A synthetic policy paired with the real
+        # evidence tree (or the reverse) would be a mixed-binding run.
+        trust=(
+            trust
+            if trust is not None
+            else build_trust_port(repo_root, workspace_root / "receipts")
+        ),
+        workspace=workspace,
+        run_id=run_id,
+        domain_id=domain_id,
+        bundle_hash="",
+        subject=subject,
+        max_repairs=max_repairs,
+        checkpointer=checkpointer,
+    )
+
+
+# ---------------------------------------------------------------------------
+# GH-114: the real executor/verifier pair.
+# ---------------------------------------------------------------------------
+
+#: Tool id -> backend name. The policy document says WHICH tools this domain
+#: authorizes; this says HOW each is run. A registered tool absent from here
+#: still resolves to NO backend and refuses at assembly by name, which is the
+#: fail-closed direction.
+IN_REPO_TOOL_BACKENDS: Mapping[str, str] = {
+    IN_REPO_COMPILER_ID: BACKEND_IN_REPO_HIR,
+    IN_REPO_VERIFIER_ID: BACKEND_IN_REPO_HIR,
+    # The synthetic TEST_ONLY tools are declared by the fixture policy document,
+    # so a registry built over that document reports them as authorized. They
+    # remain unrunnable unless a caller says what runs them, and this mapping is
+    # that statement: the fixture pair keeps the in-repo backend, which is what
+    # the repair_then_pass scenario has always effectively been.
+    #
+    # This is NOT the CLI's mapping. run-arh builds a registry over the REAL
+    # EDD-001 document, which registers neither of these tools, so nothing from
+    # the fixture reaches a live run.
+    TEST_ONLY_COMPILER_ID: BACKEND_IN_REPO_HIR,
+    TEST_ONLY_VERIFIER_ID: BACKEND_IN_REPO_HIR,
+}
+
+
+def build_in_repo_tool_ports(
+    engine: Any,
+    *,
+    design_action: str,
+    design_subject: Mapping[str, Any],
+):
+    """Assemble the real executor/verifier pair over an engine's OWN registry.
+
+    The engine's document is the only source of the tool set: nothing here names
+    a compiler or verifier the policy has not registered. Assembly failures raise
+    ToolNotResolved, so an unauthorized artifact class is a configuration error
+    rather than a mid-round surprise.
+
+    The selection logic itself lives in toolports.build_in_repo_ports so that the
+    CLI and the tests assemble the pair through ONE function; two assembly sites
+    is how a test starts exercising a shape the runtime never uses.
+    """
+    return build_in_repo_ports(
+        engine,
+        design_action=design_action,
+        design_subject=design_subject,
+        backend_for_tool=IN_REPO_TOOL_BACKENDS,
     )

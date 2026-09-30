@@ -884,3 +884,243 @@ Windows 的 NTFS 不报告目录链接数（恒为 1），所以同一份代码�
 - `st_nlink` 之外的别名手段（bind mount、overlay）不在此检查覆盖范围内，
   本条也不声称覆盖。
 
+---
+
+## ADR-018: ARH 接线：action 词表单一真源、allowlist 归操作者、缺件具名而非静默替身
+
+- 状态：accepted（pending human review）
+- 日期：2026-09-30
+- AI 参与：AI-20260930-OPENCODE-B819BC9023315D7833B2E771DA0CC5F5
+- 关联：`sandbox_runtime/src/aedl_sandbox/adapters.py`（`derive_proposal_action_schema`
+  / `ArhContextInputs` / `build_arh_orchestrator`）、`cli.py`（`run-arh`、
+  `_require_api_key`）、`tasks/GH-112.yaml`、ADR-016、RFC §2.5 N8
+
+### 问题
+
+ARH 已合入且 141 测试全绿，但**包外零引用**：CLI 唯一能到达的 `RepairPort` 实现是
+`_TestOnlyRepair`。Agent 不可用，而绿灯读起来像可用。
+
+接线本身不缺接口 —— `SandboxOrchestrator.__init__` 早已接受 `repair: RepairPort`
+并在构造期 isinstance 检查（这正是 N8 要求的装配期定型）。缺的是**装配**，以及
+装配时必须回答的三个问题：给模型看什么 action 词表、allowlist 从哪来、缺件怎么办。
+
+### 决策
+
+**1. `action_schema` 从 `policy.engine.SUBJECT_SPECS` 派生，只取 `DESIGN_*`。**
+
+不手写。`repair_agent` 既按 `action_schema` 拒 action，又按 `SUBJECT_SPECS` 校字段；
+两者分开维护的故障形态是**模型被告知可以发、实际 100% 被拒**——一个看起来完全像
+「模型不听话」的静默全拒。单一真源消除它。
+
+只取 `DESIGN_*`：`PREFLIGHT` / `COMPILE_HIR` / `VERIFY_ARTIFACT` 由 orchestrator
+在自己构造的请求上派发。proposal 命名它们等于让模型驱动它无权驱动的机构。
+不构造这个面，比构造了再逐个靠 policy 拦更省事。
+
+**2. `allowlist` 与 `subject_frozen` 由操作者在装配期声明，不由模型或运行态影响。**
+
+模型决定**提哪个 action、填什么参数**，且被限制在操作者声明的范围内。一个能被
+模型自己放宽的 allowlist 不是 allowlist。
+
+**3. 空的 `allowed_components` / `evidence_ids` 在装配期就拒绝，不留到 `propose`。**
+
+`repair_agent` 接受空 allowlist 然后拒绝每一个元件 proposal。装配期拒绝把
+「配置漏了」和「模型不听话」区分开；否则前者会伪装成后者。
+
+**4. 缺件具名，不给 test-only 替身。**
+
+实测发现**不存在真实 `ExecutorPort` / `VerifierPort`**，只有 `_TestOnly*` 双件。
+于是 `build_arh_orchestrator` 把这两个设为**必填参数且无默认值**；CLI 传
+`_UnresolvedExecutor/_Verifier`，首次使用时抛具名错误。
+
+理由：把双件接上去会让一次「实时」repair 轮次报告它从未挣得的成功。缺件应当在
+**函数签名里可见**，而不是埋进一个默认值里。这一条是 Envelope 范围修正 **A1**。
+
+**5. API key 只从环境变量读；`--api-key` 选项不存在。**
+
+argv 会进进程列表和 shell history。不是「不建议」，是**不存在**，并用测试断言
+argparse 拒绝它。缺失/空白在**任何装配之前**具名拒绝，不留半成品 workspace 或
+trajectory。
+
+### 团队自主判断
+
+「不提供方便的默认值」和「先拒绝再解释」都是工程判断，合同没规定。其中第一条是
+本条最反直觉的地方：给 `executor` 一个 `_TestOnlyExecutor()` 默认值会让这个函数
+**好用得多**，也正因如此它危险——便利会把谎报固化进默认路径。
+
+### 影响
+
+- **可达性达成**：一条 CLI 命令即可装配出 repair port 为真实 `LLMRepairPort` 的
+  orchestrator。变异验证（把 `repair` 换回 `_TestOnlyRepair`）被 3 个测试杀掉，
+  承重的那个由 **proposal 内容**杀死而非类型检查。
+- **未达成：可用性。** 缺真实 executor/verifier，agent 跑不完整轮；缺 ground
+  truth，无法主张它修好了任何东西（Issue #73 OPEN）。**本 ADR 只声称可达。**
+- 测试：sandbox 440 → 457，ARH 141 → 158；`skipped`/`xfail` 计数**不变**（1/1）。
+- 不改冻结的 `RepairPort.propose` 签名（`contract_change: false` 是约束不是默认）。
+
+### known_limitations
+
+- **NOT_RUN：真实 LLM。** 按指令停在配置 API 之前，未配置 key、未发任何请求。
+  模型能否产出通过三道静态校验的 proposal 是 **UNKNOWN**。
+- **UNKNOWN：benchmark。** 无 ground truth，不做效果主张。
+- **TO_VERIFY：N8 已满足**是对既有 isinstance 构造期检查的**读法**，不是事实
+  认定。五项 BLOCKING 的放行裁决属 Owner，本任务不代做。
+- 真实 executor/verifier 未建，`run-arh` 目前在首次使用时具名失败。
+
+
+---
+
+## ADR-019: 真实 ExecutorPort/VerifierPort：判据来源决定真实性；工具注册表单一真源；缺件在解析期具名
+
+- 状态：accepted（pending human review）
+- 日期：2026-09-30
+- AI 参与：AI-20260930-OPENCODE-6C7D42EE50B9282866D9A5CBBF6D74CF
+- 关联：`sandbox_runtime/src/aedl_sandbox/toolports.py`（新增）、`adapters.py`、`cli.py`、
+  `tests/toolports/**`（新增）、`tasks/GH-114.yaml`、Issue #114、ADR-018、
+  RFC §2.5 N8 / T-04 / T-08 / T-11
+
+### 问题
+
+ADR-018 的范围修正 A1 记录：仓库里不存在真实 `ExecutorPort` / `VerifierPort`，
+`cli.py run-arh` 只能传 `_Unresolved*` 桩。要建这两个端口，必须先回答一个**可争议的
+定义问题**：在这个仓库里，「真实」意味着什么？
+
+三个实测事实把这个问题逼了出来：
+
+1. 真实 EDD-001 的 `tool_coverage` 是 `{compilers: [], verifiers: []}`，
+   `missing_requirements` 还挂着 POWER 合同与 5 份 datasheet。
+   **EDD-001 没有任何可执行或可验证的东西。**
+2. 本机工具链探测：`kicad-cli` / `arduino-cli` / `pio` / `idf.py` / `gcc` /
+   `clang` / `cmake` / `ngspice` / `iverilog` **全部不存在**，只有 `python` 与 `uv`。
+3. `gates/**` 里所有真实判据（ERC 不塌缩、四视图语义一致、冻结的 kicad-cli 命令向量）
+   **都是 Python**，唯一调用的第三方二进制是 kicad-cli。
+
+于是「真实 = 调用外部 EDA 工具」这条路在本机与 CI 上都会退化成具名失败，与它要替换的
+`_Unresolved*` 桩**在可观测行为上无法区分**。
+
+### 决策
+
+**1. verifier 的真实性来自判据来源，不来自实现语言。**
+
+判据来源被限定为三种可检验的东西：域自己的**冻结 policy 注册表**、**冻结命令向量**、
+以及**从磁盘读回的产物字节**。任何被声明的工具都必须能追溯到这三者之一。这条是整条
+ADR 的地基，也是最容易被反驳的一条，因此明写为立场而非默认。
+
+**2. 工具集合从 `PolicyDocument.compilers/.verifiers` 派生，不另立清单。**
+
+端口能跑的工具集与 policy 授权的工具集**不允许是两个清单**。派生方向的单一性
+（文档决定有哪些工具，注册表决定每个工具怎么跑）消除了「模型被允许发、执行期找不到」
+这一整类漂移。
+
+**3. 缺件在解析期具名失败，不在构造期全量失败。**
+
+最初实现把「每个注册工具都必须有后端」放在 `ToolRegistry.__init__`，实测立刻暴露问题：
+一份 policy 文档可以合法声明本进程跑不了的工具（真实 EDD-001 一个都不声明），构造期
+全量拒绝会让**无关声明变成致命错误**。失败点移到 `resolve_*` / `backend_for`：未被授权
+的工具是具名拒绝，已授权但无后端的工具同样具名拒绝，两者都没有 fallback。
+
+**4. artifact 的 tool 字段记录「写出它的后端」，不是授权它的注册项。**
+
+compiler 与 verifier 按设计是两个不同 id；把 compiler 的 id 写进 artifact 会让 verifier
+拒绝每一个它本该检查的产物。授权是 policy 文档的事，这个字段回答的是「这些字节是谁写的」。
+
+**5. 信封是闭合的三键白名单，`output_kind` 属于信封层而非内层 subject。**
+
+红队 T-08 记录 envelope extras 零校验直达 executor。修法是**白名单**而不是「多允许一个键」。
+`output_kind` 必须在信封层：`repair_agent` 按 `SUBJECT_SPECS` 精确字段集校内层 subject，
+把它放进内层会让**每一个模型 proposal 100% 被拒**——与 ADR-018 第 1 条同一个故障形态。
+同时产物类别是**运行**与域的契约，不该是 proposal 能变动的东西。
+
+**6. `run-arh` 的一切拒绝都发生在落盘之前。**
+
+实现过程中实测到一个真实缺陷：端口装配失败时 `runs/run/<id>/` 已经建好，留下一个看起来
+像「尝试过」的目录。顺序被改为 key → 信封 → 域 → 工具注册表 → 才建目录，并有测试断言
+被拒绝的运行**不留 run 目录**。
+
+**7. `build_arh_orchestrator` 的 policy 端口由调用者提供；`run-arh` 新增
+`--policy-source {real,test-only}`（默认 real）。**
+
+原来的实现把 policy 硬编码为真实 EDD-001 端口，而它在真实域上必然 BLOCKED，于是真实端口
+**永远不可能被跑到**。把域的选择变成显式的、默认安全的开关：合成域只能靠点名进入，
+真实域是默认值。
+
+### 团队自主判断
+
+- 「判据来源比语言更重要」是工程判断，不是合同规定；它在 EDA 领域可争议，因此写明为
+  **可反驳的立场**而不是事实。
+- 「绝不给默认值」延续 ADR-018 第 4 条：给 executor 一个 `_TestOnlyExecutor()` 默认值会
+  让函数好用得多，也正因如此它会把谎报固化进默认路径。
+- 内建 `in-repo-hir` 产物类是本仓库**今天真能跑通**的那一类；选它而不是伪造一个 kicad
+  工具链，是范围控制而非能力主张。
+
+### 影响
+
+- **达成：一轮完整跑通。** `run-arh --policy-source test-only` 实跑到
+  `HUMAN_REVIEW_PENDING` + `verification_status: PASS`，落盘 `hir.json`、`.actions.jsonl`、
+  execution/verification 两份回执；**从未晋升**（人审是硬中断）。
+- **实测到的结构事实**：这一轮里**模型一次都没被调用**（假 transport 调用数 = 0）——
+  操作者冻结的 subject 本身就是设计，execute/verify 无需 repair 即可完成。测试按此如实
+  断言「零调用」，而不是编造一次模型调用。
+- **实测到的结构边界**：对 `in-repo-hir` 这一类产物，artifact 是从冻结设计确定性投影的，
+  **首轮必然 PASS**，因此 repair 回路在该产物类上目前不可达。这是设计事实，记录为限制
+  而非缺陷；它在 ground truth（Issue #73）出现前也无法有实际意义。
+- 测试：sandbox 457 → 502（+45），`skipped`/`xfail` 计数**不变**（1/1）。
+- 变异验证：把端口换回 `_TestOnly*` 双件被杀死，且杀在**内容**上——双件写了自己的
+  `artifact.json`、真实 `hir.json` 不存在，且 agent 因诊断未引用 finding code 触发预算停机
+  （`consecutive invalid proposals 3 >= 3`）。
+- 不改冻结的 `ExecutorPort.execute` / `VerifierPort.verify` 签名
+  （`contract_change: false` 是约束不是默认）。
+
+### 已知限制
+
+- **NOT_RUN：真实 LLM 调用。** 未配置 key、未发任何请求；模型输出质量仍是 UNKNOWN。
+- **NOT_REACHABLE：EDD-001。** 真实域注册零工具且冻结输入不全，本任务不做任何 EDD-001
+  电子学主张。
+- **UNKNOWN：`in-repo-hir` 产物格式是新增的最小 schema**，记为带理由的设计决定，
+  不呈现为机械结论。
+- **风险**：读者可能把「一轮能跑完」误读为「agent 修好了东西」。PR 必须同段写明相反的话。
+- **已知缺口**：软保留引脚的 `approval_status` 授权判定留在 policy 层，executor 只记录
+  不判定——它没有携带该授权，也不得凭空假定。
+
+### 复查与追加（同日，真实 LLM 探针，Owner 直接授权）
+
+**范围**：Owner 指示可直接使用其自有 key 做真实调用（预算 10 元）。探针一次性、位于
+`%TEMP%`、不入库、不进 CI；key 只从**进程环境变量**读，不回显、不落盘、不进 argv。
+本条独立于本 envelope 原有的 out-of-scope 声明，已作为 **GH-114 scope amendment A1** 记录。
+
+**探针方法**：走真实生产路径（`build_test_only_policy_port` → 注册表派生的 `ToolPorts` →
+`build_arh_orchestrator(model=OpenAICompatibleAdapter(真实 transport))` → `run()`），
+只把 verifier 桥成「首轮必挂」，作为**唯一**让 repair 节点运行、因而让真实模型调用发生的理由。
+
+**结果（模型 `deepseek-flash`，端点 `api.deepseek.com`）**：
+
+- 轨迹序列：`round_start` → **`model_call`** → `attempt(outcome=accepted)`；
+  usage input **2348** / output **211** / cache_read 2176；延迟 **1359 ms**；单次约 **¥0.003**。
+- 模型诊断：`PROBE_BRIDGE_FORCES_REPAIR: ... re-emit the frozen, allowlisted component
+  selection.` —— **正确引用了 finding code**；action `DESIGN_SELECT_COMPONENT`。
+- **三道静态校验 `outcome: accepted`**：真实模型的 proposal 过得了。
+- 终态 `REPAIR_STALLED`（桥接 verifier 恒挂，符合预期）。
+
+**由此推翻了一条此前的 UNKNOWN**：「真实模型输出是否过得了三道静态校验」在**这一次调用、
+这一个模型**上答案是**过得了**。这是**有边界的**结论，不是「模型质量已确认」：n=1、单一模型、
+单一 prompt 形态、单一端点，且探针只证明**校验可过**，不证明**修得对**（无 ground truth，
+Issue #73）。
+
+**探针抓到的真实缺陷（ADR-019 决策 5 的修正）**：
+
+`repair_agent` 的 proposal 只带 `design_action` + `design_subject`——`output_kind` **刻意不在**
+它的 action schema 里，因为产物类别是运行与域的契约、不该是 proposal 能变动的。于是 repair
+轮次的信封没有 `output_kind`，第二次 `execute` 抛 `ENVELOPE_MISSING_OUTPUT_KIND`。
+**GH-114 的真实端口把模型这条路径变成不可达，而 502 个测试全绿**——因为没有任何测试让 repair
+轮次真的执行第二次。这是「绿灯证明了 harness 符合自己的规格，没证明任何东西在跑」的同一个
+故障形态，在我的新代码里又出现了一次。
+
+**修正**（决策 5 的修订，并新增决策 8）：解析器**不再强求** `output_kind`，只把它列为允许键；
+要求被移到两个能真正回答它的地方——CLI 在**配置层**要求操作者声明，executor 在**请求期**对
+域自己的注册表消解，且**只在恰好一个可运行产物类别时**消解，两个或零个都具名拒绝。
+新增两个测试覆盖这两条（回归 + 歧义拒绝），sandbox 502 → 504。
+
+### 已知限制（追加）
+
+- **探针结论的边界**：n=1、单一模型（`deepseek-flash`）、单一 prompt 形态。它证明
+  「校验可过」，**不证明「修得对」**。任何把它读成效果主张的用法都是过度解读。
+- 该次调用**不是** benchmark，也**不进入**任何 Evidence 台账：它是开发期的有界探针。

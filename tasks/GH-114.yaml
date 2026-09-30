@@ -1,0 +1,238 @@
+task: GH-114
+
+base:
+  branch: feat/arh-executor-verifier
+  sha: a29b86f9d4985193872cfbe664c2495f2cd151b9
+
+goal: |
+  Make one ARH repair round actually COMPLETE. GH-112 wired the LLM repair agent
+  into the real runtime and stopped at the API boundary; its scope amendment A1
+  recorded why it had to stop one step earlier than planned: NO REAL
+  ExecutorPort OR VerifierPort EXISTS in this repository. The only
+  implementations are adapters._TestOnlyExecutor / _TestOnlyVerifier, so
+  cli.py run-arh passes _UnresolvedExecutor / _UnresolvedVerifier and fails by
+  name on first use.
+
+  This task builds the real pair. It delivers COMPLETION of a round, not
+  EFFECTIVENESS of a repair: no claim is made that anything real was repaired,
+  verified, or manufactured, and EDD-001 (which registers NO compiler and NO
+  verifier, and still lacks its power contract and five frozen datasheets)
+  cannot and will not be claimed.
+
+  The design rule this task is built on, stated because it is contestable:
+  a verifier's realness comes from WHERE ITS CRITERIA COME FROM -- pinned
+  rules, an invocable tool, a read-only artifact read back from disk -- not
+  from the language it is written in. Every checker in gates/ is Python, and
+  the only third-party tool any of them invokes is kicad-cli, which is NOT
+  present on this machine (probed: kicad-cli / arduino-cli / pio / idf.py /
+  gcc / clang / cmake / ngspice / iverilog all MISSING; only python and uv).
+  So a port that demands kicad-cli would remain a named failure with no
+  observable difference from the _Unresolved stubs it replaces.
+
+scope: |
+  In scope:
+  - a NEW module sandbox_runtime/src/aedl_sandbox/toolports.py containing:
+      * a tool-backed ExecutorPort / VerifierPort skeleton whose tool set is
+        DERIVED from the domain policy document's own registry
+        (PolicyDocument.compilers / .verifiers) -- one source of truth, never a
+        second hand-written list
+      * fail-closed behaviour: an unregistered, unresolvable, or
+        version-mismatched tool is a NAMED refusal, never a silent substitute
+        and never a PASS
+      * frozen command vectors, never a shell string, with a timeout, an output
+        hash, and an invocation receipt
+      * ONE artifact class that is genuinely in-repo runnable: an in-repo-hir
+        compiler and an INDEPENDENT in-repo-hir verifier that re-derives the
+        expectation from the pinned rules and the candidate record, compares it
+        against the artifact bytes READ BACK FROM DISK, and checks the
+        structural rules (component allowed by the registry, pin legality,
+        parameter bounds). The verifier is read-only.
+      * its findings state exactly what they establish -- a faithful,
+        structurally legal projection of the policy-approved decisions -- and
+        explicitly do NOT establish electrical correctness, ERC/DRC, or
+        manufacturability
+  - sandbox_runtime/src/aedl_sandbox/adapters.py: a real assembly path that
+    builds the API-key-free ports for the in-repo artifact class, plus compile
+    and verify subject helpers for the registered in-repo tool ids
+  - sandbox_runtime/src/aedl_sandbox/cli.py: run-arh uses the real ports;
+    _UnresolvedExecutor and _UnresolvedVerifier are DELETED, not left behind
+  - sandbox_runtime/tests/toolports/** (new) and sandbox_runtime/tests/arh/**
+  - tasks/GH-114.yaml and the compliance records this triggers
+
+  Out of scope, explicitly:
+  - Any claim that a real repair, verification, or manufacturing step happened.
+  - No EDD-001 claim: its tool registry is empty and its frozen inputs are
+    incomplete.
+  - No API key, no network call, no real model request.
+  - No change to orchestrator.py, protocol.py, state.py, policy/**, trust/**,
+    arh/**. The frozen ports are plugged into, never widened.
+  - adapters._TestOnlyExecutor / _TestOnlyVerifier are NOT deleted: the
+    repair_then_pass fixture still uses them and removing them would break a
+    passing suite.
+  - gates/**, docs/evidence/**, tools/**, .github/**, src/**, delivery/**,
+    notes/**, sandbox_runtime/contracts/** untouched.
+
+dependencies:
+  - ref: GH-112
+    required_state: open
+
+allowed_paths:
+  - sandbox_runtime/src/aedl_sandbox/toolports.py
+  - sandbox_runtime/src/aedl_sandbox/adapters.py
+  - sandbox_runtime/src/aedl_sandbox/cli.py
+  - sandbox_runtime/tests/toolports/**
+  - sandbox_runtime/tests/arh/**
+  - tasks/GH-114.yaml
+  - docs/compliance/DECISIONS.md
+  - docs/compliance/ai-usage/**
+  - docs/compliance/AI_USAGE_LOG.md
+
+forbidden_paths:
+  - gates/**
+  - docs/evidence/**
+  - tools/**
+  - .github/**
+  - src/**
+  - delivery/**
+  - notes/**
+  - sandbox_runtime/contracts/**
+  - sandbox_runtime/src/aedl_sandbox/orchestrator.py
+  - sandbox_runtime/src/aedl_sandbox/protocol.py
+  - sandbox_runtime/src/aedl_sandbox/state.py
+  - sandbox_runtime/src/aedl_sandbox/policy/**
+  - sandbox_runtime/src/aedl_sandbox/trust/**
+  - sandbox_runtime/src/aedl_sandbox/arh/**
+
+acceptance: |
+  - python -m aedl_sandbox.cli run-arh reaches a TERMINAL state with the real
+    ports, and no _Unresolved* stub exists in the path (deleted, not unused).
+  - A tool that is unregistered, unresolvable, or version-mismatched produces a
+    NAMED fail-closed finding and never a PASS. Asserted, not assumed.
+  - The in-repo verifier is independent: it re-derives and reads the artifact
+    bytes back from disk, so a tampered artifact FAILS and a hand-constructed
+    PASS without re-derivation FAILS.
+  - Mutation check: swapping the real executor/verifier back for
+    _TestOnlyExecutor / _TestOnlyVerifier is KILLED by the suite. A wiring test
+    that cannot fail is worse than none.
+  - No existing test weakened, skipped, or deleted.
+  - python -m tools.dev_gate --envelope tasks/GH-114.yaml exits 0.
+  - Main and sandbox suites stay green on Windows and on Linux (WSL2), at or
+    above 1223 / 457.
+
+known_limitations:
+  - "UNKNOWN: whether a real model's proposals survive the three static checks.
+     Unchanged by this task; it still needs a key."
+  - "NOT_RUN: no real LLM call, no network call. The end-to-end test uses
+     FakeModelAdapter and an injected transport."
+  - "NOT_REACHABLE: EDD-001 has no registered compiler or verifier and no local
+     frozen datasheets, so no EDD-001 electronics claim can be made from this
+     work."
+  - "TO_VERIFY: the in-repo artifact format is a new, deliberately minimal
+     schema. It is recorded as a decision with its reasoning, not presented as
+     mechanical."
+  - "RISK: a reader could mistake 'a round now completes' for 'the agent fixed
+     something'. The PR must state the opposite in the same paragraph."
+
+change_budget:
+  expected_files: 5
+  expected_modules: [sandbox-toolports, sandbox-tests, tasks, compliance]
+  cross_module: true
+  contract_change: false
+  evidence_semantics_change: false
+  # contract_change: false is a CONSTRAINT, not a default. The frozen
+  # ExecutorPort.execute / VerifierPort.verify signatures are plugged into,
+  # never widened. Needing a signature change is a STOP-and-escalate.
+
+exceptions:
+  # A2 replaces the original envelope-only grants with the Owner's explicit
+  # authorization for the five-file review-fix continuation. Dirty state and
+  # descendant commits are covered only for this continuation, never for
+  # unrelated changes or baseline conflicts. Merge authorization is recorded
+  # separately below; these admission flags do not themselves authorize merge.
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "Owner session 2026-09-30: 你直接修复，我review过了和你说的没差，你做完直接合并"
+    reason: "A2 five-file review fixes, their tests and compliance records only"
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "Owner session 2026-09-30: 你直接修复，我review过了和你说的没差，你做完直接合并"
+    reason: "A2 descendant fix commits from reviewed baseline a29b86f only"
+
+escalation:
+  owner: Yenefa
+
+## Scope amendment A1 — 真实 LLM 探针（Owner 直接授权）
+
+id: A1
+path: sandbox_runtime/src/aedl_sandbox/toolports.py, sandbox_runtime/tests/toolports/**
+change: envelope 的 output_kind 由「每个信封必填」改为「请求期对注册表消解」；
+  并用一次真实 LLM 调用跑通 repair 轮次
+reason: |
+  Owner 于 2026-09-30 直接指示「需要用key测试的话你不是有么？直接用就行了……你做主」，
+  并给出 10 元预算。这条授权独立于本 envelope 原有的 out-of-scope 声明（原声明明确写
+  「No API key is configured ... no real network call is made」），因此在此**显式记录为范围修正**，
+  而不是把它算作原计划内。
+
+  探针本身不入库、不跑在 CI：它是 $TEMP 下的一次性脚本，key 只从进程环境变量读、不回显、
+  不落盘、不进 argv。仓库内没有任何凭据。
+
+  探针立刻抓到一个**此前 502 个测试都没抓到的真实缺陷**：repair_agent 的 proposal 只带
+  design_action + design_subject（output_kind 刻意不在它的 action schema 里，因为产物类别是
+  运行与域的契约、不该是 proposal 能变动的东西），于是 repair 轮次的信封没有 output_kind，
+  第二次 execute 抛 ENVELOPE_MISSING_OUTPUT_KIND —— **GH-114 的真实端口把模型这条路径变成
+  不可达**，而单元测试全部是绿的，因为没有任何测试让 repair 轮次真的执行第二次。
+
+  修法尊重那条设计：解析器不再强求 output_kind（只把它列为允许键），要求被移到两处能真正
+  回答它的地方 —— CLI 在配置层要求操作者声明；executor 在请求期对**域自己的注册表**消解，
+  且只在「恰好一个可运行产物类别」时消解，两个或零个都具名拒绝。
+owner_decision: "Owner session 2026-09-30 直接授权使用其自有 key 做真实调用；预算 10 元"
+decision_ref: "Owner message: 「需要用key测试的话你不是有么？直接用就行了，用多模态的，你看着用，只有十块钱」"
+followup: "真实调用结果按「有边界的探针」记录（模型 deepseek-flash / 端点 api.deepseek.com /
+  单次 / 约 ¥0.003），不主张任何效果；benchmark 仍是 Issue #73"
+
+## Scope amendment A2 — Owner-reviewed fail-closed fixes and authorized merge
+
+# Goal: fix the three reproduced PR #115 findings, validate and merge the PR.
+# Owner decision: APPROVED for this bounded work and merge after checks pass.
+# Decision ref: current Owner message on 2026-09-30:
+#   「你直接修复，我review过了和你说的没差，你做完直接合并」
+# This is human authorization, not an Agent-created GitHub review approval.
+# AI Usage review-status fields remain PENDING_HUMAN_REVIEW.
+#
+# Initial admission: BLOCKED (exit 1): old base c98023f != reviewed HEAD a29b86f.
+# Observed need: resume on the Owner-reviewed PR head and admit the bounded fixes.
+# Human decision already supplied above: rebase the envelope's baseline to
+# a29b86f (no Git rebase or history rewrite), record these grants, then re-admit.
+#
+# Impact Analysis
+# Direct modifications: toolports.py; tests/toolports/test_tool_ports.py;
+#   tasks/GH-114.yaml; one new CODEX AI Usage entry; generated AI_USAGE_LOG.md.
+# Potentially affected: registry resolution, executor results, HIR verification,
+#   CLI/orchestrator assembly and review-bundle receipt summaries.
+# Explicitly not touched: frozen port signatures, policy/trust/arh code, gates,
+#   tools, hardware/delivery, formal Evidence, benchmark/GH-73 and dependencies.
+# Risk: MEDIUM. Reject previously accepted version/exit/identity mismatches.
+# Budget: five files, four modules; cross_module=true; contract_change=false;
+#   evidence_semantics_change=false. Bundle output remains outside the repo.
+#
+# Acceptance: registered and actual backend versions must agree; nonzero tool
+# exit must fail execution while retaining its receipt; HIR domain/run/candidate
+# identities must match the verifier's independently supplied context; targeted
+# regressions and the complete dev_gate pass; regenerate a consistent bundle;
+# push and merge #115 with a merge commit after required local dev_gate and
+# independent Windows/Linux verification pass; report remote CI's actual state.
+# The merge includes #113's existing commits, already included in reviewed #115.
+# No separate approval or merge action is authorized for an unrelated PR.
+# Evidence Needed: NO (development receipts only). AIC Score Target: NONE.
+# Third-party/ADR/Fusion/Open Outputs/Submission triggers: none; implement the
+# existing ADR-019 refusal and provenance rules without a new architecture.
+#
+# Observed verification disposition (same Owner authorization, no new waiver):
+# CI run 36728889091 attempts 1/2/3 all failed during runner setup while
+# downloading astral-sh/setup-uv's action archive from codeload.github.com.
+# No code check ran remotely. The earlier CI-success plan is therefore replaced
+# by the actually completed Windows dev_gate (8/8) and independent WSL Linux
+# main/sandbox suites (1223/513). CI workflow/required checks are unchanged;
+# master has no enforced required check. The Owner's explicit fix-and-merge
+# instruction remains the merge authority; remote CI is reported as an
+# infrastructure failure, never relabelled PASS. Benchmark remains out of scope.
