@@ -27,7 +27,14 @@ from aedl_sandbox.policy import (
     PolicyDocumentError,
     SandboxPolicyEngine,
 )
+from aedl_sandbox.policy.engine import SUBJECT_SPECS
 from aedl_sandbox.trust import FileTrustStore
+
+from .arh.budget import BudgetConfig, BudgetStop
+from .arh.llm_repair_port import LLMRepairPort
+from .arh.model_adapter import ModelAdapter
+from .arh.schema import ContextInputs
+from .arh.trajectory import TrajectoryRecorder
 
 from .orchestrator import SandboxOrchestrator
 from .protocol import (
@@ -567,6 +574,184 @@ def build_test_only_fixture_orchestrator(
         domain_id="EDD-001",
         bundle_hash=bundle_manifest_sha256(manifest),
         subject=test_only_design_subject(1),
+        max_repairs=max_repairs,
+        checkpointer=checkpointer,
+    )
+
+
+# ---------------------------------------------------------------------------
+# ARH live wiring (GH-112)
+#
+# Everything above this line is TEST_ONLY or a public M/L port builder. What
+# follows is the assembly that makes the ARH repair agent reachable from a real
+# process at all. Until it existed, nothing outside `arh/` referenced the
+# harness and the only RepairPort the CLI could reach was `_TestOnlyRepair`.
+# ---------------------------------------------------------------------------
+
+#: The action prefix a repair PROPOSAL may name. The orchestrator's own actions
+#: (PREFLIGHT / COMPILE_HIR / VERIFY_ARTIFACT / ...) are dispatched by
+#: `adapters` on requests it builds itself; a proposal naming one of those would
+#: be asking the agent to drive machinery it has no authority over, so they are
+#: not offered. Offering them is not a wider capability -- each is individually
+#: policy-gated -- but it is a wider SURFACE than the contract intends, and the
+#: cheap thing is to not build it.
+PROPOSAL_ACTION_PREFIX = "DESIGN_"
+
+
+def derive_proposal_action_schema() -> dict[str, list[str]]:
+    """The design actions a proposal may name, derived from `SUBJECT_SPECS`.
+
+    DERIVED, never hand-written, and that is the whole point.
+    `repair_agent` refuses any action absent from `action_schema` AND any action
+    absent from `SUBJECT_SPECS`; if the two were maintained separately, the
+    failure mode is a proposal the model was TOLD to emit that is then rejected
+    100% of the time -- a silent, total rejection rate that looks exactly like a
+    model that cannot follow instructions. One source, so they cannot disagree.
+
+    Field names come from the same table that validates them, so the advertised
+    shape and the enforced shape are the same object.
+    """
+    return {
+        action: [name for name, _ in SUBJECT_SPECS[action]]
+        for action in sorted(SUBJECT_SPECS)
+        if action.startswith(PROPOSAL_ACTION_PREFIX)
+    }
+
+
+class ArhContextInputs:
+    """Projects run state into `ContextInputs` for one repair round (RFC 3.2, D6).
+
+    A PROJECTION, deliberately not an `engine.document` dump: the harness is
+    handed the fields the round needs and nothing else, so there is no path by
+    which the full contract document -- and everything it carries -- reaches a
+    prompt.
+
+    `allowlist` and `subject_frozen` are supplied by the OPERATOR at assembly
+    time, not derived from anything the model or the run can influence. That
+    asymmetry is the point: the model chooses WHICH action to propose and WITH
+    WHAT arguments, and is confined to the choices the operator declared. An
+    allowlist the agent could widen would be no allowlist at all.
+    """
+
+    def __init__(
+        self,
+        *,
+        workspace: CandidateWorkspace,
+        domain_id: str,
+        subject: Mapping[str, Any],
+        allowlist: Mapping[str, Any],
+        contract_ref: Mapping[str, Any] | None = None,
+        fingerprint_state: Mapping[str, Any] | None = None,
+        verification_ref: Mapping[str, Any] | None = None,
+    ) -> None:
+        if not isinstance(allowlist, Mapping):
+            raise TypeError("allowlist must be a mapping")
+        # Fail closed AT ASSEMBLY rather than at the first proposal. An empty
+        # allowed_components is accepted by `repair_agent` and then rejects every
+        # component proposal, so a misconfigured allowlist would present as a
+        # model that cannot follow instructions. Refusing here names the cause.
+        components = allowlist.get("allowed_components")
+        if not components:
+            raise ValueError(
+                "allowlist.allowed_components is empty, so every component "
+                "proposal would fail closed. Declare the components this run may "
+                "select at assembly time; the harness will not invent them."
+            )
+        if not allowlist.get("evidence_ids"):
+            raise ValueError(
+                "allowlist.evidence_ids is empty, so no proposal could cite "
+                "evidence and the harness requires cited evidence to be a subset "
+                "of the available set. Declare this run's evidence ids."
+            )
+        self._workspace = workspace
+        self._domain_id = domain_id
+        self._subject = dict(subject)
+        self._allowlist = dict(allowlist)
+        self._contract_ref = dict(contract_ref or {})
+        self._fingerprint_state = dict(fingerprint_state or {})
+        self._verification_ref = dict(verification_ref or {})
+
+    def __call__(
+        self, run_id: str, candidate_id: str, findings: tuple[Finding, ...]
+    ) -> ContextInputs:
+        return ContextInputs(
+            domain_id=self._domain_id,
+            candidate_root=self._workspace.candidate_root(run_id, candidate_id),
+            contract_ref=dict(self._contract_ref),
+            subject_frozen=dict(self._subject),
+            fingerprint_state=dict(self._fingerprint_state),
+            verification_ref=dict(self._verification_ref),
+            allowlist=dict(self._allowlist),
+            action_schema=derive_proposal_action_schema(),
+        )
+
+
+def build_arh_orchestrator(
+    workspace_root: Path | str,
+    run_id: str,
+    checkpointer: Any,
+    *,
+    repo_root: Path | str,
+    model: ModelAdapter,
+    subject: Mapping[str, Any],
+    allowlist: Mapping[str, Any],
+    executor: Any,
+    verifier: Any,
+    max_repairs: int = 3,
+    budget: BudgetStop | None = None,
+    run_dir: Path | str | None = None,
+    domain_id: str = "EDD-001",
+) -> SandboxOrchestrator:
+    """Assemble a REAL orchestrator whose repair port is the ARH agent.
+
+    The port set is chosen HERE, at assembly time, and nowhere else. That is
+    RFC 2.5 N8: the agent influences the CONTENT of a proposal and nothing
+    about which implementations exist. `SandboxOrchestrator` additionally
+    isinstance-checks every port it is handed, so a misassembled port is a
+    TypeError at construction rather than a surprise mid-run.
+
+    `executor` and `verifier` are REQUIRED and have NO default. The doubles
+    `_TestOnlyExecutor` / `_TestOnlyVerifier` exist and would make this function
+    convenient, and that is exactly why they are not wired in here: a live
+    repair round that silently executed and verified against test doubles would
+    report success it never earned. Supplying them is the caller's explicit
+    choice, so the gap is visible in the signature instead of buried in a
+    default. They are a separate piece of work.
+
+    `model` is passed in rather than constructed here, for the same reason plus
+    one: the adapter's transport is a required argument with no default, so a
+    caller who passes a real transport has chosen real I/O and a caller who
+    passes a fake one cannot accidentally make a request. No network call
+    happens in this function.
+    """
+    workspace_root = Path(workspace_root)
+    workspace = CandidateWorkspace(workspace_root)
+    run_dir = Path(run_dir) if run_dir is not None else workspace_root / "run" / run_id
+    # N4: the recorder owns its own directory under the run dir. It is never the
+    # receipt root, so a trajectory can never be read back as a verdict.
+    trajectory = TrajectoryRecorder(run_dir, run_id)
+    repair = LLMRepairPort(
+        model=model,
+        inputs_provider=ArhContextInputs(
+            workspace=workspace,
+            domain_id=domain_id,
+            subject=subject,
+            allowlist=allowlist,
+        ),
+        trajectory=trajectory,
+        budget=budget if budget is not None else BudgetStop(BudgetConfig()),
+    )
+    return SandboxOrchestrator(
+        policy=build_real_edd001_policy_port(repo_root),
+        executor=executor,
+        verifier=verifier,
+        repair=repair,
+        trust=build_trust_port(repo_root, workspace_root / "receipts"),
+        workspace=workspace,
+        run_id=run_id,
+        domain_id=domain_id,
+        bundle_hash="",
+        subject=subject,
         max_repairs=max_repairs,
         checkpointer=checkpointer,
     )

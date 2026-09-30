@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 132 条。完整正文在各自条目文件中；本索引只做导航。
+共 133 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -193,3 +193,6 @@
 - [`AI-20260929-OPENCODE-4DF0E253EF9FDABD36AF6D7ECF0E97FC`](ai-usage/AI-20260929-OPENCODE-4DF0E253EF9FDABD36AF6D7ECF0E97FC.md) — GH-109: fix the two Linux CI platform defects (directory st_nlink read as alias count; Windows-only cmd probe) and the ENOTDIR link removal they masked
 - [`AI-20260929-OPENCODE-A3A148D0CFF3603CF461C089ADCBD6DC`](ai-usage/AI-20260929-OPENCODE-A3A148D0CFF3603CF461C089ADCBD6DC.md) — the Linux-only path-flavour failure on master left by PR #104
 - [`AI-20260929-OPENCODE-BD1868C795E46D85B1883D3AD87012B7`](ai-usage/AI-20260929-OPENCODE-BD1868C795E46D85B1883D3AD87012B7.md) — P0 第一步 —— KICAD_VERIFY 变成纯证据生产者，裁决交给 policy
+## 2026-09-30
+
+- [`AI-20260930-OPENCODE-B819BC9023315D7833B2E771DA0CC5F5`](ai-usage/AI-20260930-OPENCODE-B819BC9023315D7833B2E771DA0CC5F5.md) — GH-112: wire the ARH LLM repair agent into the real runtime (assembly, derived action schema, operator allowlist, env-only API key), stopping at the API boundary

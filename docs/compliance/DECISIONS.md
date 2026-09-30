@@ -884,3 +884,85 @@ Windows 的 NTFS 不报告目录链接数（恒为 1），所以同一份代码�
 - `st_nlink` 之外的别名手段（bind mount、overlay）不在此检查覆盖范围内，
   本条也不声称覆盖。
 
+---
+
+## ADR-018: ARH 接线：action 词表单一真源、allowlist 归操作者、缺件具名而非静默替身
+
+- 状态：accepted（pending human review）
+- 日期：2026-09-30
+- AI 参与：AI-20260930-OPENCODE-B819BC9023315D7833B2E771DA0CC5F5
+- 关联：`sandbox_runtime/src/aedl_sandbox/adapters.py`（`derive_proposal_action_schema`
+  / `ArhContextInputs` / `build_arh_orchestrator`）、`cli.py`（`run-arh`、
+  `_require_api_key`）、`tasks/GH-112.yaml`、ADR-016、RFC §2.5 N8
+
+### 问题
+
+ARH 已合入且 141 测试全绿，但**包外零引用**：CLI 唯一能到达的 `RepairPort` 实现是
+`_TestOnlyRepair`。Agent 不可用，而绿灯读起来像可用。
+
+接线本身不缺接口 —— `SandboxOrchestrator.__init__` 早已接受 `repair: RepairPort`
+并在构造期 isinstance 检查（这正是 N8 要求的装配期定型）。缺的是**装配**，以及
+装配时必须回答的三个问题：给模型看什么 action 词表、allowlist 从哪来、缺件怎么办。
+
+### 决策
+
+**1. `action_schema` 从 `policy.engine.SUBJECT_SPECS` 派生，只取 `DESIGN_*`。**
+
+不手写。`repair_agent` 既按 `action_schema` 拒 action，又按 `SUBJECT_SPECS` 校字段；
+两者分开维护的故障形态是**模型被告知可以发、实际 100% 被拒**——一个看起来完全像
+「模型不听话」的静默全拒。单一真源消除它。
+
+只取 `DESIGN_*`：`PREFLIGHT` / `COMPILE_HIR` / `VERIFY_ARTIFACT` 由 orchestrator
+在自己构造的请求上派发。proposal 命名它们等于让模型驱动它无权驱动的机构。
+不构造这个面，比构造了再逐个靠 policy 拦更省事。
+
+**2. `allowlist` 与 `subject_frozen` 由操作者在装配期声明，不由模型或运行态影响。**
+
+模型决定**提哪个 action、填什么参数**，且被限制在操作者声明的范围内。一个能被
+模型自己放宽的 allowlist 不是 allowlist。
+
+**3. 空的 `allowed_components` / `evidence_ids` 在装配期就拒绝，不留到 `propose`。**
+
+`repair_agent` 接受空 allowlist 然后拒绝每一个元件 proposal。装配期拒绝把
+「配置漏了」和「模型不听话」区分开；否则前者会伪装成后者。
+
+**4. 缺件具名，不给 test-only 替身。**
+
+实测发现**不存在真实 `ExecutorPort` / `VerifierPort`**，只有 `_TestOnly*` 双件。
+于是 `build_arh_orchestrator` 把这两个设为**必填参数且无默认值**；CLI 传
+`_UnresolvedExecutor/_Verifier`，首次使用时抛具名错误。
+
+理由：把双件接上去会让一次「实时」repair 轮次报告它从未挣得的成功。缺件应当在
+**函数签名里可见**，而不是埋进一个默认值里。这一条是 Envelope 范围修正 **A1**。
+
+**5. API key 只从环境变量读；`--api-key` 选项不存在。**
+
+argv 会进进程列表和 shell history。不是「不建议」，是**不存在**，并用测试断言
+argparse 拒绝它。缺失/空白在**任何装配之前**具名拒绝，不留半成品 workspace 或
+trajectory。
+
+### 团队自主判断
+
+「不提供方便的默认值」和「先拒绝再解释」都是工程判断，合同没规定。其中第一条是
+本条最反直觉的地方：给 `executor` 一个 `_TestOnlyExecutor()` 默认值会让这个函数
+**好用得多**，也正因如此它危险——便利会把谎报固化进默认路径。
+
+### 影响
+
+- **可达性达成**：一条 CLI 命令即可装配出 repair port 为真实 `LLMRepairPort` 的
+  orchestrator。变异验证（把 `repair` 换回 `_TestOnlyRepair`）被 3 个测试杀掉，
+  承重的那个由 **proposal 内容**杀死而非类型检查。
+- **未达成：可用性。** 缺真实 executor/verifier，agent 跑不完整轮；缺 ground
+  truth，无法主张它修好了任何东西（Issue #73 OPEN）。**本 ADR 只声称可达。**
+- 测试：sandbox 440 → 457，ARH 141 → 158；`skipped`/`xfail` 计数**不变**（1/1）。
+- 不改冻结的 `RepairPort.propose` 签名（`contract_change: false` 是约束不是默认）。
+
+### known_limitations
+
+- **NOT_RUN：真实 LLM。** 按指令停在配置 API 之前，未配置 key、未发任何请求。
+  模型能否产出通过三道静态校验的 proposal 是 **UNKNOWN**。
+- **UNKNOWN：benchmark。** 无 ground truth，不做效果主张。
+- **TO_VERIFY：N8 已满足**是对既有 isinstance 构造期检查的**读法**，不是事实
+  认定。五项 BLOCKING 的放行裁决属 Owner，本任务不代做。
+- 真实 executor/verifier 未建，`run-arh` 目前在首次使用时具名失败。
+
