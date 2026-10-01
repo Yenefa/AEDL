@@ -244,3 +244,30 @@
 - License / 授权 / 关键义务：服务条款具体版本 TO_VERIFY；Owner 授权使用自有账号，调用范围限定于开发探针，不据此推断模型许可。
 - AEDL 自研边界：上下文投影、提案校验、budget、接线、作用域和验收；模型推理能力来自 DeepSeek。
 - 合规状态：TO_VERIFY（服务条款）；关联 sandbox_runtime/arh、tools/run_arh_episode.py、GH-110、ADR-020、EVID-20261001-001。
+
+## RES-013 — SchGen comparator 实现与论文（benchmark 口径研究输入）
+
+- 名称：SchGen netlist comparator（`netlist_comparison_new.py`）与 SchGen 论文（NL→editable schematic generation）
+- 类型：外部 benchmark 实现 + 论文；融合角色：**DEV_ONLY**（仅作口径研究，未集成、未运行评分）
+- 来源：SchGen 公开仓库（comparator 源码）与 arXiv 论文；本地数据集绑定见 RES-011
+- 版本 / License：`TO_VERIFY`（未核对论文/代码许可；不得复制其代码入仓）
+- 用途与使用方式：只读分析，结论存档于 `notes/schgen-dev-chain/benchmark-oracle-2026-10-02.md` §1–§5：
+  endpoint-set exact-match 语义、无 instance ref、无 value/MPN/tolerance 维度、net name 不参评、无单样本 PASS cutoff
+- 是否修改上游源码：否；是否再分发：否
+- AEDL 自研边界：三层 oracle 架构（frozen-contract 判决 + 回归门禁 + SchGen 结构分）为 AEDL 方法主张；SchGen 方法本身属第三方
+- 合规状态：`TO_VERIFY`
+- 关联模块：`notes/schgen-dev-chain/`；关联 Issue #73
+
+## RES-014 — 开源 agentic EDA 项目群（moat 定位研究输入）
+
+- 名称：KiCad Agentic MCP、Copperhead、KiCad Copilot、KiCad MCP Pro、PCB Flow、FluxBench、PCB-QA
+- 类型：外部开源仓库与论文；融合角色：**DEV_ONLY**（竞争格局研究，未集成其任何代码）
+- 来源：各 GitHub 公开仓库与 arXiv；具体 URL 与版本 `TO_VERIFY`（研究速记，未逐一钉 sha）
+- 版本 / License：`TO_VERIFY`（未使用其代码，故未触发义务；一旦引用或集成必须先补登记）
+- 用途与使用方式：仅用于 `notes/schgen-dev-chain/benchmark-oracle-2026-10-02.md` §6 的壁垒分析；
+  结论方向：deterministic executor / readback / checkpoint / ERC-DRC loop 均已 commodity 化，
+  AEDL 主张收敛为 frozen semantic contract + repair causality
+- 是否修改上游源码：否；是否再分发：否
+- AEDL 自研边界：分析结论属研究判断；任何“首创/领先”表述仍需 Evidence 支撑（§8.8），本条不构成此支撑
+- 合规状态：`TO_VERIFY`
+- 关联：Issue #73（benchmark）、比赛定位材料（待 SUBMISSION_CHECKLIST 阶段复核）
