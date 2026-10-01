@@ -1138,3 +1138,17 @@ Issue #73）。
 - 影响：冻结的 ports/schema/graph 不改；无自动 promotion、制造签发或 EDD-001 claim。既有 C5 topology 和 KiCad checker 复用，未修改第三方源码。
 - Evidence/Reference：tasks/GH-110.yaml；EVID-20261001-001；docs/evidence/gh110/；现有 src/repair/topology_policy_v1.json E2。
 - 复查条件：新增故障类别、持久化恢复、额外 native op、ERC/DRC 或完整板级合同覆盖时另行 admission；一个案例不晋升为通用 harness 能力。
+
+
+## ADR-021 — 按需查证与一次专家辅助恢复，运行时最多三个 agent
+
+- 日期：2026-10-01；任务 GH-117；AI 参与：AI-20261001-CODEX-7A3EB57084C67EA4CEDBC49A121FDA5B；人工审核 PENDING_HUMAN_REVIEW。
+- 问题：V1 只有已组装上下文和提案，无法主动请求已有原生观察；重复 finding 立即终止，没有第二意见恢复。GH-110 仅证明一个已知引脚合同能闭环，不证明复杂诊断。
+- 候选：全面多 agent 并发写入、保留 V1 不变、单主 agent 加受控只读查证及按需专家。Owner 明确同意第三种设计，并要求此阶段不超过 3 个 agent。
+- 决策：默认 V1 不变。可选 AdaptiveRepairAgent 仅接受操作者注册的资源 ID；主机提供有实际源 SHA 的有界只读投影。模型不能提交任意路径、shell、授权或 verifier 参数。主 agent 最终提案仍通过原 RepairAgent 静态校验和现有 policy。
+- 决策：最多一名 lead 加两名操作者注册的专家，本阶段原生实例只配置一名 address specialist。专家仅提出带已观察资源 ID/SHA/evidence ID 引用的建议，不替代独立判据。调查、专家和提案调用共享 BudgetStop 与逐角色 trajectory。
+- 决策：orchestrator 新增可选主机 stall_recovery 回调，重复失败最多允许一次专家辅助重试；使用已 checkpoint 的 stall_count 防止重建后重复放宽，且不突破 max_repairs。之后再停滞仍按 REPAIR_STALLED 停止。状态/提案/PolicyRequest schema 和写入/验收/promotion 权限不变。
+- 决策：原生 episode 的可选调查模式将 finding 表述为中性失败观察，正确目标只能从注册合同投影查证。报告和独立 KiCad 判据不改；不强制真实 verifier 失败来假造专家触发。
+- 团队自主判断：UNKNOWN（本条记录 Owner 明确设计授权和 Agent 实现，不冒充人工架构审核）。
+- 验证：全真实调查修复 FAIL→PASS；混合脚本/真实模型停滞对照 FAIL→FAIL→PASS；详见 EVID-20261001-002 与 docs/evidence/gh117/。专家在全真实普通探针中未被调用；不声称 benchmark 效果提升。
+- 复查条件：增加故障类别、专家数量、访问源类型、并发执行或制造主张时重新审查。单案例演示不得当作 benchmark uplift。

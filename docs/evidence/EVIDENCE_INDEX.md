@@ -300,3 +300,19 @@ Evidence（其元数据冻结结论不受影响）。
 - 复现：python -m tools.run_arh_episode --run-root <新目录> --worker-python <固定 akcli Python> --kicad-cli <10.0.5 executable> --base-url <provider> --model deepseek-flash；AEDL_ARH_API_KEY 只通过环境供应。--offline-control 明确不计真实模型。
 - 限制：一个模型、一个已知夹具、一项规则；无 benchmark、通用收敛率、完整 ERC/DRC、PCB/固件合同或实物性能结论；EDD-001 仍缺输入与工具注册；manufacturing_release=false。
 - 人工核验：PENDING_HUMAN_REVIEW。
+
+
+## EVID-20261001-002 — GH-117 受控查证与按需专家开发记录
+
+- 分类：DEV_ONLY；不作为 gates/run_gates.py 正式 Evidence，不晋升候选。
+- 主张：可选 adaptive 路径能读取注册的原生观察并保持独立验收；实际配置 lead + address specialist 共 2 个角色，硬上限 3。
+- 关联：GH-117；ADR-021；AI-20261001-CODEX-7A3EB57084C67EA4CEDBC49A121FDA5B；复用 RES-005 / RES-012。
+- 最终全真实 episode gh117-real-04：deepseek-flash 两次真实调用（调查、提案），模型选择 current_netlist 与 address_contract，读取投影/原文件 SHA 分列；真实 U2.2 FLOATING→GND，C5 COMMITTED，fresh KiCad 独立合同 FAIL→PASS，HUMAN_REVIEW。input3168/output785/cache_read1280 tokens，整轮9.109秒。专家未被调用。
+- 最终混合停滞控制 gh117-mixed-stall-03：前两次 lead 调用是明确脚本化的不修复对照，实际独立 verifier FAIL→FAIL；随后四次真实 lead/expert 调用（查证、专家查证、建议、最终提案），建议引用测得合同和网表哈希，再次真实修改后 PASS。共6调用、2次repair，HUMAN_REVIEW。此项明确标为 CONTROL_RUN/MIXED_CONTROL，不能声称全真实自主 episode。没有强制 verifier verdict。
+- 历史：七次持久化 probe（含两次拒绝/截断失败）均保留，累计16次真实网络调用；summary.json 区分全部历史与最终代码哈希匹配的两个交付探针，manifest.json 绑定234个原始文件及五个执行代码文件。
+- 位置：docs/evidence/gh117/README.md、summary.json、manifest.json；原始 C:/dev/aedl-episodes/gh117-*/；完整归档 C:/dev/aedl-episodes/adaptive-stage/gh117-episodes.zip。
+- 测试：目录/来源漂移、硬链接、跨run/candidate、权限注入、伪造引用、预算与agent/read上限、建议空白填充、SQLite重建一次恢复、真实原生 FAIL/FAIL/PASS 对照。完整开发门禁结果完成后追加。
+- 限制：仅一个 DC-02 夹具与 SHT30_ADDRESS 判据；不是 benchmark uplift、完整 ERC/DRC/PCB/固件覆盖、EDD-001 就绪或实体硬件证明。BudgetStop 外部重建保持调用方职责，此 runner 拒绝复用旧 run root。
+- 人工核验：PENDING_HUMAN_REVIEW；manufacturing_release=false。
+
+- GH-117 最终开发门禁：Windows与Linux均exit0、8/8 PASS，main各1226、sandbox各564；Windows skip21/1+xfail1，Linux skip29/3+xfail1。46个新增sandbox测试全部纳入；Windows执行原生控制，Linux明确跳过相应两项。回执位于 C:/dev/aedl-episodes/adaptive-stage/dev-gate-{windows,linux}-receipt.json。
