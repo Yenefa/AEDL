@@ -182,6 +182,7 @@ def _run_arh(
     allowlist_path: Path,
     subject_path: Path,
     policy_source: str = "real",
+    max_repairs: int = 3,
 ) -> int:
     """Assemble and run a real orchestrator with the ARH repair port.
 
@@ -255,7 +256,8 @@ def _run_arh(
     engine, bundle_root = _domain_for(policy_source, repo_root, run_root)
     try:
         executor, verifier = adapters.build_in_repo_tool_ports(
-            engine, design_action=design_action, design_subject=design_subject
+            engine, design_action=design_action, design_subject=design_subject,
+            output_kind=subject[ENVELOPE_OUTPUT_KIND_KEY],
         )
     except ToolNotResolved as exc:
         _print(
@@ -299,6 +301,7 @@ def _run_arh(
             executor=executor,
             verifier=verifier,
             trust=adapters.build_trust_port(bundle_root, run_dir / "receipts"),
+            max_repairs=max_repairs,
         )
         state = orchestrator.run()
         pending = orchestrator.pending_interrupt()
@@ -390,7 +393,7 @@ def main(argv: list[str] | None = None) -> int:
             return _run_arh(
                 args.repo_root, args.run_root, args.run_id, args.base_url,
                 args.model, args.allowlist_path, args.subject_path,
-                args.policy_source,
+                args.policy_source, args.max_repairs,
             )
         except MissingApiKey as exc:
             _print({"status": "REFUSED", "reason": str(exc), "env_var": ARH_API_KEY_ENV})

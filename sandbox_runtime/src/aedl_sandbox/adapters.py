@@ -833,17 +833,6 @@ def build_arh_orchestrator(
 IN_REPO_TOOL_BACKENDS: Mapping[str, str] = {
     IN_REPO_COMPILER_ID: BACKEND_IN_REPO_HIR,
     IN_REPO_VERIFIER_ID: BACKEND_IN_REPO_HIR,
-    # The synthetic TEST_ONLY tools are declared by the fixture policy document,
-    # so a registry built over that document reports them as authorized. They
-    # remain unrunnable unless a caller says what runs them, and this mapping is
-    # that statement: the fixture pair keeps the in-repo backend, which is what
-    # the repair_then_pass scenario has always effectively been.
-    #
-    # This is NOT the CLI's mapping. run-arh builds a registry over the REAL
-    # EDD-001 document, which registers neither of these tools, so nothing from
-    # the fixture reaches a live run.
-    TEST_ONLY_COMPILER_ID: BACKEND_IN_REPO_HIR,
-    TEST_ONLY_VERIFIER_ID: BACKEND_IN_REPO_HIR,
 }
 
 
@@ -852,6 +841,7 @@ def build_in_repo_tool_ports(
     *,
     design_action: str,
     design_subject: Mapping[str, Any],
+    output_kind: str | None = None,
 ):
     """Assemble the real executor/verifier pair over an engine's OWN registry.
 
@@ -869,4 +859,5 @@ def build_in_repo_tool_ports(
         design_action=design_action,
         design_subject=design_subject,
         backend_for_tool=IN_REPO_TOOL_BACKENDS,
+        output_kind=output_kind,
     )

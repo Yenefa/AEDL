@@ -1124,3 +1124,17 @@ Issue #73）。
 - **探针结论的边界**：n=1、单一模型（`deepseek-flash`）、单一 prompt 形态。它证明
   「校验可过」，**不证明「修得对」**。任何把它读成效果主张的用法都是过度解读。
 - 该次调用**不是** benchmark，也**不进入**任何 Evidence 台账：它是开发期的有界探针。
+
+
+## ADR-020 — 将真实修复接到候选验收，保留独立判据与原生事务
+
+- 日期：2026-10-01；任务 GH-110；AI 参与：AI-20261001-CODEX-77994966A120AF272A72C9C6EEEE6963；人工审核 PENDING_HUMAN_REVIEW。
+- 问题：repair proposal 不带 output_kind；CLI 与测试的可运行工具映射不同；HIR verifier 冻结初始方案；max-repairs 参数丢失。原生 C5 还在 STAGE_APPLY 和 COMMIT 两处要求 API writer 不提供的 tool_applied=True。
+- 候选：扩大模型权限或冻结 proposal schema、另造通用 shell harness、复用已有端口与约束 native writer。选择复用既有 ARH proposal-only 接口和 C5 single-writer transaction。
+- 决策：output_kind 由操作者绑定到 run，冲突具名拒绝；成功执行的 host request 按候选保存深拷贝，HIR verifier 从该决策和 pinned rules 重新推导，候选 bytes 不能声明期望答案。独立 native 验收则固定 M2 SHT30_ADDRESS 合同，只读 fresh KiCad XML 网表。
+- 决策：API writer 的 applied=null 保持真实；允许该固定模式需要非空逐操作 ok、连续索引、不同有效 before/after SHA、对应 native observations，之后仍须通过实际 delta、thin verification、报告重核、绑定/依赖/权限/锁和 commit predicate。COMMIT 再核同一原始回执，不伪造 CLI 的 applied 字段。
+- 决策：新增的 tools.run_arh_episode 是明确限定于 DC-02 的内部验证入口。初始执行原样复制真实故障；模型通过现有 DESIGN_ASSIGN_PIN 提案决定 U2.2 的功能；主机只翻译成一条 E2 允许的 add_net_label，写入私有候选。
+- 团队自主判断：UNKNOWN（本条记录 Agent 提案及 Owner 授权范围，不冒充人工架构审核）。
+- 影响：冻结的 ports/schema/graph 不改；无自动 promotion、制造签发或 EDD-001 claim。既有 C5 topology 和 KiCad checker 复用，未修改第三方源码。
+- Evidence/Reference：tasks/GH-110.yaml；EVID-20261001-001；docs/evidence/gh110/；现有 src/repair/topology_policy_v1.json E2。
+- 复查条件：新增故障类别、持久化恢复、额外 native op、ERC/DRC 或完整板级合同覆盖时另行 admission；一个案例不晋升为通用 harness 能力。

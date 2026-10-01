@@ -3275,7 +3275,9 @@ def _stage_write_succeeded(staged: Mapping) -> bool:
     while the others are true:
 
     ``status == "APPLIED_TO_STAGE"``  the writer ran and claimed the stage route
-    ``tool_applied is True``          the writer self-reported applying the ops
+    ``tool_applied is True``          the CLI self-reported applying the ops;
+                                    PYTHON_WRITER deliberately reports null,
+                                    and needs its independently bound effect
     ``exit_code == 0``                the tool did not fail
     ``changed is True``               the target bytes actually differ
 
@@ -3290,8 +3292,23 @@ def _stage_write_succeeded(staged: Mapping) -> bool:
     tool = staged.get("tool")
     if not isinstance(tool, Mapping):
         return False
+    applied = tool.get("tool_applied") is True
+    if tool.get("tool_applied") is None and tool.get("mode") == "PYTHON_WRITER":
+        rows = tool.get("op_results")
+        before, after = staged.get("before_source_sha256"), staged.get("after_source_sha256")
+        native_before, native_after = staged.get("native_before"), staged.get("native_after")
+        applied = (isinstance(rows, list) and bool(rows)
+                   and all(isinstance(row, Mapping) for row in rows)
+                   and [row.get("op_index") for row in rows] == list(range(len(rows)))
+                   and all(row.get("status") == "ok" for row in rows)
+                   and isinstance(before, str) and bool(_SHA256_RE.match(before))
+                   and isinstance(after, str) and bool(_SHA256_RE.match(after))
+                   and before != after
+                   and isinstance(native_before, Mapping) and isinstance(native_after, Mapping)
+                   and native_before.get("source_sha256") == before
+                   and native_after.get("source_sha256") == after)
     return (staged.get("status") == "APPLIED_TO_STAGE"
-            and tool.get("tool_applied") is True
+            and applied
             and tool.get("exit_code") == 0
             and staged.get("changed") is True)
 
@@ -4350,7 +4367,8 @@ def _commit_predicate(receipt: Mapping, thin: Mapping, *,
                       binding_drift: Sequence[str],
                       permission_drift: Sequence[str],
                       lock_held: bool,
-                      writer_calls: int) -> Tuple[bool, List[Finding], List[str]]:
+                      writer_calls: int,
+                      staged_receipt: Optional[Mapping] = None) -> Tuple[bool, List[Finding], List[str]]:
     """Contract 335-347, the pipeline's ONLY commit predicate, as a pure function.
 
     Line 349: "这是合取，没有'置信度高''仅 warning''多数 checks PASS'的例外."
@@ -4388,7 +4406,8 @@ def _commit_predicate(receipt: Mapping, thin: Mapping, *,
         # what the round did, not about what the adapter reports.
         "route_and_effect_checks": all([
             receipt.get("route") in COMMIT_ROUTES,
-            stage.get("tool_applied") is True,
+            (_stage_write_succeeded(staged_receipt) if staged_receipt is not None
+             else stage.get("tool_applied") is True),
             stage.get("changed") is True,
             writer_calls == 1,
         ]),
@@ -5024,7 +5043,8 @@ def _run_round_body(round_request, lock_held, recovery_notes):
         binding_drift=binding_drift,
         permission_drift=permission_drift,
         lock_held=lock_held,
-        writer_calls=writer_calls)
+        writer_calls=writer_calls,
+        staged_receipt=staged)
     if identity_reasons:
         # Contract 378 is not one of the nine named conjuncts but it governs
         # whether the replace may touch these bytes at all, so it is part of the

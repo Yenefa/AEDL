@@ -125,6 +125,60 @@ class RunArhTest(unittest.TestCase):
 class RoundCompletionTests(RunArhTest):
     """The round completes. That is the GH-114 deliverable."""
 
+    def _fault_first_compile(self):
+        from aedl_sandbox.toolports import InRepoHirBackend
+        original = InRepoHirBackend.compile
+        calls = []
+        def compile(backend, registration, request):
+            result = original(backend, registration, request)
+            calls.append(request)
+            if len(calls) == 1:
+                path = request.candidate_root / "hir.json"
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                payload["plan"][0]["function"] = "CORRUPTED"
+                path.write_text(json.dumps(payload), encoding="utf-8")
+            return result
+        return mock.patch.object(InRepoHirBackend, "compile", compile), calls
+
+    def _pin_subject(self):
+        self.subject_path.write_text(json.dumps({"design_action": "DESIGN_ASSIGN_PIN",
+            "design_subject": {"pin": "GPIO1", "function": "DATA", "approval_status": "NOT_REQUIRED"},
+            "output_kind": "hir"}), encoding="utf-8")
+
+    def test_real_cli_repairs_to_a_different_approved_plan(self):
+        self._pin_subject()
+        proposal = {"diagnosis": "VERIFY_PLAN_MISMATCH: candidate plan is corrupt",
+            "design_action": "DESIGN_ASSIGN_PIN", "design_subject": {
+                "pin": "GPIO2", "function": "DATA", "approval_status": "NOT_REQUIRED"},
+            "evidence_ids": [TEST_EVIDENCE], "locator": {"pin": "GPIO2"}}
+        transport = _FakeTransport(proposal)
+        fault, calls = self._fault_first_compile()
+        with fault:
+            code, out = self._run(transport)
+        payload = json.loads(out)
+        self.assertEqual(code, 0)
+        self.assertEqual(payload["status"], "HUMAN_REVIEW_PENDING")
+        self.assertEqual(len(transport.calls), 1)
+        self.assertEqual(len(calls), 2)
+        self.assertNotIn("output_kind", calls[1].subject)
+        self.assertEqual(payload["state"]["verification_result"]["status"], "PASS")
+        root = Path(payload["state"]["candidate_root"])
+        self.assertEqual(json.loads((root / "hir.json").read_text())["plan"][0]["pin"], "GPIO2")
+
+    def test_max_repairs_zero_stops_before_model_call(self):
+        self._pin_subject()
+        transport = _FakeTransport()
+        fault, calls = self._fault_first_compile()
+        with fault:
+            code, out = self._run(transport, extra=("--max-repairs", "0"))
+        payload = json.loads(out)
+        self.assertEqual(code, 0)
+        self.assertEqual(payload["status"], "TERMINAL")
+        self.assertEqual(payload["state"]["max_repairs"], 0)
+        self.assertEqual(payload["state"]["repair_count"], 0)
+        self.assertEqual(len(transport.calls), 0)
+        self.assertEqual(len(calls), 1)
+
     def test_run_arh_reaches_human_review_with_a_real_verify_pass(self) -> None:
         """The round completes, and it completes WITHOUT a model call.
 

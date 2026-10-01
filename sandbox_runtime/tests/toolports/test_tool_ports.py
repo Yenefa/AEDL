@@ -194,7 +194,7 @@ class RegistryTests(TempRootTest):
         """The filter is by BACKEND, not by runnability."""
         registry = self._registry(adapters.test_only_document())
         only_in_repo = [r.tool_id for r in registry.compilers(backend=adapters.BACKEND_IN_REPO_HIR)]
-        self.assertEqual(sorted(only_in_repo), ["in-repo-hir", "test-only-compiler"])
+        self.assertEqual(sorted(only_in_repo), ["in-repo-hir"])
         self.assertEqual(registry.compilers(backend="command"), ())
 
     def test_unregistered_compiler_refuses_by_name(self) -> None:

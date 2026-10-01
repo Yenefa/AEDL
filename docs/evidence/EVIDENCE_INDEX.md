@@ -286,3 +286,17 @@ Evidence（其元数据冻结结论不受影响）。
 
 
 - 人工核验：PENDING_HUMAN_REVIEW。
+
+
+## EVID-20261001-001 — GH-110 真实模型原生修复开发记录
+
+- 分类：DEV_ONLY；本条是可复核的开发运行记录，不是 gates/run_gates.py 正式 Evidence，不晋升任何候选。
+- 对应主张：一个 real model-driven episode 在现有 DC-02 KiCad 原生故障夹具上，把 SHT30 ADDR U2.2 从悬空改为 GND，独立 M2 合同的 netlist-only SHT30_ADDRESS 结果 FAIL→PASS。
+- 模块：nativeports、tools.run_arh_episode、既有 C5 pipeline；AI Usage AI-20261001-CODEX-77994966A120AF272A72C9C6EEEE6963；ADR-020；RES-005 / RES-012。
+- 环境：Windows、Python 3.11.16、akcli-kicad 0.21.0、KiCad 10.0.5；工具和输入哈希见 docs/evidence/gh110/manifest.json。
+- 方法：真实 LLM transport，初始 verifier 不桥接或强制 FAIL；读原样故障的 fresh KiCad netlist，真实提案经过三道静态校验与 scope policy，经 C5 E2 constrained native writer、实际拓扑 delta、两次 fresh 导出和 commit 后，再做独立合同验收。
+- 结果：首轮真实模型调用 1 次，repair_count=1，C5 COMMITTED，终态 HUMAN_REVIEW；input 2544 / output 614 / cache_read 768，invalid=0。正式交付快照与最终复核见 summary.json 和 manifest.json，历史探针原始目录 C:/dev/aedl-episodes/gh110-real-01/ 保留。
+- 原始证据：完整 native receipts / netlists / private candidates / checkpoint / trajectory 位于 manifest 指向的仓库外运行目录；trajectory 独立于 receipts 与 observations，不读取其内容产生 PASS。
+- 复现：python -m tools.run_arh_episode --run-root <新目录> --worker-python <固定 akcli Python> --kicad-cli <10.0.5 executable> --base-url <provider> --model deepseek-flash；AEDL_ARH_API_KEY 只通过环境供应。--offline-control 明确不计真实模型。
+- 限制：一个模型、一个已知夹具、一项规则；无 benchmark、通用收敛率、完整 ERC/DRC、PCB/固件合同或实物性能结论；EDD-001 仍缺输入与工具注册；manufacturing_release=false。
+- 人工核验：PENDING_HUMAN_REVIEW。

@@ -1,0 +1,231 @@
+{
+  "classification": "DEV_ONLY_NOT_FORMAL_GATE_EVIDENCE",
+  "raw_root": "C:\\dev\\aedl-episodes\\gh110-real-final",
+  "git_base": "58d68e72879c4b8ccac3b92dcd88f04105de182d",
+  "execution_implementation_sha256": {
+    "sandbox_runtime/src/aedl_sandbox/nativeports.py": "b5b6e62a411cbbfbec34e7cc7a0c42b37b75724ac7ae1fd82f230a0b27491bba",
+    "tools/run_arh_episode.py": "e533217e2031798b45e8e4015089c333a2d2ce12410877760b3497a9d6342170",
+    "tools/repair_pipeline.py": "7382ab043f49103fe32ea887e365ebecea454d1c042bd8e303b078de820d7a52",
+    "sandbox_runtime/src/aedl_sandbox/adapters.py": "67ab24904354b7e3af7295a4ae91f1fc6d9cb89e772102483754f14ab8b8df0c"
+  },
+  "files": [
+    {
+      "path": "checkpoint.sqlite",
+      "sha256": "73f2abbb81cfbe5108d1e1f901f53d3af0ae7c12a039d4071d3b591abeabc4db",
+      "size_bytes": 106496,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "observations/toolchain.json",
+      "sha256": "e1a2ac1b9e32794d0c6bf4b121f426f389311d5396226d85ee8638d3d26202c2",
+      "size_bytes": 60501,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "observations/transactions/txn-f9b4e1cf4af64091b80f225552f23570/artifacts/backup/fault.kicad_sch.bak",
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0",
+      "size_bytes": 62685,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "observations/transactions/txn-f9b4e1cf4af64091b80f225552f23570/artifacts/kicad_verify/txn-f9b4e1cf4af64091b80f225552f23570/exports/txn-f9b4e1cf4af64091b80f225552f23570/after/after.net.xml",
+      "sha256": "d5260457bbdff9d8d794e261a7c95f90738ee4884d5dae09419a3ecd3b17a983",
+      "size_bytes": 36366,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "observations/transactions/txn-f9b4e1cf4af64091b80f225552f23570/artifacts/kicad_verify/txn-f9b4e1cf4af64091b80f225552f23570/exports/txn-f9b4e1cf4af64091b80f225552f23570/before/before.net.xml",
+      "sha256": "21d03e4b41cbe7b8d639cf6b44d773852546326b76eb12759d4f91ce6e277536",
+      "size_bytes": 36667,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "observations/transactions/txn-f9b4e1cf4af64091b80f225552f23570/artifacts/kicad_verify/txn-f9b4e1cf4af64091b80f225552f23570/thin_verification_txn-f9b4e1cf4af64091b80f225552f23570.json",
+      "sha256": "e49d75470426670136fbbe38781f4f65aab9488719eeb1a76e59c071ceaadb06",
+      "size_bytes": 7913,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "observations/transactions/txn-f9b4e1cf4af64091b80f225552f23570/artifacts/request-apply_exception.json",
+      "sha256": "e958e7765054dce066658ece2949d420b3f1e4a366e4a3ae66a4fd3e3b63aecd",
+      "size_bytes": 415,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "observations/transactions/txn-f9b4e1cf4af64091b80f225552f23570/artifacts/request-read.json",
+      "sha256": "50520e8ea2293d8eb7d811ba73a80556fcfdacbf0189f8359135c467102c8295",
+      "size_bytes": 150,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "observations/transactions/txn-f9b4e1cf4af64091b80f225552f23570/artifacts/result-apply_exception.json",
+      "sha256": "387fa35c58272457a3f9e6dd3786a58a2b040011f8003ef8e46ace14860f58ba",
+      "size_bytes": 538,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "observations/transactions/txn-f9b4e1cf4af64091b80f225552f23570/artifacts/result-read.json",
+      "sha256": "fa8bdcd56659180f0cb2a95762ffa80c11d22e7ec87769198f77e31806d99820",
+      "size_bytes": 53229,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "observations/transactions/txn-f9b4e1cf4af64091b80f225552f23570/receipt.json",
+      "sha256": "270ad9ac5d196837c2351dd8adaca218d1fdd5d53ac5f84dd944ebd2adc88751",
+      "size_bytes": 13405,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "observations/transactions/txn-f9b4e1cf4af64091b80f225552f23570/repair/journal.jsonl",
+      "sha256": "b87db939d9288b6c0cb5a14e15c66cbf7a80452ca1643790923317a227d8e780",
+      "size_bytes": 1904,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "observations/transactions/txn-f9b4e1cf4af64091b80f225552f23570/repair/snapshot/fault.kicad_sch",
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0",
+      "size_bytes": 62685,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "observations/transactions/txn-f9b4e1cf4af64091b80f225552f23570/repair/snapshot/src/firmware/include/sht30.h",
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2",
+      "size_bytes": 1440,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "observations/transactions/txn-f9b4e1cf4af64091b80f225552f23570/repair.lock",
+      "sha256": "2530e5980d399597863c7a4c6fa93d64275464ee586575feb12aa66dcb7ab348",
+      "size_bytes": 34,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "observations/transactions/txn-f9b4e1cf4af64091b80f225552f23570/stage/fault.kicad_sch",
+      "sha256": "65ac445c70f3d79d01e485038745b308875a92f4142e22d98714b19a78a05c1a",
+      "size_bytes": 62825,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "observations/transactions/txn-f9b4e1cf4af64091b80f225552f23570/stage/ops.json",
+      "sha256": "918fac4ca6757c664681c8bc9aa3fbd0cc06066030a046eb8c8bff930c59bfdb",
+      "size_bytes": 162,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "observations/transactions/txn-f9b4e1cf4af64091b80f225552f23570/stage/src/firmware/include/sht30.h",
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2",
+      "size_bytes": 1440,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "observations/verification/cand-60b00ab46835ad03-1a8ff5d8a21a488a94db1dccd99b908d/after.net.xml",
+      "sha256": "09005262c19ad4cdc18ce510badece729d1535639e0403244f3717942bd39bf7",
+      "size_bytes": 37317,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "observations/verification/cand-60b00ab46835ad03-1a8ff5d8a21a488a94db1dccd99b908d/export.json",
+      "sha256": "0fbad0652339e739adb3775e79d22e1f96df307a36c5acd11b6f12ccae85087b",
+      "size_bytes": 1306,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "observations/verification/cand-60b00ab46835ad03-1a8ff5d8a21a488a94db1dccd99b908d/semantic.json",
+      "sha256": "de610cd5a1ad92dc1a6ae47a3fe1096e5928576d5af89131cb2f16c677ea9fbf",
+      "size_bytes": 536,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "observations/verification/cand-799550e9a67b7153-51d5443de74c41528540381830e34493/after.net.xml",
+      "sha256": "b5e95d32f10c459dc36bf97da00794534887062c4807e7137f0fa2502e97f66b",
+      "size_bytes": 37236,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "observations/verification/cand-799550e9a67b7153-51d5443de74c41528540381830e34493/export.json",
+      "sha256": "cc8f9b036332b437d9acb9f7d151ca105f3744852ee84816076246b5bbd2530f",
+      "size_bytes": 1306,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "observations/verification/cand-799550e9a67b7153-51d5443de74c41528540381830e34493/semantic.json",
+      "sha256": "588d946d79e2d957d77c59efe8e054916f947c270738608c12c7d98c20f4e86f",
+      "size_bytes": 537,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "receipts/gh110-episode/0515a1a72f71b5a48ba79de800ce6c2bbbf83c342a759018ce804d74d6543bda.json",
+      "sha256": "0515a1a72f71b5a48ba79de800ce6c2bbbf83c342a759018ce804d74d6543bda",
+      "size_bytes": 913,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "receipts/gh110-episode/998c57d94ad2638956ad0d356de3c8e5d8bded164ed7c31d6e4b6ccd88cedbd5.json",
+      "sha256": "998c57d94ad2638956ad0d356de3c8e5d8bded164ed7c31d6e4b6ccd88cedbd5",
+      "size_bytes": 906,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "receipts/gh110-episode/cc1465f45e4f95be21801c4c447818f5e6b8777d82a1061454288abe11563c86.json",
+      "sha256": "cc1465f45e4f95be21801c4c447818f5e6b8777d82a1061454288abe11563c86",
+      "size_bytes": 419,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "receipts/gh110-episode/f9b03ebf1597023be4ee9076a82ab1aa1ef8effeb9186b122205f02464b22899.json",
+      "sha256": "f9b03ebf1597023be4ee9076a82ab1aa1ef8effeb9186b122205f02464b22899",
+      "size_bytes": 419,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "run/gh110-episode/candidate/cand-60b00ab46835ad03/.actions.jsonl",
+      "sha256": "fc7ba356550304f039385a75ea3c86aed884525d4aea1a34a35e9a40f02c3a9d",
+      "size_bytes": 342,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "run/gh110-episode/candidate/cand-60b00ab46835ad03/design/fault.kicad_sch",
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0",
+      "size_bytes": 62685,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "run/gh110-episode/candidate/cand-60b00ab46835ad03/design/src/firmware/include/sht30.h",
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2",
+      "size_bytes": 1440,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "run/gh110-episode/candidate/cand-799550e9a67b7153/.actions.jsonl",
+      "sha256": "f8ae8afc75d1a1711054038dc513c5d84fa767872a06e964e6b1594bfdd43af4",
+      "size_bytes": 342,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "run/gh110-episode/candidate/cand-799550e9a67b7153/design/fault.kicad_sch",
+      "sha256": "65ac445c70f3d79d01e485038745b308875a92f4142e22d98714b19a78a05c1a",
+      "size_bytes": 62825,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "run/gh110-episode/candidate/cand-799550e9a67b7153/design/src/firmware/include/sht30.h",
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2",
+      "size_bytes": 1440,
+      "role": "DEVELOPMENT_ARTIFACT"
+    },
+    {
+      "path": "run/gh110-episode/trajectory/gh110-episode.jsonl",
+      "sha256": "61a5555733aaf55397e47c492a5032087e60e97684ac304f2bcbfa885eb9d917",
+      "size_bytes": 983,
+      "role": "DIAGNOSTIC_ONLY"
+    },
+    {
+      "path": "summary.json",
+      "sha256": "1908e34613db41a8b6a58e63c101cb8f8ec447e1032da74786f2078da7c6c507",
+      "size_bytes": 2591,
+      "role": "DEVELOPMENT_ARTIFACT"
+    }
+  ],
+  "trajectory_is_verdict": false,
+  "human_review": "PENDING_HUMAN_REVIEW"
+}

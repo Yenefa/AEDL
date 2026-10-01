@@ -1,0 +1,77 @@
+task: GH-110
+base:
+  branch: codex/gh110-real-episode
+  sha: 58d68e72879c4b8ccac3b92dcd88f04105de182d
+goal: |
+  Repair the live harness and run one real model-driven native KiCad episode,
+  with an actual faulty schematic and independently measured finding delta.
+scope: |
+  Owner session 2026-10-01: 我只看结果，直接修复，修复到agent实际跑一次.
+  This supersedes the earlier research-only attachment. Preserve frozen ARH
+  proposal schemas and orchestrator interfaces. Use existing constrained native
+  writer and independent M2 contract; all writes stay in private candidates.
+  No manufacturing release, EDD-001 readiness, benchmark, or convergence claim.
+allowed_paths:
+  - sandbox_runtime/src/aedl_sandbox/toolports.py
+  - sandbox_runtime/src/aedl_sandbox/adapters.py
+  - sandbox_runtime/src/aedl_sandbox/cli.py
+  - sandbox_runtime/src/aedl_sandbox/nativeports.py
+  - sandbox_runtime/tests/toolports/**
+  - tools/run_arh_episode.py
+  - tools/repair_pipeline.py
+  - tests/test_run_arh_episode.py
+  - tasks/GH-110.yaml
+  - docs/compliance/ai-usage/**
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/compliance/DECISIONS.md
+  - docs/compliance/THIRD_PARTY_RESOURCES.md
+  - docs/evidence/EVIDENCE_INDEX.md
+  - docs/evidence/gh110/**
+forbidden_paths:
+  - delivery/**
+  - gates/**
+  - .github/**
+  - sandbox_runtime/contracts/**
+  - sandbox_runtime/src/aedl_sandbox/orchestrator.py
+  - sandbox_runtime/src/aedl_sandbox/protocol.py
+  - sandbox_runtime/src/aedl_sandbox/state.py
+  - sandbox_runtime/src/aedl_sandbox/policy/**
+  - sandbox_runtime/src/aedl_sandbox/trust/**
+  - sandbox_runtime/src/aedl_sandbox/arh/**
+impact_analysis:
+  direct_modifications: [sandbox ports and CLI, bounded episode runner, regression tests, task and compliance records]
+  potentially_affected: [repair execution, candidate verification, native writer integration]
+  explicitly_not_touched: [frozen protocols, orchestration graph, policy and trust engine, hardware production sources, gates]
+  risk: MEDIUM
+change_budget:
+  expected_files: 18
+  expected_modules: [sandbox-runtime, tests, episode-runner, task, compliance, evidence]
+  cross_module: true
+  contract_change: false
+  evidence_semantics_change: false
+acceptance: |
+  Approved repair decisions execute with the run-bound output kind and are
+  verified against an independently derived authorized candidate plan.
+  CLI max-repairs=0 causes no model calls.
+  One real model proposes a native schematic change, a fresh KiCad netlist is
+  independently checked against SHT30_ADDRESS, and the before/after finding
+  delta and honest terminal state are saved. Trajectory remains separate.
+  Run admission, learning gate, regression suites and development gate.
+exceptions:
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "Owner session 2026-10-01: 我只看结果，直接修复，修复到agent实际跑一次"
+    reason: "Authorized GH-110 implementation and its records only"
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "Owner session 2026-10-01: 我只看结果，直接修复，修复到agent实际跑一次"
+    reason: "GH-110 descendant commits only"
+escalation:
+  owner: Yenefa
+scope_amendment_A1: |
+  Owner's direct repair authorization covers the concrete native integration
+  defect discovered during the requested episode: C5 rejects the existing C4
+  PYTHON_WRITER receipt because tool_applied is intentionally null. Add a
+  narrow consumer correction in tools/repair_pipeline.py and its regression
+  tests; preserve the frozen receipt shape and all independent effect checks.
+  Impact: C5 stage admission; risk MEDIUM. No authority or Evidence promotion.

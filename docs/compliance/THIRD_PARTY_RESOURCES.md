@@ -98,6 +98,7 @@
 - 最终开放方式：不随仓库分发本机安装
 - 对应模块：`tools/generate_m2_ops.py`、`src/hardware/m2-board/ops_gen.json`
 - 备注：实际可执行路径属于本机环境，不作为跨机器固定路径。
+- GH-110 补记（2026-10-01）：从 [PyPI 固定版本 0.21.0](https://pypi.org/project/akcli-kicad/0.21.0/) 安装到仓库外隔离环境；该发行页声明 MIT。源码不修改、不随 AEDL 再分发。sdist 声明 SHA256 `949ea4d51497ec5413ec19ad15454972d2c30b58f1447493b7b5d99031330df6`，installed distribution digest 则在 worker 独立实测，二者不混用；完整运行绑定见 GH-110 bundle。历史 Hermes 安装链仍为 TO_VERIFY，当前固定安装链可复核。角色仍为 SUPPORT，用途新增私有候选上的 C5 E2 约束写入。
 
 ## RES-006
 
@@ -230,3 +231,16 @@
 - 支持工具：KiCad 8.0.9 已在本 PR 的 DEV-only ingest smoke 中**实际调用**（`kicad-cli` 8.0.9，二进制 sha256 `8b7f4a889dc8cfb8c3eae1337d64ade2fe0cf1ec5daa87878cc709904378fb26`；每次 subprocess 前后都对同一 digest 复算，整轮绑定同一个 binary）。不涉及 repair / scorer / 正式实验。akcli 0.21.0 属 held 半，本 PR 不使用。
 - 合规状态：`TO_VERIFY`。
 - 关联：`notes/schgen-dev-chain/TASK.md`、EVID-20260918-001、AI-20260918-DSH-C7396AEC9D7DC7BCD22C6337E56A806E。
+
+
+## RES-012 — GH-110 配置的 DeepSeek API
+
+- 类型：模型 API / SaaS；融合角色 SUPPORT（真实开发验证调用，不单独作为创新主张）。
+- 来源：[DeepSeek 官方 API 文档](https://api-docs.deepseek.com/)；实际 provider host api.deepseek.com。
+- 版本：请求及响应 model id deepseek-flash；具体权重/服务部署版本 UNKNOWN，不按名称推测。
+- 用途：读取限定的 SHT30_ADDRESS finding 与 allowlist，产生 proposal-only JSON；由本地 ARH 静态校验、作用域策略、原生事务和独立 KiCad 检查约束。
+- 使用方式：Owner 既有已配置凭据在进程内读取；真实 network transport；凭据不入日志、argv 或仓库。
+- 是否修改上游源码：否；是否再分发：否（调用 API，不分发模型权重）。
+- License / 授权 / 关键义务：服务条款具体版本 TO_VERIFY；Owner 授权使用自有账号，调用范围限定于开发探针，不据此推断模型许可。
+- AEDL 自研边界：上下文投影、提案校验、budget、接线、作用域和验收；模型推理能力来自 DeepSeek。
+- 合规状态：TO_VERIFY（服务条款）；关联 sandbox_runtime/arh、tools/run_arh_episode.py、GH-110、ADR-020、EVID-20261001-001。
