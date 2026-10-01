@@ -262,9 +262,11 @@ class BudgetSnapshotTests(unittest.TestCase):
                 "total_invalid",
                 "consecutive_format_errors",
                 "total_format_errors",
+                "tripped",
                 "limits",
             },
         )
+        self.assertIsNone(snap["tripped"])
         self.assertEqual(
             set(snap["limits"]),
             {
@@ -298,6 +300,82 @@ class BudgetSnapshotTests(unittest.TestCase):
         with self.assertRaises(BudgetExceeded) as ctx:
             stop.check_before_call()
         self.assertEqual(ctx.exception.code, "BUDGET_CALLS")
+
+
+class BudgetRestoreTests(unittest.TestCase):
+    """`from_snapshot` rebuilds the exact latched state (GH-119 follow-up).
+
+    Without it a caller could only replay `record_*` calls, which loses the N6
+    latch: a valid proposal clears the consecutive counters but must never
+    clear the trip. Replaying counters alone would wash a tripped run clean.
+    """
+
+    def test_round_trip_preserves_counters_and_clock(self) -> None:
+        clock = FakeClock(100.0)
+        stop = BudgetStop(
+            isolated(max_calls=7, max_total_tokens=1234), clock=clock
+        )
+        stop.record_call(input_tokens=1, output_tokens=2)
+        stop.record_invalid_proposal()
+        clock.advance(4.5)
+        snap = stop.snapshot()
+        other_clock = FakeClock(1000.0)
+        rebuilt = BudgetStop.from_snapshot(snap, clock=other_clock)
+        self.assertEqual(rebuilt.snapshot()["calls"], 1)
+        self.assertEqual(rebuilt.snapshot()["total_tokens"], 3)
+        self.assertEqual(rebuilt.snapshot()["consecutive_invalid"], 1)
+        self.assertEqual(rebuilt.snapshot()["tripped"], None)
+        # Same wall-clock continues, not restarts: 4.5s already spent.
+        self.assertAlmostEqual(rebuilt.snapshot()["elapsed_s"], 4.5)
+        other_clock.advance(1.0)
+        self.assertAlmostEqual(rebuilt.snapshot()["elapsed_s"], 5.5)
+
+    def test_a_tripped_run_stays_tripped_after_restore(self) -> None:
+        """The load-bearing case: trip, then a valid proposal clears the
+        consecutive counter. The restored instance must still refuse."""
+        clock = FakeClock()
+        stop = BudgetStop(isolated(max_consecutive_invalid=2), clock=clock)
+        stop.record_invalid_proposal()
+        with self.assertRaises(BudgetExceeded):
+            stop.record_invalid_proposal()  # trips here
+        self.assertIsNotNone(stop.snapshot()["tripped"])
+        stop.record_valid_proposal()  # clears consecutive, NOT the latch
+        snap = stop.snapshot()
+        self.assertEqual(snap["consecutive_invalid"], 0)
+        self.assertIsNotNone(snap["tripped"])
+        rebuilt = BudgetStop.from_snapshot(snap, clock=FakeClock())
+        self.assertTrue(rebuilt.exhausted)
+        with self.assertRaises(BudgetExceeded):
+            rebuilt.check_before_call()
+        # And a further valid proposal cannot talk it out of stopping either.
+        rebuilt.record_valid_proposal()
+        with self.assertRaises(BudgetExceeded):
+            rebuilt.check_before_call()
+
+    def test_old_snapshots_without_tripped_still_load(self) -> None:
+        clock = FakeClock(10.0)
+        stop = BudgetStop(isolated(max_calls=7), clock=clock)
+        stop.record_call(input_tokens=5)
+        snap = stop.snapshot()
+        del snap["tripped"]
+        rebuilt = BudgetStop.from_snapshot(snap, clock=FakeClock(50.0))
+        self.assertEqual(rebuilt.snapshot()["calls"], 1)
+        self.assertIsNone(rebuilt.snapshot()["tripped"])
+
+    def test_malformed_snapshots_are_refused_not_defaulted(self) -> None:
+        clock = FakeClock()
+        stop = BudgetStop(isolated(), clock=clock)
+        good = stop.snapshot()
+        for bad in (
+            "not-a-mapping",
+            {**good, "tripped": "BUDGET_SOMETHING_ELSE"},
+            {**good, "calls": -1},
+            {**good, "elapsed_s": -0.5},
+            {k: v for k, v in good.items() if k != "limits"},
+            {**good, "limits": {}},
+        ):
+            with self.assertRaises((TypeError, ValueError)):
+                BudgetStop.from_snapshot(bad, clock=clock)
 
 
 if __name__ == "__main__":
