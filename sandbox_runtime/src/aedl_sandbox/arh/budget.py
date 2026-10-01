@@ -40,6 +40,7 @@ testable without sleeping.
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping
@@ -285,12 +286,12 @@ class BudgetStop:
         anything malformed is refused outright rather than defaulted.
 
         `elapsed_s` is restored by back-dating the clock origin, so the rebuilt
-        instance continues the same wall-clock rather than restarting it. Old
-        snapshots without ``tripped`` still load (as untripped); their
-        calls/tokens/wall-clock limits re-trip on the next check, exactly as
-        before -- but a run that had tripped on consecutive counters and then
-        logged a valid proposal cannot be distinguished from a clean run, which
-        is why `snapshot()` now records the latch.
+        instance continues the recorded elapsed time rather than restarting it.
+        Old snapshots without ``tripped`` are refused: even zero consecutive
+        counters cannot establish that the run never tripped before a later
+        successful proposal cleared them. Numeric fields must already have the
+        types emitted by ``snapshot()``; coercion must not truncate counters or
+        turn non-finite values into a disabled time limit.
         """
         if not isinstance(data, Mapping):
             raise TypeError(
@@ -300,65 +301,71 @@ class BudgetStop:
         limits = data.get("limits")
         if not isinstance(limits, Mapping):
             raise TypeError("budget snapshot has no limits mapping")
-        try:
-            config = BudgetConfig(
-                max_calls=int(limits["max_calls"]),
-                max_total_tokens=int(limits["max_total_tokens"]),
-                max_wall_clock_s=float(limits["max_wall_clock_s"]),
-                max_consecutive_invalid=int(limits["max_consecutive_invalid"]),
-                max_consecutive_format_errors=int(
-                    limits["max_consecutive_format_errors"]
-                ),
-            )
-        except (KeyError, TypeError, ValueError) as exc:
-            raise ValueError(
-                "budget snapshot has malformed limits: %r" % (limits,)
-            ) from exc
-        if (
-            config.max_calls < 0
-            or config.max_total_tokens < 0
-            or config.max_wall_clock_s < 0
-            or config.max_consecutive_invalid < 0
-            or config.max_consecutive_format_errors < 0
-        ):
-            raise ValueError("budget limits must be non-negative")
-
-        def _count(name: str) -> int:
-            try:
-                value = int(data[name])
-            except (KeyError, TypeError, ValueError) as exc:
+        def _count(source: Mapping[str, Any], name: str) -> int:
+            value = source.get(name)
+            if type(value) is not int or value < 0:
                 raise ValueError(
-                    "budget snapshot has malformed counter %r" % (name,)
-                ) from exc
-            if value < 0:
-                raise ValueError("budget counter %r is negative" % (name,))
+                    "budget snapshot field %r must be a non-negative integer" % name
+                )
             return value
 
-        try:
-            elapsed = float(data["elapsed_s"])
-        except (KeyError, TypeError, ValueError) as exc:
-            raise ValueError("budget snapshot has malformed elapsed_s") from exc
-        if elapsed < 0:
-            raise ValueError("budget snapshot elapsed_s is negative")
+        def _seconds(source: Mapping[str, Any], name: str) -> float:
+            value = source.get(name)
+            message = "budget snapshot field %r must be finite and non-negative" % name
+            if type(value) not in (int, float):
+                raise ValueError(message)
+            try:
+                value = float(value)
+            except (OverflowError, ValueError) as exc:
+                raise ValueError(message) from exc
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(message)
+            return value
 
-        tripped = data.get("tripped", None)
-        if tripped is not None and tripped not in cls._TRIP_CODES:
-            raise ValueError(
-                "budget snapshot has unknown tripped code %r" % (tripped,)
-            )
+        config = BudgetConfig(
+            max_calls=_count(limits, "max_calls"),
+            max_total_tokens=_count(limits, "max_total_tokens"),
+            max_wall_clock_s=_seconds(limits, "max_wall_clock_s"),
+            max_consecutive_invalid=_count(limits, "max_consecutive_invalid"),
+            max_consecutive_format_errors=_count(limits, "max_consecutive_format_errors"),
+        )
+        elapsed = _seconds(data, "elapsed_s")
+        counters = {name: _count(data, name) for name in (
+            "calls", "input_tokens", "output_tokens", "cache_read_tokens",
+            "cache_write_tokens", "total_tokens", "consecutive_invalid",
+            "total_invalid", "consecutive_format_errors", "total_format_errors",
+        )}
+        if counters["total_tokens"] != sum(counters[name] for name in (
+            "input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens"
+        )):
+            raise ValueError("budget snapshot total_tokens does not match token counters")
+        if (counters["consecutive_invalid"] > counters["total_invalid"]
+                or counters["consecutive_format_errors"] > counters["total_format_errors"]):
+            raise ValueError("budget snapshot consecutive counters exceed their totals")
+
+        if "tripped" not in data:
+            raise ValueError("budget snapshot is missing the required tripped latch")
+        tripped = data["tripped"]
+        if tripped is not None and (type(tripped) is not str or tripped not in cls._TRIP_CODES):
+            raise ValueError("budget snapshot has an unknown tripped code")
+        if tripped is None and (
+            counters["consecutive_invalid"] >= config.max_consecutive_invalid
+            or counters["consecutive_format_errors"] >= config.max_consecutive_format_errors
+        ):
+            raise ValueError("budget snapshot exhausted consecutive counters without a tripped latch")
 
         rebuilt = cls(config, clock=clock)
         # Continue the same wall-clock instead of restarting it.
         rebuilt._started_at = clock() - elapsed
-        rebuilt._calls = _count("calls")
-        rebuilt._input_tokens = _count("input_tokens")
-        rebuilt._output_tokens = _count("output_tokens")
-        rebuilt._cache_read_tokens = _count("cache_read_tokens")
-        rebuilt._cache_write_tokens = _count("cache_write_tokens")
-        rebuilt._consecutive_invalid = _count("consecutive_invalid")
-        rebuilt._total_invalid = _count("total_invalid")
-        rebuilt._consecutive_format = _count("consecutive_format_errors")
-        rebuilt._total_format = _count("total_format_errors")
+        rebuilt._calls = counters["calls"]
+        rebuilt._input_tokens = counters["input_tokens"]
+        rebuilt._output_tokens = counters["output_tokens"]
+        rebuilt._cache_read_tokens = counters["cache_read_tokens"]
+        rebuilt._cache_write_tokens = counters["cache_write_tokens"]
+        rebuilt._consecutive_invalid = counters["consecutive_invalid"]
+        rebuilt._total_invalid = counters["total_invalid"]
+        rebuilt._consecutive_format = counters["consecutive_format_errors"]
+        rebuilt._total_format = counters["total_format_errors"]
         rebuilt._tripped = tripped
         return rebuilt
 
