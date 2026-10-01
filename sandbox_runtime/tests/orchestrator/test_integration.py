@@ -136,9 +136,9 @@ class Int01RealEdd001Tests(unittest.TestCase):
             status, _findings = trust.validate_bundle(REAL_MANIFEST)
         self.assertEqual(status, EvidenceStatus.PARTIAL)
         manifest = json.loads(REAL_MANIFEST.read_text(encoding="utf-8"))
-        # POWER contract + five component evidence items (GH-20 Tasks 6-7:
-        # SS34 joined AP63203 in the required set).
-        self.assertEqual(len(manifest["missing_requirements"]), 6)
+        # POWER contract still DRAFT (Owner review 2026-10-02 froze the six
+        # datasheets; the power gap is a separate decision).
+        self.assertEqual(len(manifest["missing_requirements"]), 1)
         self.assertEqual(manifest["tool_coverage"], {"compilers": [], "verifiers": []})
 
 

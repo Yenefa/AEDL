@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 142 条。完整正文在各自条目文件中；本索引只做导航。
+共 143 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -205,6 +205,9 @@
 - [`AI-20261001-CODEX-77994966A120AF272A72C9C6EEEE6963`](ai-usage/AI-20261001-CODEX-77994966A120AF272A72C9C6EEEE6963.md) — GH-110 live harness fixes and real native repair episode
 - [`AI-20261001-CODEX-7A3EB57084C67EA4CEDBC49A121FDA5B`](ai-usage/AI-20261001-CODEX-7A3EB57084C67EA4CEDBC49A121FDA5B.md) — Bounded ARH investigation and on-demand specialists (GH-117)
 - [`AI-20261001-OPENCODE-4DF67FB295B8329115C47D0C79949905`](ai-usage/AI-20261001-OPENCODE-4DF67FB295B8329115C47D0C79949905.md) — BudgetStop.from_snapshot — 跨重启恢复闩锁的 N6 预算状态
+## 2026-10-02
+
+- [`AI-20261002-OPENCODE-97E8629BE3294E6DED0538E2441129F7`](ai-usage/AI-20261002-OPENCODE-97E8629BE3294E6DED0538E2441129F7.md) — EDD-001 六份手册复审通过后入库（下载验 sha、manifest 哈希绑定、删 5 项缺口、RES-010 转 OK）
 ## 2026-10-04
 
 - [`AI-20261004-OPENCODE-BB0E31FB88FF7B0C6B03004ED38E0B15`](ai-usage/AI-20261004-OPENCODE-BB0E31FB88FF7B0C6B03004ED38E0B15.md) — AI fully autonomous takeover: ADR-022 governance mode, un-terminate, merge authority, irreversible boundaries

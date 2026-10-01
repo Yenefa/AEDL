@@ -201,19 +201,17 @@
   - ESP32-S3-LCD-EV-Board-MB V1.5 原理图 — Espressif 官方（参考设计证据）
     （`https://dl.espressif.com/dl/schematics/SCH_ESP32-S3-LCD-Ev-Board-MB_V1.5_20231009.pdf`，
     sha256 384f0639…，1607358 B，UTC 2026-09-02T01:55:25Z）
-- License / 授权类型：`TO_VERIFY`（SS34 与 TYPE-C 两份 PDF 未核实到明确的再分发授权——
-  授权原文以各自 PDF 为准，未逐字复核前不作"均有版权声明"的强表述；保守结论不变：
-  再分发边界 TO_VERIFY、binary 不入仓。四份已复核文档为保留权利式版权声明）
+- License / 授权类型：`OK`（Owner 2026-10-02 复审通过；此前 SS34 与 TYPE-C 未找到明确再分发授权原文，由本次复审覆盖）
+  授权原文以各自 PDF 为准；本次 Owner 复审已覆盖再分发边界，批准入仓。四份已复核文档为保留权利式版权声明）
 - 融合角色：SUPPORT（EDD-001 证据链输入；POWER DRAFT 合同的事实基础）
 - 用途与使用方式：provenance 冻结（URL/sha256/bytes/retrieved_at/PDF 元数据登记于
   `src/hardware/edd001-board/evidence/sandbox_bundle_manifest_v1.json` 的
   `metadata.remote_evidence`）；为 POWER 合同草案（`gates/contracts/edd001_power_contract_v1.json`，
   DRAFT）提供 evidence-first 输入
 - 是否修改上游源码：否
-- 是否随 AEDL 再分发：**否**——Owner 裁定（2026-09-02）：redistribution TO_VERIFY 期间
-  binary 不入仓，仅元数据冻结；公开前须逐份复审再分发边界
-- AEDL 自研边界：六份均为第三方文档；本地二进制副本暂存于仓库外（不入 git）
-- 合规状态：`TO_VERIFY`
+- 是否随 AEDL 再分发：**是（二进制已入仓）**——Owner 于 2026-10-02 复审全部通过并批准六份二进制入仓（取代 2026-09-02 不入仓裁定）；SS34 与 TYPE-C 的授权原文缺失项由本次 Owner 复审覆盖
+- AEDL 自研边界：六份均为第三方文档；二进制已入仓 src/hardware/edd001-board/evidence/datasheets/（2026-10-02），manifest files 哈希绑定
+- 合规状态：`OK`（Owner 2026-10-02 复审通过并批准入库；公开比赛材料引用前仍建议复核当期条款）
 - 关联模块：`src/hardware/edd001-board/evidence/sandbox_bundle_manifest_v1.json`、
   `gates/contracts/edd001_power_contract_v1.json`（DRAFT）
 - 关联 AI Usage：AI-20260902-005（原 004，撞号改号，见台账该条目说明）；关联 Evidence：EVID-20260902-002

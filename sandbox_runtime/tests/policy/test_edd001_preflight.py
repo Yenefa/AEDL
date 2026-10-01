@@ -156,8 +156,25 @@ class RealEdd001PreflightTests(unittest.TestCase):
         self.assertIn("AP63203WU-7", reported)
 
     def test_source_urls_are_not_treated_as_local_evidence(self) -> None:
+        """A ``sources`` URL entry is never local evidence -- but since the
+        Owner review 2026-10-02 froze the six datasheets on disk, the six
+        component directories ARE. This pins the post-freeze set exactly: six
+        more or six fewer is a failure, so a silently added (or deleted)
+        datasheet directory cannot slip through."""
         document = self.engine.document
-        self.assertEqual(document.available_evidence_ids, frozenset())
+        self.assertEqual(
+            document.available_evidence_ids,
+            frozenset(
+                {
+                    "ESP32-S3-WROOM-1-N8R8",
+                    "AP63203WU-7",
+                    "TYPE-C-31-M-12",
+                    "USBLC6-2SC6",
+                    "SS34",
+                    "ESP32-S3-LCD-EV-BOARD",
+                }
+            ),
+        )
         for mpn, record in document.components.items():
             self.assertTrue(record.required_evidence_ids, msg=f"{mpn} declares no evidence")
 
