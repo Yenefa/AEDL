@@ -1,0 +1,1424 @@
+{
+  "classification": "DEV_ONLY",
+  "git_base": "dbde75cd59e1d00a88d72b03e4239b1255b973e2",
+  "raw_base": "C:/dev/aedl-episodes",
+  "execution_implementation_sha256": {
+    "sandbox_runtime/src/aedl_sandbox/arh/adaptive.py": "9836ee75301f3ba5762789acb354a24f8d3bbcf7c4eb58b9daef0c0440862e50",
+    "sandbox_runtime/src/aedl_sandbox/orchestrator.py": "54bed9118956c02642de30f18cdc8a5ef895e9393da57546deaef0f77109dc6d",
+    "sandbox_runtime/src/aedl_sandbox/adapters.py": "6628bd5ae6af488313e29ca94a38d41f89f5343d0a5a6279561fd31bd5c8c601",
+    "sandbox_runtime/src/aedl_sandbox/nativeports.py": "502245e523239f1fe755053063fd1b460cdd0c0aee53de4d3f70c4c96a8f76a8",
+    "tools/run_arh_episode.py": "65bfe2e0423007b408a83c85df1799c150fdaacdfb23b53ff8c32a78a3dfd3f2"
+  },
+  "archive": {
+    "path": "C:/dev/aedl-episodes/adaptive-stage/gh117-episodes.zip",
+    "sha256": "a0cf0bc7f3028306eb9940ecfc0570a16c46d5998b0330b626de3fbcb6b18dba"
+  },
+  "files": [
+    {
+      "run": "gh117-mixed-stall-01",
+      "path": "checkpoint.sqlite",
+      "size_bytes": 106496,
+      "sha256": "fecdef38ea0177b66f4a538e62d44acf9f55eff08fa992a5d7f79dee2e9d38bb"
+    },
+    {
+      "run": "gh117-mixed-stall-01",
+      "path": "implementation-sha256.json",
+      "size_bytes": 589,
+      "sha256": "3bc1a175a2d0a45cc77291849f87fc8096925ea7ee0eee9ca2b5d0d2067686ae"
+    },
+    {
+      "run": "gh117-mixed-stall-01",
+      "path": "observations/toolchain.json",
+      "size_bytes": 60501,
+      "sha256": "e1a2ac1b9e32794d0c6bf4b121f426f389311d5396226d85ee8638d3d26202c2"
+    },
+    {
+      "run": "gh117-mixed-stall-01",
+      "path": "observations/verification/cand-7a1ce1052575bdb6-6eb8a2f4f8074647b96c036b71fd0edd/after.net.xml",
+      "size_bytes": 37321,
+      "sha256": "3b25133da8873e0356e50a5a14cb43c621c8ce921680c8ccb1031ffc442f10ce"
+    },
+    {
+      "run": "gh117-mixed-stall-01",
+      "path": "observations/verification/cand-7a1ce1052575bdb6-6eb8a2f4f8074647b96c036b71fd0edd/export.json",
+      "size_bytes": 1318,
+      "sha256": "2b42a68e97f65d0f979ab4fa32cfae303e4b3381c3b02f667a52297780e13160"
+    },
+    {
+      "run": "gh117-mixed-stall-01",
+      "path": "observations/verification/cand-7a1ce1052575bdb6-6eb8a2f4f8074647b96c036b71fd0edd/semantic.json",
+      "size_bytes": 536,
+      "sha256": "b7da1dd999e7f3158a56109b41e1c2e05eeba5ee956be6ce7cd13879772e40c7"
+    },
+    {
+      "run": "gh117-mixed-stall-01",
+      "path": "observations/verification/cand-b94507c333fcfde5-6a0a727747644edaa01e3103ff9f9792/after.net.xml",
+      "size_bytes": 37321,
+      "sha256": "3af9e28eb1fa430180b962b4f95ea234dc1667ee83d0bc54a09c681d67462ff4"
+    },
+    {
+      "run": "gh117-mixed-stall-01",
+      "path": "observations/verification/cand-b94507c333fcfde5-6a0a727747644edaa01e3103ff9f9792/export.json",
+      "size_bytes": 1318,
+      "sha256": "d97a75933cc5289ed9c9323c1663e14faf98db766b8cba471258dc01e874dd4f"
+    },
+    {
+      "run": "gh117-mixed-stall-01",
+      "path": "observations/verification/cand-b94507c333fcfde5-6a0a727747644edaa01e3103ff9f9792/semantic.json",
+      "size_bytes": 536,
+      "sha256": "b7d67ab92f56affb1102fb763d4c998ba55b89869eed6f8a4b4ded78838c616f"
+    },
+    {
+      "run": "gh117-mixed-stall-01",
+      "path": "receipts/gh117-episode/219a478edb77a81305bc78f03aa9027580d2da0d3236e203386aaa16126ea98d.json",
+      "size_bytes": 423,
+      "sha256": "219a478edb77a81305bc78f03aa9027580d2da0d3236e203386aaa16126ea98d"
+    },
+    {
+      "run": "gh117-mixed-stall-01",
+      "path": "receipts/gh117-episode/2de767cb906c3524f3d95f7a9cf617dcb2d86651b54bd5547aae3a31040c9d75.json",
+      "size_bytes": 480,
+      "sha256": "2de767cb906c3524f3d95f7a9cf617dcb2d86651b54bd5547aae3a31040c9d75"
+    },
+    {
+      "run": "gh117-mixed-stall-01",
+      "path": "receipts/gh117-episode/41a7405dd5cc9f4af6b14b9790f989d27bc133c34f5a959aad8a284b560b7470.json",
+      "size_bytes": 480,
+      "sha256": "41a7405dd5cc9f4af6b14b9790f989d27bc133c34f5a959aad8a284b560b7470"
+    },
+    {
+      "run": "gh117-mixed-stall-01",
+      "path": "receipts/gh117-episode/6cb1b34b0ed4c8b7438d574106686055320a6ab1f327710a9e5bce736a2b7e8c.json",
+      "size_bytes": 423,
+      "sha256": "6cb1b34b0ed4c8b7438d574106686055320a6ab1f327710a9e5bce736a2b7e8c"
+    },
+    {
+      "run": "gh117-mixed-stall-01",
+      "path": "run/gh117-episode/candidate/cand-7a1ce1052575bdb6/.actions.jsonl",
+      "size_bytes": 346,
+      "sha256": "c6946cbadbebcc9e055d99cc99535102b0a26eaa5b87cbcad0188f0b4e12bed6"
+    },
+    {
+      "run": "gh117-mixed-stall-01",
+      "path": "run/gh117-episode/candidate/cand-7a1ce1052575bdb6/design/fault.kicad_sch",
+      "size_bytes": 62685,
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0"
+    },
+    {
+      "run": "gh117-mixed-stall-01",
+      "path": "run/gh117-episode/candidate/cand-7a1ce1052575bdb6/design/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-mixed-stall-01",
+      "path": "run/gh117-episode/candidate/cand-b94507c333fcfde5/.actions.jsonl",
+      "size_bytes": 346,
+      "sha256": "cbbc9f23eb6c8c5f3a169388aad6416893a8e1be324c7f499df5eabe99944790"
+    },
+    {
+      "run": "gh117-mixed-stall-01",
+      "path": "run/gh117-episode/candidate/cand-b94507c333fcfde5/design/fault.kicad_sch",
+      "size_bytes": 62685,
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0"
+    },
+    {
+      "run": "gh117-mixed-stall-01",
+      "path": "run/gh117-episode/candidate/cand-b94507c333fcfde5/design/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-mixed-stall-01",
+      "path": "run/gh117-episode/trajectory/gh117-episode.jsonl",
+      "size_bytes": 3997,
+      "sha256": "8991db7deebf1aa991b1c511dc50f0cda36c420393b2ea6f87e3c09d224a09bc"
+    },
+    {
+      "run": "gh117-mixed-stall-01",
+      "path": "summary.json",
+      "size_bytes": 3880,
+      "sha256": "5a6612212d58653a76c0c21514f48a3a5631635d1acc92acf5f1a725ec6c218a"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "checkpoint.sqlite",
+      "size_bytes": 147456,
+      "sha256": "9956e9586cc43c26866265c38661994ef73b617f594d9f3047665657d5900a42"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "implementation-sha256.json",
+      "size_bytes": 589,
+      "sha256": "d50b51510120ac86e8a593f24294f6e3ca55c4cd1999963f808a2d55d6e1fb0f"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/toolchain.json",
+      "size_bytes": 60501,
+      "sha256": "e1a2ac1b9e32794d0c6bf4b121f426f389311d5396226d85ee8638d3d26202c2"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/transactions/txn-8e6156fbd73147f4ac8750b524675af7/artifacts/backup/fault.kicad_sch.bak",
+      "size_bytes": 62685,
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/transactions/txn-8e6156fbd73147f4ac8750b524675af7/artifacts/kicad_verify/txn-8e6156fbd73147f4ac8750b524675af7/exports/txn-8e6156fbd73147f4ac8750b524675af7/after/after.net.xml",
+      "size_bytes": 36370,
+      "sha256": "77d8c0fee6c314d847b621564b8f53df259ab463d94ab38b9d5e511cda8043fc"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/transactions/txn-8e6156fbd73147f4ac8750b524675af7/artifacts/kicad_verify/txn-8e6156fbd73147f4ac8750b524675af7/exports/txn-8e6156fbd73147f4ac8750b524675af7/before/before.net.xml",
+      "size_bytes": 36671,
+      "sha256": "564832750d6cdb7504fd2d45a3c70fcd9e2bc9bcaf6a47829494b062e73e625f"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/transactions/txn-8e6156fbd73147f4ac8750b524675af7/artifacts/kicad_verify/txn-8e6156fbd73147f4ac8750b524675af7/thin_verification_txn-8e6156fbd73147f4ac8750b524675af7.json",
+      "size_bytes": 7961,
+      "sha256": "fd23fc6a8a3284b970552032ae75541504691b17a45ec703cc904ca62dce43f6"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/transactions/txn-8e6156fbd73147f4ac8750b524675af7/artifacts/request-apply_exception.json",
+      "size_bytes": 423,
+      "sha256": "2517beb106209dbc9f12c9fda93fc5d7ce19e54064895021b8d7ddc53b582d7e"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/transactions/txn-8e6156fbd73147f4ac8750b524675af7/artifacts/request-read.json",
+      "size_bytes": 154,
+      "sha256": "f5b38a7e0823355852be228d9149c21dac6622c4920d73e32590c92903f394cf"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/transactions/txn-8e6156fbd73147f4ac8750b524675af7/artifacts/result-apply_exception.json",
+      "size_bytes": 538,
+      "sha256": "387fa35c58272457a3f9e6dd3786a58a2b040011f8003ef8e46ace14860f58ba"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/transactions/txn-8e6156fbd73147f4ac8750b524675af7/artifacts/result-read.json",
+      "size_bytes": 53229,
+      "sha256": "fa8bdcd56659180f0cb2a95762ffa80c11d22e7ec87769198f77e31806d99820"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/transactions/txn-8e6156fbd73147f4ac8750b524675af7/receipt.json",
+      "size_bytes": 13473,
+      "sha256": "56280911edfc8ccfb54605109c092806a9d26f21ab556ecdaa2d6b5f2a089f61"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/transactions/txn-8e6156fbd73147f4ac8750b524675af7/repair/journal.jsonl",
+      "size_bytes": 1928,
+      "sha256": "9fb1cb16b6a32abd0d225195b5f46ec18e4c8b85640c5d28ae7196330353c5f3"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/transactions/txn-8e6156fbd73147f4ac8750b524675af7/repair/snapshot/fault.kicad_sch",
+      "size_bytes": 62685,
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/transactions/txn-8e6156fbd73147f4ac8750b524675af7/repair/snapshot/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/transactions/txn-8e6156fbd73147f4ac8750b524675af7/repair.lock",
+      "size_bytes": 34,
+      "sha256": "2530e5980d399597863c7a4c6fa93d64275464ee586575feb12aa66dcb7ab348"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/transactions/txn-8e6156fbd73147f4ac8750b524675af7/stage/fault.kicad_sch",
+      "size_bytes": 62825,
+      "sha256": "65ac445c70f3d79d01e485038745b308875a92f4142e22d98714b19a78a05c1a"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/transactions/txn-8e6156fbd73147f4ac8750b524675af7/stage/ops.json",
+      "size_bytes": 162,
+      "sha256": "918fac4ca6757c664681c8bc9aa3fbd0cc06066030a046eb8c8bff930c59bfdb"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/transactions/txn-8e6156fbd73147f4ac8750b524675af7/stage/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/verification/cand-7a1ce1052575bdb6-e85b2360543142b288af6bb57c460b08/after.net.xml",
+      "size_bytes": 37321,
+      "sha256": "4ce6db98a23117049f2782185ef09228e45d8dcfecaa14f3790e4b3acf72d98a"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/verification/cand-7a1ce1052575bdb6-e85b2360543142b288af6bb57c460b08/export.json",
+      "size_bytes": 1318,
+      "sha256": "9bd522ea69e255d940b656ada15affa6ffeada5e2d5066dd57a9733ad87687f8"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/verification/cand-7a1ce1052575bdb6-e85b2360543142b288af6bb57c460b08/semantic.json",
+      "size_bytes": 536,
+      "sha256": "19807ec4329ebf27b4cccae712f9927f3a14c2ada6868b8f50083051dcce60d1"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/verification/cand-b94507c333fcfde5-a5f21f2f9e9c487d97df95772bf04554/after.net.xml",
+      "size_bytes": 37321,
+      "sha256": "0789951bc57b6223fce5dbba5dbdf9c333cbcaa1f0713eaab1854479518be12d"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/verification/cand-b94507c333fcfde5-a5f21f2f9e9c487d97df95772bf04554/export.json",
+      "size_bytes": 1318,
+      "sha256": "d0fb6fb75cbf8e4d626d632cc22526e26434c17ed5f89a4d50288cd28fa7cb0b"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/verification/cand-b94507c333fcfde5-a5f21f2f9e9c487d97df95772bf04554/semantic.json",
+      "size_bytes": 536,
+      "sha256": "619ce869bea372d4892b0c09172fd24a89e1acaaf293ca9d9a9c3d64daa168de"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/verification/cand-f68996a18c6710e1-f1d07983ad6d466085949a11490eee58/after.net.xml",
+      "size_bytes": 37240,
+      "sha256": "10ebd76d83ab47a7d1e0bbc81b84048e20b6bce4bc7c15d13b9b5572329ebc3a"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/verification/cand-f68996a18c6710e1-f1d07983ad6d466085949a11490eee58/export.json",
+      "size_bytes": 1318,
+      "sha256": "ff88c427916a9090f327f4882bae48d937a41bb81e4026330608fb281d41ee40"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "observations/verification/cand-f68996a18c6710e1-f1d07983ad6d466085949a11490eee58/semantic.json",
+      "size_bytes": 537,
+      "sha256": "1c3bb3de7696597e1ab9ef89fd29f0e6751b868b2095428e40782b81fbf6e0b8"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "receipts/gh117-episode/25f6c81b53e539dca02c032ad45ba946e0413579bb11b19b96b6310978767ff9.json",
+      "size_bytes": 458,
+      "sha256": "25f6c81b53e539dca02c032ad45ba946e0413579bb11b19b96b6310978767ff9"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "receipts/gh117-episode/2de767cb906c3524f3d95f7a9cf617dcb2d86651b54bd5547aae3a31040c9d75.json",
+      "size_bytes": 480,
+      "sha256": "2de767cb906c3524f3d95f7a9cf617dcb2d86651b54bd5547aae3a31040c9d75"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "receipts/gh117-episode/41a7405dd5cc9f4af6b14b9790f989d27bc133c34f5a959aad8a284b560b7470.json",
+      "size_bytes": 480,
+      "sha256": "41a7405dd5cc9f4af6b14b9790f989d27bc133c34f5a959aad8a284b560b7470"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "receipts/gh117-episode/943a8485c961cbd0b4470ca766542e2d09c18dd55f168d633c921e58153ad971.json",
+      "size_bytes": 423,
+      "sha256": "943a8485c961cbd0b4470ca766542e2d09c18dd55f168d633c921e58153ad971"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "receipts/gh117-episode/d4868b11324fd59a3f0d94a20c3cd7f7158610c3ec6cf96f5e6634d666eea9e7.json",
+      "size_bytes": 423,
+      "sha256": "d4868b11324fd59a3f0d94a20c3cd7f7158610c3ec6cf96f5e6634d666eea9e7"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "receipts/gh117-episode/dfa5bacc3afe170e5f59246038a65ba9e48afd0f3f65b5cba79439e58cf05924.json",
+      "size_bytes": 423,
+      "sha256": "dfa5bacc3afe170e5f59246038a65ba9e48afd0f3f65b5cba79439e58cf05924"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "run/gh117-episode/candidate/cand-7a1ce1052575bdb6/.actions.jsonl",
+      "size_bytes": 346,
+      "sha256": "1819d51cebafa0fa9c589961ada644ccbef272ab67c45fbd15d38d48debabec4"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "run/gh117-episode/candidate/cand-7a1ce1052575bdb6/design/fault.kicad_sch",
+      "size_bytes": 62685,
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "run/gh117-episode/candidate/cand-7a1ce1052575bdb6/design/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "run/gh117-episode/candidate/cand-b94507c333fcfde5/.actions.jsonl",
+      "size_bytes": 346,
+      "sha256": "53261cf1a97817f3717a762c47e7b3c1eeeced0108b68c9ead6e0db9aa831012"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "run/gh117-episode/candidate/cand-b94507c333fcfde5/design/fault.kicad_sch",
+      "size_bytes": 62685,
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "run/gh117-episode/candidate/cand-b94507c333fcfde5/design/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "run/gh117-episode/candidate/cand-f68996a18c6710e1/.actions.jsonl",
+      "size_bytes": 346,
+      "sha256": "2dd10ea11e62f684b40c35bf181702a27fd81e1d7dbd32cef32c4a047e9f3338"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "run/gh117-episode/candidate/cand-f68996a18c6710e1/design/fault.kicad_sch",
+      "size_bytes": 62825,
+      "sha256": "65ac445c70f3d79d01e485038745b308875a92f4142e22d98714b19a78a05c1a"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "run/gh117-episode/candidate/cand-f68996a18c6710e1/design/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "run/gh117-episode/trajectory/gh117-episode.jsonl",
+      "size_bytes": 7669,
+      "sha256": "6669b40489494eeb659a4f753d892be13f7327afb51104f766eb1990d27eb589"
+    },
+    {
+      "run": "gh117-mixed-stall-02",
+      "path": "summary.json",
+      "size_bytes": 6332,
+      "sha256": "4f5aca329c65175bbc95af9c923a44a32d833f3d079552412487ac60526a682c"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "checkpoint.sqlite",
+      "size_bytes": 147456,
+      "sha256": "bcf61159eb313ca9a6a0c9eca2084f4e80481e63329b81fb317fa53dbbec472e"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "implementation-sha256.json",
+      "size_bytes": 589,
+      "sha256": "29496beb2d582226a0b28fd47a6e95c1d10f77a360ee2dd06a8d25a41316ac26"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/toolchain.json",
+      "size_bytes": 60501,
+      "sha256": "e1a2ac1b9e32794d0c6bf4b121f426f389311d5396226d85ee8638d3d26202c2"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/transactions/txn-6363a3a38bd7441e8358f0ae6bdfd74f/artifacts/backup/fault.kicad_sch.bak",
+      "size_bytes": 62685,
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/transactions/txn-6363a3a38bd7441e8358f0ae6bdfd74f/artifacts/kicad_verify/txn-6363a3a38bd7441e8358f0ae6bdfd74f/exports/txn-6363a3a38bd7441e8358f0ae6bdfd74f/after/after.net.xml",
+      "size_bytes": 36370,
+      "sha256": "c2c9fe93e35235efde81cdaa19cc727ca68836ce4d76790bb4044f28aa02c30a"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/transactions/txn-6363a3a38bd7441e8358f0ae6bdfd74f/artifacts/kicad_verify/txn-6363a3a38bd7441e8358f0ae6bdfd74f/exports/txn-6363a3a38bd7441e8358f0ae6bdfd74f/before/before.net.xml",
+      "size_bytes": 36671,
+      "sha256": "dfb8cededce3981c12dff2557414d7da85d177728e3979f35888079d4840e41a"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/transactions/txn-6363a3a38bd7441e8358f0ae6bdfd74f/artifacts/kicad_verify/txn-6363a3a38bd7441e8358f0ae6bdfd74f/thin_verification_txn-6363a3a38bd7441e8358f0ae6bdfd74f.json",
+      "size_bytes": 7961,
+      "sha256": "c1441267dac1f47d27546b6faa2d1de64073221a336d4c61069b4896ec3ea983"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/transactions/txn-6363a3a38bd7441e8358f0ae6bdfd74f/artifacts/request-apply_exception.json",
+      "size_bytes": 423,
+      "sha256": "e148805350b4a9669acb8564c0b618619da8b1c3c32f278edb6cec4d6816a917"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/transactions/txn-6363a3a38bd7441e8358f0ae6bdfd74f/artifacts/request-read.json",
+      "size_bytes": 154,
+      "sha256": "0907eec80b7412d4a7b9fc1d3e6bf81f2f9551ffc9e483b13157242ffb72c561"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/transactions/txn-6363a3a38bd7441e8358f0ae6bdfd74f/artifacts/result-apply_exception.json",
+      "size_bytes": 538,
+      "sha256": "387fa35c58272457a3f9e6dd3786a58a2b040011f8003ef8e46ace14860f58ba"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/transactions/txn-6363a3a38bd7441e8358f0ae6bdfd74f/artifacts/result-read.json",
+      "size_bytes": 53229,
+      "sha256": "fa8bdcd56659180f0cb2a95762ffa80c11d22e7ec87769198f77e31806d99820"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/transactions/txn-6363a3a38bd7441e8358f0ae6bdfd74f/receipt.json",
+      "size_bytes": 13473,
+      "sha256": "dba6c4673038cf535595d51d524f881b52a26efcd76d8bb1865781e60c9d4152"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/transactions/txn-6363a3a38bd7441e8358f0ae6bdfd74f/repair/journal.jsonl",
+      "size_bytes": 1928,
+      "sha256": "68ec21f742efa9c03020d9d2482c32f71b115748832b7f48a15724ad430fd4bf"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/transactions/txn-6363a3a38bd7441e8358f0ae6bdfd74f/repair/snapshot/fault.kicad_sch",
+      "size_bytes": 62685,
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/transactions/txn-6363a3a38bd7441e8358f0ae6bdfd74f/repair/snapshot/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/transactions/txn-6363a3a38bd7441e8358f0ae6bdfd74f/repair.lock",
+      "size_bytes": 34,
+      "sha256": "2530e5980d399597863c7a4c6fa93d64275464ee586575feb12aa66dcb7ab348"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/transactions/txn-6363a3a38bd7441e8358f0ae6bdfd74f/stage/fault.kicad_sch",
+      "size_bytes": 62825,
+      "sha256": "65ac445c70f3d79d01e485038745b308875a92f4142e22d98714b19a78a05c1a"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/transactions/txn-6363a3a38bd7441e8358f0ae6bdfd74f/stage/ops.json",
+      "size_bytes": 162,
+      "sha256": "918fac4ca6757c664681c8bc9aa3fbd0cc06066030a046eb8c8bff930c59bfdb"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/transactions/txn-6363a3a38bd7441e8358f0ae6bdfd74f/stage/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/verification/cand-7a1ce1052575bdb6-f0152a3c5d144d3491c3d7edca964e06/after.net.xml",
+      "size_bytes": 37321,
+      "sha256": "05549ba0e436d63cff6599e0f87bbae457e88f238dbf6bf81e8e246e9dfd7b18"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/verification/cand-7a1ce1052575bdb6-f0152a3c5d144d3491c3d7edca964e06/export.json",
+      "size_bytes": 1318,
+      "sha256": "e6b9c14017620741040dbf8d9be80232c930dba1ad5232f6f794b786dec724d8"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/verification/cand-7a1ce1052575bdb6-f0152a3c5d144d3491c3d7edca964e06/semantic.json",
+      "size_bytes": 536,
+      "sha256": "30d0345b785e143014920d84f32fda8f90cbbd8344bc8cdc0043d3fa60bcbb9d"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/verification/cand-b94507c333fcfde5-b0e0d7ba08794bcbb401d444d1256320/after.net.xml",
+      "size_bytes": 37321,
+      "sha256": "135fe4843ff5e2660aaa1aa6fdc70475f2f9fe9aedf8addc763a8b8f5b7689c3"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/verification/cand-b94507c333fcfde5-b0e0d7ba08794bcbb401d444d1256320/export.json",
+      "size_bytes": 1318,
+      "sha256": "d1053d0ecd7606ad8199370d5a445a0a06f3901cc0f8c62aa8496ff2f474c9b4"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/verification/cand-b94507c333fcfde5-b0e0d7ba08794bcbb401d444d1256320/semantic.json",
+      "size_bytes": 536,
+      "sha256": "adf25507cdd5cc39a0ebed6069885f42b04f40968919a881f60c339a1af0d734"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/verification/cand-f68996a18c6710e1-f7f5e4fcd4554a6982043e8247e5007e/after.net.xml",
+      "size_bytes": 37240,
+      "sha256": "db6de18d3d63b0b16f0daa1e48c6e7366cffd20790fc2e95638cfcfd30548f57"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/verification/cand-f68996a18c6710e1-f7f5e4fcd4554a6982043e8247e5007e/export.json",
+      "size_bytes": 1318,
+      "sha256": "e6bdfbe661308719ec479d8257e8149b81b7274ae6a3e6d8d01dec9e5176c6cb"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "observations/verification/cand-f68996a18c6710e1-f7f5e4fcd4554a6982043e8247e5007e/semantic.json",
+      "size_bytes": 537,
+      "sha256": "b88b4086693a9b5212385cb90c35e0088d950b035024cc01bfc15138fef21819"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "receipts/gh117-episode/1e9b66e60f8f037b40c2ca96f125646b30238661218436f831b81503cb383f21.json",
+      "size_bytes": 423,
+      "sha256": "1e9b66e60f8f037b40c2ca96f125646b30238661218436f831b81503cb383f21"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "receipts/gh117-episode/25f6c81b53e539dca02c032ad45ba946e0413579bb11b19b96b6310978767ff9.json",
+      "size_bytes": 458,
+      "sha256": "25f6c81b53e539dca02c032ad45ba946e0413579bb11b19b96b6310978767ff9"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "receipts/gh117-episode/2de767cb906c3524f3d95f7a9cf617dcb2d86651b54bd5547aae3a31040c9d75.json",
+      "size_bytes": 480,
+      "sha256": "2de767cb906c3524f3d95f7a9cf617dcb2d86651b54bd5547aae3a31040c9d75"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "receipts/gh117-episode/41a7405dd5cc9f4af6b14b9790f989d27bc133c34f5a959aad8a284b560b7470.json",
+      "size_bytes": 480,
+      "sha256": "41a7405dd5cc9f4af6b14b9790f989d27bc133c34f5a959aad8a284b560b7470"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "receipts/gh117-episode/4982dde332189e35a4baa176303da47cc401e47e7f65b3bca7a02110405be18c.json",
+      "size_bytes": 423,
+      "sha256": "4982dde332189e35a4baa176303da47cc401e47e7f65b3bca7a02110405be18c"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "receipts/gh117-episode/fa332a43ecebc0dd9297dc0d22776355343d8c7f8d2adb059b93d73806b250ee.json",
+      "size_bytes": 423,
+      "sha256": "fa332a43ecebc0dd9297dc0d22776355343d8c7f8d2adb059b93d73806b250ee"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "run/gh117-episode/candidate/cand-7a1ce1052575bdb6/.actions.jsonl",
+      "size_bytes": 346,
+      "sha256": "2222d1855c093b47091643cb0476ca680b09e7241fc7266d97547d69e655016a"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "run/gh117-episode/candidate/cand-7a1ce1052575bdb6/design/fault.kicad_sch",
+      "size_bytes": 62685,
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "run/gh117-episode/candidate/cand-7a1ce1052575bdb6/design/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "run/gh117-episode/candidate/cand-b94507c333fcfde5/.actions.jsonl",
+      "size_bytes": 346,
+      "sha256": "1ddef4b57300c0baa52fd1b588fb9cb0e4c5c16e56a93bead95a2b20b5f64fb4"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "run/gh117-episode/candidate/cand-b94507c333fcfde5/design/fault.kicad_sch",
+      "size_bytes": 62685,
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "run/gh117-episode/candidate/cand-b94507c333fcfde5/design/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "run/gh117-episode/candidate/cand-f68996a18c6710e1/.actions.jsonl",
+      "size_bytes": 346,
+      "sha256": "e8ea0da2e140606d78ffe806b6126a09d10cb9fcb565f09907a4697ddf7dc518"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "run/gh117-episode/candidate/cand-f68996a18c6710e1/design/fault.kicad_sch",
+      "size_bytes": 62825,
+      "sha256": "65ac445c70f3d79d01e485038745b308875a92f4142e22d98714b19a78a05c1a"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "run/gh117-episode/candidate/cand-f68996a18c6710e1/design/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "run/gh117-episode/trajectory/gh117-episode.jsonl",
+      "size_bytes": 7689,
+      "sha256": "2946ec5a2a13d9bc498a6118d29ab6958cc7e0b888131f45f717c1c60c1f1e11"
+    },
+    {
+      "run": "gh117-mixed-stall-03",
+      "path": "summary.json",
+      "size_bytes": 6333,
+      "sha256": "e69f21e8f848a3153b0071dbc9a7f5360a4ac4255c2039d41a892f47ce723b18"
+    },
+    {
+      "run": "gh117-real-01",
+      "path": "checkpoint.sqlite",
+      "size_bytes": 65536,
+      "sha256": "6f0d1cc5e3d6a3987885aef31d4a247149c486a8ffbbdee9bda588ed65f0bb17"
+    },
+    {
+      "run": "gh117-real-01",
+      "path": "observations/toolchain.json",
+      "size_bytes": 60501,
+      "sha256": "e1a2ac1b9e32794d0c6bf4b121f426f389311d5396226d85ee8638d3d26202c2"
+    },
+    {
+      "run": "gh117-real-01",
+      "path": "observations/verification/cand-60b00ab46835ad03-97197c9ffeaa485da4d815e2a9763bbf/after.net.xml",
+      "size_bytes": 37314,
+      "sha256": "16cdec69e18f89dc83e8758adf47eb19226f412097a10d0917508bc5f300793f"
+    },
+    {
+      "run": "gh117-real-01",
+      "path": "observations/verification/cand-60b00ab46835ad03-97197c9ffeaa485da4d815e2a9763bbf/export.json",
+      "size_bytes": 1297,
+      "sha256": "d410727fcf598a01d789d0a57e582f57481de98f400cb3f9ec2b8c388818d0aa"
+    },
+    {
+      "run": "gh117-real-01",
+      "path": "observations/verification/cand-60b00ab46835ad03-97197c9ffeaa485da4d815e2a9763bbf/semantic.json",
+      "size_bytes": 536,
+      "sha256": "b157e43708c1e2fb384b4f9d2edfd92d846397711339548dee701f5bd7c09905"
+    },
+    {
+      "run": "gh117-real-01",
+      "path": "receipts/gh110-episode/3e1d4fc0e5bc4a7e5d55c8ae5fed56f8838aa9bec18db89b2876ca5b7fe2dfdf.json",
+      "size_bytes": 480,
+      "sha256": "3e1d4fc0e5bc4a7e5d55c8ae5fed56f8838aa9bec18db89b2876ca5b7fe2dfdf"
+    },
+    {
+      "run": "gh117-real-01",
+      "path": "receipts/gh110-episode/c8c45dd13f1872b5311efbba5289d42d4fd5a769c70c6dc338fef15cf2fe3f71.json",
+      "size_bytes": 416,
+      "sha256": "c8c45dd13f1872b5311efbba5289d42d4fd5a769c70c6dc338fef15cf2fe3f71"
+    },
+    {
+      "run": "gh117-real-01",
+      "path": "run/gh110-episode/candidate/cand-60b00ab46835ad03/.actions.jsonl",
+      "size_bytes": 339,
+      "sha256": "454d381d051a8f0c51e7163624483d2b2e3fab0e2424ceff566b59be7ef2eefc"
+    },
+    {
+      "run": "gh117-real-01",
+      "path": "run/gh110-episode/candidate/cand-60b00ab46835ad03/design/fault.kicad_sch",
+      "size_bytes": 62685,
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0"
+    },
+    {
+      "run": "gh117-real-01",
+      "path": "run/gh110-episode/candidate/cand-60b00ab46835ad03/design/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-real-01",
+      "path": "run/gh110-episode/trajectory/gh110-episode.jsonl",
+      "size_bytes": 1061,
+      "sha256": "188a6d9d9be646ec3e65839df6dc8b0b3b97bcbd378be72ef4f252265ab646a4"
+    },
+    {
+      "run": "gh117-real-01",
+      "path": "summary.json",
+      "size_bytes": 2027,
+      "sha256": "2272db6d1b9789db385020d2e9b32b3da8c7b2b63685c19e37b31b31d34ec966"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "checkpoint.sqlite",
+      "size_bytes": 98304,
+      "sha256": "ce82fb0ec763362792121d8c88e4b58dcf57401fceaeef6ca05975ca6aeda98e"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "implementation-sha256.json",
+      "size_bytes": 589,
+      "sha256": "3bc1a175a2d0a45cc77291849f87fc8096925ea7ee0eee9ca2b5d0d2067686ae"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "observations/toolchain.json",
+      "size_bytes": 60501,
+      "sha256": "e1a2ac1b9e32794d0c6bf4b121f426f389311d5396226d85ee8638d3d26202c2"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "observations/transactions/txn-a5eb4d2b64b84f2aae6a4f404c34e44e/artifacts/backup/fault.kicad_sch.bak",
+      "size_bytes": 62685,
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "observations/transactions/txn-a5eb4d2b64b84f2aae6a4f404c34e44e/artifacts/kicad_verify/txn-a5eb4d2b64b84f2aae6a4f404c34e44e/exports/txn-a5eb4d2b64b84f2aae6a4f404c34e44e/after/after.net.xml",
+      "size_bytes": 36363,
+      "sha256": "c574766c29da34dad3bd167e4fde8b2c489d27d320431d55cd661b3c01695056"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "observations/transactions/txn-a5eb4d2b64b84f2aae6a4f404c34e44e/artifacts/kicad_verify/txn-a5eb4d2b64b84f2aae6a4f404c34e44e/exports/txn-a5eb4d2b64b84f2aae6a4f404c34e44e/before/before.net.xml",
+      "size_bytes": 36664,
+      "sha256": "1d95e9210546705d10d0e79221caa10aa1f8a183081c591030425484d996d495"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "observations/transactions/txn-a5eb4d2b64b84f2aae6a4f404c34e44e/artifacts/kicad_verify/txn-a5eb4d2b64b84f2aae6a4f404c34e44e/thin_verification_txn-a5eb4d2b64b84f2aae6a4f404c34e44e.json",
+      "size_bytes": 7877,
+      "sha256": "3721e9abcd38c9115121965c76c99b5e661edeedc127cc2c8a04ac527c9d818b"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "observations/transactions/txn-a5eb4d2b64b84f2aae6a4f404c34e44e/artifacts/request-apply_exception.json",
+      "size_bytes": 409,
+      "sha256": "e8f07643f40cf2e10f91b3d732d8002f16e2f1006049311973fcc494fde2c522"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "observations/transactions/txn-a5eb4d2b64b84f2aae6a4f404c34e44e/artifacts/request-read.json",
+      "size_bytes": 147,
+      "sha256": "e8bc9f9edce21054bc21644223c8852c175615ff82c4a58db645a27e35c4a352"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "observations/transactions/txn-a5eb4d2b64b84f2aae6a4f404c34e44e/artifacts/result-apply_exception.json",
+      "size_bytes": 538,
+      "sha256": "387fa35c58272457a3f9e6dd3786a58a2b040011f8003ef8e46ace14860f58ba"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "observations/transactions/txn-a5eb4d2b64b84f2aae6a4f404c34e44e/artifacts/result-read.json",
+      "size_bytes": 53229,
+      "sha256": "fa8bdcd56659180f0cb2a95762ffa80c11d22e7ec87769198f77e31806d99820"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "observations/transactions/txn-a5eb4d2b64b84f2aae6a4f404c34e44e/receipt.json",
+      "size_bytes": 13354,
+      "sha256": "ae630151de1256fe7fa8a3caa289415edc7e9a84ca329bd69168cd5afe57261d"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "observations/transactions/txn-a5eb4d2b64b84f2aae6a4f404c34e44e/repair/journal.jsonl",
+      "size_bytes": 1886,
+      "sha256": "a84cf215485c835eb85645448079e35f9fee1dcc64ffa9114ff42b34ef524c69"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "observations/transactions/txn-a5eb4d2b64b84f2aae6a4f404c34e44e/repair/snapshot/fault.kicad_sch",
+      "size_bytes": 62685,
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "observations/transactions/txn-a5eb4d2b64b84f2aae6a4f404c34e44e/repair/snapshot/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "observations/transactions/txn-a5eb4d2b64b84f2aae6a4f404c34e44e/repair.lock",
+      "size_bytes": 34,
+      "sha256": "2530e5980d399597863c7a4c6fa93d64275464ee586575feb12aa66dcb7ab348"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "observations/transactions/txn-a5eb4d2b64b84f2aae6a4f404c34e44e/stage/fault.kicad_sch",
+      "size_bytes": 62825,
+      "sha256": "65ac445c70f3d79d01e485038745b308875a92f4142e22d98714b19a78a05c1a"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "observations/transactions/txn-a5eb4d2b64b84f2aae6a4f404c34e44e/stage/ops.json",
+      "size_bytes": 162,
+      "sha256": "918fac4ca6757c664681c8bc9aa3fbd0cc06066030a046eb8c8bff930c59bfdb"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "observations/transactions/txn-a5eb4d2b64b84f2aae6a4f404c34e44e/stage/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "observations/verification/cand-b94507c333fcfde5-9c5462f1da344e84803e3042e7147db6/after.net.xml",
+      "size_bytes": 37314,
+      "sha256": "899034f725ea24310ad30a430615934117ba18754e7ee4405d03f82e7e1dc864"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "observations/verification/cand-b94507c333fcfde5-9c5462f1da344e84803e3042e7147db6/export.json",
+      "size_bytes": 1297,
+      "sha256": "a5b4b92a38ee1c2dd6e9d42fbbaa49ad674030b83bafecf197607d593df43cf9"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "observations/verification/cand-b94507c333fcfde5-9c5462f1da344e84803e3042e7147db6/semantic.json",
+      "size_bytes": 536,
+      "sha256": "eb9664e281d82817961cb0dff7a24c43a692a3a8125cc2ec8425149a989bccfe"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "observations/verification/cand-f68996a18c6710e1-3895a2618108478f828a0dd15b23593a/after.net.xml",
+      "size_bytes": 37233,
+      "sha256": "47175767cbe386dc99aa043b49f6730eb1e6aa9a5db8cb27a4aed799983d81af"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "observations/verification/cand-f68996a18c6710e1-3895a2618108478f828a0dd15b23593a/export.json",
+      "size_bytes": 1297,
+      "sha256": "9298af1a6d090164d56531e3cf39c6c31bcc5bdd86ffbc60fd040d79424a9b41"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "observations/verification/cand-f68996a18c6710e1-3895a2618108478f828a0dd15b23593a/semantic.json",
+      "size_bytes": 537,
+      "sha256": "13816487e286e77c9c11e1c1f2f64bafab492b053401fc7ffe882d2066fd79a6"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "receipts/gh117-episode/34c858d872800cf664e5ed339bf2425173190d6c4f7daf9c7570f82764642236.json",
+      "size_bytes": 416,
+      "sha256": "34c858d872800cf664e5ed339bf2425173190d6c4f7daf9c7570f82764642236"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "receipts/gh117-episode/41a7405dd5cc9f4af6b14b9790f989d27bc133c34f5a959aad8a284b560b7470.json",
+      "size_bytes": 480,
+      "sha256": "41a7405dd5cc9f4af6b14b9790f989d27bc133c34f5a959aad8a284b560b7470"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "receipts/gh117-episode/b25d1c5c341ed2da77e385b97208eb26d8c9e90d19c18e63e870e3371a29e270.json",
+      "size_bytes": 416,
+      "sha256": "b25d1c5c341ed2da77e385b97208eb26d8c9e90d19c18e63e870e3371a29e270"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "receipts/gh117-episode/dbc0bd34b4a99eb942447faaf53c0b81599ecfeffcfee4fd258820b8b904d3fc.json",
+      "size_bytes": 458,
+      "sha256": "dbc0bd34b4a99eb942447faaf53c0b81599ecfeffcfee4fd258820b8b904d3fc"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "run/gh117-episode/candidate/cand-b94507c333fcfde5/.actions.jsonl",
+      "size_bytes": 339,
+      "sha256": "be67350a5149fabd57f44e26ce8a43bbc6e93994c8af951ebc902c32c2270f72"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "run/gh117-episode/candidate/cand-b94507c333fcfde5/design/fault.kicad_sch",
+      "size_bytes": 62685,
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "run/gh117-episode/candidate/cand-b94507c333fcfde5/design/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "run/gh117-episode/candidate/cand-f68996a18c6710e1/.actions.jsonl",
+      "size_bytes": 339,
+      "sha256": "f7094f34bab49ba4a01c0750ba7abdaae49a156418bcac5bc71e342a877a44e4"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "run/gh117-episode/candidate/cand-f68996a18c6710e1/design/fault.kicad_sch",
+      "size_bytes": 62825,
+      "sha256": "65ac445c70f3d79d01e485038745b308875a92f4142e22d98714b19a78a05c1a"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "run/gh117-episode/candidate/cand-f68996a18c6710e1/design/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "run/gh117-episode/trajectory/gh117-episode.jsonl",
+      "size_bytes": 2825,
+      "sha256": "bb1f4e6113dab3b9e9282f96b32e15251f5677840e6a521feef200f6830cd336"
+    },
+    {
+      "run": "gh117-real-02",
+      "path": "summary.json",
+      "size_bytes": 3595,
+      "sha256": "df6bfc255d6ed407a87c85a88355be4d355c7a8b6749db51f4f32ae01bac5e98"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "checkpoint.sqlite",
+      "size_bytes": 98304,
+      "sha256": "a33e6d86e6cb30a17e675928ce3ae961b2b1d5b5b99072160240dc37a2095066"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "implementation-sha256.json",
+      "size_bytes": 589,
+      "sha256": "d50b51510120ac86e8a593f24294f6e3ca55c4cd1999963f808a2d55d6e1fb0f"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "observations/toolchain.json",
+      "size_bytes": 60501,
+      "sha256": "e1a2ac1b9e32794d0c6bf4b121f426f389311d5396226d85ee8638d3d26202c2"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "observations/transactions/txn-90d08a9412b74bd2bdb17e8cfd65e4d6/artifacts/backup/fault.kicad_sch.bak",
+      "size_bytes": 62685,
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "observations/transactions/txn-90d08a9412b74bd2bdb17e8cfd65e4d6/artifacts/kicad_verify/txn-90d08a9412b74bd2bdb17e8cfd65e4d6/exports/txn-90d08a9412b74bd2bdb17e8cfd65e4d6/after/after.net.xml",
+      "size_bytes": 36363,
+      "sha256": "ced8426d30c1534bd8a6e4e5d6725cedded95b29f1a2f6e88632948e4a221395"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "observations/transactions/txn-90d08a9412b74bd2bdb17e8cfd65e4d6/artifacts/kicad_verify/txn-90d08a9412b74bd2bdb17e8cfd65e4d6/exports/txn-90d08a9412b74bd2bdb17e8cfd65e4d6/before/before.net.xml",
+      "size_bytes": 36664,
+      "sha256": "973348b6c6e90464da07628422460b3a29e03f41b3b637efbdbfc08e439b109e"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "observations/transactions/txn-90d08a9412b74bd2bdb17e8cfd65e4d6/artifacts/kicad_verify/txn-90d08a9412b74bd2bdb17e8cfd65e4d6/thin_verification_txn-90d08a9412b74bd2bdb17e8cfd65e4d6.json",
+      "size_bytes": 7877,
+      "sha256": "acf71e02fbb6a0b1521ea17ce657112fad0c1d7548015c9acf608ce1f1169769"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "observations/transactions/txn-90d08a9412b74bd2bdb17e8cfd65e4d6/artifacts/request-apply_exception.json",
+      "size_bytes": 409,
+      "sha256": "655675b248c5f777383bb4a7e067cce6256cf3783c5d5474ee749257211ebfa2"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "observations/transactions/txn-90d08a9412b74bd2bdb17e8cfd65e4d6/artifacts/request-read.json",
+      "size_bytes": 147,
+      "sha256": "735d0eb11d8c5f17bb0b313644e4608a90ecaf05cfe1719b36606de603c85747"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "observations/transactions/txn-90d08a9412b74bd2bdb17e8cfd65e4d6/artifacts/result-apply_exception.json",
+      "size_bytes": 538,
+      "sha256": "387fa35c58272457a3f9e6dd3786a58a2b040011f8003ef8e46ace14860f58ba"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "observations/transactions/txn-90d08a9412b74bd2bdb17e8cfd65e4d6/artifacts/result-read.json",
+      "size_bytes": 53229,
+      "sha256": "fa8bdcd56659180f0cb2a95762ffa80c11d22e7ec87769198f77e31806d99820"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "observations/transactions/txn-90d08a9412b74bd2bdb17e8cfd65e4d6/receipt.json",
+      "size_bytes": 13354,
+      "sha256": "cf3391be6def1b17875ed0b5b133bf223ac7279be2ad583dc6d9624ba21ec07e"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "observations/transactions/txn-90d08a9412b74bd2bdb17e8cfd65e4d6/repair/journal.jsonl",
+      "size_bytes": 1886,
+      "sha256": "31516ddd09bb411e86b773eebed016b2cb554336a3426d8ba57ff8e3b0c96924"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "observations/transactions/txn-90d08a9412b74bd2bdb17e8cfd65e4d6/repair/snapshot/fault.kicad_sch",
+      "size_bytes": 62685,
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "observations/transactions/txn-90d08a9412b74bd2bdb17e8cfd65e4d6/repair/snapshot/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "observations/transactions/txn-90d08a9412b74bd2bdb17e8cfd65e4d6/repair.lock",
+      "size_bytes": 34,
+      "sha256": "2530e5980d399597863c7a4c6fa93d64275464ee586575feb12aa66dcb7ab348"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "observations/transactions/txn-90d08a9412b74bd2bdb17e8cfd65e4d6/stage/fault.kicad_sch",
+      "size_bytes": 62825,
+      "sha256": "65ac445c70f3d79d01e485038745b308875a92f4142e22d98714b19a78a05c1a"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "observations/transactions/txn-90d08a9412b74bd2bdb17e8cfd65e4d6/stage/ops.json",
+      "size_bytes": 162,
+      "sha256": "918fac4ca6757c664681c8bc9aa3fbd0cc06066030a046eb8c8bff930c59bfdb"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "observations/transactions/txn-90d08a9412b74bd2bdb17e8cfd65e4d6/stage/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "observations/verification/cand-b94507c333fcfde5-93663b7f9fc04d88a8b6b260d78c87d0/after.net.xml",
+      "size_bytes": 37314,
+      "sha256": "455b63acf189cc3318554af9ad930cb0da90a551796f12e99284afb4a23a080d"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "observations/verification/cand-b94507c333fcfde5-93663b7f9fc04d88a8b6b260d78c87d0/export.json",
+      "size_bytes": 1297,
+      "sha256": "af5bb4eb164e211054efbc545c74a6cc14148f068a37910883274e3bf98de546"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "observations/verification/cand-b94507c333fcfde5-93663b7f9fc04d88a8b6b260d78c87d0/semantic.json",
+      "size_bytes": 536,
+      "sha256": "330adea0e031ab1c65f1cbfcf911bd33c436600076bae4336e3ecc92ba4abb8d"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "observations/verification/cand-f68996a18c6710e1-0f00e8a4459844899034a87495a9f93c/after.net.xml",
+      "size_bytes": 37233,
+      "sha256": "c55d02906c6b4451f6f9779c61be79eb86ba0973197f314a23d87a022c70a6be"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "observations/verification/cand-f68996a18c6710e1-0f00e8a4459844899034a87495a9f93c/export.json",
+      "size_bytes": 1297,
+      "sha256": "3666b034c545419a6f3d3d9500205318278f0909d32b2a7f01415a5ef2ffdcc3"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "observations/verification/cand-f68996a18c6710e1-0f00e8a4459844899034a87495a9f93c/semantic.json",
+      "size_bytes": 537,
+      "sha256": "4d6a8e94f760103b8b3fca88ae02430ea707787813676e081062b8c4f5d672d7"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "receipts/gh117-episode/41a7405dd5cc9f4af6b14b9790f989d27bc133c34f5a959aad8a284b560b7470.json",
+      "size_bytes": 480,
+      "sha256": "41a7405dd5cc9f4af6b14b9790f989d27bc133c34f5a959aad8a284b560b7470"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "receipts/gh117-episode/d6b8ee147a5652b031218c333b6f26ce98bcdadd689b4be066c6e5f2052e312a.json",
+      "size_bytes": 416,
+      "sha256": "d6b8ee147a5652b031218c333b6f26ce98bcdadd689b4be066c6e5f2052e312a"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "receipts/gh117-episode/dbc0bd34b4a99eb942447faaf53c0b81599ecfeffcfee4fd258820b8b904d3fc.json",
+      "size_bytes": 458,
+      "sha256": "dbc0bd34b4a99eb942447faaf53c0b81599ecfeffcfee4fd258820b8b904d3fc"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "receipts/gh117-episode/e72baef65b0d0a30c4904089d44b80068945349dce955667048ff96956b3c93f.json",
+      "size_bytes": 416,
+      "sha256": "e72baef65b0d0a30c4904089d44b80068945349dce955667048ff96956b3c93f"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "run/gh117-episode/candidate/cand-b94507c333fcfde5/.actions.jsonl",
+      "size_bytes": 339,
+      "sha256": "2867e07683d86141221a9c019134a2c67e9c20b8b24165d6695bff028febb2af"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "run/gh117-episode/candidate/cand-b94507c333fcfde5/design/fault.kicad_sch",
+      "size_bytes": 62685,
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "run/gh117-episode/candidate/cand-b94507c333fcfde5/design/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "run/gh117-episode/candidate/cand-f68996a18c6710e1/.actions.jsonl",
+      "size_bytes": 339,
+      "sha256": "50c5c51421c737afe072de5a7ca04d7f32727405c51aea9324476c1fc5e7a473"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "run/gh117-episode/candidate/cand-f68996a18c6710e1/design/fault.kicad_sch",
+      "size_bytes": 62825,
+      "sha256": "65ac445c70f3d79d01e485038745b308875a92f4142e22d98714b19a78a05c1a"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "run/gh117-episode/candidate/cand-f68996a18c6710e1/design/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "run/gh117-episode/trajectory/gh117-episode.jsonl",
+      "size_bytes": 2801,
+      "sha256": "d545883a2ae591ac7636841770ade10c7b61a58b8add25fde9b99dad0f885542"
+    },
+    {
+      "run": "gh117-real-03",
+      "path": "summary.json",
+      "size_bytes": 3549,
+      "sha256": "805cc124dc13cd72537178d44022e1923d3877f23dc644d9294a5ab95f499118"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "checkpoint.sqlite",
+      "size_bytes": 98304,
+      "sha256": "bf7997eb0d80135515ae728a1abca57e8810086ecf3283eb863a7e0eed5fa018"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "implementation-sha256.json",
+      "size_bytes": 589,
+      "sha256": "29496beb2d582226a0b28fd47a6e95c1d10f77a360ee2dd06a8d25a41316ac26"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "observations/toolchain.json",
+      "size_bytes": 60501,
+      "sha256": "e1a2ac1b9e32794d0c6bf4b121f426f389311d5396226d85ee8638d3d26202c2"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "observations/transactions/txn-d76e2664056b41faac2670b3c6b3986b/artifacts/backup/fault.kicad_sch.bak",
+      "size_bytes": 62685,
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "observations/transactions/txn-d76e2664056b41faac2670b3c6b3986b/artifacts/kicad_verify/txn-d76e2664056b41faac2670b3c6b3986b/exports/txn-d76e2664056b41faac2670b3c6b3986b/after/after.net.xml",
+      "size_bytes": 36363,
+      "sha256": "f543579e6b2214005f830f9b33a422dd6595153ea6f4922d83874c4179cc5286"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "observations/transactions/txn-d76e2664056b41faac2670b3c6b3986b/artifacts/kicad_verify/txn-d76e2664056b41faac2670b3c6b3986b/exports/txn-d76e2664056b41faac2670b3c6b3986b/before/before.net.xml",
+      "size_bytes": 36664,
+      "sha256": "d4c3f4c2624ec9b15cd2f244551ca8728f6cee4f4b008a97afe666de26f0ead2"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "observations/transactions/txn-d76e2664056b41faac2670b3c6b3986b/artifacts/kicad_verify/txn-d76e2664056b41faac2670b3c6b3986b/thin_verification_txn-d76e2664056b41faac2670b3c6b3986b.json",
+      "size_bytes": 7877,
+      "sha256": "bf6902318adf054fd88d29e8b902d2661e422f29dc15cd9f1af8437c420eb975"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "observations/transactions/txn-d76e2664056b41faac2670b3c6b3986b/artifacts/request-apply_exception.json",
+      "size_bytes": 409,
+      "sha256": "284581879fba5bd021d4667c6d4ee0724476c62fcb349006afe33b999cecb1ef"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "observations/transactions/txn-d76e2664056b41faac2670b3c6b3986b/artifacts/request-read.json",
+      "size_bytes": 147,
+      "sha256": "582dc999f6c6e2d9e896c8e7df7e67ea771c2c76f25cdf2ab45d198ddedd034b"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "observations/transactions/txn-d76e2664056b41faac2670b3c6b3986b/artifacts/result-apply_exception.json",
+      "size_bytes": 538,
+      "sha256": "387fa35c58272457a3f9e6dd3786a58a2b040011f8003ef8e46ace14860f58ba"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "observations/transactions/txn-d76e2664056b41faac2670b3c6b3986b/artifacts/result-read.json",
+      "size_bytes": 53229,
+      "sha256": "fa8bdcd56659180f0cb2a95762ffa80c11d22e7ec87769198f77e31806d99820"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "observations/transactions/txn-d76e2664056b41faac2670b3c6b3986b/receipt.json",
+      "size_bytes": 13354,
+      "sha256": "203d17ecd0aacd1c4aed4de9a393937daab513fb0fce8738a67b19a5817c89b9"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "observations/transactions/txn-d76e2664056b41faac2670b3c6b3986b/repair/journal.jsonl",
+      "size_bytes": 1886,
+      "sha256": "2ac0472d6530a94319685274486c6b5f88af0aeba8aa9d22ce95899319e13c3f"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "observations/transactions/txn-d76e2664056b41faac2670b3c6b3986b/repair/snapshot/fault.kicad_sch",
+      "size_bytes": 62685,
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "observations/transactions/txn-d76e2664056b41faac2670b3c6b3986b/repair/snapshot/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "observations/transactions/txn-d76e2664056b41faac2670b3c6b3986b/repair.lock",
+      "size_bytes": 34,
+      "sha256": "2530e5980d399597863c7a4c6fa93d64275464ee586575feb12aa66dcb7ab348"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "observations/transactions/txn-d76e2664056b41faac2670b3c6b3986b/stage/fault.kicad_sch",
+      "size_bytes": 62825,
+      "sha256": "65ac445c70f3d79d01e485038745b308875a92f4142e22d98714b19a78a05c1a"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "observations/transactions/txn-d76e2664056b41faac2670b3c6b3986b/stage/ops.json",
+      "size_bytes": 162,
+      "sha256": "918fac4ca6757c664681c8bc9aa3fbd0cc06066030a046eb8c8bff930c59bfdb"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "observations/transactions/txn-d76e2664056b41faac2670b3c6b3986b/stage/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "observations/verification/cand-b94507c333fcfde5-ba7ca286e265463d80e085cc437e4d64/after.net.xml",
+      "size_bytes": 37314,
+      "sha256": "d37f7febb41d5678527a5cad4f94c5930d985074a2bdcd7ff3bad22fe94d3e3d"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "observations/verification/cand-b94507c333fcfde5-ba7ca286e265463d80e085cc437e4d64/export.json",
+      "size_bytes": 1297,
+      "sha256": "a2fe292747a71361d6b6543d264a446248bf3a04beedb814945812bb0601a795"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "observations/verification/cand-b94507c333fcfde5-ba7ca286e265463d80e085cc437e4d64/semantic.json",
+      "size_bytes": 536,
+      "sha256": "7c9dc7b14750b9eae9a2d2ff10cbd7e8cfd82b756838fffdf2cf260b0ec5e2d9"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "observations/verification/cand-f68996a18c6710e1-69b6441b79fb494b9db45049f3a5a8c3/after.net.xml",
+      "size_bytes": 37233,
+      "sha256": "2a8cf0d8c9e5e5ef3a1b16335cb8d3114a9ca19df2022eede28940e2bb660dac"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "observations/verification/cand-f68996a18c6710e1-69b6441b79fb494b9db45049f3a5a8c3/export.json",
+      "size_bytes": 1297,
+      "sha256": "6dee3108fcd50d2cad59841011a8b5e496f1360829908d898d3d4b69c42806aa"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "observations/verification/cand-f68996a18c6710e1-69b6441b79fb494b9db45049f3a5a8c3/semantic.json",
+      "size_bytes": 537,
+      "sha256": "9c5214e2494cdd28a47efad1e44d75649c97af701f44d6842389381722ee7b99"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "receipts/gh117-episode/41a7405dd5cc9f4af6b14b9790f989d27bc133c34f5a959aad8a284b560b7470.json",
+      "size_bytes": 480,
+      "sha256": "41a7405dd5cc9f4af6b14b9790f989d27bc133c34f5a959aad8a284b560b7470"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "receipts/gh117-episode/43c73835091ded00bc3d1161a7c47a5e313f80ab0d6a0da65270977d6fe82660.json",
+      "size_bytes": 416,
+      "sha256": "43c73835091ded00bc3d1161a7c47a5e313f80ab0d6a0da65270977d6fe82660"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "receipts/gh117-episode/68c188f35d646d2a7365afe7d03b5aa5df95c09d76b1def60de1ca43cd4bd006.json",
+      "size_bytes": 416,
+      "sha256": "68c188f35d646d2a7365afe7d03b5aa5df95c09d76b1def60de1ca43cd4bd006"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "receipts/gh117-episode/dbc0bd34b4a99eb942447faaf53c0b81599ecfeffcfee4fd258820b8b904d3fc.json",
+      "size_bytes": 458,
+      "sha256": "dbc0bd34b4a99eb942447faaf53c0b81599ecfeffcfee4fd258820b8b904d3fc"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "run/gh117-episode/candidate/cand-b94507c333fcfde5/.actions.jsonl",
+      "size_bytes": 339,
+      "sha256": "1e87408d86ba91956169241c322060e69383c2f48ba66c3abfb6b75e9f2bc051"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "run/gh117-episode/candidate/cand-b94507c333fcfde5/design/fault.kicad_sch",
+      "size_bytes": 62685,
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "run/gh117-episode/candidate/cand-b94507c333fcfde5/design/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "run/gh117-episode/candidate/cand-f68996a18c6710e1/.actions.jsonl",
+      "size_bytes": 339,
+      "sha256": "2ac24f48f94bef4cc20e3eecb7bb4622a24a7a91145ce23bfe6a3e73ca2c32c9"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "run/gh117-episode/candidate/cand-f68996a18c6710e1/design/fault.kicad_sch",
+      "size_bytes": 62825,
+      "sha256": "65ac445c70f3d79d01e485038745b308875a92f4142e22d98714b19a78a05c1a"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "run/gh117-episode/candidate/cand-f68996a18c6710e1/design/src/firmware/include/sht30.h",
+      "size_bytes": 1440,
+      "sha256": "343e23f2285de6cb3a18a02654ca9bc7bfd60fec6b8a8231f48593d9d3b7a1d2"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "run/gh117-episode/trajectory/gh117-episode.jsonl",
+      "size_bytes": 2802,
+      "sha256": "feb3450c4dd9fb7d043f0b5f9b62f4dbd737fcfa18320740f3054c7c6b2bd1c6"
+    },
+    {
+      "run": "gh117-real-04",
+      "path": "summary.json",
+      "size_bytes": 3594,
+      "sha256": "3be2bd2aa88aba4d4eafc173674970dae598c1e48454e8adf9d407b35cfa6e4c"
+    }
+  ],
+  "trajectory_is_verdict": false,
+  "human_review": "PENDING_HUMAN_REVIEW"
+}

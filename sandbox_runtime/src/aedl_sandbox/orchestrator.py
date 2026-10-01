@@ -17,7 +17,7 @@ import hashlib
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
@@ -27,6 +27,7 @@ from .protocol import (
     EvidenceEvent,
     EvidenceStatus,
     ExecutorPort,
+    Finding,
     HumanApprovalReceipt,
     Outcome,
     PolicyPort,
@@ -139,6 +140,7 @@ class SandboxOrchestrator:
         subject: Mapping[str, Any],
         max_repairs: int = 3,
         checkpointer: Any,
+        stall_recovery: Callable[[str, str, tuple[Finding, ...]], bool] | None = None,
     ) -> None:
         for label, port, port_type in (
             ("policy", policy, PolicyPort),
@@ -155,6 +157,8 @@ class SandboxOrchestrator:
             raise ValueError("a checkpointer is required so interrupts can resume")
         if int(max_repairs) < 0:
             raise ValueError("max_repairs must be >= 0")
+        if stall_recovery is not None and not callable(stall_recovery):
+            raise TypeError("stall_recovery must be callable or None")
         self._policy = policy
         self._executor = executor
         self._verifier = verifier
@@ -166,6 +170,7 @@ class SandboxOrchestrator:
         self._bundle_hash = bundle_hash
         self._subject = dict(subject)
         self._max_repairs = int(max_repairs)
+        self._stall_recovery = stall_recovery
         self._config = {"configurable": {"thread_id": run_id}}
         self._recursion_limit = 6 * (self._max_repairs + 1) + 10
         self._graph = self._build_graph().compile(checkpointer=checkpointer)
@@ -505,6 +510,31 @@ class SandboxOrchestrator:
         previous = state.get("previous_finding_fingerprint") or ""
         stall_count = state.get("stall_count", 0)
         if previous and fingerprint == previous:
+            # This optional callback only schedules advice for the existing
+            # repair node; it must not call a model or execute a repair here.
+            # The allowance lives in checkpointed state rather than in the
+            # callback instance, so reconstruction cannot grant a new retry.
+            if (
+                self._stall_recovery is not None
+                and stall_count == 0
+                and state.get("repair_count", 0)
+                < state.get("max_repairs", self._max_repairs)
+            ):
+                try:
+                    recover = self._stall_recovery(
+                        self._run_id,
+                        state["candidate_id"],
+                        decode_findings(state.get("findings") or []),
+                    )
+                except Exception:
+                    # A broken scheduler cannot authorize another repair.
+                    recover = False
+                if recover is True:
+                    return {
+                        "phase": PHASE_REPAIR,
+                        "previous_finding_fingerprint": fingerprint,
+                        "stall_count": stall_count + 1,
+                    }
             return {
                 "phase": PHASE_TERMINAL,
                 "terminal_reason": TERMINAL_REPAIR_STALLED,

@@ -1,0 +1,67 @@
+task: GH-117
+base:
+  branch: codex/arh-adaptive-expert
+  sha: dbde75cd59e1d00a88d72b03e4239b1255b973e2
+goal: Controlled read-only investigation and bounded on-demand specialists for ARH.
+scope: |
+  Owner session 2026-10-01: 我同意你的设计，向下推进，此阶段不要超过3个agent.
+  Implement the approved staged design with at most 3 development agents and
+  at most 3 runtime agents. Add optional bounded stall recovery; keep the
+  default single-agent stop behavior and all proposal/policy/verification gates.
+allowed_paths:
+  - sandbox_runtime/src/aedl_sandbox/arh/adaptive.py
+  - sandbox_runtime/src/aedl_sandbox/orchestrator.py
+  - sandbox_runtime/src/aedl_sandbox/adapters.py
+  - sandbox_runtime/src/aedl_sandbox/nativeports.py
+  - sandbox_runtime/tests/arh/test_arh_adaptive.py
+  - sandbox_runtime/tests/orchestrator/test_stall_recovery.py
+  - sandbox_runtime/tests/toolports/test_native_episode.py
+  - tools/run_arh_episode.py
+  - tasks/GH-117.yaml
+  - docs/specs/AEDL_AGENT_RUNTIME_RFC.md
+  - docs/compliance/ai-usage/**
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/compliance/DECISIONS.md
+  - docs/evidence/EVIDENCE_INDEX.md
+  - docs/evidence/gh117/**
+forbidden_paths:
+  - delivery/**
+  - gates/**
+  - .github/**
+  - sandbox_runtime/contracts/**
+  - sandbox_runtime/src/aedl_sandbox/protocol.py
+  - sandbox_runtime/src/aedl_sandbox/state.py
+  - sandbox_runtime/src/aedl_sandbox/policy/**
+  - sandbox_runtime/src/aedl_sandbox/trust/**
+  - sandbox_runtime/src/aedl_sandbox/arh/repair_agent.py
+  - sandbox_runtime/src/aedl_sandbox/arh/schema.py
+  - sandbox_runtime/src/aedl_sandbox/arh/budget.py
+  - sandbox_runtime/src/aedl_sandbox/arh/model_adapter.py
+impact_analysis:
+  direct_modifications: [adaptive repair module, optional stall callback, assembly, native episode runner, tests, records]
+  potentially_affected: [repair retry routing, context inputs, model call accounting]
+  explicitly_not_touched: [proposal and state schemas, policy and trust engines, independent contracts, production hardware]
+  risk: MEDIUM
+change_budget:
+  expected_files: 18
+  expected_modules: [sandbox-runtime, episode-runner, tests, task, compliance, evidence]
+  cross_module: true
+  contract_change: true
+  evidence_semantics_change: false
+acceptance: |
+  Operator-registered read-only resource IDs, measured hashes, bounded content,
+  shared budget, agent roster <=3, source-cited untrusted specialist advice,
+  one checkpoint-bounded stall recovery within max_repairs, unchanged default.
+  Run admission, learning gate, meaningful regression tests, development gate
+  and real model native investigation episode. No benchmark uplift claim.
+exceptions:
+  allow_dirty:
+    granted_by: Yenefa
+    decision_ref: "Owner session 2026-10-01: 我同意你的设计，向下推进，此阶段不要超过3个agent"
+    reason: Authorized GH-117 changes and records only
+  allow_drift:
+    granted_by: Yenefa
+    decision_ref: "Owner session 2026-10-01: 我同意你的设计，向下推进，此阶段不要超过3个agent"
+    reason: GH-117 descendant commits only
+escalation:
+  owner: Yenefa

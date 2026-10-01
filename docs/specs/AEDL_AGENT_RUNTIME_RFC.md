@@ -422,3 +422,15 @@ Harness 校验顺序（**两道都在 `propose` 之前**，因为带病提交必
 **仓库事实（静态阅读，NOT_RUN）**：`sandbox_runtime/src/aedl_sandbox/protocol.py`（L86-91 `Finding`、L94-112 `PolicyRequest`、L133-156 `VerificationResult`/`EvidenceEvent`/`EvidenceReceipt`、L187-232 V2 信任类型、L235-258 五个 port）、`state.py`（L33-60 `SandboxState`、L117-124 `encode_receipt`、L127-134 `finding_fingerprint`）、`orchestrator.py`（L293-306 路由、L310-366 preflight/execute、L454-537 verify/stall/repair、L485-500 PASS→human_review）、`adapters.py`（L94-196 `PolicyEnginePort` 与 envelope 映射）、`policy/engine.py`（L63-117 `SUBJECT_SPECS`、L303-315 动作词表封闭）、`docs/compliance/DECISIONS.md`（ADR-008、ADR-014、ADR-015）。
 
 **状态**：`PENDING_HUMAN_REVIEW`。本 RFC 未运行任何测试、未做任何 git 操作。
+
+
+## GH-117 / ADR-021：可选受控查证与按需专家阶段
+
+Owner 已明确同意推进，运行时与开发协作各不超过三个 agent。本文此前 V1 的无 inspect / 无 critic 决策仍描述默认模式；以下是显式配置的扩展，而不是隐式增加 V1 权限。
+
+- 调查模型只选操作者注册的资源 ID，提供者是主机只读投影函数。禁止模型路径、任意命令、网络、候选或合同写入。投影绑定测得的源 SHA、已批准 evidence ID 与内容上限；未知 ID、漂移或伪造引用拒绝。
+- 一名 lead、最多两名专业角色。专业角色由操作者装配，模型不能 spawn 或选 port。专家输出是未可信建议，不生成 authority、VerificationResult 或审批。
+- 所有角色共用调用、token 和时限预算；trajectory 记录角色、资源 ID 与 SHA、建议引用和恢复事件，仍不作为正式 Evidence。
+- 只在 repeated finding 且 max_repairs 尚有余额时调用可选 stall_recovery 调度回调。stall_count checkpoint 为一次性恢复界限；默认未配置回调时原逻辑不变。恢复不新增 graph node 或 state/proposal schema。
+- 最终提案继续走现有静态校验、policy、single writer 与独立 verifier。主 agent 或专家均无执行/晋升能力。
+- 评测阶段必须使用同故障、同独立 oracle 和明确相同预算，报告真实失败、回归及成本。此实现与单原生案例不能证明多 agent 通用有效。

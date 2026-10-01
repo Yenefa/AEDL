@@ -104,12 +104,14 @@ class NativeEpisodePolicy:
 
 class NativeEpisodePorts:
     """Concrete executor and read-only verifier sharing only host configuration."""
-    def __init__(self, repo_root, report_root, worker_python, kicad_cli):
+    def __init__(self, repo_root, report_root, worker_python, kicad_cli, *, neutral_findings=False):
         from gates import schematic_semantics
         self.repo = Path(repo_root).resolve()
         self.report = Path(report_root).resolve()
         self.source = self.repo / "tests/fixtures/repair_pr1/native/DC-02/fault.kicad_sch"
         self.contract_path = self.repo / "gates/contracts/m2_schematic_contract_v1.json"
+        self.firmware_path = self.repo / "src/firmware/include/sht30.h"
+        self.firmware_sha = sha(self.firmware_path)
         self.source_sha = sha(self.source)
         self.contract_sha = sha(self.contract_path)
         self.contract = json.loads(self.contract_path.read_text(encoding="utf-8"))
@@ -121,6 +123,9 @@ class NativeEpisodePorts:
         self.observations = []
         self.transactions = []
         self.identities = {}
+        self.neutral_findings = neutral_findings
+        self.inspection_paths = {}
+        self.inspection_candidate = None
         save(self.report / "toolchain.json", self.binding)
 
     def execute(self, request):
@@ -130,7 +135,8 @@ class NativeEpisodePorts:
         if decision.outcome != Outcome.ALLOW:
             return ExecutionResult(False, request.action_id, root.name,
                 findings=(Finding(decision.reason_code, "outside bounded native scope", "native"),))
-        if sha(self.source) != self.source_sha or sha(self.contract_path) != self.contract_sha:
+        if (sha(self.source) != self.source_sha or sha(self.contract_path) != self.contract_sha
+                or sha(self.firmware_path) != self.firmware_sha):
             return ExecutionResult(False, request.action_id, root.name,
                 findings=(Finding("NATIVE_INPUT_DRIFT", "frozen source or contract changed", "native"),))
         design = root / "design"
@@ -139,7 +145,7 @@ class NativeEpisodePorts:
         shutil.copyfile(self.source, target)
         firmware = design / "src/firmware/include/sht30.h"
         firmware.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(self.repo / "src/firmware/include/sht30.h", firmware)
+        shutil.copyfile(self.firmware_path, firmware)
         self.identities[str(root)] = (request.run_id, root.name)
         _, subject, _ = design_envelope(request)
         if subject["function"] == "GND":
@@ -220,8 +226,94 @@ class NativeEpisodePorts:
             "expected": expected, "observed": actual, "status": "PASS" if passed else "FAIL"}
         save(report / "semantic.json", result)
         self.observations.append(result)
+        self.inspection_paths[candidate_id] = report / "after.net.xml"
+        self.inspection_candidate = root
+        if self.neutral_findings:
+            # Diagnostic context deliberately omits the remedy. The independent
+            # verdict/report is unchanged; the lead must inspect approved sources.
+            finding = Finding("SHT30_ADDRESS", "Independent address contract "
+                + ("satisfied" if passed else "failed; inspect measured sources"),
+                "independent-M2-contract", details={"pin": "U2.2", "observed": actual})
+            return VerificationResult(VerificationStatus.PASS if passed else VerificationStatus.FAIL,
+                                      candidate_id, (finding,), actor_id="kicad-contract")
         finding = Finding("SHT30_ADDRESS", "SHT30 ADDR U2.2 must be GND for the fixed 0x44 address; "
             + ("fresh KiCad netlist confirms GND" if passed else "fresh KiCad netlist shows a floating pin"),
             "independent-M2-contract", details=result)
         return VerificationResult(VerificationStatus.PASS if passed else VerificationStatus.FAIL,
                                   candidate_id, (finding,), actor_id="kicad-contract")
+
+    def investigation_resources(self):
+        """Host-fixed projections; models select IDs, never filesystem paths."""
+        from gates import schematic_semantics
+        from .workspace import CandidateWorkspace, is_link_like
+
+        def checked_path(path, boundary):
+            path = Path(path)
+            for part in (path, *path.parents):
+                if is_link_like(part):
+                    raise ValueError("inspection source contains an alias")
+                if part == boundary:
+                    break
+            return CandidateWorkspace(boundary)._ensure_within(path, boundary, "inspection source")
+
+        def bound_candidate(ctx):
+            root = self.inspection_candidate
+            if root is None or str(root) not in self.identities:
+                raise ValueError("inspection candidate is not bound")
+            if self.observations[-1]["candidate_id"] != root.name:
+                raise ValueError("inspection candidate is not current")
+            if self.identities[str(root)] != (ctx.verification_ref.get("run_id"),
+                                              ctx.verification_ref.get("candidate_id")):
+                raise ValueError("inspection context differs from current candidate")
+            checked_path(root, root)
+            source = checked_path(root / "design/fault.kicad_sch", root)
+            if sha(source) != self.observations[-1]["source_sha256"]:
+                raise ValueError("inspection candidate source drift")
+            return root
+
+        def projection(content, source, evidence_ids, expected_sha):
+            source_sha = sha(source)
+            if source_sha != expected_sha:
+                raise ValueError("inspection source changed during projection")
+            return {"content": content,
+                    "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+                    "source_sha256": source_sha, "evidence_ids": evidence_ids}
+
+        def current_netlist(ctx):
+            root = bound_candidate(ctx)
+            path = checked_path(self.inspection_paths[root.name], self.report)
+            record = next(o for o in reversed(self.observations) if o["candidate_id"] == root.name)
+            if sha(root / "design/fault.kicad_sch") != record["source_sha256"]:
+                raise ValueError("inspection candidate source drift")
+            if sha(path) != record["netlist_sha256"]:
+                raise ValueError("inspection netlist drift")
+            # This semantic value came from the independent fresh export. Its
+            # measured XML binding is checked before and after projection.
+            actual = copy.deepcopy(record["observed"])
+            return projection(json.dumps({"pin": "U2.2", "observed": actual}),
+                              path, ["SHT30_ADDRESS"], record["netlist_sha256"])
+
+        def address_contract(ctx):
+            bound_candidate(ctx)
+            checked_path(self.contract_path, self.repo)
+            if sha(self.contract_path) != self.contract_sha:
+                raise ValueError("inspection contract drift")
+            return projection(json.dumps(self.rule, ensure_ascii=False), self.contract_path,
+                              ["SHT30_ADDRESS", "SHT3X_DIS_DATASHEET"], self.contract_sha)
+
+        def firmware_address(ctx):
+            root = bound_candidate(ctx)
+            path = checked_path(root / "design/src/firmware/include/sht30.h", root)
+            canonical = checked_path(self.firmware_path, self.repo)
+            # A changed candidate must not masquerade as the approved firmware.
+            if sha(path) != self.firmware_sha or sha(canonical) != self.firmware_sha:
+                raise ValueError("inspection firmware drift")
+            raw = path.read_bytes()
+            if hashlib.sha256(raw).hexdigest() != self.firmware_sha:
+                raise ValueError("inspection firmware drift")
+            content = "\n".join(line for line in raw.decode("utf-8").splitlines()
+                                if "SHT30_ADDR" in line or "0x44" in line)
+            return projection(content, path, ["SHT30_ADDRESS"], self.firmware_sha)
+
+        return {"current_netlist": current_netlist, "address_contract": address_contract,
+                "firmware_address": firmware_address}

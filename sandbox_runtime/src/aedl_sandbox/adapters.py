@@ -735,7 +735,7 @@ class ArhContextInputs:
             contract_ref=dict(self._contract_ref),
             subject_frozen=dict(self._subject),
             fingerprint_state=dict(self._fingerprint_state),
-            verification_ref=dict(self._verification_ref),
+            verification_ref={**self._verification_ref, "run_id": run_id, "candidate_id": candidate_id},
             allowlist=dict(self._allowlist),
             action_schema=derive_proposal_action_schema(),
         )
@@ -758,6 +758,8 @@ def build_arh_orchestrator(
     budget: BudgetStop | None = None,
     run_dir: Path | str | None = None,
     domain_id: str = "EDD-001",
+    investigation_resources: Mapping[str, Any] | None = None,
+    specialist_models: Mapping[str, ModelAdapter] | None = None,
 ) -> SandboxOrchestrator:
     """Assemble a REAL orchestrator whose repair port is the ARH agent.
 
@@ -787,6 +789,15 @@ def build_arh_orchestrator(
     # N4: the recorder owns its own directory under the run dir. It is never the
     # receipt root, so a trajectory can never be read back as a verdict.
     trajectory = TrajectoryRecorder(run_dir, run_id)
+    adaptive = None
+    if specialist_models and investigation_resources is None:
+        raise ValueError("specialists require operator-registered investigation resources")
+    if investigation_resources is not None:
+        from .arh.adaptive import AdaptiveRepairAgent
+        adaptive = AdaptiveRepairAgent(
+            model, resources=investigation_resources,
+            experts=specialist_models or {}, trajectory=trajectory,
+        )
     repair = LLMRepairPort(
         model=model,
         inputs_provider=ArhContextInputs(
@@ -797,6 +808,7 @@ def build_arh_orchestrator(
         ),
         trajectory=trajectory,
         budget=budget if budget is not None else BudgetStop(BudgetConfig()),
+        agent=adaptive,
     )
     return SandboxOrchestrator(
         policy=policy,
@@ -819,6 +831,7 @@ def build_arh_orchestrator(
         subject=subject,
         max_repairs=max_repairs,
         checkpointer=checkpointer,
+        stall_recovery=adaptive.schedule_second_opinion if adaptive is not None else None,
     )
 
 
