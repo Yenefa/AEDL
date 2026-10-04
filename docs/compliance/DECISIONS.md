@@ -1211,6 +1211,29 @@ Issue #73）。
 - 接管时的可复现基线（本机实跑，`py -3.9`）：`unittest discover -s tests` → **1226 tests OK (skipped=30)**；`python -m tools.dev_gate` → **status=pass, exit_code=0, 5/5 checks**（main_tests / sandbox_tests 574 OK skipped=3 expected-failures=1 / secret_scan 634 files / ai_usage_ledger 141 entries in sync）。
 - 债务盘点：OPEN PR 7 张（0/7 绿、6/7 CONFLICTING）；OPEN issue 11 张（仅 #32 真正未决）；远端陈旧分支 80 条；`decision_ref` 可解析率 4/64。
 
+### 2026-10-04 更正：决策 1 与「清醒条款 2」中的 CI 陈述不成立（追加，不改写原文）
+
+本 ADR 初版把 GitHub Actions 记为「自 2026-09-21 起因账户计费失败整体停摆，**「CI 绿」在
+当前账户状态下不可达成**」，并据此把本地 `dev_gate` 写成唯一可信门禁。**该陈述是错的**，
+现更正：
+
+| 实测项 | 结果 |
+| --- | --- |
+| 自托管 runner | 存在，`runner_name: actions-runner-aedl`（**自托管不计费**） |
+| master 在 `2bf2c7a` | `conclusion=success`（PR #120 合并后的那一次 push） |
+| 连续成功区间 | 2026-09-29 起多轮 success（`a9297161` / `6deb848` / `e071e4b` / `2bf2c7a`） |
+| 因计费失败的腿 | 仅 GitHub 托管的 `ubuntu-latest` / `windows-latest`（`ci.yml` 已于 `f7d483d` 改为 `matrix: os: [self-hosted]`），**不是 CI 整体** |
+| `2fa03059` 的红 | **基础设施，非测试**：`failed step = "Set up job"`、`runner_name = null`，job 未被调度 |
+
+因此正确口径是：**CI 一直可用**，本地 `dev_gate` 与远端 CI 并列构成两个检查入口；
+本地门禁是**更快**（约 150 秒）而非**唯一**。「独立第三方评审已不存在」这一条
+（清醒条款 1）**不受影响，继续成立**——CI 是自动化检查，不等于独立评审。
+
+**方法论教训（本轮真实踩到）**：判别一个红色 check 是「测试失败」还是「job 从未启动」，
+不能靠 CI 结论字符串，必须看 `runner_name` 是否为空 + `steps_count == 0`。本轮有两次
+把「job 未启动」误读成「测试失败」（PR #58 是**真失败**，#65 #67 #70 #93 #94 是
+**从未启动**），若不核验就会得出相反结论。
+
 ### 复查条件
 
 出现下列任一情况须重开本 ADR：Owner 收回授权；出现需要真实人类判断才能解除的门禁失败；自治验收状态被用于放行制造相关主张；或连续两轮出现「门禁放宽」提议。

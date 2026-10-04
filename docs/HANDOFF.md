@@ -37,9 +37,12 @@
   merge-base = master `6deb848`，落后 0 个提交，带 5 条未答复的 P1）；OPEN issue 11 张，
   其中**只有 #32（EDD-001 功能范围）真正未决**，#83/#85/#51/#2/#5 的升级问题早已获答只是未关单；
   远端陈旧分支 80 条；`tasks/` 45 张信封的 64 条 `decision_ref` 中**仅 4 条可解析**为 GitHub 永久链接。
-- **基础设施事实**：GitHub Actions 自 2026-09-21 起因账户计费失败整体停摆（`The job was not started
-  because recent account payments have failed`），**「CI 绿」在当前账户状态下不可达成**；
-  唯一可信验证入口是本地 `dev_gate`。该事实属账户/账单范畴，**不在自治授权内**，保持如实登记。
+- **基础设施事实（2026-10-04 更正）**：本条初版称「GitHub Actions 因账户计费失败整体停摆、
+  CI 绿不可达成」——**不成立**。CI 已迁至**自托管 runner**（`actions-runner-aedl`，不计费），
+  master 在 `2bf2c7a` 上 `conclusion=success`，2026-09-29 起连续多轮成功；因计费而**从未启动**
+  的只有 GitHub 托管的 `ubuntu-latest` / `windows-latest` 旧腿（`f7d483d` 已改 `matrix: os: [self-hosted]`）。
+  正确口径：本地 `dev_gate` 与远端 CI **并列**为两个检查入口，本地更快（约 150s）而非唯一。
+  另：`2fa03059` 的红是**基础设施**（`failed step = Set up job`、`runner_name = null`），不是测试失败。
 - **下一步（自治排序，无人值守亦成立）**：① 把自治验收状态机 `自主验收` 落地为 fail-closed 校验（ADR-022 决策 6）；
   ② 按 P1→P5 处理 #120 的 5 条 P1 并合入；③ 关掉已决但未关的 issue；④ 清 80 条陈旧分支；
   ⑤ 依 ADR-022 授权自行裁定 #32；⑥ 推 Y4 C/D 两臂实测与 EDD-001 第二载体。

@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 147 条。完整正文在各自条目文件中；本索引只做导航。
+共 148 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -216,3 +216,6 @@
 - [`AI-20261004-OPENCODE-CCA19F2D6F1AC14F76159D7931E3460A`](ai-usage/AI-20261004-OPENCODE-CCA19F2D6F1AC14F76159D7931E3460A.md) — 补登——AEDL 战略收缩与 RepairBench v0.1 现实核查存档（PR #120 P1-7 拆分的独立条目）
 - [`AI-20261004-OPENCODE-CD97DFFAC9E4268716297D327E9E6FA9`](ai-usage/AI-20261004-OPENCODE-CD97DFFAC9E4268716297D327E9E6FA9.md) — PR #120 评审整改：P1×5 + P2×2 闭环（证据 ID 绑定 / 合规回退 / ADR-023 / 台账拆分）
 - [`AI-20261004-ZCODE-20A1E410C26074A2DA692A79F33555B8`](ai-usage/AI-20261004-ZCODE-20A1E410C26074A2DA692A79F33555B8.md) — project termination record（Owner 裁决落账）+ 本会话收尾
+## 2026-10-05
+
+- [`AI-20261005-OPENCODE-EA9F28030F8EE7A1CF21369E3935BB51`](ai-usage/AI-20261005-OPENCODE-EA9F28030F8EE7A1CF21369E3935BB51.md) — Correct the false CI-unavailable claim: Actions runs on a self-hosted runner; per-PR audit of the 6 open PRs
