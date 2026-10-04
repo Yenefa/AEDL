@@ -44,6 +44,24 @@
   ② 按 P1→P5 处理 #120 的 5 条 P1 并合入；③ 关掉已决但未关的 issue；④ 清 80 条陈旧分支；
   ⑤ 依 ADR-022 授权自行裁定 #32；⑥ 推 Y4 C/D 两臂实测与 EDD-001 第二载体。
 
+## 2026-10-04 PR #120 评审整改（AEDL-AUTO 自治排序 ②；AI-20261004-OPENCODE-CD97DFFAC9E4268716297D327E9E6FA9）
+
+- 背景：#120（EDD-001 六份数据手册冻结）为 7 张 OPEN PR 中唯一的 MERGEABLE 候选，
+  Codex 评审留下 5 条 P1 + 2 条 P2；本卡逐条闭合，并按 `AGENTS.md` §0A.3 合入 master。
+- 整改：① P1-1 证据 ID 绑定：五个目录改名为合同证据 ID，真实 preflight 组件级
+  findings 从 5 条降为 1 条——仅剩 WROOM 缺 S3_DATASHEET（芯片手册，不在冻结六份内，
+  如实保留）；② P1-2 RES-010 再分发合规回退 `TO_VERIFY`（Owner 批准本地入仓 ≠ 再分发
+  授权）；③ P2-3 manifest 两处过期注记标 `SUPERSEDED`；④ P1-4 战略文档 §13/§14 显式
+  标注 AI 执行注记；⑤ P1-5 ADR-023 登记战略收缩 / RepairBench Kill Gate；
+  ⑥⑦ P1-7/P2-6 台账拆分与路径笔误修正（拆分条目
+  `AI-20261004-OPENCODE-CCA19F2D6F1AC14F76159D7931E3460A`）。
+- envelope：`tasks/PR120-P1.yaml`（ADMIT / exit 0；envelope_sha256 `6d02551ad876…`）。
+- 验证（实际运行）：sandbox 受影响套件 `test_edd001_preflight` 48 OK /
+  `test_integration` 16 OK / `test_trust` 22 OK (skipped=1)；全量 sandbox **574 OK
+  (skipped=3, expected failures=1)**；`dev_gate --envelope` 回执由合并前最后实跑生成
+  （receipt JSON 随 review bundle 归档）。
+- 状态：合入（AI 依 §0A.3 执行）；人工审核字段保持 `PENDING_HUMAN_REVIEW`。
+
 ## 2026-10-04 20:43 项目终止记录（Owner 裁决 · 最终状态）
 
 - **决定**：AEDL（project-027 自主嵌入式研发系统的落地仓库）自 **2026-10-04 20:43** 起

@@ -117,9 +117,9 @@ class Int01RealEdd001Tests(unittest.TestCase):
         self.assertEqual(len(executor.calls), 0)
         self.assertFalse((run_root / "run").exists())
         findings = state["policy_result"]["findings"]
-        # 8 findings: 5 component evidence gaps (incl. nested AP63203WU-7) +
-        # missing POWER contract + compiler + verifier coverage.
-        self.assertEqual(len(findings), 8)
+        # 4 findings after the 2026-10-04 evidence-id remediation: the WROOM
+        # S3_DATASHEET gap + missing POWER contract + compiler + verifier coverage.
+        self.assertEqual(len(findings), 4)
         self.assertEqual(
             {finding["code"] for finding in findings},
             {
@@ -136,9 +136,9 @@ class Int01RealEdd001Tests(unittest.TestCase):
             status, _findings = trust.validate_bundle(REAL_MANIFEST)
         self.assertEqual(status, EvidenceStatus.PARTIAL)
         manifest = json.loads(REAL_MANIFEST.read_text(encoding="utf-8"))
-        # POWER contract + five component evidence items (GH-20 Tasks 6-7:
-        # SS34 joined AP63203 in the required set).
-        self.assertEqual(len(manifest["missing_requirements"]), 6)
+        # POWER contract still DRAFT (Owner review 2026-10-02 froze the six
+        # datasheets; the power gap is a separate decision).
+        self.assertEqual(len(manifest["missing_requirements"]), 1)
         self.assertEqual(manifest["tool_coverage"], {"compilers": [], "verifiers": []})
 
 

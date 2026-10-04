@@ -250,21 +250,13 @@ class RealEdd001ManifestTests(unittest.TestCase):
         self.assertEqual(data["execution_status"], "NOT_READY")
         self.assertEqual(data["verification_status"], "NOT_RUN")
         self.assertEqual(data["approval_status"], "PENDING")
-        self.assertEqual(len(data["files"]), 6)
+        self.assertEqual(len(data["files"]), 12)
         self.assertEqual(len(data["mirror_sets"]), 3)
         self.assertEqual(data["tool_coverage"], {"compilers": [], "verifiers": []})
+        # Owner review 2026-10-02 froze the six datasheets (5 exact-component +
+        # 1 reference-design): only the POWER contract gap remains.
         missing_ids = {m["id"] for m in data["missing_requirements"]}
-        self.assertEqual(
-            missing_ids,
-            {
-                "EDD001_POWER_CONTRACT",
-                "ESP32_S3_WROOM_1_N8R8_DATASHEET",
-                "AP63203WU_7_DATASHEET",
-                "TYPE_C_31_M_12_DRAWING",
-                "USBLC6_2SC6_DATASHEET",
-                "SS34_DATASHEET",
-            },
-        )
+        self.assertEqual(missing_ids, {"EDD001_POWER_CONTRACT"})
         for m in data["missing_requirements"]:
             blob = json.dumps(m)
             self.assertNotIn("http://", blob)
@@ -336,29 +328,41 @@ class RemoteEvidenceMetadataTests(unittest.TestCase):
         hashes = [r["sha256"] for r in self.records]
         self.assertEqual(len(hashes), len(set(hashes)))
 
-    def test_redistribution_all_to_verify_and_binaries_not_committed(self) -> None:
-        """Owner ruling (2026-09-02): provenance-only freeze. No record may
-        claim a redistribution grant or a committed binary while TO_VERIFY."""
-        for r in self.records:
-            self.assertEqual(r["redistribution_status"], "TO_VERIFY", msg=r["id"])
-            self.assertIs(r["binary_committed"], False, msg=r["id"])
+    def test_binaries_committed_with_owner_approval(self) -> None:
+        """Owner review 2026-10-02 passed all six licenses and approved the
+        local commit, REPLACING the 2026-09-02 no-commit ruling (whose test
+        this supersedes -- kept as this docstring, not as a second test,
+        because asserting both states at once would fail by construction).
 
-    def test_records_do_not_pretend_to_be_local_frozen_files(self) -> None:
-        """Reviewer implementation note: a TO_VERIFY remote source must never
-        masquerade as a local frozen file. The five exact-component provenance
-        ids must NOT appear as repo_path entries in manifest.files, and their
-        corresponding missing_requirements must remain present. The
-        reference_design record has no missing_requirement (it is advisory
-        corroboration, not a component evidence gap)."""
+        Every record must now show a committed binary; redistribution_status
+        stays TO_VERIFY because no new redistribution grant was verified --
+        the commit rests on the Owner's approval, not on a vendor grant, and
+        the record must say so. A future grant changes this field, not the
+        binary flag.
+        """
+        for r in self.records:
+            self.assertIs(r["binary_committed"], True, msg=r["id"])
+            self.assertEqual(r["redistribution_status"], "TO_VERIFY", msg=r["id"])
+
+    def test_records_are_bound_to_hash_verified_local_files(self) -> None:
+        """Owner review 2026-10-02 froze the six datasheets (replacing the
+        2026-09-02 provenance-only ruling this test supersedes). The guard now
+        runs in the opposite direction with the same strictness: every provenance
+        record must resolve to a hash-bound files entry -- a record WITHOUT a
+        matching local file is the new masquerade. URLs still never appear as
+        repo_paths, and only the POWER contract gap remains in
+        missing_requirements (the reference_design record never had one)."""
+        by_sha = {}
+        for e in self.data["files"]:
+            by_sha.setdefault(e["sha256"], []).append(e["repo_path"])
         files_repo_paths = {e["repo_path"] for e in self.data["files"]}
         missing_ids = {m["id"] for m in self.data["missing_requirements"]}
         for r in self.records:
-            self.assertNotIn(r["id"], files_repo_paths, msg=r["id"])
+            self.assertIn(r["sha256"], by_sha, msg=r["id"])
             self.assertNotIn(r["source_url"], files_repo_paths, msg=r["id"])
             if r["role"] == "exact_component":
-                self.assertIn(r["id"], missing_ids, msg=r["id"])
-            else:
                 self.assertNotIn(r["id"], missing_ids, msg=r["id"])
+        self.assertEqual(missing_ids, {"EDD001_POWER_CONTRACT"})
 
 
 if __name__ == "__main__":

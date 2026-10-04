@@ -106,24 +106,21 @@ class RealEdd001PreflightTests(unittest.TestCase):
         self.assertEqual(power[0].details["contract_id"], "EDD-001.POWER")
         self.assertEqual(power[0].source, "contract_bundle")
 
-    def test_every_allowed_component_lacks_local_datasheet_evidence(self) -> None:
+    def test_only_the_s3_chip_datasheet_leaves_a_component_evidence_gap(self) -> None:
+        """PR #120 P1 remediation (2026-10-04): the six frozen files are stored
+        under their contract evidence ids, so four of five components resolve.
+        The WROOM component still requires S3_DATASHEET (the ESP32-S3 chip
+        datasheet), which is NOT part of the Owner-approved six-file freeze --
+        it must keep being reported, not masked."""
         decision = self.engine.preflight("run-edd001-real", self.candidate_root)
         component_findings = [
             f for f in decision.findings if f.code == "EVIDENCE_COMPONENT_SOURCE_MISSING"
         ]
-        self.assertTrue(component_findings, "expected component evidence findings")
-        for finding in component_findings:
-            self.assertTrue(finding.details["missing_evidence_ids"], msg=str(finding.details))
-        mpns = sorted(str(f.details["mpn"]) for f in component_findings)
+        self.assertEqual(len(component_findings), 1)
+        finding = component_findings[0]
+        self.assertEqual(str(finding.details["mpn"]), "ESP32-S3-WROOM-1-N8R8")
         self.assertEqual(
-            mpns,
-            [
-                "AP63203WU-7",
-                "ESP32-S3-WROOM-1-N8R8",
-                "SS34",
-                "TYPE-C-31-M-12",
-                "USBLC6-2SC6",
-            ],
+            list(finding.details["missing_evidence_ids"]), ["S3_DATASHEET"]
         )
 
     def test_nested_and_direct_power_parts_are_both_required(self) -> None:
@@ -152,12 +149,34 @@ class RealEdd001PreflightTests(unittest.TestCase):
             for f in decision.findings
             if f.code == "EVIDENCE_COMPONENT_SOURCE_MISSING"
         }
-        self.assertIn("SS34", reported)
-        self.assertIn("AP63203WU-7", reported)
+        # Post-remediation (2026-10-04): both declarations now resolve to local
+        # frozen evidence (SS34 -> ESPRESSIF_S3_LCD_EV_BOARD reference design;
+        # AP63203WU-7 -> ESP32_S3_TECHPEDIA), so neither may be reported as
+        # missing evidence any more.
+        self.assertNotIn("SS34", reported)
+        self.assertNotIn("AP63203WU-7", reported)
 
     def test_source_urls_are_not_treated_as_local_evidence(self) -> None:
+        """A ``sources`` URL entry is never local evidence -- but since the
+        Owner review 2026-10-02 froze the six datasheets on disk (stored under
+        their contract evidence ids since the 2026-10-04 P1 remediation), the
+        six local directories ARE. This pins the post-remediation set exactly:
+        the five contract ids the freeze resolves plus the SS34
+        exact-component directory (additional evidence, not a contract id)."""
         document = self.engine.document
-        self.assertEqual(document.available_evidence_ids, frozenset())
+        self.assertEqual(
+            document.available_evidence_ids,
+            frozenset(
+                {
+                    "WROOM1_DATASHEET",
+                    "ESP32_S3_TECHPEDIA",
+                    "LCSC_C165948",
+                    "ST_USBLC6_2",
+                    "SS34",
+                    "ESPRESSIF_S3_LCD_EV_BOARD",
+                }
+            ),
+        )
         for mpn, record in document.components.items():
             self.assertTrue(record.required_evidence_ids, msg=f"{mpn} declares no evidence")
 
@@ -277,10 +296,8 @@ class DeclarationSemanticsTests(unittest.TestCase):
             if f.code == "EVIDENCE_COMPONENT_SOURCE_MISSING"
         }
         self.assertNotIn("REF-DESIGN-PART", reported)
-        self.assertEqual(
-            reported,
-            {"AP63203WU-7", "ESP32-S3-WROOM-1-N8R8", "SS34", "TYPE-C-31-M-12", "USBLC6-2SC6"},
-        )
+        # Post-remediation set: only the WROOM S3_DATASHEET gap remains.
+        self.assertEqual(reported, {"ESP32-S3-WROOM-1-N8R8"})
 
 
 class RealEdd001PinTests(unittest.TestCase):
@@ -722,9 +739,9 @@ class TrustBundleBindingTests(unittest.TestCase):
         )
         self.assertEqual(bound.outcome, Outcome.BLOCKED)
         self.assertEqual(sorted(f.code for f in bound.findings), sorted(f.code for f in direct.findings))
-        # 8 findings: 5 component evidence gaps (incl. nested AP63203WU-7) +
-        # missing POWER contract + compiler + verifier coverage.
-        self.assertEqual(len(bound.findings), 8)
+        # 4 findings after the 2026-10-04 evidence-id remediation: the WROOM
+        # S3_DATASHEET gap + missing POWER contract + compiler + verifier coverage.
+        self.assertEqual(len(bound.findings), 4)
         # The port stamps the validated manifest identity on its requests.
         self.assertEqual(len(port.verified_bundle_sha256), 64)
 
