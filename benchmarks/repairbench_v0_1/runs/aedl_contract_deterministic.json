@@ -1,0 +1,117 @@
+{
+  "acceptance_sha256": "3437994467290f35bfb3ec468293a52afe1048a22d6b70841591fdfff10654f2",
+  "arm": "aedl_contract_deterministic",
+  "benchmark_id": "AEDL-RepairBench-v0.1",
+  "contract_sha256": "62e2cd063fd54b199d5b673ada161862a6fe96766f76c365db7a935ab133899c",
+  "episodes_sha256": "de44808e4683d09c26596cb19ac6e5bc6cf153ed75b88011774ea9c36334f89d",
+  "results": [
+    {
+      "after_sha256": "4959d982a8a9d6b5d9d0d4f23e285fc696e1b06c9a11a3acfbb3b280d1f6290b",
+      "all_rule_statuses_after": {
+        "ESP32_EN_RC": "pass",
+        "ESP32_GPIO9_PULLUP": "pass",
+        "SHT30_ADDRESS": "pass",
+        "SHT30_UNUSED_PINS": "pass",
+        "USB_POLARITY_AND_SERIES": "fail"
+      },
+      "arm": "aedl_contract_deterministic",
+      "before_sha256": "c37fdcb5ff9fbc46d4b53fdf119c920dc368774ad0f4026037e5661a41084f5c",
+      "bytes_changed": true,
+      "episode": "DC-01",
+      "error": null,
+      "primary_after": "fail",
+      "primary_before": "fail",
+      "primary_ok": false,
+      "regression_broken": [],
+      "regression_ok": true,
+      "structural": {
+        "problems": [
+          "net USB_DM: expected ['R8.2', 'U1.13'], observed ['R7.2', 'R8.2', 'U1.13', 'U1.14']",
+          "net USB_DP: expected ['R7.2', 'U1.14'], observed []"
+        ],
+        "status": "fail"
+      },
+      "target_rule": "USB_POLARITY_AND_SERIES"
+    },
+    {
+      "after_sha256": "65ac445c70f3d79d01e485038745b308875a92f4142e22d98714b19a78a05c1a",
+      "all_rule_statuses_after": {
+        "ESP32_EN_RC": "pass",
+        "ESP32_GPIO9_PULLUP": "pass",
+        "SHT30_ADDRESS": "pass",
+        "SHT30_UNUSED_PINS": "pass",
+        "USB_POLARITY_AND_SERIES": "pass"
+      },
+      "arm": "aedl_contract_deterministic",
+      "before_sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0",
+      "bytes_changed": true,
+      "episode": "DC-02",
+      "error": null,
+      "primary_after": "pass",
+      "primary_before": "fail",
+      "primary_ok": true,
+      "regression_broken": [],
+      "regression_ok": true,
+      "structural": {
+        "problems": [],
+        "status": "pass"
+      },
+      "target_rule": "SHT30_ADDRESS"
+    },
+    {
+      "arm": "aedl_contract_deterministic",
+      "episode": "DC-03",
+      "error": "LlmUnavailable: writer refused the model ops (rc=6): {\n  \"schema_version\": \"1.0\",\n  \"applied\": false,\n  \"status\": \"refused\",\n  \"ops\": [\n    {\n      \"op_index\": 0,\n      \"op\": \"add_net_label\",\n      \"status\": \"ok\",\n      \"created_uuids\": [\n        \"364b2555-298f-5ba0-8ac7-2e1fa931b269\"\n      ],\n      \"error_code\": null,\n      \"message\": \"\",\n      \"reme",
+      "primary_ok": false,
+      "regression_ok": false,
+      "structural": {
+        "problems": [
+          "writer refused the model ops (rc=6): {\n  \"schema_version\": \"1.0\",\n  \"applied\": false,\n  \"status\": \"refused\",\n  \"ops\": [\n    {\n      \"op_index\": 0,\n      \"op\": \"add_net_label\",\n      \"status\": \"ok\",\n      \"created_uuids\": [\n        \"364b2555-298f-5ba0-8ac7-2e1fa931b269\"\n      ],\n      \"error_code\": null,\n      \"message\": \"\",\n      \"reme"
+        ],
+        "status": "UNKNOWN"
+      },
+      "target_rule": "USB_POLARITY_AND_SERIES"
+    },
+    {
+      "arm": "aedl_contract_deterministic",
+      "episode": "DC-04",
+      "error": "LlmUnavailable: writer refused the model ops (rc=6): {\n  \"schema_version\": \"1.0\",\n  \"applied\": false,\n  \"status\": \"refused\",\n  \"ops\": [\n    {\n      \"op_index\": 0,\n      \"op\": \"add_net_label\",\n      \"status\": \"error\",\n      \"created_uuids\": [],\n      \"error_code\": \"VERIFY_FAILED\",\n      \"message\": \"pin reference 'R9' matches no placed component\",\n     ",
+      "primary_ok": false,
+      "regression_ok": false,
+      "structural": {
+        "problems": [
+          "writer refused the model ops (rc=6): {\n  \"schema_version\": \"1.0\",\n  \"applied\": false,\n  \"status\": \"refused\",\n  \"ops\": [\n    {\n      \"op_index\": 0,\n      \"op\": \"add_net_label\",\n      \"status\": \"error\",\n      \"created_uuids\": [],\n      \"error_code\": \"VERIFY_FAILED\",\n      \"message\": \"pin reference 'R9' matches no placed component\",\n     "
+        ],
+        "status": "UNKNOWN"
+      },
+      "target_rule": "ESP32_GPIO9_PULLUP"
+    },
+    {
+      "arm": "aedl_contract_deterministic",
+      "episode": "DC-05",
+      "error": "LlmUnavailable: writer refused the model ops (rc=6): {\n  \"schema_version\": \"1.0\",\n  \"applied\": false,\n  \"status\": \"refused\",\n  \"ops\": [\n    {\n      \"op_index\": 0,\n      \"op\": \"add_net_label\",\n      \"status\": \"error\",\n      \"created_uuids\": [],\n      \"error_code\": \"VERIFY_FAILED\",\n      \"message\": \"pin reference 'C5' matches no placed component\",\n     ",
+      "primary_ok": false,
+      "regression_ok": false,
+      "structural": {
+        "problems": [
+          "writer refused the model ops (rc=6): {\n  \"schema_version\": \"1.0\",\n  \"applied\": false,\n  \"status\": \"refused\",\n  \"ops\": [\n    {\n      \"op_index\": 0,\n      \"op\": \"add_net_label\",\n      \"status\": \"error\",\n      \"created_uuids\": [],\n      \"error_code\": \"VERIFY_FAILED\",\n      \"message\": \"pin reference 'C5' matches no placed component\",\n     "
+        ],
+        "status": "UNKNOWN"
+      },
+      "target_rule": "ESP32_EN_RC"
+    }
+  ],
+  "summary": {
+    "arm": "aedl_contract_deterministic",
+    "episodes": 5,
+    "errors": [
+      "DC-03",
+      "DC-04",
+      "DC-05"
+    ],
+    "executed": 2,
+    "primary_pass": 1,
+    "regression_clean": 2,
+    "structural_pass": 1
+  }
+}

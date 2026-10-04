@@ -366,3 +366,52 @@ Evidence（其元数据冻结结论不受影响）。
      另两笔真实 episode（DC-02，`EVID-20261001-001` / `-002`）已另行登记。
 - 人工核验：`PENDING_AI_REVIEW`
   （ADR-022 / `AGENTS.md` §0A.4 自治泳道；**未获人工评审**，不得读作 `HUMAN_REVIEWED`）
+
+## EVID-20261005-001 — AEDL RepairBench v0.1 首次实跑：对照成立，并暴露合同完备性缺口与并网风险
+
+- 日期：2026-10-05
+- 对应主张：**（1）** 该 benchmark 的两个对照臂同时成立——`noop` 0/5、`oracle` 5/5，
+  因此题目不可通吃也并非无解，任一对照不成立则全部结果作废。
+  **（2）** 冻结 netlist 合同**不能**表达「器件应当被装上」：它只断言器件的**值**，
+  不断言**存在**，也不含 footprint / 坐标，故补器件类故障（3/5 集）无法由合同推导修复。
+  **（3）** 按合同机械加 `add_net_label` 而**不加 net-split 守卫**会**合并已命名网络**，
+  DC-01 上 USB_DP 与 USB_DM 并成一网，且该错误被 Regression Guard + structural 两层抓到。
+- 关联模块：`tools/repairbench.py`、`tests/test_repairbench.py`、`benchmarks/repairbench_v0_1/`
+- 关联 AI Usage：AI-20261005-OPENCODE-F3E75595DCD764A2A8E5C5AFD354EA61；AI-20261005-OPENCODE-00A71B68247FA57082876E0F4C09EFAD
+- 关联 ADR：ADR-022（自治模式）；ADR-023（RepairBench v0.1 三层口径）
+- 环境：Windows 10 / CPython 3.9（`py -3.9`）/ akcli 0.21.0（protocol 2）/ **全离线，无网络调用**
+- 执行命令：
+  ```text
+  py -3.9 -m tools.repairbench --arm noop
+  py -3.9 -m tools.repairbench --arm oracle
+  py -3.9 -m tools.repairbench --arm aedl_contract_deterministic
+  py -3.9 -m unittest tests.test_repairbench
+  ```
+- Runs：4（三个臂各 1；回归 1）
+- **真实结果（原文口径）**：
+
+  | 臂 | primary | regression clean | structural | 可执行 |
+  | --- | --- | --- | --- | --- |
+  | `noop` | 0/5 | 5/5 | 0/5 | 5/5 |
+  | `oracle` | 5/5 | 5/5 | 5/5 | 5/5 |
+  | `aedl_contract_deterministic` | 1/5 | 2/5 | 1/5 | 2/5 |
+
+  回归：`Ran 8 tests ... OK`。合同 sha256 `62e2cd063fd54b19…`。
+  失败原文（DC-04）：akcli `exit 6`、`pin reference 'R9' matches no placed component`。
+  并网原文（DC-01 structural）：`net USB_DM: expected ['R8.2','U1.13'],
+  observed ['R7.2','R8.2','U1.13','U1.14']`。
+- 原始证据：`benchmarks/repairbench_v0_1/runs/{noop,oracle,aedl_contract_deterministic}.json`；
+  结论与复现步骤见 `benchmarks/repairbench_v0_1/RESULTS_20261005.md`
+- 是否可复现：**YES**（仅需 CPython 3.9 + 本机 akcli 0.21.0；不需凭据、不需网络、不需 KiCad）
+- **已知限制（不得越级引用本条）**：
+  1. **`baseline_generic` 与 `aedl_contract` 两个 LLM 臂 `NOT_RUN`。** 本机唯一凭据
+     `ARK_API_KEY` 对配置端点返回 **HTTP 401 Unauthorized**，对 RES-012 登记的 DeepSeek host
+     亦无有效凭据；按 ADR-022 决策 5 第 2 条不擅自动用他人账户或付费额度。
+     **因此不存在「AEDL 优于 baseline」的任何结论，一条都没有。**
+  2. n=5、单一板（M2）、单一故障族为主。ADR-023 要求 20–30 集 / 3–5 故障族，v0.1 远未达到。
+  3. oracle 是父合同的 **netlist 作用域投影**，比父合同**弱**（不含 intent / pcb / firmware
+     断言）。**不得**被引申为「完整 M2 合同通过」。
+  4. `aedl_contract_deterministic` 是**单次推导**臂，非多轮 agent；它测的是
+     「合同是否足以作为修复说明书」，**不是**模型能力。
+  5. 全程不调 KiCad、不跑 ERC/DRC、不含固件常量检查；无「是否为人所选择的修复」之 ground truth。
+- 人工核验：`PENDING_AI_REVIEW`（ADR-022 / `AGENTS.md` §0A.4 自治泳道；**未获人工评审**）

@@ -24,12 +24,14 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import importlib.util
 import json
 import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -225,6 +227,152 @@ def evaluate_candidate(contract, episode, before_raw: bytes, after_raw: bytes) -
     }
 
 
+# --------------------------------------------------------------------------- llm
+LLM_MODEL_ENV = "AEDL_ARH_API_KEY"
+LLM_MAX_OUTPUT_TOKENS = 2048
+
+
+class LlmUnavailable(RuntimeError):
+    """No usable model endpoint. Never silently downgraded to a fake pass."""
+
+
+def llm_available() -> bool:
+    return bool(os.environ.get(LLM_MODEL_ENV))
+
+
+def _contract_hint(contract: Dict[str, Any], rule_id: str) -> Dict[str, Any]:
+    for rule in contract["rules"]:
+        if rule["id"] == rule_id:
+            return {
+                "rule_id": rule["id"],
+                "severity": rule["severity"],
+                "title": rule.get("title", ""),
+                "source_ids": rule.get("source_ids", []),
+                "expected": rule["checks"].get("netlist", {}),
+            }
+    return {"rule_id": rule_id, "note": "rule not found in contract"}
+
+
+def _pin_summary(view: Dict[str, Any], limit: int = 40) -> List[str]:
+    rows = []
+    for pin_id, state in sorted(view["pins"].items()):
+        rows.append("%s -> %s%s" % (
+            pin_id, state.get("net"),
+            " (no_connect)" if state.get("no_connect") else ""))
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+def _repair_prompt(system: str, user: str, base_url: str, model: str) -> str:
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "temperature": 0,
+        "max_tokens": LLM_MAX_OUTPUT_TOKENS,
+    }
+    body = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        base_url.rstrip("/") + "/chat/completions",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + os.environ[LLM_MODEL_ENV],
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=120) as response:
+        raw = json.loads(response.read().decode("utf-8"))
+    return raw["choices"][0]["message"]["content"]
+
+
+SYSTEM_PROMPT = (
+    "You repair a KiCad schematic. Reply with ONLY a JSON object of the form "
+    '{"ops": [...]} and nothing else. No prose, no markdown fence.\n'
+    "Each op is one of:\n"
+    '  {"op": "add_net_label", "name": "<NET>", "at": "<REF>.<PIN>"}\n'
+    '  {"op": "place_component", "lib_id": "Device:R"|"Device:C", "designator": "<REF>", '
+    '"x_mil": <int>, "y_mil": <int>, "value": "<VALUE>", '
+    '"footprint": "Resistor_SMD:R_0603_1608Metric"|"Capacitor_SMD:C_0603_1608Metric"}\n'
+    '  {"op": "delete_object", "uuid": "<UUID>"}\n'
+    "Emit the minimal op list that fixes the described defect. Keep it under 6 ops."
+)
+
+
+def _parse_ops(raw_text: str) -> List[Dict[str, Any]]:
+    text = raw_text.strip()
+    if text.startswith("```"):
+        text = text.split("```")[1]
+        if text.lower().startswith("json"):
+            text = text[4:]
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end <= start:
+        raise LlmUnavailable("model reply contained no JSON object: %r" % text[:200])
+    doc = json.loads(text[start:end + 1])
+    ops = doc.get("ops")
+    if not isinstance(ops, list):
+        raise LlmUnavailable("model reply has no ops list")
+    return ops
+
+
+def _apply_ops(sch: Path, ops: List[Dict[str, Any]]) -> bytes:
+    akcli = find_akcli()
+    if akcli is None:
+        raise LlmUnavailable("pinned akcli writer not found")
+    with tempfile.TemporaryDirectory(prefix="rb-ops-") as tmp:
+        ops_file = Path(tmp) / "ops.json"
+        ops_file.write_text(json.dumps(
+            {"protocol_version": 2, "target_format": "kicad", "ops": ops},
+            ensure_ascii=False), encoding="utf-8")
+        proc = subprocess.run(
+            [str(akcli), "draw", str(sch), "--ops", str(ops_file),
+             "--apply", "--no-erc", "--json"],
+            capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise LlmUnavailable("writer refused the model ops (rc=%d): %s" % (
+            proc.returncode, (proc.stderr or proc.stdout)[:300]))
+    return sch.read_bytes()
+
+
+def _llm_arm(episode, workdir, contract, *, with_contract: bool, base_url: str, model: str) -> bytes:
+    sch = workdir / "fault.kicad_sch"
+    shutil.copyfile(REPO_ROOT / episode["fixture"], sch)
+    before_view = project_netlist_view(sch.read_bytes())
+
+    user = {
+        "task": "Repair the schematic so the stated engineering constraint holds.",
+        "components_present": sorted(before_view["components"].keys()),
+        "pin_net_map": _pin_summary(before_view),
+    }
+    if with_contract:
+        user["frozen_contract_rule"] = _contract_hint(contract, episode["target_rule"])
+        user["what_to_do"] = (
+            "Make the frozen contract rule's expected pin/net intent true, without "
+            "disturbing any other net.")
+    else:
+        user["defect_hint"] = episode["fault_summary"]
+
+    raw = _repair_prompt(SYSTEM_PROMPT, json.dumps(user, ensure_ascii=False), base_url, model)
+    return _apply_ops(sch, _parse_ops(raw))
+
+
+def arm_baseline_generic(episode, workdir):
+    return _llm_arm(episode, workdir, load_json(CONTRACT_PATH),
+                    with_contract=False,
+                    base_url=os.environ["AEDL_RB_BASE_URL"],
+                    model=os.environ["AEDL_RB_MODEL"])
+
+
+def arm_aedl_contract(episode, workdir):
+    return _llm_arm(episode, workdir, load_json(CONTRACT_PATH),
+                    with_contract=True,
+                    base_url=os.environ["AEDL_RB_BASE_URL"],
+                    model=os.environ["AEDL_RB_MODEL"])
+
+
 # ------------------------------------------------------------------------- arms
 def find_akcli() -> Optional[Path]:
     candidate = Path.home() / "AppData/Local/hermes/hermes-agent/venv/Scripts/akcli.exe"
@@ -259,7 +407,48 @@ def arm_oracle(episode: Dict[str, Any], workdir: Path) -> bytes:
     return target.read_bytes()
 
 
-ARMS = {"noop": arm_noop, "oracle": arm_oracle}
+def arm_aedl_contract_deterministic(episode: Dict[str, Any], workdir: Path) -> bytes:
+    """Derive repair ops mechanically from the frozen contract. No model, no key.
+
+    Emits one ``add_net_label`` per pin whose current net contradicts the contract.
+    Does not invent component placement: the contract pins component values but
+    not footprints or coordinates, so a missing component cannot be reconstructed
+    from the contract alone and such episodes are expected to fail here.
+    """
+    contract = load_json(CONTRACT_PATH)
+    sch = workdir / "fault.kicad_sch"
+    shutil.copyfile(REPO_ROOT / episode["fixture"], sch)
+    view = project_netlist_view(sch.read_bytes())
+
+    rule = _contract_hint(contract, episode["target_rule"])
+    expected_pins = (rule.get("expected") or {}).get("pins", {})
+
+    ops: List[Dict[str, Any]] = []
+    for pin_id, want in sorted(expected_pins.items()):
+        if not isinstance(want, dict):
+            continue
+        want_net = want.get("net")
+        if not want_net:
+            continue
+        got = (view["pins"].get(pin_id) or {}).get("net")
+        if got != want_net:
+            ops.append({"op": "add_net_label", "name": want_net, "at": pin_id})
+
+    if not ops:
+        # Nothing to change: report the original bytes so the episode is scored
+        # honestly as "no repair attempted" rather than skipped.
+        return sch.read_bytes()
+
+    return _apply_ops(sch, ops)
+
+
+ARMS = {
+    "noop": arm_noop,
+    "oracle": arm_oracle,
+    "baseline_generic": arm_baseline_generic,
+    "aedl_contract": arm_aedl_contract,
+    "aedl_contract_deterministic": arm_aedl_contract_deterministic,
+}
 
 
 # ------------------------------------------------------------------------- runner
