@@ -1,5 +1,10 @@
 # HANDOFF — project-027-autonomous-hardware-agent
 
+> ⛔ **项目已终止（2026-10-04 20:43，Owner/大统领拍板）**：AEDL 自该时点起**正式终止投入**
+> ——不再开发、不再排期、不再领取任何 Issue/任务信封；本 HANDOFF、`AGENTS.md`、门禁链、
+> 合规台账全部转为**归档只读**状态，仅作历史证据链使用。除非 Owner 明确书面解冻，
+> 任何 AI 会话不得以"继续开发"为由恢复工作。详见下方「2026-10-04 项目终止记录」一节。
+
 > **AI 接手强制前置**：在任何实质修改前，完整阅读根目录 `AGENTS.md`（v1.4，含 2.1
 > 硬件发布前必读 `docs/knowledge/` 两份文档）；该文件是 AEDL 当前 Agent 执行层唯一规范。
 > 本 HANDOFF 提供项目状态与硬件证据边界；`docs/compliance/AEDL_开发记录与AI使用规范_v1.0.md`
@@ -11,6 +16,25 @@
 > 提交信息里的 `[AI-...]` 标签只有台账能解码到具体会话；据此识别工作边界、未审改动和已知坑，
 > 避免并发写坏工作区。人类职责与决策边界见 `docs/HUMAN_OWNERSHIP.md`。
 > 收尾时按 AGENTS.md 第 4 节为本次实质工作新增一条记录，默认 `PENDING_HUMAN_REVIEW`。
+
+## 2026-10-04 20:43 项目终止记录（Owner 裁决 · 最终状态）
+
+- **决定**：AEDL（project-027 自主嵌入式研发系统的落地仓库）自 **2026-10-04 20:43** 起
+  正式终止投入。本节为该时间点的忠实记录，由当值 ZCode 会话按 Owner 指令写入。
+- **效力**：主线开发、Issue/信封派发、扰动验收、benchmark 与竞赛叙事全部停止；
+  全部 OPEN issue（含 #32/#51/#54/#68/#73/#83/#85 等）与 OPEN PR（#70/#67/#65/#58/#93/#94/#120）
+  一并**封存不排期**；不做任何删除、不改写任何历史 Evidence 与台账。
+- **终止时快照（如实）**：origin/master = `6deb848`（Merge PR #119，2026-10-01）。
+  已真正落地：需求合同/门禁链/交付链/Sandbox；修复链 C1-C4 全链 + 28 条扰动判据大部；
+  C5 单轮事务 + `run_round` 控制器 + 崩溃恢复；ARH V1（冻结点生效）与**第一条真实 LLM
+  修复 episode**（DC-02 SHT30_ADDRESS FAIL→PASS，C5 COMMITTED，human review pending）。
+  未竟：Y4 C/D 两臂逐轮测量 `NOT_RUN`；EDD-001 第二载体未启动（preflight BLOCKED，
+  PR #120 当时 OPEN 待人工 merge）；M2 物理线维持 2026-09-01 人工冻结。
+- **本地末态**：本地 master = origin/master + 2 个提交（`67fdcd6` 台账条目登记 +
+  本次收口提交），未 push；收口内容（docstring 实态修正、台账补记、HANDOFF 环境事实、
+  `/.mimosa/` ignore）与终止记录随本次一并入库，由 Owner 在 ZCode 之外的终端执行提交。
+- **后续处置**：仓库是否转 archived / 私有留存 / 数据导出，由 Owner 另行决定；
+  AI 不执行任何远端变更或删除动作。
 
 ## 项目状态卡（2026-09-01，AI-20260901-006 README + 双仓库治理批次）
 

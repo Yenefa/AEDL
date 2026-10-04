@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 140 条。完整正文在各自条目文件中；本索引只做导航。
+共 141 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -205,3 +205,6 @@
 - [`AI-20261001-CODEX-77994966A120AF272A72C9C6EEEE6963`](ai-usage/AI-20261001-CODEX-77994966A120AF272A72C9C6EEEE6963.md) — GH-110 live harness fixes and real native repair episode
 - [`AI-20261001-CODEX-7A3EB57084C67EA4CEDBC49A121FDA5B`](ai-usage/AI-20261001-CODEX-7A3EB57084C67EA4CEDBC49A121FDA5B.md) — Bounded ARH investigation and on-demand specialists (GH-117)
 - [`AI-20261001-OPENCODE-4DF67FB295B8329115C47D0C79949905`](ai-usage/AI-20261001-OPENCODE-4DF67FB295B8329115C47D0C79949905.md) — BudgetStop.from_snapshot — 跨重启恢复闩锁的 N6 预算状态
+## 2026-10-04
+
+- [`AI-20261004-ZCODE-20A1E410C26074A2DA692A79F33555B8`](ai-usage/AI-20261004-ZCODE-20A1E410C26074A2DA692A79F33555B8.md) — project termination record（Owner 裁决落账）+ 本会话收尾
