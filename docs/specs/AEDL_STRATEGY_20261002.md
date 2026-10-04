@@ -1,9 +1,12 @@
-# AEDL 战略收缩与 RepairBench v0.1（Owner 指令原文存档，2026-10-02）
+# AEDL 战略收缩与 RepairBench v0.1（Owner 指令存档，2026-10-02）
 
-> 来源：Owner 于 2026-10-02 直接下达的战略指示全文，逐字入库。
-> 状态：**现行战略**。后续任务的 Scope 取舍、Kill Gate 判定均以此为准；
-> 与本文件冲突的旧路线文档视为 deprecated，具体见 §D（Reality Check）。
-> 本文件本身是 Owner 决策记录，不是 Agent 提案；修改需 Owner 明示。
+> 来源：Owner 于 2026-10-02 直接下达的战略指示；正文按会话记录存档。
+> **Provenance 更正（2026-10-04，PR #120 P1 评审）**：§13/§14 的 Owner 原文为“布置首项
+> Reality Check 任务与输出格式要求”；两节已被 Agent 改写为执行状态注记——**不是 Owner
+> 原文**，已在节内显式标注（见 §13/§14）。其余各节未被改写；原“全文逐字入库”的表述废除。
+> 状态：**现行战略**（经 ADR-023 登记）。后续任务的 Scope 取舍、Kill Gate 判定均以此为准；
+> 与本文件冲突的旧路线文档视为 deprecated（Reality Check 见 §13/§14 注记）。
+> 本文件承载 Owner 决策；§13/§14 执行注记与 ADR-023 登记由 AI 完成（AEDL-AUTO）。
 
 ---
 
@@ -617,10 +620,15 @@ Research contribution
 
 # 13. 第一项任务（已执行，见 Reality Check）
 
+> ⚠️ **AI 执行注记（非 Owner 原文）**：本节与 §14 于 2026-10-02 由 OPENCODE 会话改写为
+> 执行状态注记；Owner 布置任务与输出格式的原文未在本文件逐字保留（见头部 Provenance）。
+
 Repo Reality Check（`notes/repairbench-v01/reality-check-2026-10-02.md`）已于
 2026-10-02 执行，结论：v0.1 全集为 M2（5 夹具），EDD-001 推迟。
 
 # 14. 输出格式（Reality Check 要求，已执行）
+
+> ⚠️ **AI 执行注记（非 Owner 原文）**：同 §13。
 
 见 `notes/repairbench-v01/reality-check-2026-10-02.md`（A–F 六节）。
 

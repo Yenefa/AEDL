@@ -117,9 +117,9 @@ class Int01RealEdd001Tests(unittest.TestCase):
         self.assertEqual(len(executor.calls), 0)
         self.assertFalse((run_root / "run").exists())
         findings = state["policy_result"]["findings"]
-        # 8 findings: 5 component evidence gaps (incl. nested AP63203WU-7) +
-        # missing POWER contract + compiler + verifier coverage.
-        self.assertEqual(len(findings), 8)
+        # 4 findings after the 2026-10-04 evidence-id remediation: the WROOM
+        # S3_DATASHEET gap + missing POWER contract + compiler + verifier coverage.
+        self.assertEqual(len(findings), 4)
         self.assertEqual(
             {finding["code"] for finding in findings},
             {

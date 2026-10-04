@@ -1214,3 +1214,41 @@ Issue #73）。
 ### 复查条件
 
 出现下列任一情况须重开本 ADR：Owner 收回授权；出现需要真实人类判断才能解除的门禁失败；自治验收状态被用于放行制造相关主张；或连续两轮出现「门禁放宽」提议。
+
+---
+
+## ADR-023 — 战略收缩：RepairBench v0.1 作为唯一主线与 Kill Gate
+
+- 日期：2026-10-02（Owner 指令下达）；登记：2026-10-04（PR #120 P1 评审整改，P1-5）；任务：无 GH issue（Owner 直接指令，非 issue 派发）。
+- AI 参与：AI-20261004-OPENCODE-CCA19F2D6F1AC14F76159D7931E3460A（战略指令与 Reality Check 的现实核查存档、本条登记动作，均属 AI 执行）。
+- **Provenance（不得混淆）**：本 ADR 记录的**决策来自 Owner**（2026-10-02 战略指示，原文存档 `docs/specs/AEDL_STRATEGY_20261002.md`）；本条为**台账登记**——AI 未新增或改写决策内容，登记动作在 AEDL-AUTO 下完成。人工审核：`PENDING_HUMAN_REVIEW`。
+
+### 问题
+
+1. 外部生态（NL→schematic、KiCad MCP、deterministic execution、ERC/DRC automation）快速 commodity 化，“大而全自动 EDA pipeline”不再是可辩护的差异点。
+2. “Agent 能改 KiCad / ERC=0 / DRC=0”不足以证明工程问题被正确修复；需要一个收窄、可证伪的核心命题与明确的 Kill Gate，防止按 sunk cost 继续堆 feature。
+3. 既有机制（frozen contract / fresh artifact / independent verifier）需要一个面向“修复是否真实发生”的 benchmark 口径。
+
+### 决策（Owner 2026-10-02 指令要点）
+
+1. 近期核心 thesis：**Verifiable Repair**——Agent 修复电子设计，并由独立于修改路径的冻结合同证明目标约束 FAIL→PASS、且不破坏其他已经成立的工程约束。
+2. 建设 **AEDL RepairBench v0.1**（约 20–30 个真实 repair episodes，优先 3–5 类 fault family）。三层口径：Primary Oracle = frozen contract FAIL→PASS；Regression Guard = non-target contracts 保持 PASS；Structural Preservation = secondary metric。SchGen 只作第三层比较器（“SchGen gives a score. AEDL gives the verdict.”），不以其改变 AEDL contract semantics。
+3. 必须设 baseline：generic LLM + 既有 KiCad/MCP 工具 vs AEDL Repair Agent（尽量 same model / task / artifact / budget / context）。
+4. **Scope freeze**：允许 frozen contract、repair episode、fault injection、fresh export、read-back、regression、evidence、structural metric、SchGen adapter、benchmark harness、baseline runner、evaluation 相关投入；默认禁止 full PCB generation、autorouting、manufacturing automation、新 UI、agent 数量扩张、无关 MCP 工具与 orchestration 重构等（仅当为 RepairBench blocker 时例外）。
+5. **Kill Gate**：RepairBench v0.1 完成时若 H1（semantic contract 抓到 ERC/DRC 漏掉的 failure）、H2（independent verifier 抓到 false success）、H3（合同语义接受多个有效修复）均不成立，则停止项目而不是继续加 feature。
+
+### 影响
+
+- 旧“自动 EDA 全流程”的扩张性工作视为 deprecated；既有模块重新分类为 Infrastructure ≠ Research contribution。
+- 竞赛 / benchmark 口径以 RepairBench v0.1 为准；`FUSION_MAP.md` / `OPEN_OUTPUTS.md` 的后续更新在该口径下进行。
+- Reality Check 结论（v0.1 全集 = M2 5 夹具，EDD-001 推迟）作为执行输入先行记录。
+
+### Evidence / Reference
+
+- 战略指令存档：`docs/specs/AEDL_STRATEGY_20261002.md`（§13/§14 provenance 更正见文件头）。
+- Reality Check：`notes/repairbench-v01/reality-check-2026-10-02.md`（A–F 六节）。
+- AI 台账：`docs/compliance/ai-usage/AI-20261004-OPENCODE-CCA19F2D6F1AC14F76159D7931E3460A.md`。
+
+### 复查条件
+
+RepairBench v0.1 的 Kill Gate 判定产出时；Owner 明示调整战略时；或进入正式提交 / Release 触发 benchmark 口径复核时。

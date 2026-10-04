@@ -58,7 +58,7 @@
     },
     {
       "role": "evidence_datasheet",
-      "repo_path": "src/hardware/edd001-board/evidence/datasheets/ESP32-S3-WROOM-1-N8R8/esp32-s3-wroom-1_datasheet_en.pdf",
+      "repo_path": "src/hardware/edd001-board/evidence/datasheets/WROOM1_DATASHEET/esp32-s3-wroom-1_datasheet_en.pdf",
       "size_bytes": 1280501,
       "sha256": "27d71971da07c280c6068d08c74720d1a25b8f20cf8494dc1765bdd28d40d435",
       "source_class": "VERIFIED_SOURCE",
@@ -66,7 +66,7 @@
     },
     {
       "role": "evidence_datasheet",
-      "repo_path": "src/hardware/edd001-board/evidence/datasheets/AP63203WU-7/ap63203_datasheet_ds41326-rev3-2.pdf",
+      "repo_path": "src/hardware/edd001-board/evidence/datasheets/ESP32_S3_TECHPEDIA/ap63203_datasheet_ds41326-rev3-2.pdf",
       "size_bytes": 1226090,
       "sha256": "ef99daa3789d835bc025dfcb4c605c5c2e6d3e7223e86d40b33e6b497ea5a722",
       "source_class": "VERIFIED_SOURCE",
@@ -74,7 +74,7 @@
     },
     {
       "role": "evidence_datasheet",
-      "repo_path": "src/hardware/edd001-board/evidence/datasheets/TYPE-C-31-M-12/type-c-31-m-12_drawing.pdf",
+      "repo_path": "src/hardware/edd001-board/evidence/datasheets/LCSC_C165948/type-c-31-m-12_drawing.pdf",
       "size_bytes": 118176,
       "sha256": "6ae33d50ac47820114661138dc4e4659f40fdc5d4f485b46685dfec338da1a9e",
       "source_class": "VERIFIED_SOURCE",
@@ -82,7 +82,7 @@
     },
     {
       "role": "evidence_datasheet",
-      "repo_path": "src/hardware/edd001-board/evidence/datasheets/USBLC6-2SC6/usblc6-2_datasheet.pdf",
+      "repo_path": "src/hardware/edd001-board/evidence/datasheets/ST_USBLC6_2/usblc6-2_datasheet.pdf",
       "size_bytes": 575521,
       "sha256": "bc30154f310cd631043214ed52571daefe04270587ec55072d49a23bd18b9068",
       "source_class": "VERIFIED_SOURCE",
@@ -98,7 +98,7 @@
     },
     {
       "role": "evidence_datasheet",
-      "repo_path": "src/hardware/edd001-board/evidence/datasheets/ESP32-S3-LCD-EV-BOARD/sch_esp32-s3-lcd-ev-board-mb_v1-5.pdf",
+      "repo_path": "src/hardware/edd001-board/evidence/datasheets/ESPRESSIF_S3_LCD_EV_BOARD/sch_esp32-s3-lcd-ev-board-mb_v1-5.pdf",
       "size_bytes": 1607358,
       "sha256": "384f0639b2c38e90e0065ec80722c2dd801d1f69476f85465d02e834a8915fd3",
       "source_class": "VERIFIED_SOURCE",
@@ -136,8 +136,8 @@
   },
   "notes": [
     "Truthful manifest for the six current EDD-001 contract files (three gates/contracts authoritative, three evidence/contracts mirrors).",
-    "source URLs inside the contract files are references only, not frozen local evidence; no datasheet has been frozen for EDD-001 yet.",
-    "evidence_status PARTIAL is the honest state: contract bundle present and hash-verified, engineering sources missing; no example data is used to manufacture COMPLETE.",
+    "source URLs inside the contract files are references only, not frozen local evidence; no datasheet has been frozen for EDD-001 yet. [SUPERSEDED 2026-10-02: the six datasheets were frozen on disk; kept as the state at writing]",
+    "evidence_status PARTIAL is the honest state: contract bundle present and hash-verified, engineering sources missing; no example data is used to manufacture COMPLETE. [SUPERSEDED 2026-10-02 for the six frozen datasheets; still truthful for everything else]",
     "generated_at intentionally omitted: no caller-supplied deterministic time value is available and a wall-clock timestamp would break reproducibility.",
     "V2 protocol frozen 2026-09-01 (sha256 f7d44732785d17a20283f3a18fde7689eebfee78f10a93ae899e1dd116383cad): approval authority now requires a candidate-bound HumanApprovalReceipt; this manifest's approval_status=PENDING remains truthful - no human approval receipt exists for EDD-001.",
     "GH-20 Tasks 6-7 alignment (2026-09-02): required component set converges on the frozen contracts. Runtime collection now includes the nested regulator_3v3.device (AP63203WU-7) alongside the direct SS34 declaration, so missing_requirements lists POWER plus five component evidence items.",
@@ -146,7 +146,9 @@
     "W4A collision 1 (2026-09-02): six remote evidence records pinned in metadata.remote_evidence (5 exact-component + 1 reference-design). All six carry redistribution TO_VERIFY (in-document copyright notices reserve rights; no redistribution grants found), so per the Owner ruling binaries stay OUT of the repository and missing_requirements intentionally remain - provenance debt cleared, local-freeze debt honestly red. Reviewer implementation note honored: TO_VERIFY remote sources never masquerade as local frozen files.",
     "POWER contract DRAFT (2026-09-02): gates/contracts/edd001_power_contract_v1.json + evidence/contracts mirror, evidence-first per DS41326 Rev. 3-2 Table 2 (Cin 10uF / Cout 2x22uF / L 3.9uH / CBST 100nF; EN UVLO 1.18V; USBLC6 as USB data/VBUS protection network, not a series power element; SS34 as VBUS reverse-protection diode). DRAFT is not frozen and does not satisfy EDD001_POWER_CONTRACT; freeze requires human review in a follow-up collision.",
     "Review iteration 1 correction (2026-09-02): POWER DRAFT inductor was mis-copied as 4.7uH from DS41326 Rev. 3-2 Figure 2 (drawn for AP63205/5V); Table 2 for AP63203/3.3V specifies L = 3.9uH. Corrected across the contract, its mirror, and ledgers. EV-board corroboration narrowed to the USB VBUS -> SS34 -> protected rail segment only.",
-    "Datasheet freeze (2026-10-02): Owner reviewed all six remote-evidence licenses and approved local commit. Six PDFs committed under src/hardware/edd001-board/evidence/datasheets/ with byte-identical size+sha256 to the pinned provenance; each is hash-bound as a required VERIFIED_SOURCE files entry, so validate_bundle now verifies them on disk. Removed five resolved missing_requirements; EDD001_POWER_CONTRACT remains (POWER contract still DRAFT) and evidence_status stays PARTIAL. Reference-design schematic (ESPRESSIF_S3_LCD_EV_BOARD_SCHEMATIC) is pinned as reference evidence only, not exact-component evidence (2026-09-02 adjudication unchanged)."
+    "Datasheet freeze (2026-10-02): Owner reviewed all six remote-evidence licenses and approved local commit. Six PDFs committed under src/hardware/edd001-board/evidence/datasheets/ with byte-identical size+sha256 to the pinned provenance; each is hash-bound as a required VERIFIED_SOURCE files entry, so validate_bundle now verifies them on disk. Removed five resolved missing_requirements; EDD001_POWER_CONTRACT remains (POWER contract still DRAFT) and evidence_status stays PARTIAL. Reference-design schematic (ESPRESSIF_S3_LCD_EV_BOARD_SCHEMATIC) is pinned as reference evidence only, not exact-component evidence (2026-09-02 adjudication unchanged). [Amended 2026-10-04 per PR #120 review: the approval covers the local private-repository commit only; redistribution_status stays TO_VERIFY for every record (no vendor redistribution grant verified) and public redistribution remains blocked.]",
+    "PR #120 review remediation (2026-10-04): the six frozen files now live under their contract evidence ids (WROOM1_DATASHEET / ESP32_S3_TECHPEDIA / LCSC_C165948 / ST_USBLC6_2 / ESPRESSIF_S3_LCD_EV_BOARD) so real preflight resolves the frozen artifacts instead of reporting id mismatches; AP63203WU-7 keeps the frozen contract's ESP32_S3_TECHPEDIA mapping note, and the EV-board schematic keeps its 2026-09-02 reference-design adjudication. The SS34 exact-component datasheet keeps its MPN directory as additional (non-contract-id) evidence.",
+    "Known residual after the 2026-10-04 remediation: the ESP32-S3-WROOM-1-N8R8 component still requires S3_DATASHEET (the ESP32-S3 chip datasheet), which is NOT part of the Owner-approved six-file freeze; preflight keeps reporting exactly this gap. Freezing it is a separate license-review decision (provenance TO_VERIFY first)."
   ],
   "metadata": {
     "remote_evidence": [
