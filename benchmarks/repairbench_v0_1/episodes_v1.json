@@ -21,7 +21,11 @@
       "target_rule": "USB_POLARITY_AND_SERIES",
       "fixture": "tests/fixtures/repair_pr1/native/DC-01/fault.kicad_sch",
       "fault_summary": "Series resistors exist but the nets at U1.13/U1.14 are not USB_DM/USB_DP, so the module side of the USB pair is unlabelled/misassigned.",
-      "expected_primary": "USB_POLARITY_AND_SERIES fail -> pass"
+      "expected_primary": "USB_POLARITY_AND_SERIES fail -> pass",
+      "fault_family": "connectivity_label",
+      "solvable_from_frozen_source": true,
+      "in_scope_v0_1": true,
+      "scope_note": "Wrong/missing net labels on existing parts. The contract fully specifies the required pin/net intent, so a frozen source exists."
     },
     {
       "id": "DC-02",
@@ -29,7 +33,11 @@
       "target_rule": "SHT30_ADDRESS",
       "fixture": "tests/fixtures/repair_pr1/native/DC-02/fault.kicad_sch",
       "fault_summary": "U2.2 (ADDR) is on an unnamed net instead of GND, so the sensor address is undefined.",
-      "expected_primary": "SHT30_ADDRESS fail -> pass"
+      "expected_primary": "SHT30_ADDRESS fail -> pass",
+      "fault_family": "connectivity_label",
+      "solvable_from_frozen_source": true,
+      "in_scope_v0_1": true,
+      "scope_note": "Floating pin must join GND. Fully specified by the contract."
     },
     {
       "id": "DC-03",
@@ -37,7 +45,11 @@
       "target_rule": "USB_POLARITY_AND_SERIES",
       "fixture": "tests/fixtures/repair_pr1/native/DC-03/fault.kicad_sch",
       "fault_summary": "R7/R8 (22R USB series) are absent, so the USB_DP_CONN / USB_DM_CONN to USB_DP / USB_DM chain is broken.",
-      "expected_primary": "USB_POLARITY_AND_SERIES fail -> pass"
+      "expected_primary": "USB_POLARITY_AND_SERIES fail -> pass",
+      "fault_family": "add_component",
+      "solvable_from_frozen_source": false,
+      "in_scope_v0_1": false,
+      "scope_note": "Missing series resistors R7/R8. Presence/lib_id/value/footprint are in intent_v1.json, but placement is NOT: the frozen PCB is in a different coordinate frame from this fixture. No frozen coordinate source exists, so no arm may solve it without reading the answer key."
     },
     {
       "id": "DC-04",
@@ -45,7 +57,11 @@
       "target_rule": "ESP32_GPIO9_PULLUP",
       "fixture": "tests/fixtures/repair_pr1/native/DC-04/fault.kicad_sch",
       "fault_summary": "R9 (10k +3V3 -> BOOT) is absent, so the boot strap has no defined high level.",
-      "expected_primary": "ESP32_GPIO9_PULLUP fail -> pass"
+      "expected_primary": "ESP32_GPIO9_PULLUP fail -> pass",
+      "fault_family": "add_component",
+      "solvable_from_frozen_source": false,
+      "in_scope_v0_1": false,
+      "scope_note": "Missing BOOT pull-up R9. Same placement gap as DC-03."
     },
     {
       "id": "DC-05",
@@ -53,7 +69,11 @@
       "target_rule": "ESP32_EN_RC",
       "fixture": "tests/fixtures/repair_pr1/native/DC-05/fault.kicad_sch",
       "fault_summary": "C5 (1uF EN -> GND) is absent, so the EN pin has no approved reset network.",
-      "expected_primary": "ESP32_EN_RC fail -> pass"
+      "expected_primary": "ESP32_EN_RC fail -> pass",
+      "fault_family": "add_component",
+      "solvable_from_frozen_source": false,
+      "in_scope_v0_1": false,
+      "scope_note": "Missing EN reset capacitor C5. Same placement gap as DC-03."
     }
   ],
   "controls": {
@@ -66,5 +86,33 @@
     "The oracle is the netlist-scope projection of the M2 contract, which is WEAKER than the parent contract (no intent/pcb/firmware assertions). See derivation.known_loss_of_power in the contract file.",
     "Schematic-only episodes: no PCB, no ERC/DRC, no KiCad invocation, no firmware constant check.",
     "No ground truth about whether a repair is the one a human would choose. The contract pins the net-level intent; multiple valid repairs may satisfy it, and structural agreement with acceptance_v1.json is the secondary guard, not a proof of optimality."
-  ]
+  ],
+  "scope": {
+    "headline_denominator": "episodes with in_scope_v0_1 = true",
+    "families": {
+      "connectivity_label": {
+        "episodes": [
+          "DC-01",
+          "DC-02"
+        ],
+        "solvable": true,
+        "note": "Contract fully specifies pin/net intent; a frozen source exists."
+      },
+      "add_component": {
+        "episodes": [
+          "DC-03",
+          "DC-04",
+          "DC-05"
+        ],
+        "solvable": false,
+        "note": "No frozen placement source. See placement_source_audit_20261005.md. These episodes are still run and still reported, but they are excluded from the headline primary number because a zero here measures a missing coordinate source, not a repair agent.",
+        "how_to_make_solvable": [
+          "Ship fixtures that carry their own layout intent in the same coordinate frame as the frozen contract, or",
+          "Extend a frozen design-intent artifact with per-part placement for these fixtures, or",
+          "Accept reading repair_ops.json -- rejected, that is the answer key."
+        ]
+      }
+    },
+    "why_this_matters": "A headline of 1/5 reads as a weak agent. The truthful statement is 1 of the 2 solvable connectivity episodes, plus a separately reported unsolvable family whose blocker is a missing coordinate source rather than agent capability."
+  }
 }

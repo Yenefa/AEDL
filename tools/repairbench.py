@@ -518,10 +518,46 @@ def run_arm(arm: str, outdir: Path) -> Dict[str, Any]:
                     "structural": {"status": "UNKNOWN", "problems": [str(exc)]},
                     "error": "%s: %s" % (type(exc).__name__, exc),
                 }
+        outcome["fault_family"] = episode.get("fault_family", "unspecified")
+        outcome["solvable_from_frozen_source"] = bool(
+            episode.get("solvable_from_frozen_source", True))
+        outcome["in_scope_v0_1"] = bool(episode.get("in_scope_v0_1", True))
         results.append(outcome)
 
     scored = [r for r in results if not r.get("error")]
+    in_scope = [r for r in results if r.get("in_scope_v0_1")]
+    out_scope = [r for r in results if not r.get("in_scope_v0_1")]
+    in_scope_scored = [r for r in in_scope if not r.get("error")]
+
+    families: Dict[str, Dict[str, int]] = {}
+    for r in results:
+        fam = families.setdefault(r["fault_family"], {
+            "episodes": 0, "solvable": 0, "executed": 0,
+            "primary_pass": 0, "regression_clean": 0,
+            "structural_pass": 0})
+        fam["episodes"] += 1
+        fam["solvable"] += 1 if r.get("solvable_from_frozen_source") else 0
+        if not r.get("error"):
+            fam["executed"] += 1
+            fam["primary_pass"] += 1 if r.get("primary_ok") else 0
+            fam["regression_clean"] += 1 if r.get("regression_ok") else 0
+            fam["structural_pass"] += 1 if (
+                (r.get("structural") or {}).get("status") == "pass") else 0
+
     summary = {
+        "headline_denominator": "in_scope_v0_1 episodes only",
+        "in_scope_episodes": len(in_scope),
+        "in_scope_executed": len(in_scope_scored),
+        "in_scope_primary_pass": sum(1 for r in in_scope_scored if r.get("primary_ok")),
+        "in_scope_regression_clean": sum(
+            1 for r in in_scope_scored if r.get("regression_ok")),
+        "in_scope_structural_pass": sum(
+            1 for r in in_scope_scored
+            if (r.get("structural") or {}).get("status") == "pass"),
+        "out_of_scope_episodes": len(out_scope),
+        "out_of_scope_unsolvable": sum(
+            1 for r in out_scope if not r.get("solvable_from_frozen_source")),
+        "per_family": families,
         "arm": arm,
         "episodes": len(results),
         "executed": len(scored),
@@ -553,12 +589,15 @@ def render(report: Dict[str, Any]) -> str:
         "AEDL RepairBench v0.1 - arm=%s" % report["arm"],
         "contract sha256: %s" % report["contract_sha256"][:16],
         "",
-        "%-8s %-26s %-8s %-9s %-11s %-8s" % (
-            "episode", "target_rule", "primary", "regress", "structural", "changed"),
+        "%-8s %-22s %-26s %-8s %-9s %-11s %-8s" % (
+            "episode", "family(*=out-of-scope)", "target_rule",
+            "primary", "regress", "structural", "changed"),
     ]
     for r in report["results"]:
-        lines.append("%-8s %-26s %-8s %-9s %-11s %-8s" % (
-            r["episode"], r["target_rule"],
+        lines.append("%-8s %-22s %-26s %-8s %-9s %-11s %-8s" % (
+            r["episode"],
+            r.get("fault_family", "?") + ("" if r.get("in_scope_v0_1") else " *"),
+            r["target_rule"],
             "PASS" if r.get("primary_ok") else "FAIL",
             "clean" if r.get("regression_ok") else "BROKEN",
             (r.get("structural") or {}).get("status", "-"),
@@ -566,10 +605,28 @@ def render(report: Dict[str, Any]) -> str:
         if r.get("error"):
             lines.append("         error: %s" % r["error"])
     lines += ["",
-        "primary %d/%d   regression clean %d/%d   structural %d/%d   executed %d/%d" % (
-            s["primary_pass"], s["episodes"], s["regression_clean"], s["episodes"],
-            s["structural_pass"], s["episodes"], s["executed"], s["episodes"])]
+      "HEADLINE (in-scope only)  primary %d/%d   regression clean %d/%d   "
+      "structural %d/%d   executed %d/%d" % (
+          s["in_scope_primary_pass"], s["in_scope_episodes"],
+          s["in_scope_regression_clean"], s["in_scope_episodes"],
+          s["in_scope_structural_pass"], s["in_scope_episodes"],
+          s["in_scope_executed"], s["in_scope_episodes"]),
+      "ALL episodes             primary %d/%d   executed %d/%d" % (
+          s["primary_pass"], s["episodes"], s["executed"], s["episodes"]),
+      "out-of-scope             %d episode(s), %d of them unsolvable from any "
+      "frozen source" % (s["out_of_scope_episodes"], s["out_of_scope_unsolvable"]),
+      "",
+      "%-22s %-9s %-9s %-8s %-8s %-11s" % (
+          "family", "episodes", "solvable", "exec", "primary", "structural"),
+    ]
+    for fam in sorted(s["per_family"]):
+        f = s["per_family"][fam]
+        lines.append("%-22s %-9d %-9d %-8d %-8s %-11s" % (
+            fam, f["episodes"], f["solvable"], f["executed"],
+            "%d/%d" % (f["primary_pass"], f["episodes"]),
+            "%d/%d" % (f["structural_pass"], f["episodes"])))
     if s["errors"]:
+        lines.append("")
         lines.append("errors: %s" % ", ".join(s["errors"]))
     return "\n".join(lines)
 

@@ -3,7 +3,7 @@
   "arm": "oracle",
   "benchmark_id": "AEDL-RepairBench-v0.1",
   "contract_sha256": "62e2cd063fd54b199d5b673ada161862a6fe96766f76c365db7a935ab133899c",
-  "episodes_sha256": "de44808e4683d09c26596cb19ac6e5bc6cf153ed75b88011774ea9c36334f89d",
+  "episodes_sha256": "1d3c63a190eaa1dae3acfac3005bac4912a2a6c4b0f22232a89f8075ac718355",
   "net_split_guard": false,
   "results": [
     {
@@ -20,11 +20,14 @@
       "bytes_changed": true,
       "episode": "DC-01",
       "error": null,
+      "fault_family": "connectivity_label",
+      "in_scope_v0_1": true,
       "primary_after": "pass",
       "primary_before": "fail",
       "primary_ok": true,
       "regression_broken": [],
       "regression_ok": true,
+      "solvable_from_frozen_source": true,
       "structural": {
         "problems": [],
         "status": "pass"
@@ -45,11 +48,14 @@
       "bytes_changed": true,
       "episode": "DC-02",
       "error": null,
+      "fault_family": "connectivity_label",
+      "in_scope_v0_1": true,
       "primary_after": "pass",
       "primary_before": "fail",
       "primary_ok": true,
       "regression_broken": [],
       "regression_ok": true,
+      "solvable_from_frozen_source": true,
       "structural": {
         "problems": [],
         "status": "pass"
@@ -70,11 +76,14 @@
       "bytes_changed": true,
       "episode": "DC-03",
       "error": null,
+      "fault_family": "add_component",
+      "in_scope_v0_1": false,
       "primary_after": "pass",
       "primary_before": "fail",
       "primary_ok": true,
       "regression_broken": [],
       "regression_ok": true,
+      "solvable_from_frozen_source": false,
       "structural": {
         "problems": [],
         "status": "pass"
@@ -95,11 +104,14 @@
       "bytes_changed": true,
       "episode": "DC-04",
       "error": null,
+      "fault_family": "add_component",
+      "in_scope_v0_1": false,
       "primary_after": "pass",
       "primary_before": "fail",
       "primary_ok": true,
       "regression_broken": [],
       "regression_ok": true,
+      "solvable_from_frozen_source": false,
       "structural": {
         "problems": [],
         "status": "pass"
@@ -120,11 +132,14 @@
       "bytes_changed": true,
       "episode": "DC-05",
       "error": null,
+      "fault_family": "add_component",
+      "in_scope_v0_1": false,
       "primary_after": "pass",
       "primary_before": "fail",
       "primary_ok": true,
       "regression_broken": [],
       "regression_ok": true,
+      "solvable_from_frozen_source": false,
       "structural": {
         "problems": [],
         "status": "pass"
@@ -137,6 +152,32 @@
     "episodes": 5,
     "errors": [],
     "executed": 5,
+    "headline_denominator": "in_scope_v0_1 episodes only",
+    "in_scope_episodes": 2,
+    "in_scope_executed": 2,
+    "in_scope_primary_pass": 2,
+    "in_scope_regression_clean": 2,
+    "in_scope_structural_pass": 2,
+    "out_of_scope_episodes": 3,
+    "out_of_scope_unsolvable": 3,
+    "per_family": {
+      "add_component": {
+        "episodes": 3,
+        "executed": 3,
+        "primary_pass": 3,
+        "regression_clean": 3,
+        "solvable": 0,
+        "structural_pass": 3
+      },
+      "connectivity_label": {
+        "episodes": 2,
+        "executed": 2,
+        "primary_pass": 2,
+        "regression_clean": 2,
+        "solvable": 2,
+        "structural_pass": 2
+      }
+    },
     "primary_pass": 5,
     "regression_clean": 5,
     "structural_pass": 5
