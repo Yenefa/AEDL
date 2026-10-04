@@ -4,16 +4,17 @@
   "benchmark_id": "AEDL-RepairBench-v0.1",
   "contract_sha256": "62e2cd063fd54b199d5b673ada161862a6fe96766f76c365db7a935ab133899c",
   "episodes_sha256": "de44808e4683d09c26596cb19ac6e5bc6cf153ed75b88011774ea9c36334f89d",
+  "net_split_guard": true,
   "results": [
     {
       "arm": "aedl_contract",
       "episode": "DC-01",
-      "error": "LlmUnavailable: writer refused the model ops (rc=6):   ! MERGE USB_DM + USB_DP -> USB_DM\nREFUSED: --strict-nets: net split/merge touches a named net; nothing written\n",
+      "error": "BudgetExceeded: model spend ceiling reached: 1.0000 of 1.00 CNY used; no further model calls will be issued",
       "primary_ok": false,
       "regression_ok": false,
       "structural": {
         "problems": [
-          "writer refused the model ops (rc=6):   ! MERGE USB_DM + USB_DP -> USB_DM\nREFUSED: --strict-nets: net split/merge touches a named net; nothing written\n"
+          "model spend ceiling reached: 1.0000 of 1.00 CNY used; no further model calls will be issued"
         ],
         "status": "UNKNOWN"
       },
@@ -22,12 +23,12 @@
     {
       "arm": "aedl_contract",
       "episode": "DC-02",
-      "error": "LlmUnavailable: writer refused the model ops (rc=6):   ! MERGE GND + <unnamed@U2.2> -> GND\nREFUSED: --strict-nets: net split/merge touches a named net; nothing written\n",
+      "error": "BudgetExceeded: model spend ceiling reached: 1.0000 of 1.00 CNY used; no further model calls will be issued",
       "primary_ok": false,
       "regression_ok": false,
       "structural": {
         "problems": [
-          "writer refused the model ops (rc=6):   ! MERGE GND + <unnamed@U2.2> -> GND\nREFUSED: --strict-nets: net split/merge touches a named net; nothing written\n"
+          "model spend ceiling reached: 1.0000 of 1.00 CNY used; no further model calls will be issued"
         ],
         "status": "UNKNOWN"
       },
@@ -36,64 +37,42 @@
     {
       "arm": "aedl_contract",
       "episode": "DC-03",
-      "error": "LlmUnavailable: model reply contained no JSON object: ''",
+      "error": "BudgetExceeded: model spend ceiling reached: 1.0000 of 1.00 CNY used; no further model calls will be issued",
       "primary_ok": false,
       "regression_ok": false,
       "structural": {
         "problems": [
-          "model reply contained no JSON object: ''"
+          "model spend ceiling reached: 1.0000 of 1.00 CNY used; no further model calls will be issued"
         ],
         "status": "UNKNOWN"
       },
       "target_rule": "USB_POLARITY_AND_SERIES"
     },
     {
-      "after_sha256": "bbe0f719939bab7cf52abf05dbef15331abb7ba40fae20c352d85cfa15ac4434",
-      "all_rule_statuses_after": {
-        "ESP32_EN_RC": "pass",
-        "ESP32_GPIO9_PULLUP": "pass",
-        "SHT30_ADDRESS": "pass",
-        "SHT30_UNUSED_PINS": "pass",
-        "USB_POLARITY_AND_SERIES": "pass"
-      },
       "arm": "aedl_contract",
-      "before_sha256": "655f585df2e913a8aaade3d8a0a291591ec1e7e275920006a54aec8f75dde7a0",
-      "bytes_changed": true,
       "episode": "DC-04",
-      "error": null,
-      "primary_after": "pass",
-      "primary_before": "fail",
-      "primary_ok": true,
-      "regression_broken": [],
-      "regression_ok": true,
+      "error": "BudgetExceeded: model spend ceiling reached: 1.0000 of 1.00 CNY used; no further model calls will be issued",
+      "primary_ok": false,
+      "regression_ok": false,
       "structural": {
-        "problems": [],
-        "status": "pass"
+        "problems": [
+          "model spend ceiling reached: 1.0000 of 1.00 CNY used; no further model calls will be issued"
+        ],
+        "status": "UNKNOWN"
       },
       "target_rule": "ESP32_GPIO9_PULLUP"
     },
     {
-      "after_sha256": "717072772ec983488cbd65df26f0ec4c617551f3f4767e7e1d438c871cd75178",
-      "all_rule_statuses_after": {
-        "ESP32_EN_RC": "pass",
-        "ESP32_GPIO9_PULLUP": "pass",
-        "SHT30_ADDRESS": "pass",
-        "SHT30_UNUSED_PINS": "pass",
-        "USB_POLARITY_AND_SERIES": "pass"
-      },
       "arm": "aedl_contract",
-      "before_sha256": "08393ee96d2d5f2ab15b721fc962a2c6e731330b855a26845d6f530dba4ebf16",
-      "bytes_changed": true,
       "episode": "DC-05",
-      "error": null,
-      "primary_after": "pass",
-      "primary_before": "fail",
-      "primary_ok": true,
-      "regression_broken": [],
-      "regression_ok": true,
+      "error": "BudgetExceeded: model spend ceiling reached: 1.0000 of 1.00 CNY used; no further model calls will be issued",
+      "primary_ok": false,
+      "regression_ok": false,
       "structural": {
-        "problems": [],
-        "status": "pass"
+        "problems": [
+          "model spend ceiling reached: 1.0000 of 1.00 CNY used; no further model calls will be issued"
+        ],
+        "status": "UNKNOWN"
       },
       "target_rule": "ESP32_EN_RC"
     }
@@ -104,11 +83,13 @@
     "errors": [
       "DC-01",
       "DC-02",
-      "DC-03"
+      "DC-03",
+      "DC-04",
+      "DC-05"
     ],
-    "executed": 2,
-    "primary_pass": 2,
-    "regression_clean": 2,
-    "structural_pass": 2
+    "executed": 0,
+    "primary_pass": 0,
+    "regression_clean": 0,
+    "structural_pass": 0
   }
 }

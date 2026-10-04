@@ -68,6 +68,12 @@ observe_source = _rv.observe_source
 _ss = _load_by_path("gates/schematic_semantics.py", "_aedl_schematic_semantics")
 _normalise_net = _ss._normalise_net
 evaluate_observations = _ss.evaluate_observations
+from tools.repairbench_budget import (
+    BudgetExceeded,
+    check_before_call,
+    record as record_spend,
+    snapshot as budget_snapshot,
+)
 from tools.repairbench_endpoint import describe_endpoint, resolve_endpoint
 
 BENCH_DIR = REPO_ROOT / "benchmarks" / "repairbench_v0_1"
@@ -231,6 +237,8 @@ def evaluate_candidate(contract, episode, before_raw: bytes, after_raw: bytes) -
 # --------------------------------------------------------------------------- llm
 LLM_MAX_OUTPUT_TOKENS = 8192  # reasoning models bill thinking against max_tokens; 2048 starved DC-01/DC-03 to an EMPTY reply
 LLM_MAX_REPAIRS = 0  # single-shot by design: one call per episode
+ARM_LABEL = "?"
+CEILING_CNY = budget_snapshot()["ceiling_cny"]  # Owner constraint: 1 CNY
 
 
 class LlmUnavailable(RuntimeError):
@@ -269,7 +277,10 @@ def _pin_summary(view: Dict[str, Any], limit: int = 40) -> List[str]:
     return rows
 
 
-def _repair_prompt(system: str, user: str, base_url: str, model: str, key: str) -> str:
+def _repair_prompt(system: str, user: str, base_url: str, model: str, key: str,
+                  *, arm: str = "?", episode: str = "?") -> str:
+    # Fail-closed spend guard: refuse BEFORE issuing the request.
+    check_before_call(estimated_input_tokens=len(user) // 3)
     payload = {
         "model": model,
         "messages": [
@@ -291,6 +302,12 @@ def _repair_prompt(system: str, user: str, base_url: str, model: str, key: str) 
     )
     with urllib.request.urlopen(request, timeout=120) as response:
         raw = json.loads(response.read().decode("utf-8"))
+    entry = record_spend(arm, episode, raw.get("usage") or {})
+    print("[budget] %s/%s in=%d out=%d reasoning=%d cost=%.6f CNY spent=%.6f/%.2f" % (
+        arm, episode, entry["input_tokens"], entry["output_tokens"],
+        entry["reasoning_tokens"], entry["cost_cny"],
+        budget_snapshot()["spent_cny"], CEILING_CNY),
+        file=sys.stderr)
     return raw["choices"][0]["message"]["content"]
 
 
@@ -343,8 +360,10 @@ def _apply_ops(sch: Path, ops: List[Dict[str, Any]], *, strict_nets: bool = True
     return sch.read_bytes()
 
 
-def _llm_arm(episode, workdir, contract, *, with_contract: bool) -> bytes:
+def _llm_arm(episode, workdir, contract, *, with_contract: bool, arm_label: str) -> bytes:
     base_url, key, model = resolve_endpoint()
+    global ARM_LABEL
+    ARM_LABEL = arm_label
     sch = workdir / "fault.kicad_sch"
     shutil.copyfile(REPO_ROOT / episode["fixture"], sch)
     before_view = project_netlist_view(sch.read_bytes())
@@ -363,16 +382,19 @@ def _llm_arm(episode, workdir, contract, *, with_contract: bool) -> bytes:
         user["defect_hint"] = episode["fault_summary"]
 
     raw = _repair_prompt(SYSTEM_PROMPT, json.dumps(user, ensure_ascii=False),
-                        base_url, model, key)
+                        base_url, model, key, arm=ARM_LABEL,
+                        episode=episode["id"])
     return _apply_ops(sch, _parse_ops(raw), strict_nets=ARM_GUARD["aedl_contract"])
 
 
 def arm_baseline_generic(episode, workdir):
-    return _llm_arm(episode, workdir, load_json(CONTRACT_PATH), with_contract=False)
+    return _llm_arm(episode, workdir, load_json(CONTRACT_PATH),
+                    with_contract=False, arm_label="baseline_generic")
 
 
 def arm_aedl_contract(episode, workdir):
-    return _llm_arm(episode, workdir, load_json(CONTRACT_PATH), with_contract=True)
+    return _llm_arm(episode, workdir, load_json(CONTRACT_PATH),
+                    with_contract=True, arm_label="aedl_contract")
 
 
 # ------------------------------------------------------------------------- arms
@@ -486,7 +508,9 @@ def run_arm(arm: str, outdir: Path) -> Dict[str, Any]:
                 outcome = evaluate_candidate(contract, episode, before_raw, after_raw)
                 outcome["arm"] = arm
                 outcome["error"] = None
-            except Exception as exc:  # an arm that cannot run is a failure, not a pass
+            except (Exception, BudgetExceeded) as exc:
+                # an arm that cannot run, including one refused by the spend
+                # ceiling, is a failure -- never a pass and never a skip
                 outcome = {
                     "arm": arm, "episode": episode["id"],
                     "target_rule": episode["target_rule"],

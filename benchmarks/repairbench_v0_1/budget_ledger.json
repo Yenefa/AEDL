@@ -1,0 +1,14 @@
+{
+  "calls": 0,
+  "ceiling_cny": 1.0,
+  "history": [],
+  "input_tokens": 0,
+  "output_tokens": 0,
+  "price_assumption": {
+    "input_cny_per_m": 2.0,
+    "output_cny_per_m": 8.0,
+    "verified": false
+  },
+  "reasoning_tokens": 0,
+  "spent_cny": 0.0
+}
