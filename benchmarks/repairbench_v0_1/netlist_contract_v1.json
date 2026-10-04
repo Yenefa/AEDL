@@ -1,0 +1,159 @@
+{
+  "$schema": "https://aedl.local/schemas/m2-schematic-contract.v1.json",
+  "schema_version": 1,
+  "board_id": "project-027-m2-esp32c3-sht30",
+  "sources": {
+    "ESP32_C3_WROOM_02_DATASHEET": "https://documentation.espressif.com/esp32-c3-wroom-02_datasheet_en.html",
+    "ESP32_C3_SCHEMATIC_CHECKLIST": "https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32c3/schematic-checklist.html",
+    "SHT3X_DIS_DATASHEET": "https://sensirion.com/media/documents/213E6A3B/63A5A569/Datasheet_SHT3x_DIS.pdf"
+  },
+  "rules": [
+    {
+      "id": "USB_POLARITY_AND_SERIES",
+      "kind": "connectivity",
+      "severity": "critical",
+      "title": "USB D+/D- polarity and 22 ohm series termination",
+      "source_ids": [
+        "ESP32_C3_WROOM_02_DATASHEET",
+        "ESP32_C3_SCHEMATIC_CHECKLIST"
+      ],
+      "checks": {
+        "netlist": {
+          "pins": {
+            "J1.A6": {
+              "net": "USB_DP_CONN"
+            },
+            "J1.B6": {
+              "net": "USB_DP_CONN"
+            },
+            "J1.A7": {
+              "net": "USB_DM_CONN"
+            },
+            "J1.B7": {
+              "net": "USB_DM_CONN"
+            },
+            "R7.1": {
+              "net": "USB_DP_CONN"
+            },
+            "R7.2": {
+              "net": "USB_DP"
+            },
+            "R8.1": {
+              "net": "USB_DM_CONN"
+            },
+            "R8.2": {
+              "net": "USB_DM"
+            },
+            "U1.14": {
+              "net": "USB_DP"
+            },
+            "U1.13": {
+              "net": "USB_DM"
+            }
+          },
+          "components": {
+            "R7": {
+              "value": "22R"
+            },
+            "R8": {
+              "value": "22R"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "SHT30_ADDRESS",
+      "kind": "connectivity",
+      "severity": "critical",
+      "title": "SHT30 ADDR is tied low and firmware uses 0x44",
+      "source_ids": [
+        "SHT3X_DIS_DATASHEET"
+      ],
+      "checks": {
+        "netlist": {
+          "pins": {
+            "U2.2": {
+              "net": "GND"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "SHT30_UNUSED_PINS",
+      "kind": "connectivity",
+      "severity": "major",
+      "title": "Unused SHT30 ALERT and nRESET are intentionally unconnected",
+      "source_ids": [
+        "SHT3X_DIS_DATASHEET"
+      ],
+      "checks": {
+        "netlist": {
+          "pins": {
+            "U2.3": {
+              "net": null,
+              "no_connect": true
+            },
+            "U2.6": {
+              "net": null,
+              "no_connect": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "ESP32_EN_RC",
+      "kind": "connectivity",
+      "severity": "major",
+      "title": "ESP32-C3 EN has the approved 10 kohm and 1 uF reset network",
+      "source_ids": [
+        "ESP32_C3_SCHEMATIC_CHECKLIST"
+      ],
+      "checks": {
+        "netlist": {
+          "pins": {
+            "C5.1": {
+              "net": "EN"
+            },
+            "C5.2": {
+              "net": "GND"
+            }
+          },
+          "components": {
+            "C5": {
+              "value": "1uF"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "ESP32_GPIO9_PULLUP",
+      "kind": "connectivity",
+      "severity": "major",
+      "title": "ESP32-C3 GPIO9 boot strap has an external 10 kohm pull-up",
+      "source_ids": [
+        "ESP32_C3_SCHEMATIC_CHECKLIST"
+      ],
+      "checks": {
+        "netlist": {
+          "pins": {
+            "R9.1": {
+              "net": "+3V3"
+            },
+            "R9.2": {
+              "net": "BOOT"
+            }
+          },
+          "components": {
+            "R9": {
+              "value": "10k"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

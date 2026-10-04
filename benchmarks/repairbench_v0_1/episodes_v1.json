@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "benchmark_id": "AEDL-RepairBench-v0.1",
+  "contract": "benchmarks/repairbench_v0_1/netlist_contract_v1.json",
+  "task_input": "tests/fixtures/repair_pr1/native/<EPISODE>/fault.kicad_sch",
+  "answer_key_policy": {
+    "leak_closed": "The per-episode repair_ops.json next to each fault.kicad_sch IS the ground-truth repair and is deliberately NOT part of the task input exposed to a solving arm. tools.repairbench copies only fault.kicad_sch into the arm workspace.",
+    "why_this_matters": "Before this benchmark existed, repair_ops.json sat in the same directory as the fault schematic, so any arm given the fixture directory could read the answer. That is an answer leak, not a benchmark.",
+    "answer_key_location": "tests/fixtures/repair_pr1/native/<EPISODE>/repair_ops.json",
+    "structural_oracle": "tests/fixtures/repair_pr1/private/acceptance_v1.json (test-only expectations; explicitly NOT runtime authorization)"
+  },
+  "metric_layers": {
+    "primary_oracle": "target rule FAIL -> PASS under the netlist-scope contract",
+    "regression_guard": "every non-target rule that was PASS before the attempt must still be PASS after it",
+    "structural_preservation": "secondary; the post-repair netlist must match tests/fixtures/repair_pr1/private/acceptance_v1.json for the episode"
+  },
+  "episodes": [
+    {
+      "id": "DC-01",
+      "title": "USB D+/D- net labels mislabelled at the module pins",
+      "target_rule": "USB_POLARITY_AND_SERIES",
+      "fixture": "tests/fixtures/repair_pr1/native/DC-01/fault.kicad_sch",
+      "fault_summary": "Series resistors exist but the nets at U1.13/U1.14 are not USB_DM/USB_DP, so the module side of the USB pair is unlabelled/misassigned.",
+      "expected_primary": "USB_POLARITY_AND_SERIES fail -> pass"
+    },
+    {
+      "id": "DC-02",
+      "title": "SHT30 ADDR pin left floating",
+      "target_rule": "SHT30_ADDRESS",
+      "fixture": "tests/fixtures/repair_pr1/native/DC-02/fault.kicad_sch",
+      "fault_summary": "U2.2 (ADDR) is on an unnamed net instead of GND, so the sensor address is undefined.",
+      "expected_primary": "SHT30_ADDRESS fail -> pass"
+    },
+    {
+      "id": "DC-03",
+      "title": "USB series termination resistors missing",
+      "target_rule": "USB_POLARITY_AND_SERIES",
+      "fixture": "tests/fixtures/repair_pr1/native/DC-03/fault.kicad_sch",
+      "fault_summary": "R7/R8 (22R USB series) are absent, so the USB_DP_CONN / USB_DM_CONN to USB_DP / USB_DM chain is broken.",
+      "expected_primary": "USB_POLARITY_AND_SERIES fail -> pass"
+    },
+    {
+      "id": "DC-04",
+      "title": "GPIO9 boot-strap pull-up missing",
+      "target_rule": "ESP32_GPIO9_PULLUP",
+      "fixture": "tests/fixtures/repair_pr1/native/DC-04/fault.kicad_sch",
+      "fault_summary": "R9 (10k +3V3 -> BOOT) is absent, so the boot strap has no defined high level.",
+      "expected_primary": "ESP32_GPIO9_PULLUP fail -> pass"
+    },
+    {
+      "id": "DC-05",
+      "title": "EN reset network capacitor missing",
+      "target_rule": "ESP32_EN_RC",
+      "fixture": "tests/fixtures/repair_pr1/native/DC-05/fault.kicad_sch",
+      "fault_summary": "C5 (1uF EN -> GND) is absent, so the EN pin has no approved reset network.",
+      "expected_primary": "ESP32_EN_RC fail -> pass"
+    }
+  ],
+  "controls": {
+    "noop": "Do nothing. MUST leave every episode's target rule failing. If a no-op episode scores PASS the benchmark is broken and results must be discarded.",
+    "oracle": "Apply the withheld repair_ops.json. Every episode MUST reach primary PASS. If an oracle episode fails, the fixture or the contract projection is inconsistent and results must be discarded.",
+    "why_both": "A benchmark that a do-nothing arm passes measures nothing; a benchmark whose answer key does not reach PASS is unsolvable. Both controls are required before any arm result is reportable."
+  },
+  "limitations": [
+    "v0.1 has 5 episodes drawn from a single board (M2). ADR-023 asks for 20-30 across 3-5 fault families; v0.1 is a scope-and-harness rehearsal, not the final benchmark.",
+    "The oracle is the netlist-scope projection of the M2 contract, which is WEAKER than the parent contract (no intent/pcb/firmware assertions). See derivation.known_loss_of_power in the contract file.",
+    "Schematic-only episodes: no PCB, no ERC/DRC, no KiCad invocation, no firmware constant check.",
+    "No ground truth about whether a repair is the one a human would choose. The contract pins the net-level intent; multiple valid repairs may satisfy it, and structural agreement with acceptance_v1.json is the secondary guard, not a proof of optimality."
+  ]
+}

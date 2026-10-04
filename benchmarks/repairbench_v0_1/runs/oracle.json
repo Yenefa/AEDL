@@ -1,0 +1,143 @@
+{
+  "acceptance_sha256": "3437994467290f35bfb3ec468293a52afe1048a22d6b70841591fdfff10654f2",
+  "arm": "oracle",
+  "benchmark_id": "AEDL-RepairBench-v0.1",
+  "contract_sha256": "62e2cd063fd54b199d5b673ada161862a6fe96766f76c365db7a935ab133899c",
+  "episodes_sha256": "de44808e4683d09c26596cb19ac6e5bc6cf153ed75b88011774ea9c36334f89d",
+  "results": [
+    {
+      "after_sha256": "7c65a283d757eb1ee47fa73f0c4eb657d2bd9ca77aa487078c7705c9a8bd330b",
+      "all_rule_statuses_after": {
+        "ESP32_EN_RC": "pass",
+        "ESP32_GPIO9_PULLUP": "pass",
+        "SHT30_ADDRESS": "pass",
+        "SHT30_UNUSED_PINS": "pass",
+        "USB_POLARITY_AND_SERIES": "pass"
+      },
+      "arm": "oracle",
+      "before_sha256": "c37fdcb5ff9fbc46d4b53fdf119c920dc368774ad0f4026037e5661a41084f5c",
+      "bytes_changed": true,
+      "episode": "DC-01",
+      "error": null,
+      "primary_after": "pass",
+      "primary_before": "fail",
+      "primary_ok": true,
+      "regression_broken": [],
+      "regression_ok": true,
+      "structural": {
+        "problems": [],
+        "status": "pass"
+      },
+      "target_rule": "USB_POLARITY_AND_SERIES"
+    },
+    {
+      "after_sha256": "65ac445c70f3d79d01e485038745b308875a92f4142e22d98714b19a78a05c1a",
+      "all_rule_statuses_after": {
+        "ESP32_EN_RC": "pass",
+        "ESP32_GPIO9_PULLUP": "pass",
+        "SHT30_ADDRESS": "pass",
+        "SHT30_UNUSED_PINS": "pass",
+        "USB_POLARITY_AND_SERIES": "pass"
+      },
+      "arm": "oracle",
+      "before_sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0",
+      "bytes_changed": true,
+      "episode": "DC-02",
+      "error": null,
+      "primary_after": "pass",
+      "primary_before": "fail",
+      "primary_ok": true,
+      "regression_broken": [],
+      "regression_ok": true,
+      "structural": {
+        "problems": [],
+        "status": "pass"
+      },
+      "target_rule": "SHT30_ADDRESS"
+    },
+    {
+      "after_sha256": "c1086a312408cb4e70c454349fd3db470f77fee73563877d8eccc4226250e252",
+      "all_rule_statuses_after": {
+        "ESP32_EN_RC": "pass",
+        "ESP32_GPIO9_PULLUP": "pass",
+        "SHT30_ADDRESS": "pass",
+        "SHT30_UNUSED_PINS": "pass",
+        "USB_POLARITY_AND_SERIES": "pass"
+      },
+      "arm": "oracle",
+      "before_sha256": "110c7cb61758c6a06ec6b49e43d30508931e67582cb7721b957033287eb11da9",
+      "bytes_changed": true,
+      "episode": "DC-03",
+      "error": null,
+      "primary_after": "pass",
+      "primary_before": "fail",
+      "primary_ok": true,
+      "regression_broken": [],
+      "regression_ok": true,
+      "structural": {
+        "problems": [],
+        "status": "pass"
+      },
+      "target_rule": "USB_POLARITY_AND_SERIES"
+    },
+    {
+      "after_sha256": "2f660180ab180009656da7d47e7b686a75ce42ce9084b610904e2b6d28db99c6",
+      "all_rule_statuses_after": {
+        "ESP32_EN_RC": "pass",
+        "ESP32_GPIO9_PULLUP": "pass",
+        "SHT30_ADDRESS": "pass",
+        "SHT30_UNUSED_PINS": "pass",
+        "USB_POLARITY_AND_SERIES": "pass"
+      },
+      "arm": "oracle",
+      "before_sha256": "655f585df2e913a8aaade3d8a0a291591ec1e7e275920006a54aec8f75dde7a0",
+      "bytes_changed": true,
+      "episode": "DC-04",
+      "error": null,
+      "primary_after": "pass",
+      "primary_before": "fail",
+      "primary_ok": true,
+      "regression_broken": [],
+      "regression_ok": true,
+      "structural": {
+        "problems": [],
+        "status": "pass"
+      },
+      "target_rule": "ESP32_GPIO9_PULLUP"
+    },
+    {
+      "after_sha256": "033e4efa94bc800fa60d8cb66182ba35478c6efbd85213db0a6c87a3c828f83b",
+      "all_rule_statuses_after": {
+        "ESP32_EN_RC": "pass",
+        "ESP32_GPIO9_PULLUP": "pass",
+        "SHT30_ADDRESS": "pass",
+        "SHT30_UNUSED_PINS": "pass",
+        "USB_POLARITY_AND_SERIES": "pass"
+      },
+      "arm": "oracle",
+      "before_sha256": "08393ee96d2d5f2ab15b721fc962a2c6e731330b855a26845d6f530dba4ebf16",
+      "bytes_changed": true,
+      "episode": "DC-05",
+      "error": null,
+      "primary_after": "pass",
+      "primary_before": "fail",
+      "primary_ok": true,
+      "regression_broken": [],
+      "regression_ok": true,
+      "structural": {
+        "problems": [],
+        "status": "pass"
+      },
+      "target_rule": "ESP32_EN_RC"
+    }
+  ],
+  "summary": {
+    "arm": "oracle",
+    "episodes": 5,
+    "errors": [],
+    "executed": 5,
+    "primary_pass": 5,
+    "regression_clean": 5,
+    "structural_pass": 5
+  }
+}
