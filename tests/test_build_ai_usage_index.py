@@ -227,7 +227,7 @@ class CheckTests(LedgerToolTestBase):
         text = ACTOR_ENTRY.replace("- 人工审核：`PENDING_HUMAN_REVIEW`\n", "")
         self.write_entry("AI-20260908-YEN-001.md", text)
         findings = bi.check_ledger(self.tmp)
-        self.assertTrue(any("review-status" in f for f in findings))
+        self.assertTrue(any("status field" in f for f in findings), findings)
 
     def test_hand_edited_index_fails(self):
         self.write_entry("AI-20260908-YEN-001.md", ACTOR_ENTRY)
@@ -258,7 +258,7 @@ class ReviewStatusFieldTests(LedgerToolTestBase):
             "- 备注：正文提到 HUMAN_REVIEWED，但没有人工审核字段。\n")
         self.write_entry("AI-20260908-YEN-001.md", text)
         findings = bi.check_ledger(self.tmp)
-        self.assertTrue(any("review-status" in f for f in findings), findings)
+        self.assertTrue(any("no status field" in f for f in findings), findings)
 
     def test_invalid_status_value_is_not_laundered_by_body_text(self):
         text = ACTOR_ENTRY.replace(
@@ -319,7 +319,7 @@ class ReviewStatusFieldTests(LedgerToolTestBase):
                                    "- 审核状态：`PENDING_HUMAN_REVIEW`\n")
         self.write_entry("AI-20260908-YEN-001.md", text)
         findings = bi.check_ledger(self.tmp)
-        self.assertTrue(any("review-status" in f for f in findings), findings)
+        self.assertTrue(any("no status field" in f for f in findings), findings)
 
     def test_coexisting_review_fields_in_existing_stock_pass(self):
         # AI-20260829-001..005 carry both 人工审核：HUMAN_REVIEWED and
@@ -412,6 +412,142 @@ class NewEntryTests(LedgerToolTestBase):
                 with self.assertRaises(bi.LedgerError):
                     bi.cmd_new(self.tmp, actor, day, summary)
         self.assertEqual(list(self.entries.iterdir()), [])
+
+
+class AutonomousStatusLaneTests(LedgerToolTestBase):
+    """ADR-022 / AGENTS.md 0A.4: the 自主验收 lane, fail-closed and disjoint.
+
+    Two properties are enforced, both of them about not being able to fake a
+    lane: an unknown 自主验收 value is rejected rather than ignored, and the
+    two lanes cannot be crossed in either direction — an AI acceptance typed
+    into 人工审核, or a human status typed into 自主验收, is a finding.
+    """
+
+    AUTO_ENTRY = """## AI-20260908-YEN-002
+
+- 日期：2026-09-08
+- 任务名称：自治验收条目
+- 人工审核：`PENDING_HUMAN_REVIEW`
+- 自主验收：`AI_REVIEWED`
+"""
+
+    def findings_for(self, text):
+        self.write_entry("AI-20260908-YEN-002.md", text)
+        bi.cmd_build(self.tmp)
+        return bi.check_ledger(self.tmp)
+
+    def test_autonomous_lane_alone_satisfies_the_status_requirement(self):
+        text = self.AUTO_ENTRY.replace("- 人工审核：`PENDING_HUMAN_REVIEW`\n", "")
+        findings = self.findings_for(text)
+        self.assertFalse([f for f in findings if "no status field" in f], findings)
+
+    def test_each_allowed_autonomous_value_passes(self):
+        for status in bi.AUTONOMOUS_STATUS_VALUES:
+            with self.subTest(status=status):
+                shutil.rmtree(self.entries)
+                self.entries.mkdir(parents=True)
+                findings = self.findings_for(
+                    self.AUTO_ENTRY.replace("AI_REVIEWED", status))
+                self.assertFalse([f for f in findings if "自主验收" in f], findings)
+
+    def test_invalid_autonomous_value_is_rejected(self):
+        findings = self.findings_for(
+            self.AUTO_ENTRY.replace("AI_REVIEWED", "AI_APPROVED_BY_HUMAN"))
+        self.assertTrue(
+            any("自主验收" in f and "AI_APPROVED_BY_HUMAN" in f for f in findings), findings)
+
+    def test_trailing_garbage_is_not_laundered_into_a_valid_status(self):
+        findings = self.findings_for(
+            self.AUTO_ENTRY.replace("`AI_REVIEWED`", "AI_ACCEPTED garbage"))
+        self.assertTrue(
+            any("自主验收" in f and "AI_ACCEPTED garbage" in f for f in findings), findings)
+
+    def test_autonomous_status_in_the_human_field_is_a_finding(self):
+        findings = self.findings_for(
+            self.AUTO_ENTRY.replace(
+                "- 人工审核：`PENDING_HUMAN_REVIEW`", "- 人工审核：`AI_ACCEPTED`"))
+        self.assertTrue(
+            any("HUMAN review" in f and "自主验收" in f for f in findings), findings)
+
+    def test_human_status_in_the_autonomous_field_is_a_finding(self):
+        findings = self.findings_for(
+            self.AUTO_ENTRY.replace("`AI_REVIEWED`", "`HUMAN_REVIEWED`"))
+        self.assertTrue(
+            any("never records human review" in f for f in findings), findings)
+
+    def test_body_mention_of_an_autonomous_status_is_not_a_declaration(self):
+        # Same laundering rule as the human lane: a bare mention in prose never
+        # satisfies the requirement.
+        text = self.AUTO_ENTRY.replace(
+            "- 自主验收：`AI_REVIEWED`\n",
+            "- 备注：正文提到 AI_ACCEPTED，但没有自主验收字段。\n")
+        findings = self.findings_for(text)
+        self.assertFalse([f for f in findings if "自主验收 value" in f], findings)
+
+    def test_autonomous_field_forms_in_existing_stock_pass(self):
+        for form in (
+            "- 自主验收: AI_ACCEPTED\n",             # ASCII colon, no backticks
+            "- 自主验收：`AI_REVIEWED`（ADR-022）\n",   # trailing annotation
+            "* 自主验收：`AI_REVIEWED`\n",            # bullet asterisk
+        ):
+            with self.subTest(form=form):
+                shutil.rmtree(self.entries)
+                self.entries.mkdir(parents=True)
+                findings = self.findings_for(
+                    self.AUTO_ENTRY.replace("- 自主验收：`AI_REVIEWED`\n", form))
+                self.assertFalse([f for f in findings if "自主验收" in f], findings)
+
+    def test_mutation_the_lane_rules_actually_bite(self):
+        """Negative control: neutralise the cross-lane rule, both cases go green.
+
+        An earlier version of this control widened AUTONOMOUS_STATUS_VALUES and
+        asserted the invalid-value case turned green. That was wrong twice: the
+        failing path had the module global baked into its message so the case
+        stayed red anyway, and widening an allow-set does not touch either
+        cross-lane rule. The rule now lives in `cross_lane_findings` purely so
+        it can be swapped out here without patching source text.
+        """
+        cross_human = self.AUTO_ENTRY.replace(
+            "- 人工审核：`PENDING_HUMAN_REVIEW`", "- 人工审核：`AI_ACCEPTED`")
+        cross_auto = self.AUTO_ENTRY.replace("`AI_REVIEWED`", "`HUMAN_REVIEWED`")
+
+        for label, text, needle in (
+            ("human field", cross_human, "HUMAN review"),
+            ("autonomous field", cross_auto, "never records human review"),
+        ):
+            with self.subTest(before_removal=label):
+                shutil.rmtree(self.entries)
+                self.entries.mkdir(parents=True)
+                findings = self.findings_for(text)
+                self.assertTrue(any(needle in f for f in findings),
+                                "expected a cross-lane finding, got %s" % (findings,))
+
+        original = bi.cross_lane_findings
+        try:
+            bi.cross_lane_findings = lambda rel, declared, autonomous: []
+            for label, text in (("human field", cross_human), ("autonomous field", cross_auto)):
+                with self.subTest(after_removal=label):
+                    shutil.rmtree(self.entries)
+                    self.entries.mkdir(parents=True)
+                    findings = self.findings_for(text)
+                    self.assertFalse(
+                        [f for f in findings
+                         if "HUMAN review" in f or "never records human review" in f],
+                        "cross-lane finding survived removal: %s" % (findings,))
+        finally:
+            bi.cross_lane_findings = original
+
+        # And the restored rule reports them again — the swap really was the
+        # only thing making the cases green.
+        for label, text, needle in (
+            ("human field", cross_human, "HUMAN review"),
+            ("autonomous field", cross_auto, "never records human review"),
+        ):
+            with self.subTest(after_restore=label):
+                shutil.rmtree(self.entries)
+                self.entries.mkdir(parents=True)
+                findings = self.findings_for(text)
+                self.assertTrue(any(needle in f for f in findings), findings)
 
 
 if __name__ == "__main__":

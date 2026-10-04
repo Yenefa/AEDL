@@ -123,14 +123,23 @@ class RealEdd001PreflightTests(unittest.TestCase):
             list(finding.details["missing_evidence_ids"]), ["S3_DATASHEET"]
         )
 
-    def test_nested_and_direct_power_parts_are_both_required(self) -> None:
+    def test_nested_and_direct_power_parts_are_both_collected_and_now_resolve(self) -> None:
         """GH-20 Tasks 6-7: both power-path parts must be collected.
 
         ``USB_VBUS_REVERSE_PROTECTION`` declares SS34 directly under its
         constraint; ``POWER_SOURCE_SEPARATION`` declares AP63203WU-7 nested
         inside ``constraint.regulator_3v3.device``. Collection must be
-        recursive so the real preflight reports BOTH — dropping either
-        declaration is a regression against the frozen-contract adjudication.
+        recursive or one of the two declarations is dropped — that part is
+        unchanged and is asserted below by checking both components carry
+        their role and their required evidence id.
+
+        What DID change on 2026-10-04 (PR #120 P1 remediation) is the
+        expectation on the preflight *findings*: both declarations now
+        resolve to locally frozen evidence, so neither may be reported as
+        missing any more. The previous version of this test asserted the
+        opposite (``assertIn`` on both) and its name said "are both
+        required"; leaving that name would have described an expectation the
+        body no longer holds.
         """
         document = self.engine.document
         self.assertEqual(document.components["SS34"].role, "USB_VBUS_REVERSE_PROTECTION")

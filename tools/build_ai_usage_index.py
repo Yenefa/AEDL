@@ -60,6 +60,15 @@ REVIEW_STATUS_VALUES = ("PENDING_HUMAN_REVIEW", "HUMAN_REVIEWED", "ACCEPTED")
 # `（Yenefa，…，口径同`), and that parenthesised form is the only suffix observed
 # in the stock — so `HUMAN_REVIEWED garbage` can never pass as a status.
 REVIEW_VALUE_RE = re.compile(r"`?[ \t]*([A-Za-z][A-Za-z0-9_]*)[ \t]*`?[ \t]*(?:（[^）]*）?)?")
+# ADR-022 / AGENTS.md 0A: the ledger has TWO lanes. The human lane keeps its
+# original three values; the autonomous lane is separate and disjoint, so an
+# AI acceptance can never be recorded as a human one or laundered through it.
+# An entry must declare at least one lane (the human lane alone used to be
+# mandatory, which under AI autonomous mode made 100+ records permanently
+# claim a pending review that has no reviewer behind it).
+AUTONOMOUS_STATUS_VALUES = ("PENDING_AI_REVIEW", "AI_REVIEWED", "AI_ACCEPTED")
+AUTONOMOUS_FIELD_RE = re.compile(
+    r"^([ \t]*)(?:[-*][ \t]+)?自主验收[ \t]*[：:][ \t]*(.*)$")
 REVIEW_FIELD_RE = re.compile(r"^([ \t]*)(?:[-*][ \t]+)?(人工审核|最终状态)[ \t]*[：:][ \t]*(.*)$")
 REVIEW_NESTED_STATUS_RE = re.compile(r"^[-*][ \t]+状态[ \t]*[：:][ \t]*(.*)$")
 REVIEW_NESTED_BARE_RE = re.compile(r"^[-*][ \t]+(`.*)$")
@@ -319,6 +328,42 @@ def review_status_fields(text: str) -> list:
     return fields
 
 
+def autonomous_status_fields(text: str) -> list:
+    """[(declared_status)] for every 自主验收 field (ADR-022 / AGENTS.md 0A.4).
+
+    The autonomous lane is parsed by the same full-value rule as the human
+    lane, so `AI_ACCEPTED garbage` cannot pass as a status. Only the inline
+    form is honoured here: unlike the human lane there is no legacy nested
+    `- 状态：` form to stay compatible with, because the lane is new.
+    """
+    fields = []
+    for line in text.splitlines():
+        m = AUTONOMOUS_FIELD_RE.match(line)
+        if m and m.group(2).strip():
+            fields.append(declared_review_status(m.group(2)))
+    return fields
+
+
+def cross_lane_findings(rel: str, declared: list, autonomous: list) -> list:
+    """Lane-crossing findings; empty means the two lanes stayed disjoint.
+
+    Kept as its own function so the rule is independently testable and so the
+    negative control can neutralise exactly this rule without patching source.
+    """
+    out = []
+    crossed = sorted({value for _, value in declared if value in AUTONOMOUS_STATUS_VALUES})
+    if crossed:
+        out.append(
+            f"{rel}: autonomous status value(s) {crossed} declared in the HUMAN review "
+            f"field — 自主验收 is the only lane that accepts them")
+    crossed_auto = sorted({value for value in autonomous if value in REVIEW_STATUS_VALUES})
+    if crossed_auto:
+        out.append(
+            f"{rel}: human review status value(s) {crossed_auto} declared in 自主验收 — "
+            f"an AI acceptance never records human review")
+    return out
+
+
 def cmd_build(root: Path) -> dict:
     entries = read_entries(root)
     if not entries:
@@ -362,15 +407,31 @@ def check_ledger(root: Path) -> list:
         else:
             findings.append(f"{rel}: missing 日期 field")
         declared = review_status_fields(text)
+        autonomous = autonomous_status_fields(text)
         allowed = ", ".join(REVIEW_STATUS_VALUES)
-        if not declared:
-            findings.append(f"{rel}: no review-status field (need 人工审核/最终状态 declaring one of {allowed})")
-        else:
+        allowed_auto = ", ".join(AUTONOMOUS_STATUS_VALUES)
+        if not declared and not autonomous:
+            findings.append(
+                f"{rel}: no status field (need 人工审核/最终状态 declaring one of {allowed}, "
+                f"or 自主验收 declaring one of {allowed_auto})")
+        if declared:
             invalid = sorted({value for _, value in declared if value not in REVIEW_STATUS_VALUES})
             if invalid:
                 findings.append(
                     f"{rel}: invalid review-status value(s) {invalid} in a review field "
                     f"(allowed: {allowed})")
+            # Disjoint lanes: the human field must never carry an AI status and
+            # vice versa. This is the laundering case — an AI acceptance typed
+            # into 人工审核 (or a human status typed into 自主验收) would
+            # otherwise read as the *other* lane's authority.
+            findings.extend(cross_lane_findings(rel, declared, autonomous))
+        if autonomous:
+            invalid_auto = sorted({value for value in autonomous if value not in AUTONOMOUS_STATUS_VALUES})
+            if invalid_auto:
+                findings.append(
+                    f"{rel}: invalid 自主验收 value(s) {invalid_auto} "
+                    f"(allowed: {allowed_auto})")
+        findings.extend(cross_lane_findings(rel, declared, autonomous))
     # index agreement: the generated index must reference exactly the entry set
     ledger = root / LEDGER_PATH
     if not ledger.is_file():
