@@ -44,3 +44,6 @@ spike_stage2/
 # Mimosa 安全插件本地运行状态（hook-state / reports / finding-ledger，
 # 插件自动生成，非 AEDL 工程产物；与 /.aew/ 同类，2026-10-04 收口补）
 /.mimosa/
+
+# transient commit-message scratch files (never tracked)
+_commit_msg*.txt
