@@ -1,0 +1,79 @@
+# Task Envelope — PR120-P1（#120 评审整改：P1×5 + P2×2）
+# 触发：chatgpt-codex-connector 对 PR #120 的 5 条 P1 + 2 条 P2 未解决意见；
+#       AEDL-AUTO 自治排序第 ② 项（HANDOFF 2026-10-04）。
+# 授权：ADR-022 常驻委派（allow_drift 例外见 exceptions；Agent 不自授权）。
+
+task: PR120-P1
+
+base:
+  branch: feat/edd001-datasheet-freeze
+  sha: d1c9264de0e32a884d8686d9721eef88cce4f8cc
+
+goal: |
+  逐条闭合 PR #120 的 5 条 P1 + 2 条 P2 评审意见，使冻结的六份 EDD-001 证据
+  在真实 preflight 中按合同证据 ID 生效、合规表述回到可辩护状态，然后合入 master。
+  本卡是整改卡：不改冻结合同、不改 sandbox 策略代码、不改数据手册字节。
+
+scope: |
+  P1-1 证据 ID 绑定：数据手册目录改名为合同证据 ID（WROOM1_DATASHEET /
+  ESP32_S3_TECHPEDIA / LCSC_C165948 / ST_USBLC6_2 / ESPRESSIF_S3_LCD_EV_BOARD；
+  SS34 保留为额外 exact-component 证据），manifest repo_path 与 notes 同步；
+  如实保留 S3_DATASHEET（ESP32-S3 芯片手册，不在冻结六份之内）的缺口与上报。
+  P1-2 合规：RES-010 的 License / 再分发 / 合规状态回到 TO_VERIFY，删除
+  “Owner 复审覆盖再分发授权”的过强表述（Owner 批准的是本地私有入仓）。
+  P2-3 manifest 旧注记显式标注 superseded。
+  P1-4 战略文档 provenance：§13/§14 显式标注为 AI 执行注记（非 Owner 原文），
+  更正“逐字入库”表述；补 ADR-023 登记战略收缩与 RepairBench v0.1（P1-5）。
+  P1-7/P2-6 AI 台账：修正路径笔误，把战略/审计部分拆分为独立条目，重建索引。
+  不改：gates/**（含冻结合同）、sandbox_runtime/src/**、数据手册字节、M2 任何内容。
+
+dependencies: []
+
+allowed_paths:
+  - tasks/PR120-P1.yaml
+  - src/hardware/edd001-board/evidence/sandbox_bundle_manifest_v1.json
+  - src/hardware/edd001-board/evidence/datasheets/**
+  - sandbox_runtime/tests/policy/test_edd001_preflight.py
+  - sandbox_runtime/tests/orchestrator/test_integration.py
+  - docs/compliance/THIRD_PARTY_RESOURCES.md
+  - docs/compliance/DECISIONS.md
+  - docs/compliance/ai-usage/**
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/specs/AEDL_STRATEGY_20261002.md
+  - docs/HANDOFF.md
+
+forbidden_paths:
+  - gates/**                     # 冻结合同只读
+  - sandbox_runtime/src/**       # 策略代码只读（本卡走文件系统约定，不改代码）
+  - notes/b5-acceptance/**       # 判据冻结
+  - notes/repairbench-v01/**     # reality check 只读（路径笔误在 AI 条目内更正）
+  - src/hardware/m2-board/**     # M2 冻结线
+  - docs/evidence/**             # 正式 Evidence 不登记（本卡无正式 Evidence）
+
+acceptance: |
+  - 真实 preflight 组件证据 findings：仅剩 ESP32-S3-WROOM-1-N8R8（缺 S3_DATASHEET，
+    如实上报）；AP63203WU-7 / SS34 / TYPE-C-31-M-12 / USBLC6-2SC6 不再报缺。
+  - sandbox 相关测试全绿；主仓全量 + sandbox 全量经 dev_gate --envelope 实跑
+    pass（receipt 落 review bundle）。
+  - RES-010 不再声称已获再分发授权（TO_VERIFY）；manifest notes 不再含过期的
+    “尚未冻结”现行表述（旧句标注 superseded）。
+  - 战略文档 provenance 明确区分 Owner 原文与 AI 注记；ADR-023 就位并被交叉引用。
+  - AI 台账拆分完成、索引同步（dev_gate 的 ai_usage_ledger 通过）。
+  - PR #120 的 7 条评审线程全部答复并解决；合入后记录 HANDOFF。
+
+change_budget:
+  expected_files: 12
+  expected_modules: [src, sandbox_runtime_tests, docs, tasks]
+  cross_module: true
+  contract_change: false            # 冻结合同零改动
+  evidence_semantics_change: false  # 字节与哈希不变；仅证据 ID/路径标签按合同对齐
+
+exceptions:
+  allow_drift:
+    permitted: true
+    reason: "AEDL-AUTO standing delegation (ADR-022)"
+    granted_by: YEN
+    decision_ref: "docs/compliance/DECISIONS.md#ADR-022"
+
+escalation:
+  owner: Percy
