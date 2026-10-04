@@ -316,3 +316,53 @@ Evidence（其元数据冻结结论不受影响）。
 - 人工核验：PENDING_HUMAN_REVIEW；manufacturing_release=false。
 
 - GH-117 最终开发门禁：Windows与Linux均exit0、8/8 PASS，main各1226、sandbox各564；Windows skip21/1+xfail1，Linux skip29/3+xfail1。46个新增sandbox测试全部纳入；Windows执行原生控制，Linux明确跳过相应两项。回执位于 C:/dev/aedl-episodes/adaptive-stage/dev-gate-{windows,linux}-receipt.json。
+
+## EVID-20260927-001 — DC-04 修复事务的授权 delta 摘要在 master 上可复现（补登记悬空引用）
+
+- 日期：2026-09-27（原始事务登记日）；**本条为 2026-10-05 的补登记**
+- 对应主张：DC-04 那笔真实修复事务的 `authorized_delta_sha256`
+  = `69877d3e9a4be9133f0c31684b35952a9f9745596974eb1f1237c6b437ebc681`，
+  可由 `run_round` 的 PRECHECK 从冻结夹具**单独复现**，即当前代码绑定的是同一份期望。
+- **为什么需要补登记**：`EVID-20260927-001` 此前只存在于**未落地**的 PR #94
+  （`docs/evidence-dc04-first-transaction`，draft、CI 从未启动），而 master 上已有 **4 处**
+  引用它，其中 `tests/test_repair_pipeline.py` 直接硬断言上述 digest：
+  - `tests/test_repair_pipeline.py::RunRoundTests::test_the_bound_authorized_delta_is_the_one_the_real_transaction_recorded`
+  - `tasks/PR1-C5-RUN-ROUND.yaml:45` 与 `:91`
+  - `docs/compliance/ai-usage/AI-20260927-OPENCODE-26F93624EFDFF840AB36B6DBF1BB3D4C.md:133`
+  即 master 处于「引用了一个未登记的 Evidence ID」状态。本条闭合该悬空引用。
+- 关联模块：`tools/repair_pipeline.py`（`run_round` PRECHECK）、`tests/test_repair_pipeline.py`
+- 关联 AI Usage：AI-20260927-OPENCODE-26F93624EFDFF840AB36B6DBF1BB3D4C；AI-20261005-OPENCODE-EA9F28030F8EE7A1CF21369E3935BB51
+- 关联 ADR：ADR-001（证据纪律）
+- 环境：Windows；CPython 3.9（`py -3.9`，`C:\Program Files (x86)\Microsoft Visual Studio\Shared\Python39_64`）
+- 执行命令：
+  ```text
+  py -3.9 -m unittest tests.test_repair_pipeline.RunRoundTests.test_the_bound_authorized_delta_is_the_one_the_real_transaction_recorded -v
+  py -3.9 -m unittest tests.test_repair_pipeline
+  ```
+- Runs：2（单条目标用例 1；`tests.test_repair_pipeline` 全模块 1）
+- **结果（2026-10-05 本机实测原文）**：
+  ```text
+  test_the_bound_authorized_delta_is_the_one_the_real_transaction_recorded ... ok
+  Ran 1 test in 1.436s
+  OK
+
+  Ran 336 tests in 119.018s
+  OK (skipped=4)
+  ```
+  即该 digest **在当前 master（`8e555e9`）上确实可复现**，且模块全绿零回归。
+- 原始证据：上述 unittest 输出（未单独持久化文件）；代码与夹具在 `tests/fixtures/repair_pr1/`
+- 是否可复现：**YES**（仅需 CPython 3.9；不需要 KiCad、akcli、网络或任何凭据）
+- **已知限制（重要，不得越级引用本条）**：
+  1. 本条**只**证明「授权 delta 摘要可由冻结夹具复现」。它**不**证明 DC-04 那笔真实
+     akcli 写入事务本身可复现，也**不**证明修复正确——那是 ground truth 问题，
+     master 上仍无 ground truth（Issue #73 未决）。
+  2. 原始事务回执 `aedl-txn-dc04-001`（C4/C5 `apply_stage` 回执、kicad-cli 10.0.5 的
+     网表/ERC/渲染独立见证）**不在本仓库**，在另一台主机的仓库外路径
+     （`...\aedl-txn-dc04\`）。在本机 `Test-Path C:\dev` 为 `False`，故
+     **NOT VERIFIED from here**——这不等于「不存在」，而是「从本机不可验证」。
+  3. PR #94 正文声称的「标准 ERC 对该类缺陷检出率为 0」等结论**未随本条登记**：
+     该主张来自未落地的 #94，本条不予采信、不予背书。
+  4. 本条**不**主张 `COMMITTED`：该状态下 PR #101 / #102 之后已可达，与本条无关；
+     另两笔真实 episode（DC-02，`EVID-20261001-001` / `-002`）已另行登记。
+- 人工核验：`PENDING_AI_REVIEW`
+  （ADR-022 / `AGENTS.md` §0A.4 自治泳道；**未获人工评审**，不得读作 `HUMAN_REVIEWED`）

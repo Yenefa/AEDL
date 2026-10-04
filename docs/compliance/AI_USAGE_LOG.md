@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 148 条。完整正文在各自条目文件中；本索引只做导航。
+共 149 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -218,4 +218,5 @@
 - [`AI-20261004-ZCODE-20A1E410C26074A2DA692A79F33555B8`](ai-usage/AI-20261004-ZCODE-20A1E410C26074A2DA692A79F33555B8.md) — project termination record（Owner 裁决落账）+ 本会话收尾
 ## 2026-10-05
 
+- [`AI-20261005-OPENCODE-B31C0F423DAE4A621EF4655F929E8D28`](ai-usage/AI-20261005-OPENCODE-B31C0F423DAE4A621EF4655F929E8D28.md) — Register EVID-20260927-001 to close master's dangling Evidence citation
 - [`AI-20261005-OPENCODE-EA9F28030F8EE7A1CF21369E3935BB51`](ai-usage/AI-20261005-OPENCODE-EA9F28030F8EE7A1CF21369E3935BB51.md) — Correct the false CI-unavailable claim: Actions runs on a self-hosted runner; per-PR audit of the 6 open PRs
