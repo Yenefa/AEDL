@@ -415,3 +415,57 @@ Evidence（其元数据冻结结论不受影响）。
      「合同是否足以作为修复说明书」，**不是**模型能力。
   5. 全程不调 KiCad、不跑 ERC/DRC、不含固件常量检查；无「是否为人所选择的修复」之 ground truth。
 - 人工核验：`PENDING_AI_REVIEW`（ADR-022 / `AGENTS.md` §0A.4 自治泳道；**未获人工评审**）
+
+## EVID-20261005-002 — 同模型同预算下，冻结合同对模型**未产生可测提升**（null result）
+
+- 日期：2026-10-05
+- 对应主张：**（1）** 在同模型 / 同任务 / 同产物 / 同预算下，把冻结合同交给模型，
+  对 5 个 episode 的 primary / regression / structural **逐集与总分均无任何差异**
+  （无守卫 3/5 vs 3/5；加守卫 2/5 vs 2/5）。**（2）** 并网损伤可被真实模型复现，
+  且两臂以**完全相同**的方式复现，说明它是「只加标签而不带 net-split 守卫」的共性。
+  **（3）** akcli 的 `--strict-nets` 守卫**过度拦截**：它把期望的修复（把悬空脚接 GND）
+  也一并拒绝，代价为 1 集；加上守卫后确定性臂从 1/5 掉到 **0/5 可执行**。
+- 关联模块：`tools/repairbench.py`、`tools/repairbench_endpoint.py`、`benchmarks/repairbench_v0_1/`
+- 关联 AI Usage：AI-20261005-OPENCODE-00A71B68247FA57082876E0F4C09EFAD；AI-20261005-OPENCODE-4E1D9C0F6B8A4E7C93F5D2A1B7C6D90
+- 关联 ADR：ADR-023（Kill Gate 假设 H1）
+- 环境：Windows 10 / CPython 3.9 / akcli 0.21.0；模型端点 `host=api.deepseek.com`、
+  模型 `deepseek-v4-flash`（RES-012 已登记 provider，**未新增第三方**）
+- 执行命令：
+  ```text
+  py -3.9 -m tools.repairbench --arm baseline_generic      # 不给合同
+  py -3.9 -m tools.repairbench --arm aedl_contract         # 给冻结合同
+  py -3.9 -m tools.repairbench --arm noop                  # 对照
+  py -3.9 -m tools.repairbench --arm oracle                # 对照
+  ```
+- Runs：4 臂各多次（每集每臂 1 次模型调用；单次预算）
+- **真实结果**：
+
+  | 配置 | `baseline_generic`（无合同） | `aedl_contract`（有合同） |
+  | --- | --- | --- |
+  | 无 net-split 守卫 | 3/5 | 3/5 |
+  | 加 `--strict-nets` | 2/5 | 2/5 |
+
+  逐集（无守卫，两臂一致）：DC-02 / DC-04 / DC-05 = PASS；DC-01 = FAIL（并网）；
+  DC-03 = 不可执行（baseline 写入器拒绝 exit 6；aedl 模型返回空回复）。
+  DC-01 并网原文：`net USB_DM: expected ['R8.2','U1.13'],
+  observed ['R7.2','R8.2','U1.13','U1.14']`。
+  守卫拦截原文：`! MERGE GND + <unnamed@U2.2> -> GND /
+  REFUSED: --strict-nets: net split/merge touches a named net; nothing written`。
+  对照复跑仍然成立：`noop` **0/5**、`oracle` **5/5/5**。
+- 原始证据：`benchmarks/repairbench_v0_1/runs/{baseline_generic,aedl_contract,noop,oracle,
+  aedl_contract_deterministic}.json`；逐条解读见 `benchmarks/repairbench_v0_1/RESULTS_20261005.md`
+  「第二轮」节；每份回执含 `net_split_guard` 字段标明该次是否启用守卫
+- 是否可复现：**YES**，但**需要模型端点**（凭据运行时从本机 provider 配置读取，
+  不入仓库/日志/argv）。离线对照臂不需要凭据
+- **已知限制（不得越级引用本条）**：
+  1. **这是 null result，不是「差异很小」。** 目前**没有**任何证据支持「冻结合同提升修复能力」。
+     ADR-023 Kill Gate 假设 **H1 在本轮得不到支持**。
+  2. 单一模型（`deepseek-v4-flash`）、n=5、单一板（M2）、单次推导（非多轮 agent）。
+     **不主张**任何模型间或 agent 间比较。
+  3. DC-03 在两臂下均不可执行，已按 `executed` 单列，未计入 primary 分子。
+  4. oracle 为父合同的 netlist 作用域投影，**比父合同弱**；不得引申为完整 M2 合同通过。
+  5. 除模型调用外全离线；不调 KiCad、不跑 ERC/DRC；无「是否为人所选择的修复」之 ground truth。
+  6. 本条**不**主张任何生产就绪度或商业能力。
+- 由此得到的工程要求（非主张，是下一步待做项）：net-split 合法性必须**按 net 对的粒度**判断
+  「本次合并是否被合同允许」，而不是一律「碰到已命名网络即拒绝」。
+- 人工核验：`PENDING_AI_REVIEW`（ADR-022 / `AGENTS.md` §0A.4 自治泳道；**未获人工评审**）

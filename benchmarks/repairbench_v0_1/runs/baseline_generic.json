@@ -1,0 +1,114 @@
+{
+  "acceptance_sha256": "3437994467290f35bfb3ec468293a52afe1048a22d6b70841591fdfff10654f2",
+  "arm": "baseline_generic",
+  "benchmark_id": "AEDL-RepairBench-v0.1",
+  "contract_sha256": "62e2cd063fd54b199d5b673ada161862a6fe96766f76c365db7a935ab133899c",
+  "episodes_sha256": "de44808e4683d09c26596cb19ac6e5bc6cf153ed75b88011774ea9c36334f89d",
+  "results": [
+    {
+      "arm": "baseline_generic",
+      "episode": "DC-01",
+      "error": "LlmUnavailable: writer refused the model ops (rc=6):   ! MERGE USB_DM + USB_DP -> USB_DM\nREFUSED: --strict-nets: net split/merge touches a named net; nothing written\n",
+      "primary_ok": false,
+      "regression_ok": false,
+      "structural": {
+        "problems": [
+          "writer refused the model ops (rc=6):   ! MERGE USB_DM + USB_DP -> USB_DM\nREFUSED: --strict-nets: net split/merge touches a named net; nothing written\n"
+        ],
+        "status": "UNKNOWN"
+      },
+      "target_rule": "USB_POLARITY_AND_SERIES"
+    },
+    {
+      "arm": "baseline_generic",
+      "episode": "DC-02",
+      "error": "LlmUnavailable: writer refused the model ops (rc=6):   ! MERGE GND + <unnamed@U2.2> -> GND\nREFUSED: --strict-nets: net split/merge touches a named net; nothing written\n",
+      "primary_ok": false,
+      "regression_ok": false,
+      "structural": {
+        "problems": [
+          "writer refused the model ops (rc=6):   ! MERGE GND + <unnamed@U2.2> -> GND\nREFUSED: --strict-nets: net split/merge touches a named net; nothing written\n"
+        ],
+        "status": "UNKNOWN"
+      },
+      "target_rule": "SHT30_ADDRESS"
+    },
+    {
+      "arm": "baseline_generic",
+      "episode": "DC-03",
+      "error": "LlmUnavailable: model reply contained no JSON object: ''",
+      "primary_ok": false,
+      "regression_ok": false,
+      "structural": {
+        "problems": [
+          "model reply contained no JSON object: ''"
+        ],
+        "status": "UNKNOWN"
+      },
+      "target_rule": "USB_POLARITY_AND_SERIES"
+    },
+    {
+      "after_sha256": "4dbd4253f85062afd90820abd4e984c6112bc2126165eb2f4df829d46bccdfef",
+      "all_rule_statuses_after": {
+        "ESP32_EN_RC": "pass",
+        "ESP32_GPIO9_PULLUP": "pass",
+        "SHT30_ADDRESS": "pass",
+        "SHT30_UNUSED_PINS": "pass",
+        "USB_POLARITY_AND_SERIES": "pass"
+      },
+      "arm": "baseline_generic",
+      "before_sha256": "655f585df2e913a8aaade3d8a0a291591ec1e7e275920006a54aec8f75dde7a0",
+      "bytes_changed": true,
+      "episode": "DC-04",
+      "error": null,
+      "primary_after": "pass",
+      "primary_before": "fail",
+      "primary_ok": true,
+      "regression_broken": [],
+      "regression_ok": true,
+      "structural": {
+        "problems": [],
+        "status": "pass"
+      },
+      "target_rule": "ESP32_GPIO9_PULLUP"
+    },
+    {
+      "after_sha256": "4c8c1e1fe93a81a0b3d12ccf4e24f0e4e2ffe138d2aa4709d754e4b4a88fc573",
+      "all_rule_statuses_after": {
+        "ESP32_EN_RC": "pass",
+        "ESP32_GPIO9_PULLUP": "pass",
+        "SHT30_ADDRESS": "pass",
+        "SHT30_UNUSED_PINS": "pass",
+        "USB_POLARITY_AND_SERIES": "pass"
+      },
+      "arm": "baseline_generic",
+      "before_sha256": "08393ee96d2d5f2ab15b721fc962a2c6e731330b855a26845d6f530dba4ebf16",
+      "bytes_changed": true,
+      "episode": "DC-05",
+      "error": null,
+      "primary_after": "pass",
+      "primary_before": "fail",
+      "primary_ok": true,
+      "regression_broken": [],
+      "regression_ok": true,
+      "structural": {
+        "problems": [],
+        "status": "pass"
+      },
+      "target_rule": "ESP32_EN_RC"
+    }
+  ],
+  "summary": {
+    "arm": "baseline_generic",
+    "episodes": 5,
+    "errors": [
+      "DC-01",
+      "DC-02",
+      "DC-03"
+    ],
+    "executed": 2,
+    "primary_pass": 2,
+    "regression_clean": 2,
+    "structural_pass": 2
+  }
+}

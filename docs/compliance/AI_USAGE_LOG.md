@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 155 条。完整正文在各自条目文件中；本索引只做导航。
+共 156 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -221,6 +221,7 @@
 ## 2026-10-05
 
 - [`AI-20261005-OPENCODE-00A71B68247FA57082876E0F4C09EFAD`](ai-usage/AI-20261005-OPENCODE-00A71B68247FA57082876E0F4C09EFAD.md) — RepairBench v0.1 first real run: controls hold, contract-completeness gap and net-merge hazard found, LLM arms NOT_RUN
+- [`AI-20261005-OPENCODE-492E30A94C08D5B39E24E9EF9C1B6749`](ai-usage/AI-20261005-OPENCODE-492E30A94C08D5B39E24E9EF9C1B6749.md) — Two-arm LLM experiment at matched budget: frozen contract shows NO measurable uplift (null result); net-merge reproduced by real model; strict-nets over-blocks
 - [`AI-20261005-OPENCODE-9CE325C974C753284C4D14AFAA665EAA`](ai-usage/AI-20261005-OPENCODE-9CE325C974C753284C4D14AFAA665EAA.md) — Land PR #67 *.md text eol=lf with pinned exemptions; renormalise only in-scope files
 - [`AI-20261005-OPENCODE-B31C0F423DAE4A621EF4655F929E8D28`](ai-usage/AI-20261005-OPENCODE-B31C0F423DAE4A621EF4655F929E8D28.md) — Register EVID-20260927-001 to close master's dangling Evidence citation
 - [`AI-20261005-OPENCODE-D41866B7AAF6D5C172E5FA6C46DCDEDB`](ai-usage/AI-20261005-OPENCODE-D41866B7AAF6D5C172E5FA6C46DCDEDB.md) — Land PR #58 E5 recruitment log + 3 session records as a ported commit

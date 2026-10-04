@@ -68,6 +68,7 @@ observe_source = _rv.observe_source
 _ss = _load_by_path("gates/schematic_semantics.py", "_aedl_schematic_semantics")
 _normalise_net = _ss._normalise_net
 evaluate_observations = _ss.evaluate_observations
+from tools.repairbench_endpoint import describe_endpoint, resolve_endpoint
 
 BENCH_DIR = REPO_ROOT / "benchmarks" / "repairbench_v0_1"
 CONTRACT_PATH = BENCH_DIR / "netlist_contract_v1.json"
@@ -228,8 +229,8 @@ def evaluate_candidate(contract, episode, before_raw: bytes, after_raw: bytes) -
 
 
 # --------------------------------------------------------------------------- llm
-LLM_MODEL_ENV = "AEDL_ARH_API_KEY"
-LLM_MAX_OUTPUT_TOKENS = 2048
+LLM_MAX_OUTPUT_TOKENS = 8192  # reasoning models bill thinking against max_tokens; 2048 starved DC-01/DC-03 to an EMPTY reply
+LLM_MAX_REPAIRS = 0  # single-shot by design: one call per episode
 
 
 class LlmUnavailable(RuntimeError):
@@ -237,7 +238,11 @@ class LlmUnavailable(RuntimeError):
 
 
 def llm_available() -> bool:
-    return bool(os.environ.get(LLM_MODEL_ENV))
+    try:
+        resolve_endpoint()
+        return True
+    except Exception:
+        return False
 
 
 def _contract_hint(contract: Dict[str, Any], rule_id: str) -> Dict[str, Any]:
@@ -264,7 +269,7 @@ def _pin_summary(view: Dict[str, Any], limit: int = 40) -> List[str]:
     return rows
 
 
-def _repair_prompt(system: str, user: str, base_url: str, model: str) -> str:
+def _repair_prompt(system: str, user: str, base_url: str, model: str, key: str) -> str:
     payload = {
         "model": model,
         "messages": [
@@ -280,7 +285,7 @@ def _repair_prompt(system: str, user: str, base_url: str, model: str) -> str:
         data=body,
         headers={
             "Content-Type": "application/json",
-            "Authorization": "Bearer " + os.environ[LLM_MODEL_ENV],
+            "Authorization": "Bearer " + key,
         },
         method="POST",
     )
@@ -318,7 +323,7 @@ def _parse_ops(raw_text: str) -> List[Dict[str, Any]]:
     return ops
 
 
-def _apply_ops(sch: Path, ops: List[Dict[str, Any]]) -> bytes:
+def _apply_ops(sch: Path, ops: List[Dict[str, Any]], *, strict_nets: bool = True) -> bytes:
     akcli = find_akcli()
     if akcli is None:
         raise LlmUnavailable("pinned akcli writer not found")
@@ -327,17 +332,19 @@ def _apply_ops(sch: Path, ops: List[Dict[str, Any]]) -> bytes:
         ops_file.write_text(json.dumps(
             {"protocol_version": 2, "target_format": "kicad", "ops": ops},
             ensure_ascii=False), encoding="utf-8")
-        proc = subprocess.run(
-            [str(akcli), "draw", str(sch), "--ops", str(ops_file),
-             "--apply", "--no-erc", "--json"],
-            capture_output=True, text=True)
+        argv = [str(akcli), "draw", str(sch), "--ops", str(ops_file),
+                "--apply", "--no-erc", "--json"]
+        if strict_nets:
+            argv.append("--strict-nets")
+        proc = subprocess.run(argv, capture_output=True, text=True)
     if proc.returncode != 0:
         raise LlmUnavailable("writer refused the model ops (rc=%d): %s" % (
             proc.returncode, (proc.stderr or proc.stdout)[:300]))
     return sch.read_bytes()
 
 
-def _llm_arm(episode, workdir, contract, *, with_contract: bool, base_url: str, model: str) -> bytes:
+def _llm_arm(episode, workdir, contract, *, with_contract: bool) -> bytes:
+    base_url, key, model = resolve_endpoint()
     sch = workdir / "fault.kicad_sch"
     shutil.copyfile(REPO_ROOT / episode["fixture"], sch)
     before_view = project_netlist_view(sch.read_bytes())
@@ -355,22 +362,17 @@ def _llm_arm(episode, workdir, contract, *, with_contract: bool, base_url: str, 
     else:
         user["defect_hint"] = episode["fault_summary"]
 
-    raw = _repair_prompt(SYSTEM_PROMPT, json.dumps(user, ensure_ascii=False), base_url, model)
-    return _apply_ops(sch, _parse_ops(raw))
+    raw = _repair_prompt(SYSTEM_PROMPT, json.dumps(user, ensure_ascii=False),
+                        base_url, model, key)
+    return _apply_ops(sch, _parse_ops(raw), strict_nets=ARM_GUARD["aedl_contract"])
 
 
 def arm_baseline_generic(episode, workdir):
-    return _llm_arm(episode, workdir, load_json(CONTRACT_PATH),
-                    with_contract=False,
-                    base_url=os.environ["AEDL_RB_BASE_URL"],
-                    model=os.environ["AEDL_RB_MODEL"])
+    return _llm_arm(episode, workdir, load_json(CONTRACT_PATH), with_contract=False)
 
 
 def arm_aedl_contract(episode, workdir):
-    return _llm_arm(episode, workdir, load_json(CONTRACT_PATH),
-                    with_contract=True,
-                    base_url=os.environ["AEDL_RB_BASE_URL"],
-                    model=os.environ["AEDL_RB_MODEL"])
+    return _llm_arm(episode, workdir, load_json(CONTRACT_PATH), with_contract=True)
 
 
 # ------------------------------------------------------------------------- arms
@@ -439,7 +441,23 @@ def arm_aedl_contract_deterministic(episode: Dict[str, Any], workdir: Path) -> b
         # honestly as "no repair attempted" rather than skipped.
         return sch.read_bytes()
 
-    return _apply_ops(sch, ops)
+    return _apply_ops(sch, ops, strict_nets=ARM_GUARD["aedl_contract_deterministic"])
+
+
+# Net-split guard per arm. `--strict-nets` is fail-closed but too coarse: it
+# refuses ANY label write touching a named net, so it blocks the unsafe case
+# (DC-01 merging USB_DP into USB_DM) AND the intended fix (DC-02 attaching a
+# floating pin to GND). Measured round 2: with the guard on, DC-02 becomes a
+# refusal and aedl_contract_deterministic drops 1/5 -> 0/5 executed.
+# Measured round 3: the guard is what makes the DC-01 merge impossible.
+# Neither setting is presented as the winner; both are recorded.
+ARM_GUARD = {
+    "noop": False,
+    "oracle": False,          # the answer key is vetted; it is the solvability control
+    "baseline_generic": True,
+    "aedl_contract": True,
+    "aedl_contract_deterministic": True,
+}
 
 
 ARMS = {
@@ -495,6 +513,7 @@ def run_arm(arm: str, outdir: Path) -> Dict[str, Any]:
         "contract_sha256": sha256_file(CONTRACT_PATH),
         "episodes_sha256": sha256_file(EPISODES_PATH),
         "acceptance_sha256": sha256_file(ACCEPTANCE_PATH),
+        "net_split_guard": ARM_GUARD.get(arm),
         "summary": summary,
         "results": results,
     }

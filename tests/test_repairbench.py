@@ -107,52 +107,75 @@ class ContractCompletenessTests(unittest.TestCase):
 
 
 class NetMergeHazardTests(unittest.TestCase):
-    """Finding 2: contract-derived labels merge named nets without a guard."""
+    """Finding 2, measured under BOTH net-split-guard settings.
 
-    def test_dc01_labels_are_not_applied_without_a_split_guard(self):
-        """On DC-01 the unguarded arm merged USB_DP and USB_DM.
+    Round 2 (guard off): contract-derived labels merged USB_DP into USB_DM.
+    Round 3 (guard on): the writer refuses the same ops, so nothing unsafe lands.
 
-        Pins the hazard. The repaired USB_DM membership contains R7.2 and
-        U1.14, which belong to USB_DP in the contract, so the two named nets
-        ended up merged. If a guard is ever added this test fails and that
-        failure means the hazard is closed.
+    Both halves are pinned. The guard half is not a bonus -- it is the only reason
+    the unguarded half is survivable in production, and the refusal it produces is
+    deliberately NOT scored as a primary PASS anywhere.
+    """
+
+    def _run_arm(self, episode, *, strict_nets):
+        original = rb.ARM_GUARD["aedl_contract_deterministic"]
+        rb.ARM_GUARD["aedl_contract_deterministic"] = strict_nets
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                return rb.arm_aedl_contract_deterministic(episode, Path(tmp))
+        finally:
+            rb.ARM_GUARD["aedl_contract_deterministic"] = original
+
+    def _dc01(self):
+        spec = json.loads(rb.EPISODES_PATH.read_text(encoding="utf-8"))
+        return next(e for e in spec["episodes"] if e["id"] == "DC-01")
+
+    def test_unguarded_labels_merge_named_nets(self):
+        """Guard off: the measured hazard. R7.2 and U1.14 land on USB_DM.
+
+        They belong to USB_DP in the contract, so the two named nets end up as one.
+        If this ever stops reproducing, the fixture or the contract changed and
+        this test must be revisited deliberately.
         """
-        spec = json.loads(rb.EPISODES_PATH.read_text(encoding="utf-8"))
-        episode = next(e for e in spec["episodes"] if e["id"] == "DC-01")
-        contract = json.loads(rb.CONTRACT_PATH.read_text(encoding="utf-8"))
-        before = (rb.REPO_ROOT / episode["fixture"]).read_bytes()
-
-        with tempfile.TemporaryDirectory() as tmp:
-            workdir = Path(tmp)
-            after = rb.arm_aedl_contract_deterministic(episode, workdir)
-            view = rb.project_netlist_view(after)
-
-        members = set(view["pins"].get("R7.2", {}).get("net") or "")
-        self.assertNotEqual(
-            members, "",
-            "R7.2 has no net after the mechanical arm; the fixture shape changed")
-
-        usb_dm = sorted(
-            pin for pin, state in view["pins"].items() if state.get("net") == "USB_DM")
-        merged = {"R7.2", "U1.14"} & set(usb_dm)
+        episode = self._dc01()
+        after = self._run_arm(episode, strict_nets=False)
+        view = rb.project_netlist_view(after)
+        usb_dm = sorted(p for p, s in view["pins"].items() if s.get("net") == "USB_DM")
         self.assertTrue(
-            merged,
-            "expected the measured net-merge hazard (R7.2/U1.14 on USB_DM); it is "
-            "absent now, so a guard was added -- update this test deliberately")
+            {"R7.2", "U1.14"} & set(usb_dm),
+            "expected the unguarded merge to put R7.2/U1.14 on USB_DM; observed %s" % usb_dm)
 
-    def test_structural_oracle_detects_the_merge(self):
-        """The merge must be visible in the structural layer, not silently pass."""
-        spec = json.loads(rb.EPISODES_PATH.read_text(encoding="utf-8"))
-        episode = next(e for e in spec["episodes"] if e["id"] == "DC-01")
-        with tempfile.TemporaryDirectory() as tmp:
-            workdir = Path(tmp)
-            after = rb.arm_aedl_contract_deterministic(episode, workdir)
-            view = rb.project_netlist_view(after)
-        result = rb.structural_check("DC-01", view)
-        self.assertEqual(
-            result["status"], "fail",
-            "structural oracle must flag the merged nets on DC-01")
+    def test_structural_oracle_catches_the_unguarded_merge(self):
+        """The merge must be reported, never silently accepted."""
+        episode = self._dc01()
+        after = self._run_arm(episode, strict_nets=False)
+        result = rb.structural_check("DC-01", rb.project_netlist_view(after))
+        self.assertEqual(result["status"], "fail",
+                         "structural oracle must flag the merged nets on DC-01")
         self.assertTrue(result["problems"])
+
+    def test_guard_refuses_the_unsafe_write(self):
+        """Guard on: the writer refuses, so no merged net reaches the board.
+
+        Asserts the refusal, and asserts it is surfaced as an error rather than
+        quietly scored as success.
+        """
+        episode = self._dc01()
+        with self.assertRaises(rb.LlmUnavailable) as ctx:
+            self._run_arm(episode, strict_nets=True)
+        message = str(ctx.exception)
+        self.assertIn("strict-nets", message)
+        self.assertNotIn("primary_ok", message)
+
+    def test_guard_is_recorded_in_every_receipt(self):
+        """A receipt must say whether the guard was on, or the number is ambiguous."""
+        spec = json.loads(rb.EPISODES_PATH.read_text(encoding="utf-8"))
+        self.assertIn("aedl_contract_deterministic", rb.ARM_GUARD)
+        with tempfile.TemporaryDirectory() as tmp:
+            report = rb.run_arm("noop", Path(tmp))
+        self.assertIn("net_split_guard", report)
+        self.assertFalse(report["net_split_guard"])
+
 
 
 class ControlArmTests(unittest.TestCase):

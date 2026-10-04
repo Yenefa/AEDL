@@ -4,6 +4,7 @@
   "benchmark_id": "AEDL-RepairBench-v0.1",
   "contract_sha256": "62e2cd063fd54b199d5b673ada161862a6fe96766f76c365db7a935ab133899c",
   "episodes_sha256": "de44808e4683d09c26596cb19ac6e5bc6cf153ed75b88011774ea9c36334f89d",
+  "net_split_guard": false,
   "results": [
     {
       "after_sha256": "c37fdcb5ff9fbc46d4b53fdf119c920dc368774ad0f4026037e5661a41084f5c",
