@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 146 条。完整正文在各自条目文件中；本索引只做导航。
+共 147 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -211,6 +211,7 @@
 ## 2026-10-04
 
 - [`AI-20261004-OPENCODE-7EE52F40A50EAA661434B6611C305A22`](ai-usage/AI-20261004-OPENCODE-7EE52F40A50EAA661434B6611C305A22.md) — Land ADR-022 decision 6: fail-closed 自主验收 lane, and rename a stale PR #120 test name
+- [`AI-20261004-OPENCODE-B06333FF48C9CEFB8F3CBFC9BF323C97`](ai-usage/AI-20261004-OPENCODE-B06333FF48C9CEFB8F3CBFC9BF323C97.md) — Correct false provenance: la4876949-bot/AEDL migration never happened; no branch deletion
 - [`AI-20261004-OPENCODE-BB0E31FB88FF7B0C6B03004ED38E0B15`](ai-usage/AI-20261004-OPENCODE-BB0E31FB88FF7B0C6B03004ED38E0B15.md) — AI fully autonomous takeover: ADR-022 governance mode, un-terminate, merge authority, irreversible boundaries
 - [`AI-20261004-OPENCODE-CCA19F2D6F1AC14F76159D7931E3460A`](ai-usage/AI-20261004-OPENCODE-CCA19F2D6F1AC14F76159D7931E3460A.md) — 补登——AEDL 战略收缩与 RepairBench v0.1 现实核查存档（PR #120 P1-7 拆分的独立条目）
 - [`AI-20261004-OPENCODE-CD97DFFAC9E4268716297D327E9E6FA9`](ai-usage/AI-20261004-OPENCODE-CD97DFFAC9E4268716297D327E9E6FA9.md) — PR #120 评审整改：P1×5 + P2×2 闭环（证据 ID 绑定 / 合规回退 / ADR-023 / 台账拆分）
