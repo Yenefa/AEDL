@@ -1,9 +1,14 @@
 # HANDOFF — project-027-autonomous-hardware-agent
 
-> ⛔ **项目已终止（2026-10-04 20:43，Owner/大统领拍板）**：AEDL 自该时点起**正式终止投入**
-> ——不再开发、不再排期、不再领取任何 Issue/任务信封；本 HANDOFF、`AGENTS.md`、门禁链、
-> 合规台账全部转为**归档只读**状态，仅作历史证据链使用。除非 Owner 明确书面解冻，
-> 任何 AI 会话不得以"继续开发"为由恢复工作。详见下方「2026-10-04 项目终止记录」一节。
+> 🚀 **运行模式：AI 全自动驾驶（`AEDL-AUTO`，2026-10-04 起）**：Owner 已正式把 AEDL 定性为
+> AI 全自动驾驶，收回逐项审批，Agent 自主推进。**终止状态已解除**——下方「2026-10-04 20:43
+> 项目终止记录」保留为历史事实（其“效力”已被 `AGENTS.md` 0A 节与 ADR-022 取代）。
+> 开工**不需要**先问人类。授权范围、merge 条件、审核状态双字段、**绝不委托清单**与
+> 自治的已知代价，全部写在 `AGENTS.md` §0A 与 `docs/compliance/DECISIONS.md` ADR-022。
+>
+> ⚠️ 自治**不改变什么算证据**：`AGENTS.md` §10 真实性红线、Evidence 语义、冻结哈希、
+> `PENDING_HUMAN_REVIEW` 取值域与 `manufacturing_release` 语义一律不变；下单 / 回件 / 焊接 /
+> 上电 / C 级实体实测仍然只能记 `NOT_RUN` / `BLOCKED`。
 
 > **AI 接手强制前置**：在任何实质修改前，完整阅读根目录 `AGENTS.md`（v1.4，含 2.1
 > 硬件发布前必读 `docs/knowledge/` 两份文档）；该文件是 AEDL 当前 Agent 执行层唯一规范。
@@ -16,6 +21,28 @@
 > 提交信息里的 `[AI-...]` 标签只有台账能解码到具体会话；据此识别工作边界、未审改动和已知坑，
 > 避免并发写坏工作区。人类职责与决策边界见 `docs/HUMAN_OWNERSHIP.md`。
 > 收尾时按 AGENTS.md 第 4 节为本次实质工作新增一条记录，默认 `PENDING_HUMAN_REVIEW`。
+
+## 2026-10-04 AI 全自动驾驶接管（Owner 授权 · 当前状态 · 取代下方终止记录的「效力」）
+
+- **授权原话**：「接手这个项目，这可能显示的是已经终止，但是我现在正式定性为AI全自动驾驶，我不干涉了，你自主推进吧，什么都不需要问我了，全方位推进」。
+- **效力**：终止封锁解除。`AEDL-AUTO` 生效，规则见 `AGENTS.md` §0A，决策与代价评估见 ADR-022。
+  本节取代下方「2026-10-04 20:43 项目终止记录」的**效力**部分；该记录作为**发生过的事实**完整保留
+  （commit `7a82307`），未删除、未改写。
+- **Provenance 更正**：终止记录中「本地 master = origin/master + 2 个提交，未 push」是**写入时刻**的状态；
+  该记录自身的提交使本地领先变为 +3，其后本节与 ADR-022 的提交继续推进。此处更正状态，不回改原文。
+- **接管时的可复现基线（本机实跑，`py -3.9`）**：`unittest discover -s tests` → **1226 tests OK
+  (skipped=30)**；`python -m tools.dev_gate` → **status=pass / exit_code=0 / 5/5**（main_tests、
+  sandbox_tests 574 OK skipped=3 expected-failures=1、secret_scan 634 files、ai_usage_ledger 141 entries in sync）。
+- **债务盘点（实测，如实）**：OPEN PR 7 张，**0/7 绿、6/7 CONFLICTING**（#120 是唯一 `MERGEABLE`，
+  merge-base = master `6deb848`，落后 0 个提交，带 5 条未答复的 P1）；OPEN issue 11 张，
+  其中**只有 #32（EDD-001 功能范围）真正未决**，#83/#85/#51/#2/#5 的升级问题早已获答只是未关单；
+  远端陈旧分支 80 条；`tasks/` 45 张信封的 64 条 `decision_ref` 中**仅 4 条可解析**为 GitHub 永久链接。
+- **基础设施事实**：GitHub Actions 自 2026-09-21 起因账户计费失败整体停摆（`The job was not started
+  because recent account payments have failed`），**「CI 绿」在当前账户状态下不可达成**；
+  唯一可信验证入口是本地 `dev_gate`。该事实属账户/账单范畴，**不在自治授权内**，保持如实登记。
+- **下一步（自治排序，无人值守亦成立）**：① 把自治验收状态机 `自主验收` 落地为 fail-closed 校验（ADR-022 决策 6）；
+  ② 按 P1→P5 处理 #120 的 5 条 P1 并合入；③ 关掉已决但未关的 issue；④ 清 80 条陈旧分支；
+  ⑤ 依 ADR-022 授权自行裁定 #32；⑥ 推 Y4 C/D 两臂实测与 EDD-001 第二载体。
 
 ## 2026-10-04 20:43 项目终止记录（Owner 裁决 · 最终状态）
 

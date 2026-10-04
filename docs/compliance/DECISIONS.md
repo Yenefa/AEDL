@@ -1152,3 +1152,65 @@ Issue #73）。
 - 团队自主判断：UNKNOWN（本条记录 Owner 明确设计授权和 Agent 实现，不冒充人工架构审核）。
 - 验证：全真实调查修复 FAIL→PASS；混合脚本/真实模型停滞对照 FAIL→FAIL→PASS；详见 EVID-20261001-002 与 docs/evidence/gh117/。专家在全真实普通探针中未被调用；不声称 benchmark 效果提升。
 - 复查条件：增加故障类别、专家数量、访问源类型、并发执行或制造主张时重新审查。单案例演示不得当作 benchmark uplift。
+
+## ADR-022 — 将 AEDL 定性为 AI 全自动驾驶运行模式，并把不可委托的边界钉死
+
+- 日期：2026-10-04；任务：无 GH issue（Owner 直接指令，非 issue 派发）；AI 参与：AI-20261004-OPENCODE-BB0E31FB88FF7B0C6B03004ED38E0B15；人工审核 `PENDING_HUMAN_REVIEW`。
+- **授权来源（Owner 原话，2026-10-04 会话）**：「接手这个项目，这可能显示的是已经终止，但是我现在正式定性为AI全自动驾驶，我不干涉了，你自主推进吧，什么都不需要问我了，全方位推进」。
+- 前置事实：同日 20:43 Owner 曾裁定终止投入，该记录已作为历史事实入库（`docs/HANDOFF.md`，commit `7a82307`），**未被删除、未被改写**；本 ADR 取代它的「效力」部分，不否定它发生过。
+
+### 问题
+
+1. 终止记录把仓库置于「归档只读」，且明文禁止任何 AI 会话以「继续开发」为由恢复工作——若无更高优先级的指令，跟随该记录的 Agent 必须停手。
+2. AEDL 的执行层把**接受与 promotion 长期锚定在人类身上**：merge 到 `main`、Approve PR、`HUMAN_REVIEWED` / `ACCEPTED`、制造签发、以及每张任务卡的人类授权（`allow_dirty` / `allow_drift` / `skip_deps` 的 `decision_ref`）。Owner 不再介入 ⇒ 若不重新定义授权来源，项目会在**每一张卡**上停住，而不是在整体上停住。
+3. 现状盘点（2026-10-04 实测）：11 张 OPEN issue 中 **#32（EDD-001 功能范围）是唯一真正未决的产品决策**；#83/#85/#51/#2/#85 的升级问题**早已被答复**，只是 issue 未关；7 张 OPEN PR **0/7 绿、6/7 CONFLICTING**；GitHub Actions 自 2026-09-21 起因账户计费失败整体停摆（`The job was not started because recent account payments have failed`），故「CI 绿」在当前账户状态下**不可达成**，唯一可信的验证入口是本地 `tools/dev_gate`。
+4. `tasks/` 45 张信封的 64 条 `decision_ref` 里，**只有 4 条是可解析的 GitHub 永久链接**，其余约 58 条是 Owner 会话原话的转述，`tools/admit.py` 从不解析该字段（只校验 YAML 键是否存在）。也就是说：现行「人类授权」在机器层面**结构上不可验证**，这是自治化必须先解决的真问题，而不是加一句「已获授权」。
+
+### 候选
+
+- **A. 维持终止，仅开放只读。** 否决：与 Owner 明确指令冲突。
+- **B. 只解除封锁，治理规则不动。** 否决：每张卡仍需人类授权，Owner 不介入 ⇒ 全面停摆，只是停在更细的地方。
+- **C. 单点授权（逐卡仍要人类签）。** 否决：与「什么都不需要问我」直接冲突。
+- **D. 一次性、显式、可撤销的全面自治授权 + 一份不可委托清单。** **采纳。**
+
+### 决策
+
+1. **运行模式命名 `AEDL-AUTO`。** 自本 ADR 起，AEDL 以「AI 全自动驾驶」运行：Agent 自主选取工作、自主开卡、自主实现、自主验证、自主合并、自主清理债务，**不再等待人类逐项批准**。
+2. **授权来源换成单一可验证锚点。** 后续任何信封需要 `allow_dirty` / `allow_drift` / `skip_deps` 时，`granted_by: YEN` + `decision_ref` 指向**本 ADR 的仓库内路径与本条 Owner 原话**，不再新造无法解析的会话转述。这是把 58 条不可验证授权替换成 1 条可验证授权。
+3. **merge / Approve / 关 issue / 删陈旧分支：授权给 Agent**，条件是（a）本地 `python -m tools.dev_gate` 实跑 `status=pass` 且 `exit_code=0`；（b）本次改动范围不超出信封 `allowed_paths`；（c）无未解决的 P1 review 意见；（d）涉及硬件事实的断言有对应真实运行或如实标 `NOT_RUN`。**不豁免任何一条**。
+4. **保留 `PENDING_HUMAN_REVIEW` 作为台账审核状态，且永不代签。** `人工审核` 字段的取值域仍是 `{PENDING_HUMAN_REVIEW, HUMAN_REVIEWED, ACCEPTED}`，`tools/build_ai_usage_index.py` 的 fail-closed 校验不变。自治模式的验收状态另立字段（决策 6），**不得**借用人工状态表达「AI 已验收」。
+5. **绝不委托的清单（不可协商，不因自治而放宽）：**
+   - 任何需要**人的身体**的动作：嘉立创下单、回件、焊接、上电、`C` 级实体实测。相关字段只能是 `NOT_RUN` / `BLOCKED`。
+   - 任何需要**花钱或动用他人账户**的动作：CI 计费恢复、云资源采购、付费 API 额度。Agent 只能用已授权的既有凭据，且凭据不进 argv / 日志 / 仓库。
+   - 设置 `manufacturing_release=true`、`HUMAN_REVIEWED`、`ACCEPTED`。
+   - 声称人工评审、人工签发、人工决策。**AI 决策必须标注为 AI 决策。**
+   - 删除或改写已入库的 Evidence、台账、ADR、冻结哈希、git 历史（撤销一律用 `revert`）。
+   - 生成虚假 PASS / Benchmark / 截图 / 用户反馈 / 测试结果。
+6. **自治验收状态机（第二阶段落地）。** 新增台账字段 `自主验收`，取值域 `{PENDING_AI_REVIEW, AI_REVIEWED, AI_ACCEPTED}`，由校验器 fail-closed 检查；写入方只能是 Agent，且必须同时存在一条真实运行的 gate 回执。上限是 `AI_ACCEPTED`。
+7. **诚实性红线的优先级高于自治。** `AGENTS.md` §10 与 ADR-012 的性质不变：自治改变的是**谁来做决定**，不改变**什么算证据**。
+8. **单点失败的对冲：** 自治意味着连续多个无人值守会话，因此 `docs/HANDOFF.md` 与本 ADR 是唯一的跨会话连续性载体；每轮收尾必须更新二者，否则下一轮无法接手——这是自治模式的**硬性交付物**，不是可选项。
+
+### Owner 必须知道的代价（清醒条款，不迎合）
+
+1. **本项目原有的独立校验层就是人类评审本身。** 现已把它撤掉，剩下的是「同一个 AI 写、另一个 AI 审」。本仓已有的对抗手段（变异测试 / 反向对照 / fail-closed 门禁 / 双平台矩阵）在过去确实多次先抓到 AI 自己的错误，这是目前唯一可用的替代品，但它**不等价于独立第三方**。决策 3 的四个条件是对这个缺口的补偿，不是等价替代。
+2. **验证能力成为唯一瓶颈。** CI 已死，本地 `dev_gate` 成为唯一可信门禁。若某轮为赶进度跳过或放宽门禁，自治就会退化成「把未验证的东西自动合进 master」。因此：**放宽任何门禁检查项的行为本身，等同于违反本 ADR**，即使它能提高通过率。
+3. **归因污染风险最高。** 无人复核时，AI 做的产品/叙事决策极易在记录里被读成人类决策。决策 4 与 5 是为此设的硬约束，AI 必须主动暴露自己是决策者。
+4. **物理闭环仍然缺人。** 项目的北极星是「正确交付实体板卡」。只要 Owner 不下单、不回件、不实测，这条北极星在 `AEDL-AUTO` 下**只能推进到 C 级实测之前**；Agent 能做到的是把 C 级实测所需的全部文件、门禁与签发前条件做到齐备且可复现，如实记 `BLOCKED`。这不是 Agent 能解的问题，也不应被包装成已解。
+
+### 影响
+
+- `AGENTS.md` 新增 0A 节并修订 §1/§3.6/§3.7/§4/§12/§13/§14；`docs/HUMAN_OWNERSHIP.md` 同步（否则该页会变成假陈述）；`docs/HANDOFF.md` 顶部横幅与解冻记录同步。
+- 终止记录（`7a82307`）保留为历史，仅「效力」被本 ADR 取代。
+- **未变更**：任何 gate 的判据、Evidence 语义、冻结哈希、第三方源码、`PENDING_HUMAN_REVIEW` 取值域、`manufacturing_release` 语义。
+- **新增风险**：见「清醒条款」。缓解措施见决策 3/5/6/8。
+
+### Evidence / Reference
+
+- 授权原话：本 ADR 头部「授权来源」。
+- 终止记录：`docs/HANDOFF.md`「2026-10-04 20:43 项目终止记录」，commit `7a82307`，台账 `AI-20261004-ZCODE-20A1E410C26074A2DA692A79F33555B8`。
+- 接管时的可复现基线（本机实跑，`py -3.9`）：`unittest discover -s tests` → **1226 tests OK (skipped=30)**；`python -m tools.dev_gate` → **status=pass, exit_code=0, 5/5 checks**（main_tests / sandbox_tests 574 OK skipped=3 expected-failures=1 / secret_scan 634 files / ai_usage_ledger 141 entries in sync）。
+- 债务盘点：OPEN PR 7 张（0/7 绿、6/7 CONFLICTING）；OPEN issue 11 张（仅 #32 真正未决）；远端陈旧分支 80 条；`decision_ref` 可解析率 4/64。
+
+### 复查条件
+
+出现下列任一情况须重开本 ADR：Owner 收回授权；出现需要真实人类判断才能解除的门禁失败；自治验收状态被用于放行制造相关主张；或连续两轮出现「门禁放宽」提议。

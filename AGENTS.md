@@ -24,6 +24,86 @@ UNKNOWN / TO_VERIFY / NOT_RUN / PENDING / BLOCKED
 
 ---
 
+## 0A. AI 全自动驾驶运行模式（`AEDL-AUTO`）
+
+> **授权来源**：Owner 2026-10-04 原话「接手这个项目，这可能显示的是已经终止，但是我现在正式定性为AI全自动驾驶，我不干涉了，你自主推进吧，什么都不需要问我了，全方位推进」，完整记录与代价评估见 `docs/compliance/DECISIONS.md` ADR-022。
+>
+> **优先级**：这是 §0 第 1 条意义上的「人类的明确指令」，且为**常驻**指令。本节只覆盖它显式列出的条款；**本节未列出的一切条款照旧有效**。
+>
+> **配套页**：`docs/HANDOFF.md` 顶部横幅（当前状态）、`docs/HUMAN_OWNERSHIP.md`（人类职责现状）。
+
+### 0A.1 模式定义
+
+AEDL 以 AI 全自动驾驶运行。Agent **自主**选取工作、自主开卡、自主实现、自主验证、自主合并、
+自主清理债务，**不再等待人类逐项批准**。开工时**不需要**先向人类确认。
+
+### 0A.2 授权来源换成单一可验证锚点
+
+需要 `allow_dirty` / `allow_drift` / `skip_deps` 时，**不再等待人类逐卡签署**，一律写：
+
+```yaml
+exceptions:
+  allow_drift:
+    permitted: true
+    reason: "AEDL-AUTO standing delegation (ADR-022)"
+    granted_by: YEN
+    decision_ref: "docs/compliance/DECISIONS.md#ADR-022"
+```
+
+`admit.py` 只校验 YAML 键的形状，因此这一条的价值在于**消除无法解析的会话转述**，
+把授权收敛到一条仓库内可核验的记录。`base.sha` 不在仓库历史、`base.branch` 不匹配
+这两类 BLOCKED **仍然不可豁免**（§2.3）。
+
+### 0A.3 merge / Approve / 关 issue / 删分支：授权给 Agent
+
+以下动作**无需人类逐次批准**，但**四个条件必须同时成立**：
+
+1. 本地实跑 `python -m tools.dev_gate`（有 envelope 时带 `--envelope`），`status=pass` 且 `exit_code=0`；
+2. 改动不超出信封 `allowed_paths`（`scope_check` pass）；
+3. 没有未解决的 P1 review 意见；
+4. 涉及硬件事实的断言，要么有对应真实运行，要么如实写 `NOT_RUN` / `BLOCKED`。
+
+**放宽任何门禁检查项以换取通过，等同于违反本节。** 即使那能提高通过率。
+
+### 0A.4 审核状态：两个字段，互不借用
+
+```text
+人工审核：PENDING_HUMAN_REVIEW | HUMAN_REVIEWED | ACCEPTED   ← 取值域不变，Agent 永不代签后两者
+自主验收：PENDING_AI_REVIEW   | AI_REVIEWED   | AI_ACCEPTED   ← 上限 AI_ACCEPTED
+```
+
+`人工审核` 字段**保持 `PENDING_HUMAN_REVIEW`**——这是事实：没有人类评审过。
+自治模式**不得**用人工状态字段表达「AI 已验收」，也不得声称人工已评审。
+`自主验收` 字段的 fail-closed 校验见 ADR-022 决策 6（第二阶段落地）。
+
+### 0A.5 绝不委托清单（不可协商）
+
+以下**不因自治而放宽**，Agent 不得以任何理由执行：
+
+1. **需要人的身体的动作**：嘉立创下单、回件、焊接、上电、`C` 级实体实测 ⇒ 相关字段只能是 `NOT_RUN` / `BLOCKED`。
+2. **需要花钱或动用他人账户的动作**：CI 计费恢复、云资源采购、付费额度扩张。只能用已授权的既有凭据，且凭据不进 argv / 日志 / 仓库。
+3. 设置 `manufacturing_release=true`、`HUMAN_REVIEWED`、`ACCEPTED`。
+4. 声称人工评审、人工签发、人工决策。**AI 决策必须标注为 AI 决策。**
+5. 删除或改写已入库的 Evidence、台账、ADR、冻结哈希、git 历史（撤销一律用 `revert`）。
+6. 生成虚假 PASS / Benchmark / 截图 / 用户反馈 / 测试结果。
+
+### 0A.6 自治的已知代价（不得当作已解决）
+
+- 本项目原有的独立校验层**就是人类评审本身**，现已撤掉；剩下的是「同一个 AI 写、另一个 AI 审」。
+  仓内的变异测试 / 反向对照 / fail-closed 门禁是唯一替代品，**不等价于独立第三方**。
+- 验证能力因此成为唯一瓶颈。`dev_gate` 是当前唯一可信门禁（GitHub Actions 自 2026-09-21
+  因账户计费失败整体停摆，「CI 绿」在现账户状态下不可达成）。
+- 归因污染风险最高：无人复核时 AI 决策极易被读成人类决策，故 0A.4 / 0A.5 是硬约束。
+- 物理闭环仍缺人：北极星「正确交付实体板卡」在 `AEDL-AUTO` 下只能推进到 `C` 级实测之前；
+  Agent 能做到的是把实测所需文件、门禁与签发前条件做到齐备可复现，如实记 `BLOCKED`。
+
+### 0A.7 连续性是硬性交付物
+
+自治意味着连续多个无人值守会话。每轮收尾**必须**更新 `docs/HANDOFF.md` 与本节相关的 ADR，
+否则下一轮无法接手。`docs/HANDOFF.md` 与 `AGENTS.md` 0A 节是唯一的跨会话连续性载体。
+
+---
+
 # 1. 标准开发闭环
 
 所有**实质开发任务**默认遵循：
@@ -49,9 +129,9 @@ commit + push（仅在获授权时）
 ↓
 PR / Handoff
 ↓
-PENDING_HUMAN_REVIEW
+审查：AEDL-AUTO 下由 AI 评审；PENDING_HUMAN_REVIEW 保持不变（0A.4）
 ↓
-人工 Review 后才能 Merge main
+Merge main：AEDL-AUTO 下满足 0A.3 四条件即可由 AI merge
 ```
 
 目标优先级：
@@ -298,7 +378,8 @@ Third-party IDs
 ADR IDs
 Evidence IDs
 Known risks / follow-up
-Human review: PENDING_HUMAN_REVIEW
+Human review: PENDING_HUMAN_REVIEW   # AEDL-AUTO 下仍为 PENDING，见 0A.4
+AI autonomous acceptance: AI_REVIEWED | AI_ACCEPTED | PENDING_AI_REVIEW
 ```
 
 需人工 Review 的交付必须附带 Review Bundle（`review-bundles/`，见 `docs/CONTROL_PLANE.md` §8）：**无 bundle 不进入人工 Review**。
@@ -309,13 +390,14 @@ Agent 可以起草 PR、分析 PR、提出 Review 建议，但不得冒充人工
 
 未经本次任务的人类明确授权，不得：
 
-- merge 到 `main`；
-- Approve PR；
+- merge 到 `main`（**AEDL-AUTO 例外**：0A.3 四条件同时成立时授权给 Agent）；
+- Approve PR（**AEDL-AUTO 例外**：同 0A.3）；
 - force-push `main`；
 - 无必要 rebase/重写共享历史；
 - 删除含未合并成果的分支；
 - 对未知工作执行破坏性 `reset --hard` / `clean`；
-- 设置 `HUMAN_REVIEWED` / `ACCEPTED`。
+- 设置 `HUMAN_REVIEWED` / `ACCEPTED`。**这一条没有任何例外**：自治模式下由 AI 写入
+  这两个值等同于伪造人工评审。
 
 已共享提交需要撤销时，优先 `revert` 而不是改写历史。
 
@@ -400,6 +482,8 @@ AI 完成后的审核状态只能是：
 ```text
 PENDING_HUMAN_REVIEW
 ```
+
+（AEDL-AUTO 下**仍然如此**：见 0A.4，自治验收另用 `自主验收` 字段，取值上限 `AI_ACCEPTED`。）
 
 ---
 
@@ -880,7 +964,8 @@ EVID-...
 - [ ] Commit / Push 状态如实报告
 - [ ] PR/Handoff 足够人工审核
 - [ ] Review Bundle 已生成（需人工 Review 的交付必须附带，见 CONTROL_PLANE §8；命令：`python -m tools.make_review_bundle`，post-commit 钩子亦自动生成）
-- [ ] 状态保持 `PENDING_HUMAN_REVIEW`
+- [ ] `人工审核` 保持 `PENDING_HUMAN_REVIEW`（不得代签 `HUMAN_REVIEWED` / `ACCEPTED`）；
+- [ ] AEDL-AUTO 下另填 `自主验收`（0A.4）
 
 ---
 
@@ -921,10 +1006,15 @@ Review Bundle:
 
 Human review:
 - PENDING_HUMAN_REVIEW
+AI autonomous acceptance:
+- AI_REVIEWED | AI_ACCEPTED | PENDING_AI_REVIEW
 ```
 
 ---
 
 # 14. 总规则
 
-> **在受控 Git 分支上做最小必要修改，检查真实 diff，运行真实测试；仅按触发条件更新 AIC/AI/第三方/Evidence 记录；获授权后 commit/push/PR；最终接受与 merge 永远留给人类。**
+> **在受控 Git 分支上做最小必要修改，检查真实 diff，运行真实测试；仅按触发条件更新 AIC/AI/第三方/Evidence 记录；获授权后 commit/push/PR。**
+>
+> 非 `AEDL-AUTO` 期间：最终接受与 merge 留给人类。`AEDL-AUTO` 期间（ADR-022）：由 Agent 在
+> 0A.3 四条件下自行 merge —— **诚实性红线（§10）与 0A.5 绝不委托清单不随模式改变**。

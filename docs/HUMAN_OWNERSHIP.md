@@ -9,6 +9,11 @@
 > - 人类贡献台账：[`docs/compliance/TEAM_CONTRIBUTIONS.md`](compliance/TEAM_CONTRIBUTIONS.md)（历史 `UNKNOWN` 不回填）
 >
 > 身份映射：`Yenefa` = 项目负责人（记录中亦称"大统领"）；`la4876949-bot` = Percy = 正式团队成员（AEDL_TEAM）。
+>
+> ⚠️ **2026-10-04 起项目运行于 `AEDL-AUTO`（AI 全自动驾驶）**：本页第 2 节中「Merge 授权」与「验收」
+> 两行已同步为自治口径，依据 ADR-022。**制造 / 发布签核、`HUMAN_REVIEWED` / `ACCEPTED`、以及一切
+> 需要人的身体或他人账户的动作，仍然只属于具名人类**——见 `AGENTS.md` §0A.5 绝不委托清单。
+> 下方「GitHub 事实」段是 2026-10-04 之前的历史统计，**不改写**；自治期间的新 merge 由 ADR-022 授权。
 > 依据：[`docs/ID_MAP.md`](ID_MAP.md)「真人身份与代称」、[`docs/COLLABORATION.md`](COLLABORATION.md) 顶部公告（`sca331613-commits` → `Yenefa`）。
 
 ---
@@ -32,11 +37,11 @@
 | 架构接受（Architecture acceptance） | Yenefa | ADR-004（批准 B′）、ADR-005（CONDITIONAL APPROVE → 整改后采纳）、ADR-008（批准三层 Sandbox 定义） |
 | 范围扩张审批 | 任务 Owner 之外的人类属主 | AGENTS.md §2.2 越界 STOP → 人类确认；`.github/ISSUE_TEMPLATE/task.md`「crossing them requires STOP + scope expansion approved by the human owner」 |
 | 风险接受 | Yenefa | ADR-005「数学没错但工程解释不够严谨」→ 三项整改后采纳；ADR-004「人工签发保留制造风险的责任边界」 |
-| 制造 / 发布签核 | 具名人类（AI 永不设置 release 状态） | ADR-004 决策 4；`gates/board_review_v1.json` `manufacturing_release=false`；HANDOFF「M2 物理线冻结（2026-09-01 人工裁决）」 |
+| 制造 / 发布签核 | 具名人类（AI 永不设置 release 状态）——**AEDL-AUTO 不改变这一条** | ADR-004 决策 4；ADR-022 决策 5（绝不委托清单第 1、3 条）；`gates/board_review_v1.json` `manufacturing_release=false`；HANDOFF「M2 物理线冻结（2026-09-01 人工裁决）」 |
 | 验证政策（Verification Policy） | **SHARED：Yenefa + Percy 双人确认** | `.github/CODEOWNERS`（`/.github/workflows/`、`/docs/evidence/`、`/gates/contracts/`、`/sandbox_runtime/contracts/`）；`.github/ISSUE_TEMPLATE/task.md`「Verification Policy Change … require both human owners (Yenefa + Percy) to confirm」；`docs/COLLABORATION.md` §0.8 |
-| Merge 授权（promotion） | 人类审查者；**作者不得自批** | `docs/COLLABORATION.md` §0.5.5；AGENTS.md §3.7；ADR-011「只有人工 merge 才是 promotion」 |
+| Merge 授权（promotion） | **2026-10-04 起（AEDL-AUTO）**：由 Agent 在 AGENTS.md §0A.3 四条件下自行 merge / Approve / 关 issue / 删陈旧分支；`HUMAN_REVIEWED` / `ACCEPTED` 仍**永不代签**。此前的历史事实是「人类审查者，作者不得自批」 | `AGENTS.md` §0A、§3.7；ADR-022（授权与代价评估）；历史依据 `docs/COLLABORATION.md` §0.5.5；ADR-011「只有人工 merge 才是 promotion」（2026-10-04 起被 ADR-022 的授权条款覆盖，历史记录不改） |
 | 拒绝 / 升级裁决 | Yenefa（envelope `escalation.owner`；BLOCKED 记录 `Owner decision`） | AGENTS.md §2.3 升级协议与 BLOCKED 模板；`tasks/GH-49.yaml`、`tasks/GH-54.yaml` `escalation.owner: Yenefa` |
-| 验收（acceptance） | 任务 Owner 之外的另一名真人 | `docs/COLLABORATION.md` §0.5.5；`W1_CARD_Yenefa`「Percy 负责独立验收」 |
+| 验收（acceptance） | 2026-10-04 起（AEDL-AUTO）：Agent 自验 + 对抗性反向对照，状态上限 `AI_ACCEPTED`；**无独立第三方复核**——这是本模式已知且未解决的代价 | `AGENTS.md` §0A.4、§0A.6；ADR-022「Owner 必须知道的代价」；历史依据 `docs/COLLABORATION.md` §0.5.5；`W1_CARD_Yenefa`「Percy 负责独立验收」 |
 
 **GitHub 事实（可由 `gh pr list` 复核）**：Yenefa 提交并 merge 的 PR： #6 #7 #12 #13 #16 #17 #18 #19 #21 #22 #23 #24 #25 #26 #27 #35 #42 #44 #45 #46 #47 #48 #49 #50；
 Percy（`la4876949-bot`）提交、Yenefa merge 的 PR：#14 #30 #33 #34 #36 #38 #39 #40 #41 #43；
