@@ -1,17 +1,35 @@
-"""AEDL PR-1 repair pipeline - C1 subset.
+"""AEDL PR-1 repair pipeline - C1-C4 plus the C5 one-round transaction.
 
 Implementation Contract v1 (docs/competition/internal/AEDL_PR1_实现合同_20260907.md)
-is frozen.  This commit implements only the C1 slice (contract section 11):
+is frozen.  This module has grown past its original C1 slice (contract
+section 11) and now implements:
 
-  * strict Proposal parsing - PATCH/REFUSE, three-op subset, closed fields,
-    forbidden self-assertion fields, limits (section 4);
-  * topology policy document structure validation - host only (section 6/7);
+  * strict Proposal parsing (parse_proposal) - PATCH/REFUSE, three-op subset,
+    closed fields, forbidden self-assertion fields, limits (section 4);
+  * topology policy document structure validation
+    (validate_topology_policy, section 6/7);
   * public projection - make_public_context / public_feedback whitelists
-    (section 6).
+    (section 6);
+  * host-side authority and candidate-partition machinery for the apply path
+    (validate_host_context, select_rule, observe_candidate_manifest,
+    capture_before_partitions, project_expected_partitions,
+    build_expected_after);
+  * the C5 single-round transaction: resolve_authorization,
+    qualify_toolchain and bind_policy (PR #92,
+    feat-pr1-c5-single-round-transaction);
+  * the one-round controller run_round (PR #95 MVP, then PRs #100-#102):
+    single-writer lock held from PRECHECK to exit, crash recovery
+    (_recover_incomplete, resolved at the next round's PRECHECK), the
+    PRECHECK -> SNAPSHOT -> STAGE_APPLY -> COMMIT phase machine, the durable
+    journal, the commit predicate, and the atomic replace + restore.
 
-Deliberately NOT present in this commit: run_round, bind_policy,
-snapshot/stage/commit, rollback/recovery/replay, adapter and verifier
-integration (C2-C5).  They must not be faked or stubbed here.
+Deliberately NOT present in this file: the multi-round convergence loop
+(propose -> apply -> verify -> diagnose -> re-propose across rounds).  One
+call to run_round is one round; driving rounds until convergence belongs to
+the ARH episode runner (tools/run_arh_episode.py and
+sandbox_runtime/src/aedl_sandbox/arh/), and the C2 verifier / C4 adapter
+stay in gates/repair_verification.py and tools/akcli_adapter.py by contract
+section 8.  They must not be faked or stubbed here.
 
 NOTE on hash helpers: contract section 8 assigns hash_bytes/canonical_sha256 to
 gates.repair_verification.  Since C2 landed, that module is the single home and
