@@ -54,9 +54,17 @@ py -3.9 -m tools.repairbench_budget                          # 查花费
 ### 范围分层（为什么 headline 只有 2 集）
 
 `connectivity_label`（DC-01/02，**可解**，进 headline）与 `add_component`（DC-03/04/05，
-**无冻结坐标真源、不可解**，单列不进 headline）。依据见
-`benchmarks/repairbench_v0_1/placement_source_audit_20261005.md`：冻结 PCB 与 DC 夹具
-**坐标系不一致**（R9 在 PCB 是 (1.45,22.50) mm，答案键是 (34.29,257.81) mm）。
+**修复腿尚未闭环**，单列不进 headline）。
+
+⚠️ **旧结论已被推翻**：`placement_source_audit_20261005.md` 曾判定「冻结 PCB 与 DC 夹具坐标系不一致」。
+合成实验证明**不成立**——schematic 实测 R9 = (34.29, 257.81) mm，与答案键 `acceptance_v1.json`
+**完全一致**；不一致的是**冻结 PCB**（(1.45, 22.50) mm）。更正见该文件末尾的追加段落。
+
+### 已验证的两条正面结论（`synthesis_findings_20261005.md`）
+
+1. **冻结合同在真实 M2 板上 5 条规则全 PASS** ⇒ 合同可满足（此前只证明它能判夹具的错）。
+2. **缺件夹具可从冻结源干净合成**：`delete_component(R9)` + `delete_object(<其 net 上的 13 个 label>)`
+   ⇒ rc=0、解析干净、`ESP32_GPIO9_PULLUP` 恰好 fail、其余 4 条仍 pass。
 
 ### 真实结果（离线臂，零花费）
 
@@ -75,7 +83,7 @@ py -3.9 -m tools.repairbench_budget                          # 查花费
 | # | 项 | 性质 | 证据 |
 | --- | --- | --- | --- |
 | 1 | in-scope 仅 2 集 | 样本极小，任何差异都不是结论 | `episodes_v1.json` |
-| 2 | `add_component` 族不可解 | 缺坐标真源；需自带布局意图的新夹具 | placement audit |
+| 2 | `add_component` 修复腿未闭环 | **缺件夹具已能干净合成**（目标规则恰好 fail、其余 pass）；修复腿因 `place_component` 未传旋转角而 fail-closed | `synthesis_findings_20261005.md` |
 | 3 | `--strict-nets` 过度拦截 | 把期望修复也拒了（DC-02），确定性臂 1/5→0/5 | `RESULTS_20261005.md` |
 | 4 | 合同只断言器件值、不断言存在 | 补器件类无法从合同推导 | `EVID-20261005-001` |
 | 5 | 80 条远端分支 0 条可证明全落地 | 未清理（ADR-022 禁止销毁未落地内容） | `notes/branch-unlanded-audit-2026-10-04.md` |

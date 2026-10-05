@@ -67,3 +67,27 @@ placed component`）。
 - 夹具是否**本应**与 M2 PCB 同坐标系（即夹具生成过程是否有缺陷），**未查证**。
   本记录只陈述「两者不一致」这一实测事实，不判定责任方。
 - 未修改任何夹具、合同或 PCB；本轮为**只读审计**，零模型花费。
+
+---
+
+## 更正（同日 20:5x，由合成实验反证）— 本文件上文的坐标系结论有误
+
+`benchmarks/repairbench_v0_1/synthesis_findings_20261005.md` 用冻结源实测发现：
+
+| 来源 | R9 坐标 |
+| --- | --- |
+| 冻结 schematic（`m2_board.kicad_sch`，实测 `position_nm` = 34290000 / 257810000） | **(34.29, 257.81) mm** |
+| 答案键 `acceptance_v1.json` | **(34.29, 257.81) mm** |
+| 冻结 PCB（`m2_board.kicad_pcb`） | (1.45, 22.50) mm |
+
+**schematic 与 acceptance 之间不存在坐标系不一致——两者完全对齐。**
+真正不一致的是**冻结 PCB** 与 schematic/acceptance。
+
+因此上文「冻结 PCB 与 DC 夹具坐标系不一致」这一表述**定位错了对象**：
+不一致发生在 PCB 与 schematic 之间，不是发生在 DC 夹具与答案之间。
+由此推出的「add_component 族不可解」结论**依据不成立**，需重判。
+
+上文其余事实（PCB R9 位于 (1.45,22.50) mm；`intent_v1.json` 无坐标；答案键自带坐标故仅 oracle 可达）
+均**未被推翻，继续有效**。
+
+本更正以追加方式记录，不改写上文原文。
