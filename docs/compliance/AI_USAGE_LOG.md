@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 160 条。完整正文在各自条目文件中；本索引只做导航。
+共 161 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -223,6 +223,7 @@
 - [`AI-20261005-OPENCODE-00A71B68247FA57082876E0F4C09EFAD`](ai-usage/AI-20261005-OPENCODE-00A71B68247FA57082876E0F4C09EFAD.md) — RepairBench v0.1 first real run: controls hold, contract-completeness gap and net-merge hazard found, LLM arms NOT_RUN
 - [`AI-20261005-OPENCODE-1BA6FBAF4B90200B0BE358EE490CF83E`](ai-usage/AI-20261005-OPENCODE-1BA6FBAF4B90200B0BE358EE490CF83E.md) — RepairBench synthesis probe: contract passes on the real M2 board; missing-part fixtures are synthesable; placement audit mislocated the coordinate mismatch
 - [`AI-20261005-OPENCODE-2D1342EE34F3C8EAC09F4DEFC330CB88`](ai-usage/AI-20261005-OPENCODE-2D1342EE34F3C8EAC09F4DEFC330CB88.md) — Enforce the Owner 1 CNY model-spend ceiling fail-closed, with token accounting and 11 tests
+- [`AI-20261005-OPENCODE-41C13A732C40CFFCD57D18D1AD5426A9`](ai-usage/AI-20261005-OPENCODE-41C13A732C40CFFCD57D18D1AD5426A9.md) — Second synthesis diagnostic: refute the rotation and missing-wire hypotheses; locate the remaining unknown in pin geometry
 - [`AI-20261005-OPENCODE-492E30A94C08D5B39E24E9EF9C1B6749`](ai-usage/AI-20261005-OPENCODE-492E30A94C08D5B39E24E9EF9C1B6749.md) — Two-arm LLM experiment at matched budget: frozen contract shows NO measurable uplift (null result); net-merge reproduced by real model; strict-nets over-blocks
 - [`AI-20261005-OPENCODE-738C3999AF8CA577AE8C9B6A8C414985`](ai-usage/AI-20261005-OPENCODE-738C3999AF8CA577AE8C9B6A8C414985.md) — Make v0.1 scope explicit: per-family breakdown, headline over solvable episodes, unsolvable family reported separately
 - [`AI-20261005-OPENCODE-9CE325C974C753284C4D14AFAA665EAA`](ai-usage/AI-20261005-OPENCODE-9CE325C974C753284C4D14AFAA665EAA.md) — Land PR #67 *.md text eol=lf with pinned exemptions; renormalise only in-scope files
