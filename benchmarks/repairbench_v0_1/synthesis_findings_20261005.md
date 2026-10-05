@@ -549,3 +549,103 @@ primary 永远无法 fail→pass，DC-06 报 `FAIL`。
    它们标 `solvable_from_frozen_source: false` 的依据（无坐标真源）已被推翻，
    应改为「缺自带 placement 记录」这一**准确**的表述，或直接用 `synthesise_fault` 重生成。
 3. 继续扩规模（headline 3 集仍偏小）。
+
+---
+
+## 十一、第九轮（2026-10-05 续）— 修掉 DC-06/DC-04 重复，多部件合成，DC-04 判定不可救
+
+### K1. 先承认一个自己引入的缺陷
+
+上一轮生成的 DC-06 目标是 `ESP32_GPIO9_PULLUP`，与 DC-04 **完全相同**。
+逐项比对（按 `(family, target_rule, failing 集)`）确认：
+
+```
+!! DUPLICATE ['ESP32_GPIO9_PULLUP', ('ESP32_GPIO9_PULLUP',)] -> ['DC-04', 'DC-06']
+```
+
+同一块板、同一个缺件、同一条规则 ⇒ **DC-06 是 DC-04 的近似复制**，
+它抬高 headline 分母但**不增加任何信息**。这是最坏的一种扩规模：分母变大、信号不变。
+DC-01/DC-03 共用 `USB_POLARITY_AND_SERIES` **不算重复**，因为 fault_family 不同
+（贴错网名 vs 缺器件），那是两种不同能力。
+
+### K2. 单部件合成对 USB 规则是错的（实测）
+
+逐个删器件看哪条规则断：
+
+| 删除 | 断的规则 |
+| --- | --- |
+| R7 | USB_POLARITY_AND_SERIES |
+| R8 | USB_POLARITY_AND_SERIES |
+| R9 | ESP32_GPIO9_PULLUP |
+| **R4** | **无**（什么都不断） |
+| C5 | ESP32_EN_RC + SHT30_ADDRESS（两条） |
+| R3 / C4 | 多条 |
+
+**删 R7 会断 USB 规则，但把 R7 放回去并不能满足它** —— 因为规则要的是 **R7+R8 一对**。
+⇒ 单部件集在「删得断、放不回」两个方向上都是错的。DC-03 标题写的是 resistors（复数），正是这个原因。
+
+⇒ `synthesise_fault` 已扩展为**接受多个器件**，`repair()` 相应放多个器件。
+
+### K3. 第二个真实教训：必须还原**全部**被删标签
+
+`R7+R8` 一起删时，会删掉这两个器件**所在网络上的全部标签**，包括网络另一端
+（U1/J1 那些引脚上的）。只还原「落在被还原引脚上」的标签，网络另一端仍然无名，
+规则照样 FAIL。
+
+实测：放回 R7+R8、只还原引脚上的标签 ⇒ `USB_POLARITY_AND_SERIES` **仍 fail**；
+还原**全部 10 片**标签 ⇒ **5 条规则全 pass**。
+
+`repair()` 已改为还原**全部**被删标签（仍要求至少一片落在被还原引脚上，否则报错），
+并在代码注释里写明这条实测。
+
+### K4. DC-04 判定为**不可救**（从「假定」变成「证明」）
+
+试着用冻结板的 placement 记录去修 DC-04 的夹具：放 R9 之后
+`ESP32_GPIO9_PULLUP` **仍然 fail**。说明 **DC-04 夹具与冻结 M2 板不在同一坐标系**。
+
+而 DC-04 的夹具被 **12+ 个测试模块引用**（`test_repair_verification`、`test_akcli_adapter`、
+`test_repair_pipeline`、`test_repair_contract`、`akcli_adapter`、`repair_pipeline` 等），
+**不能重生成**。
+
+⇒ DC-04 保持 `in_scope_v0_1: false` 是**正确的**，且现在有**实测依据**，
+不再是上一轮那种「依据有误但先不改」的悬空状态。
+
+### K5. DC-06 改为 R7+R8 双部件 USB 集（与 DC-04 区分开）
+
+现在三集 in-scope 互不重复，且覆盖两种能力：
+
+| 集 | family | 规则 | 要还原的器件 |
+| --- | --- | --- | --- |
+| DC-01 | connectivity_label | USB_POLARITY_AND_SERIES | —（改网名） |
+| DC-02 | connectivity_label | SHT30_ADDRESS | —（接 GND） |
+| DC-06 | add_component | USB_POLARITY_AND_SERIES | **R7 + R8（两个）** |
+
+DC-06 现在**比 DC-04 更难**（两个器件 + 10 片标签），且与 DC-04 规则不同、family 不同。
+
+### K6. 新增 4 条回归（`test_repairbench_synth` → 15 条）
+
+- `test_pair_fault_fails_only_the_target_rule` —— 双部件集只断目标规则
+- `test_both_parts_are_removed` —— 两个器件确实都不在了
+- `test_repair_restores_every_deleted_label` —— 断言**标签数 > 引脚上标签数**，
+  逼着这一集必须覆盖「引脚之外的标签」
+- `test_duplicate_in_scope_episodes_are_rejected` —— **同 family + 同规则 + 同 failing 集
+  不得出现两次**，并要求 in-scope 集合不少于 3
+
+最后这条就是 K1 的护栏。写第一版时它的 key 漏了 family，误报 DC-06 与 DC-01 重复；
+这说明**护栏本身也要校准**——已按 K1 的结论修正（family 不同即不同能力）。
+
+### K7. 实测（对照臂）
+
+| 臂 | HEADLINE(in-scope) | ALL |
+| --- | --- | --- |
+| `noop` | **0/3** | 0/6 |
+| `oracle` | **3/3** | **6/6** |
+
+`tests.test_repairbench_synth` → **Ran 15, OK**；全量门禁 **pass**（main 1271 / sandbox 574 /台账 167）。
+
+### K8. 下一步
+
+1. 补 DC-06 的 structural 期望进 `acceptance_v1.json`（现在是 UNKNOWN，headline structural 2/3）。
+2. `ESP32_EN_RC` 暂不做成合成集：实测删 R4 不断任何规则、删 C5 断两条，
+   说明它需要 R4+C5 联合判定且牵连 SHT30，**不是干净的单规则集**，硬做会污染回归层。
+3. 继续扩 `connectivity_label` 族（当前只有 2 集，是最薄的一环）。

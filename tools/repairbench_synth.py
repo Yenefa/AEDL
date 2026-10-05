@@ -194,80 +194,107 @@ def write_native_labels(schematic_path, labels):
 
 
 def synthesise_fault(source, reference, rule_statuses, observe, akcli=None):
-    """Build a fault board: the part and its labels are removed.
+    """Build a fault board: the named part(s) and their labels are removed.
+
+    ``reference`` may be one designator or a list of them. Multi-part episodes matter
+    because some contract rules assert a *pair*: deleting R7 alone breaks
+    USB_POLARITY_AND_SERIES, but placing R7 back does not satisfy it, because the rule
+    also needs R8. A single-part episode would then be unsolvable in one direction and
+    misleading in the other. Measured, not assumed.
 
     Returns (dest_path, placement) where placement is the public record a solver needs
     to repair the board without any answer key.
     """
     source = Path(source)
-    raw = source.read_bytes()
-    observation = observe(raw)
-    comp = next((c for c in observation["components"] if c["reference"] == reference), None)
-    if comp is None:
-        raise SynthesisError("%s not on %s" % (reference, source))
+    observation = observe(source.read_bytes())
+    wanted_refs = [reference] if isinstance(reference, str) else list(reference)
+    specs = []
+    for ref in wanted_refs:
+        comp = next((c for c in observation["components"] if c["reference"] == ref), None)
+        if comp is None:
+            raise SynthesisError("%s not on %s" % (ref, source))
+        specs.append((ref, comp))
 
-    body = tuple(comp["position_nm"])
-    offsets = symbol_pin_offsets(source.read_text(encoding="utf-8", errors="replace"),
-                                 comp["lib_id"])
-    if not offsets:
-        raise SynthesisError("no pin offsets for %s" % comp["lib_id"])
-    pin_points = {}
-    for number, dx, dy in offsets:
-        pin_points[number] = (int(body[0] + dx), int(body[1] - dy))
-
+    source_text = source.read_text(encoding="utf-8", errors="replace")
     labels = _label_records(observation)
-    names = []
-    for part in observation["partitions"]:
-        for member in part["members"]:
-            if member.get("reference") == reference:
-                for net in (part.get("names") or []):
-                    if net not in names:
-                        names.append(net)
-    wanted = {n.lstrip("/") for n in names}
-    victims = [(uid, nm, at) for uid, nm, at in labels if nm in wanted]
+
+    victims, component_specs, pin_points = [], [], {}
+    for ref, comp in specs:
+        body = tuple(comp["position_nm"])
+        offsets = symbol_pin_offsets(source_text, comp["lib_id"])
+        if not offsets:
+            raise SynthesisError("no pin offsets for %s" % comp["lib_id"])
+        pin_points[ref] = {number: [int(body[0] + dx), int(body[1] - dy)]
+                           for number, dx, dy in offsets}
+        component_specs.append({
+            "reference": ref,
+            "lib_id": comp["lib_id"],
+            "footprint": comp["footprint"],
+            "value": comp["value"],
+            "x_mil": round(body[0] / MIL_NM),
+            "y_mil": round(body[1] / MIL_NM),
+        })
+        names = []
+        for part in observation["partitions"]:
+            for member in part["members"]:
+                if member.get("reference") == ref:
+                    for net in (part.get("names") or []):
+                        if net not in names:
+                            names.append(net)
+        wanted = {n.lstrip("/") for n in names}
+        victims += [(uid, nm, at) for uid, nm, at in labels if nm in wanted]
 
     dest = Path(tempfile.mkdtemp()) / "fault.kicad_sch"
     shutil.copyfile(str(source), str(dest))
 
-    ops = [{"op": "delete_component", "designator": reference}]
+    ops = [{"op": "delete_component", "designator": spec["reference"]}
+           for spec in component_specs]
     ops += [{"op": "delete_object", "uuid": uid} for uid, _nm, _at in victims]
     rc, out = _akcli_draw(dest, ops, akcli)
     if rc != 0:
         raise SynthesisError("fault synthesis refused: %s" % out[:400])
     return dest, {
-        "reference": reference,
-        "lib_id": comp["lib_id"],
-        "footprint": comp["footprint"],
-        "value": comp["value"],
-        "x_mil": round(body[0] / MIL_NM),
-        "y_mil": round(body[1] / MIL_NM),
-        "pin_points_nm": {k: list(v) for k, v in pin_points.items()},
-        "labels": [{"name": nm, "point_nm": list(at)} for uid, nm, at in victims],
+        "components": component_specs,
+        "pin_points_nm": pin_points,
+        "labels": [{"name": nm, "point_nm": list(at)} for _uid, nm, at in victims],
     }
 
 
 def repair(dest, placement, rule_statuses, observe, akcli=None):
-    """Place the part and restore its labels natively. Returns rule statuses."""
+    """Place the part(s) and restore their labels natively. Returns rule statuses."""
     dest = Path(dest)
-    rc, out = _akcli_draw(dest, [{
-        "op": "place_component",
-        "lib_id": placement["lib_id"],
-        "designator": placement["reference"],
-        "x_mil": placement["x_mil"],
-        "y_mil": placement["y_mil"],
-        "value": placement["value"],
-        "footprint": placement["footprint"],
-    }], akcli)
+    ops = [{"op": "place_component",
+            "lib_id": spec["lib_id"],
+            "designator": spec["reference"],
+            "x_mil": spec["x_mil"],
+            "y_mil": spec["y_mil"],
+            "value": spec["value"],
+            "footprint": spec["footprint"]}
+           for spec in placement["components"]]
+    rc, out = _akcli_draw(dest, ops, akcli)
     if rc != 0:
         raise SynthesisError("place_component refused: %s" % out[:400])
 
-    pin_points = {k: tuple(v) for k, v in placement["pin_points_nm"].items()}
+    pin_points = set()
+    for points in placement["pin_points_nm"].values():
+        pin_points.update(tuple(p) for p in points.values())
+
+    # Restore EVERY deleted label, not only the ones sitting on a restored pin.
+    # Deleting a part also deletes the labels on all of its nets, including those at the
+    # far end of the net on other components. Restoring only the pin-sitting ones leaves
+    # the far end unnamed and the contract still fails. Measured: with only the pin-sitting
+    # labels restored, USB_POLARITY_AND_SERIES stayed FAIL after R7 and R8 were placed;
+    # with all ten restored, all five rules pass.
     on_pins = []
+    seen = set()
     for entry in placement["labels"]:
         point = tuple(entry["point_nm"])
-        if point in pin_points.values():
-            on_pins.append((entry["name"], point))
-    if not on_pins:
+        key = (entry["name"], point)
+        if key in seen:
+            continue
+        seen.add(key)
+        on_pins.append((entry["name"], point))
+    if not any(point in pin_points for _name, point in on_pins):
         raise SynthesisError("no recorded label sits on a restored pin")
     write_native_labels(dest, on_pins)
     return rule_statuses(dest.read_bytes())

@@ -61,23 +61,23 @@
     },
     {
       "path": "native/DC-06/fault.kicad_sch",
-      "sha256": "0544c2d2617ee958ebbf7ad041b4e028439d2c3e9bf2c5cef408840517ccbadc",
-      "size_bytes": 60378
+      "sha256": "e6aa9af3b30db750ba0c2b6d078c4c945884e462c627f6b845a24e69241d821c",
+      "size_bytes": 60089
     },
     {
       "path": "native/DC-06/native_labels.json",
-      "sha256": "bb4d138b52bfdf453ac715ecbd13a607e8daa5985dbcdeb51fe7363115db09a2",
-      "size_bytes": 189
+      "sha256": "b5a4ec2897c4ee6d3bad688db01ef7238fb67ccfe9df97314dd82abab3dd4d9b",
+      "size_bytes": 985
     },
     {
       "path": "native/DC-06/placement.json",
-      "sha256": "25868137b21073935a5dfc6c7c695d421c0cd76dc2cb9aea07ce709dcb13f6fe",
-      "size_bytes": 1697
+      "sha256": "cc7f6b226199d136d13c57be577675bd70670d8300cfc3bada40a13a0ace6fe7",
+      "size_bytes": 1869
     },
     {
       "path": "native/DC-06/repair_ops.json",
-      "sha256": "b698289724886ab6415dbcf4884b7f7516661710e6b33b850fc0641ca35c8e4d",
-      "size_bytes": 301
+      "sha256": "5c7828908c4e6035083192931bd472f121bc1a181133bbf95274111050269a2b",
+      "size_bytes": 524
     }
   ]
 }

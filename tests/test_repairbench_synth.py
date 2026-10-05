@@ -61,10 +61,10 @@ class MissingPartSynthesis(unittest.TestCase):
     def test_placement_record_is_self_contained(self):
         """A solver gets the part and its pin geometry without any answer key."""
         p = self.placement
-        self.assertEqual(p["reference"], "R9")
-        self.assertEqual(p["lib_id"], "Device:R")
-        self.assertEqual(p["value"], "10k")
-        self.assertEqual(len(p["pin_points_nm"]), 2)
+        self.assertEqual([c["reference"] for c in p["components"]], ["R9"])
+        self.assertEqual(p["components"][0]["lib_id"], "Device:R")
+        self.assertEqual(p["components"][0]["value"], "10k")
+        self.assertEqual(len(p["pin_points_nm"]["R9"]), 2)
         self.assertTrue(p["labels"])
 
     def test_repair_closes_the_loop(self):
@@ -127,7 +127,7 @@ class GeneratedEpisodeIntegrity(unittest.TestCase):
     """
 
     EPISODE = REPO_ROOT + "/tests/fixtures/repair_pr1/native/DC-06"
-    RULE = "ESP32_GPIO9_PULLUP"
+    RULE = "USB_POLARITY_AND_SERIES"
 
     def setUp(self):
         if not os.path.isfile(self.EPISODE + "/fault.kicad_sch"):
@@ -172,6 +172,71 @@ class GeneratedEpisodeIntegrity(unittest.TestCase):
         # the fixture must be untouched by any of this
         again = statuses(read_bytes(self.EPISODE + "/fault.kicad_sch"))
         self.assertEqual(again, before, "verification must never mutate the fixture")
+
+
+class MultiPartEpisode(unittest.TestCase):
+    """The USB series rule asserts a pair, which single-part synthesis gets wrong.
+
+    Deleting R7 alone breaks USB_POLARITY_AND_SERIES, and placing R7 back does not
+    satisfy it, because R8 is required too. So the episode has to be the pair. And
+    deleting a part deletes the labels on all of its nets, including the ones at the far
+    end on other components, so a repair that restores only the pin-sitting labels leaves
+    the net unnamed and the rule still fails.
+    """
+
+    REFS = ["R7", "R8"]
+    RULE = "USB_POLARITY_AND_SERIES"
+
+    @classmethod
+    def setUpClass(cls):
+        if not SOURCE.exists() or not AKCLI.exists():
+            raise unittest.SkipTest("frozen board or akcli unavailable")
+        cls.dest, cls.placement = synth.synthesise_fault(
+            SOURCE, cls.REFS, statuses, rb.observe_source, AKCLI)
+
+    def test_pair_fault_fails_only_the_target_rule(self):
+        st = statuses(self.dest.read_bytes())
+        self.assertEqual(sorted(k for k, v in st.items() if v == "fail"), [self.RULE])
+
+    def test_both_parts_are_removed(self):
+        text = self.dest.read_text(encoding="utf-8", errors="replace")
+        for ref in self.REFS:
+            self.assertNotIn('"%s"' % ref, text, ref)
+
+    def test_repair_restores_every_deleted_label(self):
+        """Not only the labels on the restored pins."""
+        st = synth.repair(self.dest, self.placement, statuses, rb.observe_source, AKCLI)
+        for rule, value in st.items():
+            self.assertEqual(value, "pass", rule)
+        pin_points = set()
+        for points in self.placement["pin_points_nm"].values():
+            pin_points.update(tuple(p) for p in points.values())
+        on_pins = [tuple(e["point_nm"]) for e in self.placement["labels"]
+                   if tuple(e["point_nm"]) in pin_points]
+        self.assertLess(len(on_pins), len(self.placement["labels"]),
+                        "this episode must exercise labels beyond the restored pins")
+
+    def test_duplicate_in_scope_episodes_are_rejected(self):
+        """Two in-scope episodes must not be the same fault on the same rule.
+
+        The key includes fault_family on purpose: DC-01 (mislabelled nets) and DC-06
+        (missing parts) both fail USB_POLARITY_AND_SERIES, and that is legitimate,
+        because a labelling defect and a missing component are different capabilities.
+        What must never happen is the same family, same rule, same failing set twice,
+        which is exactly the near-copy DC-06 originally was when it duplicated DC-04.
+        """
+        episodes = read_json("%s/benchmarks/repairbench_v0_1/episodes_v1.json" % REPO_ROOT)["episodes"]
+        seen = {}
+        for episode in episodes:
+            if not episode.get("in_scope_v0_1"):
+                continue
+            key = (episode["fault_family"], episode["target_rule"], tuple(sorted(
+                k for k, v in statuses(read_bytes(
+                    os.path.join(REPO_ROOT, episode["fixture"]))).items() if v == "fail")))
+            self.assertNotIn(key, seen,
+                             "%s duplicates %s" % (episode["id"], seen.get(key)))
+            seen[key] = episode["id"]
+        self.assertGreaterEqual(len(seen), 3, "in-scope set must keep growing")
 
 
 if __name__ == "__main__":

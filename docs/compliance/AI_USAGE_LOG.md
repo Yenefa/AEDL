@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 167 条。完整正文在各自条目文件中；本索引只做导航。
+共 168 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -221,6 +221,7 @@
 ## 2026-10-05
 
 - [`AI-20261005-OPENCODE-00A71B68247FA57082876E0F4C09EFAD`](ai-usage/AI-20261005-OPENCODE-00A71B68247FA57082876E0F4C09EFAD.md) — RepairBench v0.1 first real run: controls hold, contract-completeness gap and net-merge hazard found, LLM arms NOT_RUN
+- [`AI-20261005-OPENCODE-053354947B8FE048E1812F4BF2CCC35D`](ai-usage/AI-20261005-OPENCODE-053354947B8FE048E1812F4BF2CCC35D.md) — Ninth round: remove the DC-06/DC-04 duplicate, add multi-part synthesis, prove DC-04 unrescuable in its own frame
 - [`AI-20261005-OPENCODE-05535B3228B5EBCA2B7F0B8AABBE24A8`](ai-usage/AI-20261005-OPENCODE-05535B3228B5EBCA2B7F0B8AABBE24A8.md) — Eighth round: land DC-06 as a solvable in-scope add_component episode; headline denominator moves from 2 to 3
 - [`AI-20261005-OPENCODE-1BA6FBAF4B90200B0BE358EE490CF83E`](ai-usage/AI-20261005-OPENCODE-1BA6FBAF4B90200B0BE358EE490CF83E.md) — RepairBench synthesis probe: contract passes on the real M2 board; missing-part fixtures are synthesable; placement audit mislocated the coordinate mismatch
 - [`AI-20261005-OPENCODE-2D1342EE34F3C8EAC09F4DEFC330CB88`](ai-usage/AI-20261005-OPENCODE-2D1342EE34F3C8EAC09F4DEFC330CB88.md) — Enforce the Owner 1 CNY model-spend ceiling fail-closed, with token accounting and 11 tests
