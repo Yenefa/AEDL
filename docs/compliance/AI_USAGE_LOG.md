@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 165 条。完整正文在各自条目文件中；本索引只做导航。
+共 166 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -230,6 +230,7 @@
 - [`AI-20261005-OPENCODE-738C3999AF8CA577AE8C9B6A8C414985`](ai-usage/AI-20261005-OPENCODE-738C3999AF8CA577AE8C9B6A8C414985.md) — Make v0.1 scope explicit: per-family breakdown, headline over solvable episodes, unsolvable family reported separately
 - [`AI-20261005-OPENCODE-921244038C5F08F439450AEB43C0D1AF`](ai-usage/AI-20261005-OPENCODE-921244038C5F08F439450AEB43C0D1AF.md) — Fourth synthesis round: pin geometry proven exact, six hypotheses eliminated, failure isolated to add_net_label connection semantics
 - [`AI-20261005-OPENCODE-9CE325C974C753284C4D14AFAA665EAA`](ai-usage/AI-20261005-OPENCODE-9CE325C974C753284C4D14AFAA665EAA.md) — Land PR #67 *.md text eol=lf with pinned exemptions; renormalise only in-scope files
+- [`AI-20261005-OPENCODE-A0193333E756C4ED818EB25529840429`](ai-usage/AI-20261005-OPENCODE-A0193333E756C4ED818EB25529840429.md) — Seventh round: close the missing-part loop with a native label writer plus eight regression tests
 - [`AI-20261005-OPENCODE-B31C0F423DAE4A621EF4655F929E8D28`](ai-usage/AI-20261005-OPENCODE-B31C0F423DAE4A621EF4655F929E8D28.md) — Register EVID-20260927-001 to close master's dangling Evidence citation
 - [`AI-20261005-OPENCODE-D41866B7AAF6D5C172E5FA6C46DCDEDB`](ai-usage/AI-20261005-OPENCODE-D41866B7AAF6D5C172E5FA6C46DCDEDB.md) — Land PR #58 E5 recruitment log + 3 session records as a ported commit
 - [`AI-20261005-OPENCODE-DDFF8903DF23A1E9D511143F9018DA0A`](ai-usage/AI-20261005-OPENCODE-DDFF8903DF23A1E9D511143F9018DA0A.md) — Sixth synthesis round: add_wire takes pin-referenced vertices, and akcli v1 provably cannot place a net label at a chosen point

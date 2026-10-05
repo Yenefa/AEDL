@@ -420,3 +420,62 @@ pristine labels: 64   repaired labels: 64
    （删件、place_component、add_wire），再对 label 图元做**最小化的原生文本补写**，
    并为此写一条明确的、**带回归测试**的工具，而不是手工改夹具。
 3. 在此之前，`episodes_v1.json` 的 DC-03/04/05 标记**继续不动**。
+
+---
+
+## 九、第七轮（2026-10-05 续）— **闭环合上：原生 label 写入 + 回归测试落地**
+
+### I1. 决定性验证
+
+在「故障板 + `place_component`」之上，直接写入原生 `(label ...)` 图元：
+
+```
+故障板        ESP32_GPIO9_PULLUP = fail，其余 4 条 pass，解析干净
++ place       仍 fail（规则要连通，不只是器件在场）
++ 原生 label  ESP32_GPIO9_PULLUP = pass，其余 4 条仍 pass
+```
+
+**闭环合上。全程未读任何 `repair_ops.json`，零模型调用。**
+
+原生图元与冻结板里的写法完全同形：
+
+```
+(label "+3V3" (at 93.98 33.02 90) (effects (font (size 1.27 1.27)) (justify left bottom)) (uuid "..."))
+```
+
+关键点是**显式给出 `(at x y)`**：verifier 要求 label 必须精确落在引脚点或 wire 端点，
+而 akcli 的 `add_net_label` 恰好不生效，所以落点只能由我们自己写。
+
+### I2. 已落地的产物
+
+| 文件 | 作用 |
+| --- | --- |
+| `tools/repairbench_synth.py` | 缺件夹具合成 + 修复闭环。akcli 负责删件/删标签/放件，**原生文本只负责 label** |
+| `tests/test_repairbench_synth.py` | 8 条回归，锁住本文件所有轮次的事实 |
+
+回归测试锁住的是**几轮试错换来的结论**，防止 akcli 或 verifier 变更后悄悄失效：
+
+1. `test_fault_fails_target_rule_only` —— 目标规则 fail、其余 4 条 pass（这一集的全部价值所在）
+2. `test_fault_board_parses` —— 无孤儿标签，verifier 不会 fail-closed
+3. `test_placement_record_is_self_contained` —— placement 记录自足，含 2 个引脚点，**不含答案键**
+4. `test_repair_closes_the_loop` —— 放件 + 原生 label 后 5 条规则全 pass
+5. `test_repaired_board_is_stable` —— 连修两次不漂移
+6. `test_device_r_pin_axis_is_y` —— `Device:R` 引脚轴向为 Y（第一轮猜错的那个点）
+7. `test_native_label_block_matches_frozen_shape` —— 原生图元与冻结板同形
+8. `test_native_label_block_uses_only_primitives_the_verifier_knows` ——
+   **专门防止有人把原生写入换回 `add_net_label`**（那个会静默丢坐标的 op）
+
+实跑：`py -3.9 -m unittest tests.test_repairbench_synth -v` → **Ran 8 tests, OK**。
+
+### I3. 由此可以改判了（这次有依据）
+
+`episodes_v1.json` 里 DC-03/04/05 的 `solvable_from_frozen_source: false` **依据是错的**
+（第六节已证 placement 记录是自足的）。但**本轮仍不改这三个既有夹具的标记**——
+本轮证明的是「**可以**为该族合成可解夹具」，还没有真的产出那一集。
+
+### I4. 下一步（唯一一件）
+
+**产出 DC-06**：用 `repairbench_synth.synthesise_fault` 生成 R9 缺件夹具 +
+`placement.json`（公开输入）+ 答案键，接进 `episodes_v1.json`。
+接入时需要给 oracle 臂补一个能力：**答案键里含原生 label 写入**（不是 akcli op），
+否则 oracle 无法解这一集。这是**唯一**的接口改动，改完 headline 分母就能离开 2。
