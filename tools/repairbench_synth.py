@@ -298,3 +298,45 @@ def repair(dest, placement, rule_statuses, observe, akcli=None):
         raise SynthesisError("no recorded label sits on a restored pin")
     write_native_labels(dest, on_pins)
     return rule_statuses(dest.read_bytes())
+
+
+def synthesise_label_fault(source, rule, rule_statuses, observe, akcli=None):
+    """Build a fault board by removing one net label, chosen to break exactly `rule`.
+
+    Connectivity-label episodes are the cheapest honest episodes available: the frozen
+    board already satisfies every rule, so deleting a single label that some rule depends
+    on produces a fault that violates that rule and nothing else. Measured on the M2
+    board: 15 of 72 labels break exactly one rule, spread across all four rules, and each
+    one restores cleanly through write_native_labels.
+
+    Returns (dest_path, record) where record names the label and the exact point to
+    restore. That record is the answer key; the fault board is the task input.
+    """
+    source = Path(source)
+    labels = _label_records(observe(source.read_bytes()))
+    for uid, name, at in labels:
+        probe = Path(tempfile.mkdtemp()) / "probe.kicad_sch"
+        shutil.copyfile(str(source), str(probe))
+        rc, _out = _akcli_draw(probe, [{"op": "delete_object", "uuid": uid}], akcli)
+        if rc != 0:
+            continue
+        try:
+            statuses = rule_statuses(probe.read_bytes())
+        except Exception:
+            continue
+        failing = sorted(k for k, v in statuses.items() if v == "fail")
+        if failing != [rule]:
+            continue
+        dest = Path(tempfile.mkdtemp()) / "fault.kicad_sch"
+        shutil.copyfile(str(source), str(dest))
+        rc, out = _akcli_draw(dest, [{"op": "delete_object", "uuid": uid}], akcli)
+        if rc != 0:
+            raise SynthesisError("label fault refused: %s" % out[:300])
+        return dest, {"label": name, "point_nm": list(at), "broken_rule": rule}
+    raise SynthesisError("no single label breaks exactly %s" % rule)
+
+
+def repair_label(dest, record, rule_statuses, observe, akcli=None):
+    """Restore the one removed label natively. Returns rule statuses."""
+    write_native_labels(Path(dest), [(record["label"], tuple(record["point_nm"]))])
+    return rule_statuses(Path(dest).read_bytes())

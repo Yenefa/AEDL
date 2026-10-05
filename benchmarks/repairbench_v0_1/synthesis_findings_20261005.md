@@ -649,3 +649,95 @@ DC-06 现在**比 DC-04 更难**（两个器件 + 10 片标签），且与 DC-04
 2. `ESP32_EN_RC` 暂不做成合成集：实测删 R4 不断任何规则、删 C5 断两条，
    说明它需要 R4+C5 联合判定且牵连 SHT30，**不是干净的单规则集**，硬做会污染回归层。
 3. 继续扩 `connectivity_label` 族（当前只有 2 集，是最薄的一环）。
+
+---
+
+## 十二、第十轮（2026-10-05 续）— connectivity_label 族合成 + structural 期望补齐 + 护栏校准
+
+### L1. connectivity_label 族的合成器（`synthesise_label_fault`）
+
+冻结板本身 5 条规则**全pass**，所以「删掉某条规则依赖的那一片 label」就得到
+「只违反该规则、其余不受影响」的夹具。实测：**72 片 label 中有 15 片**满足
+「删掉后恰好断一条规则」，覆盖全部 4 条规则，且每片都能用 `write_native_labels` 干净还原。
+
+这是**最便宜且最诚实的**一类夹具：故障来自冻结真相，答案来自冻结真相，不读答案键。
+
+### L2. 生成了 DC-07 / DC-08 / DC-09，并**主动把其中两集排除出headline**
+
+| 集 | 目标规则 | 删除的 label | 结果 |
+| --- | --- | --- | --- |
+| DC-07 | SHT30_ADDRESS | GND @ (266.70, 259.08) | **排除出headline** |
+| DC-08 | ESP32_EN_RC | GND @ (267.97, 40.64) | **计入 headline** |
+| DC-09 | USB_POLARITY_AND_SERIES | USB_DP_CONN @ (218.44, 189.23) | **排除出 headline** |
+
+**为什么排除 DC-07 / DC-09**：护栏按「(family, 规则, 冻结网络缺失签名)」比对，报出
+
+```
+DC-07 duplicates DC-02 at netlist scope
+DC-09 duplicates DC-01 at netlist scope
+```
+
+逐层追下去，结论是**这两集在合同的 netlist 尺度下与原集不可区分**：
+DC-02（ADDR 引脚悬空）与 DC-07（删掉 GND label）落到同一份网表指纹，
+DC-01（网名贴错）与 DC-09（删掉 label）亦然。
+**同时计入等于把同一种能力数两遍。**
+⇒ 二者设 `in_scope_v0_1: false`，**夹具保留**，等有更细签名（引脚级而非网络级）再启用。
+
+这是本轮最重要的一条：**护栏又一次起了作用，而且这次是我主动照它执行、把自己刚做的三集砍掉两集。**
+
+### L3. 护栏本身也升级了（从「failing 集」到「缺失网络签名」）
+
+第一版 key 是 `(family, 规则, failing 集)`，误报 DC-06/DC-01（同 family 同规则但不同缺陷）。
+第二版加入 `fault_family` 后，误报 DC-07/DC-02——因为两者 family、规则、failing 集全同。
+第三版改为 **`(family, 规则, 冻结网络缺失签名)`**：
+签名 = 冻结板上存在的网络名集合 − 故障板上存在的网络名集合。
+这才是**真正的缺陷指纹**，前两版都是在代理指标上打转。
+
+### L4. structural 层不再是 UNKNOWN
+
+DC-06..DC-09 的 `acceptance_v1.json` 条目**由实际修复结果算出**，不是手写：
+
+```
+DC-06  /USB_DM{R8.2,U1.13}  /USB_DM_CONN{J1.A7,J1.B7,R8.1}  /USB_DP{R7.2,U1.14} ...
+       add_components=[R7, R8]
+DC-07  /GND{...U2.2...}
+DC-08  /EN{C5.1,R3.2,SW1.1,U1.2} + /GND{...}
+DC-09  /USB_DP{R7.2,U1.14}  /USB_DP_CONN{J1.A6,J1.B6,R7.1}
+```
+
+并记入 `limitations`：这些期望是**从真实修复生成**、且**只覆盖该集触及的网络**（非整板）。
+⇒ headline 的 structural 从 **2/3（其中一格 UNKNOWN）** 变成 **4/4 真值**。
+
+### L5. 一个自己踩的坑：`add_components` 必须是对象不是字符串
+
+第一次生成 DC-06 的 structural 期望时我把 `add_components` 写成 `["R7","R8"]`，
+比较器直接取 `comp["reference"]` ⇒ **KeyError ⇒ DC-06 在两个臂里都报 error**。
+已改为完整记录（`reference`/`lib_id`/`value`/`footprint`/`position_nm`），
+DC-06 与 DC-03 用的是同一对 R7+R8，直接复用 DC-03 已验证的记录。
+
+### L6. 实测对照
+
+| 臂 | HEADLINE(in-scope) | ALL | 说明 |
+| --- | --- | --- | --- |
+| `noop` | **0/4** | 0/9 | 对照成立 |
+| `oracle` | **4/4** | **9/9** | 对照成立，structural 4/4 |
+
+headline 分母 3 → **4**（诚实的 4，不是注水的 6）。
+
+### L7. 新增 3 条回归（`test_repairbench_synth` → 18 条）
+
+- `test_each_rule_has_a_clean_single_label_fault` —— 3 条规则各有恰好断一条的单 label 夹具
+- `test_label_fault_restores_cleanly` —— 还原后 5 条全pass
+- `test_in_scope_set_covers_both_families` —— in-scope 必须同时覆盖两个 family，且不少于 4
+
+（同时修掉一个自己写错的断言：`repair_label` 是**就地写入**的，
+我却断言「修复后夹具不变」。已改为断言修复后全pass，
+而「夹具不被验证过程改动」这条由 DC-06 的 `test_answer_key_repairs_a_copy` 负责。）
+
+### L8. 下一步
+
+1. **护栏升级的启示**：`connectivity_label` 族在**网络级签名下已饱和**（3 条规则各有代表集）。
+   要继续扩，必须引入**引脚级或网名级**的更细签名，否则只能造出重复集。
+   ⇒ 下一步应先做 `structural` 层增强（记录引脚→网络映射而非仅网络成员），再谈扩规模。
+2. `ESP32_EN_RC` 的合成集仍不做：实测需 R4+C5 联合判定且牵连 SHT30，非干净单规则集。
+3. DC-03/04/05 保持 out-of-scope（DC-04 已证明与冻结板不同坐标系且被 12+ 模块引用）。

@@ -740,9 +740,10 @@ class FixtureProvenanceTests(unittest.TestCase):
                   if p.is_file() and p.name != "manifest_v1.json"}
         self.assertEqual(declared, actual)
         # Exact-set guard: every fixture file must be declared and nothing undeclared.
-        # 11 before DC-06; DC-06 added 4 (fault.kicad_sch, placement.json,
-        # repair_ops.json, native_labels.json) for a solvable add_component episode.
-        self.assertEqual(len(declared), 15)
+        # 11 before the synthesised episodes; DC-06 added 4 (fault.kicad_sch,
+        # placement.json, repair_ops.json, native_labels.json) and DC-07/08/09 added 3
+        # each (fault.kicad_sch, repair_ops.json, native_labels.json) for a total of 24.
+        self.assertEqual(len(declared), 24)
         for entry in manifest["files"]:
             with self.subTest(path=entry["path"]):
                 raw = (FIXTURES / entry["path"]).read_bytes()

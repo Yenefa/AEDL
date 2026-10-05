@@ -1,9 +1,9 @@
 {
-  "acceptance_sha256": "3437994467290f35bfb3ec468293a52afe1048a22d6b70841591fdfff10654f2",
+  "acceptance_sha256": "40ca9efea5b4bebaab78e56a216f6c6547dafa33a25d633c31568986dab26c7a",
   "arm": "noop",
   "benchmark_id": "AEDL-RepairBench-v0.1",
   "contract_sha256": "62e2cd063fd54b199d5b673ada161862a6fe96766f76c365db7a935ab133899c",
-  "episodes_sha256": "21ce7e6dec0c791640959bc55d6ce9ac6590bab67420b8935e7445bb350bc782",
+  "episodes_sha256": "f9264e92ca79f5e046cd6731ad43d6af1b94b5156956594689f653da33f80348",
   "net_split_guard": false,
   "results": [
     {
@@ -190,25 +190,120 @@
       "solvable_from_frozen_source": true,
       "structural": {
         "problems": [
-          "no acceptance case for DC-06"
+          "net USB_DM: expected ['R8.2', 'U1.13'], observed []",
+          "net USB_DM_CONN: expected ['J1.A7', 'J1.B7', 'R8.1'], observed []",
+          "net USB_DP: expected ['R7.2', 'U1.14'], observed []",
+          "net USB_DP_CONN: expected ['J1.A6', 'J1.B6', 'R7.1'], observed []",
+          "component R7: expected '22R', observed None",
+          "component R8: expected '22R', observed None"
         ],
-        "status": "UNKNOWN"
+        "status": "fail"
+      },
+      "target_rule": "USB_POLARITY_AND_SERIES"
+    },
+    {
+      "after_sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0",
+      "all_rule_statuses_after": {
+        "ESP32_EN_RC": "pass",
+        "ESP32_GPIO9_PULLUP": "pass",
+        "SHT30_ADDRESS": "fail",
+        "SHT30_UNUSED_PINS": "pass",
+        "USB_POLARITY_AND_SERIES": "pass"
+      },
+      "arm": "noop",
+      "before_sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0",
+      "bytes_changed": false,
+      "episode": "DC-07",
+      "error": null,
+      "fault_family": "connectivity_label",
+      "in_scope_v0_1": false,
+      "primary_after": "fail",
+      "primary_before": "fail",
+      "primary_ok": false,
+      "regression_broken": [],
+      "regression_ok": true,
+      "solvable_from_frozen_source": true,
+      "structural": {
+        "problems": [
+          "net GND: expected ['#FLG02.1', 'C1.2', 'C2.2', 'C3.2', 'C4.2', 'C5.2', 'D1.1', 'J1.A1', 'J1.A12', 'J1.B1', 'J1.B12', 'J1.SH', 'R5.2', 'R6.2', 'SW1.2', 'SW2.2', 'U1.19', 'U1.9', 'U2.2', 'U2.7', 'U2.8', 'U2.9', 'U3.2'], observed ['#FLG02.1', 'C1.2', 'C2.2', 'C3.2', 'C4.2', 'C5.2', 'D1.1', 'J1.A1', 'J1.A12', 'J1.B1', 'J1.B12', 'J1.SH', 'R5.2', 'R6.2', 'SW1.2', 'SW2.2', 'U1.19', 'U1.9', 'U2.7', 'U2.8', 'U2.9', 'U3.2']"
+        ],
+        "status": "fail"
+      },
+      "target_rule": "SHT30_ADDRESS"
+    },
+    {
+      "after_sha256": "1d92ecab8ca4d3b954e980266ebbe54e5ab6273f21ffdb01c51f8c82ef52e5b6",
+      "all_rule_statuses_after": {
+        "ESP32_EN_RC": "fail",
+        "ESP32_GPIO9_PULLUP": "pass",
+        "SHT30_ADDRESS": "pass",
+        "SHT30_UNUSED_PINS": "pass",
+        "USB_POLARITY_AND_SERIES": "pass"
+      },
+      "arm": "noop",
+      "before_sha256": "1d92ecab8ca4d3b954e980266ebbe54e5ab6273f21ffdb01c51f8c82ef52e5b6",
+      "bytes_changed": false,
+      "episode": "DC-08",
+      "error": null,
+      "fault_family": "connectivity_label",
+      "in_scope_v0_1": true,
+      "primary_after": "fail",
+      "primary_before": "fail",
+      "primary_ok": false,
+      "regression_broken": [],
+      "regression_ok": true,
+      "solvable_from_frozen_source": true,
+      "structural": {
+        "problems": [
+          "net GND: expected ['#FLG02.1', 'C1.2', 'C2.2', 'C3.2', 'C4.2', 'C5.2', 'D1.1', 'J1.A1', 'J1.A12', 'J1.B1', 'J1.B12', 'J1.SH', 'R5.2', 'R6.2', 'SW1.2', 'SW2.2', 'U1.19', 'U1.9', 'U2.2', 'U2.7', 'U2.8', 'U2.9', 'U3.2'], observed ['#FLG02.1', 'C1.2', 'C2.2', 'C3.2', 'C4.2', 'D1.1', 'J1.A1', 'J1.A12', 'J1.B1', 'J1.B12', 'J1.SH', 'R5.2', 'R6.2', 'SW1.2', 'SW2.2', 'U1.19', 'U1.9', 'U2.2', 'U2.7', 'U2.8', 'U2.9', 'U3.2']"
+        ],
+        "status": "fail"
+      },
+      "target_rule": "ESP32_EN_RC"
+    },
+    {
+      "after_sha256": "5d86ee6040950e945a7a95c871241ea05b339be5199025362cd6ba6c889364a5",
+      "all_rule_statuses_after": {
+        "ESP32_EN_RC": "pass",
+        "ESP32_GPIO9_PULLUP": "pass",
+        "SHT30_ADDRESS": "pass",
+        "SHT30_UNUSED_PINS": "pass",
+        "USB_POLARITY_AND_SERIES": "fail"
+      },
+      "arm": "noop",
+      "before_sha256": "5d86ee6040950e945a7a95c871241ea05b339be5199025362cd6ba6c889364a5",
+      "bytes_changed": false,
+      "episode": "DC-09",
+      "error": null,
+      "fault_family": "connectivity_label",
+      "in_scope_v0_1": false,
+      "primary_after": "fail",
+      "primary_before": "fail",
+      "primary_ok": false,
+      "regression_broken": [],
+      "regression_ok": true,
+      "solvable_from_frozen_source": true,
+      "structural": {
+        "problems": [
+          "net USB_DP_CONN: expected ['J1.A6', 'J1.B6', 'R7.1'], observed ['J1.A6', 'J1.B6']"
+        ],
+        "status": "fail"
       },
       "target_rule": "USB_POLARITY_AND_SERIES"
     }
   ],
   "summary": {
     "arm": "noop",
-    "episodes": 6,
+    "episodes": 9,
     "errors": [],
-    "executed": 6,
+    "executed": 9,
     "headline_denominator": "in_scope_v0_1 episodes only",
-    "in_scope_episodes": 3,
-    "in_scope_executed": 3,
+    "in_scope_episodes": 4,
+    "in_scope_executed": 4,
     "in_scope_primary_pass": 0,
-    "in_scope_regression_clean": 3,
+    "in_scope_regression_clean": 4,
     "in_scope_structural_pass": 0,
-    "out_of_scope_episodes": 3,
+    "out_of_scope_episodes": 5,
     "out_of_scope_unsolvable": 3,
     "per_family": {
       "add_component": {
@@ -220,16 +315,16 @@
         "structural_pass": 0
       },
       "connectivity_label": {
-        "episodes": 2,
-        "executed": 2,
+        "episodes": 5,
+        "executed": 5,
         "primary_pass": 0,
-        "regression_clean": 2,
-        "solvable": 2,
+        "regression_clean": 5,
+        "solvable": 5,
         "structural_pass": 0
       }
     },
     "primary_pass": 0,
-    "regression_clean": 6,
+    "regression_clean": 9,
     "structural_pass": 0
   }
 }

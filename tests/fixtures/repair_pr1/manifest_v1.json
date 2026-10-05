@@ -55,11 +55,6 @@
       "size_bytes": 473
     },
     {
-      "path": "private/acceptance_v1.json",
-      "sha256": "3437994467290f35bfb3ec468293a52afe1048a22d6b70841591fdfff10654f2",
-      "size_bytes": 2021
-    },
-    {
       "path": "native/DC-06/fault.kicad_sch",
       "sha256": "e6aa9af3b30db750ba0c2b6d078c4c945884e462c627f6b845a24e69241d821c",
       "size_bytes": 60089
@@ -78,6 +73,56 @@
       "path": "native/DC-06/repair_ops.json",
       "sha256": "5c7828908c4e6035083192931bd472f121bc1a181133bbf95274111050269a2b",
       "size_bytes": 524
+    },
+    {
+      "path": "native/DC-07/fault.kicad_sch",
+      "sha256": "cffa3d5b7faf019c8ec65a14877b1f2d305d2d2997455a99b4ba75280ac850e0",
+      "size_bytes": 62685
+    },
+    {
+      "path": "native/DC-07/native_labels.json",
+      "sha256": "11fe8e206b735efd73987160ffbfd7057a5cce0e3db352b863595e443d8c6713",
+      "size_bytes": 97
+    },
+    {
+      "path": "native/DC-07/repair_ops.json",
+      "sha256": "f0e03ec3835ea41e2743efdebf418117569dcabbdd175644690b873df58f6dd5",
+      "size_bytes": 74
+    },
+    {
+      "path": "native/DC-08/fault.kicad_sch",
+      "sha256": "1d92ecab8ca4d3b954e980266ebbe54e5ab6273f21ffdb01c51f8c82ef52e5b6",
+      "size_bytes": 62685
+    },
+    {
+      "path": "native/DC-08/native_labels.json",
+      "sha256": "a43b437f830d4db936ae00cdf81dfec05b612040dd709d60ea2dcc0693620ec3",
+      "size_bytes": 96
+    },
+    {
+      "path": "native/DC-08/repair_ops.json",
+      "sha256": "f0e03ec3835ea41e2743efdebf418117569dcabbdd175644690b873df58f6dd5",
+      "size_bytes": 74
+    },
+    {
+      "path": "native/DC-09/fault.kicad_sch",
+      "sha256": "5d86ee6040950e945a7a95c871241ea05b339be5199025362cd6ba6c889364a5",
+      "size_bytes": 62678
+    },
+    {
+      "path": "native/DC-09/native_labels.json",
+      "sha256": "c9ca2dc195d40ca9762ea898820735ea0022094eab4431bdf420a7570f7001b2",
+      "size_bytes": 105
+    },
+    {
+      "path": "native/DC-09/repair_ops.json",
+      "sha256": "f0e03ec3835ea41e2743efdebf418117569dcabbdd175644690b873df58f6dd5",
+      "size_bytes": 74
+    },
+    {
+      "path": "private/acceptance_v1.json",
+      "sha256": "40ca9efea5b4bebaab78e56a216f6c6547dafa33a25d633c31568986dab26c7a",
+      "size_bytes": 7163
     }
   ]
 }

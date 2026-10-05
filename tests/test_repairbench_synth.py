@@ -226,17 +226,76 @@ class MultiPartEpisode(unittest.TestCase):
         which is exactly the near-copy DC-06 originally was when it duplicated DC-04.
         """
         episodes = read_json("%s/benchmarks/repairbench_v0_1/episodes_v1.json" % REPO_ROOT)["episodes"]
+        pristine = read_bytes(str(synth.DEFAULT_SOURCE))
+        pristine_nets = set()
+        for part in rb.observe_source(pristine)["partitions"]:
+            pristine_nets.update(n.lstrip("/") for n in (part.get("names") or []))
+
         seen = {}
         for episode in episodes:
             if not episode.get("in_scope_v0_1"):
                 continue
-            key = (episode["fault_family"], episode["target_rule"], tuple(sorted(
-                k for k, v in statuses(read_bytes(
-                    os.path.join(REPO_ROOT, episode["fixture"]))).items() if v == "fail")))
+            fault = read_bytes(os.path.join(REPO_ROOT, episode["fixture"]))
+            fault_nets = set()
+            for part in rb.observe_source(fault)["partitions"]:
+                fault_nets.update(n.lstrip("/") for n in (part.get("names") or []))
+            # True defect fingerprint: which frozen nets this fault leaves unnamed.
+            missing = frozenset(pristine_nets - fault_nets)
+            key = (episode["fault_family"], episode["target_rule"], missing)
             self.assertNotIn(key, seen,
-                             "%s duplicates %s" % (episode["id"], seen.get(key)))
+                             "%s duplicates %s at netlist scope" % (episode["id"],
+                                                                     seen.get(key)))
             seen[key] = episode["id"]
-        self.assertGreaterEqual(len(seen), 3, "in-scope set must keep growing")
+        self.assertGreaterEqual(len(seen), 4, "in-scope set must keep growing")
+
+
+class LabelFaultSynthesis(unittest.TestCase):
+    """connectivity_label episodes: delete one label that exactly one rule depends on.
+
+    These are the cheapest honest episodes available because the frozen board already
+    satisfies every rule, so removing one label gives a fault that violates that rule and
+    nothing else. Measured on the M2 board: 15 of 72 labels qualify, spread across all
+    four rules.
+    """
+
+    RULES = ["SHT30_ADDRESS", "ESP32_EN_RC", "USB_POLARITY_AND_SERIES"]
+
+    @classmethod
+    def setUpClass(cls):
+        if not SOURCE.exists() or not AKCLI.exists():
+            raise unittest.SkipTest("frozen board or akcli unavailable")
+
+    def test_each_rule_has_a_clean_single_label_fault(self):
+        for rule in self.RULES:
+            with self.subTest(rule=rule):
+                dest, record = synth.synthesise_label_fault(
+                    SOURCE, rule, statuses, rb.observe_source, AKCLI)
+                st = statuses(dest.read_bytes())
+                self.assertEqual(sorted(k for k, v in st.items() if v == "fail"), [rule])
+                self.assertEqual(record["broken_rule"], rule)
+                self.assertTrue(record["label"])
+                self.assertEqual(len(record["point_nm"]), 2)
+
+    def test_label_fault_restores_cleanly(self):
+        for rule in self.RULES:
+            with self.subTest(rule=rule):
+                dest, record = synth.synthesise_label_fault(
+                    SOURCE, rule, statuses, rb.observe_source, AKCLI)
+                st = synth.repair_label(dest, record, statuses, rb.observe_source, AKCLI)
+                for name, value in st.items():
+                    self.assertEqual(value, "pass", "%s: %s" % (rule, name))
+                # repair_label writes in place, so the board is now correct; the
+                # assertion that the *fixture* is untouched lives in the DC-06 tests.
+                again = statuses(dest.read_bytes())
+                self.assertEqual([k for k, v in again.items() if v == "fail"], [])
+
+    def test_in_scope_set_covers_both_families(self):
+        episodes = read_json("%s/benchmarks/repairbench_v0_1/episodes_v1.json" % REPO_ROOT)["episodes"]
+        in_scope = [e for e in episodes if e.get("in_scope_v0_1")]
+        families = {e["fault_family"] for e in in_scope}
+        self.assertEqual(families, {"connectivity_label", "add_component"})
+        self.assertGreaterEqual(len(in_scope), 4,
+                                "headline denominator must not shrink below 4")
 
 
 if __name__ == "__main__":
