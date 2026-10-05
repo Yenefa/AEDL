@@ -381,6 +381,10 @@ def _llm_arm(episode, workdir, contract, *, with_contract: bool, arm_label: str)
     else:
         user["defect_hint"] = episode["fault_summary"]
 
+    if episode.get("public_input"):
+        # A published placement record is task INPUT, not an answer key: it says where
+        # the part belongs and what its pins are, not which nets must exist afterwards.
+        user["placement_record"] = load_json(REPO_ROOT / episode["public_input"])
     raw = _repair_prompt(SYSTEM_PROMPT, json.dumps(user, ensure_ascii=False),
                         base_url, model, key, arm=ARM_LABEL,
                         episode=episode["id"])
@@ -410,6 +414,11 @@ def arm_noop(episode: Dict[str, Any], workdir: Path) -> bytes:
     return target.read_bytes()
 
 
+def _import_synth():
+    """Load tools.repairbench_synth by path, the same way gates modules are loaded."""
+    return _load_by_path("tools/repairbench_synth.py", "repairbench_synth")
+
+
 def arm_oracle(episode: Dict[str, Any], workdir: Path) -> bytes:
     """Apply the withheld ground-truth repair_ops.json. Control: MUST pass."""
     ep_id = episode["id"]
@@ -428,6 +437,18 @@ def arm_oracle(episode: Dict[str, Any], workdir: Path) -> bytes:
     if proc.returncode != 0:
         raise RuntimeError("oracle arm writer failed rc=%d: %s" % (
             proc.returncode, (proc.stderr or proc.stdout)[:300]))
+
+    # akcli v1 cannot place a net label at a chosen coordinate: add_net_label accepts
+    # an ``at`` field, reports applied, and silently anchors the label at (50, 250) mil.
+    # Episodes that need connectivity restored therefore ship the label writes as a
+    # sidecar, applied natively here. Verified against the verifier's own rule that a
+    # label is legal only on a pin point or a wire endpoint.
+    sidecar = REPO_ROOT / ("tests/fixtures/repair_pr1/native/%s/native_labels.json" % ep_id)
+    if sidecar.is_file():
+        _synth = _import_synth()
+        labels = load_json(sidecar)
+        _synth.write_native_labels(target, [(e["name"], tuple(e["point_nm"]))
+                                           for e in labels])
     return target.read_bytes()
 
 

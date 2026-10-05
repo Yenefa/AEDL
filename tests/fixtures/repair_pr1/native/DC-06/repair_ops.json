@@ -1,0 +1,15 @@
+{
+  "protocol_version": 2,
+  "target_format": "kicad",
+  "ops": [
+    {
+      "op": "place_component",
+      "lib_id": "Device:R",
+      "designator": "R9",
+      "x_mil": 1350,
+      "y_mil": 10150,
+      "value": "10k",
+      "footprint": "Resistor_SMD:R_0603_1608Metric"
+    }
+  ]
+}

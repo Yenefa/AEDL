@@ -74,6 +74,19 @@
       "solvable_from_frozen_source": false,
       "in_scope_v0_1": false,
       "scope_note": "Missing EN reset capacitor C5. Same placement gap as DC-03."
+    },
+    {
+      "id": "DC-06",
+      "title": "BOOT pull-up resistor R9 removed from the ESP32 boot net",
+      "target_rule": "ESP32_GPIO9_PULLUP",
+      "fixture": "tests/fixtures/repair_pr1/native/DC-06/fault.kicad_sch",
+      "fault_summary": "R9 (10k, Device:R) is absent, so the ESP32 GPIO9 BOOT net has no pull-up. The contract requires it.",
+      "expected_primary": "ESP32_GPIO9_PULLUP fail -> pass",
+      "fault_family": "add_component",
+      "solvable_from_frozen_source": true,
+      "in_scope_v0_1": true,
+      "scope_note": "Synthesised from the frozen M2 board by tools/repairbench_synth.py. Unlike DC-03/04/05 it carries its own published placement record (placement.json) in the same coordinate frame as the schematic, so a solver has a frozen source for the coordinates. Measured: this rule requires connectivity to be restored, not merely the part to exist.",
+      "public_input": "tests/fixtures/repair_pr1/native/DC-06/placement.json"
     }
   ],
   "controls": {

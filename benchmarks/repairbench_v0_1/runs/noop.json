@@ -3,7 +3,7 @@
   "arm": "noop",
   "benchmark_id": "AEDL-RepairBench-v0.1",
   "contract_sha256": "62e2cd063fd54b199d5b673ada161862a6fe96766f76c365db7a935ab133899c",
-  "episodes_sha256": "1d3c63a190eaa1dae3acfac3005bac4912a2a6c4b0f22232a89f8075ac718355",
+  "episodes_sha256": "2935979defec1d4fae403fbaf4372e66283cd92a44ca58cd381b7f687e448d94",
   "net_split_guard": false,
   "results": [
     {
@@ -165,28 +165,58 @@
         "status": "fail"
       },
       "target_rule": "ESP32_EN_RC"
+    },
+    {
+      "after_sha256": "0544c2d2617ee958ebbf7ad041b4e028439d2c3e9bf2c5cef408840517ccbadc",
+      "all_rule_statuses_after": {
+        "ESP32_EN_RC": "pass",
+        "ESP32_GPIO9_PULLUP": "fail",
+        "SHT30_ADDRESS": "pass",
+        "SHT30_UNUSED_PINS": "pass",
+        "USB_POLARITY_AND_SERIES": "pass"
+      },
+      "arm": "noop",
+      "before_sha256": "0544c2d2617ee958ebbf7ad041b4e028439d2c3e9bf2c5cef408840517ccbadc",
+      "bytes_changed": false,
+      "episode": "DC-06",
+      "error": null,
+      "fault_family": "add_component",
+      "in_scope_v0_1": true,
+      "primary_after": "fail",
+      "primary_before": "fail",
+      "primary_ok": false,
+      "regression_broken": [],
+      "regression_ok": true,
+      "solvable_from_frozen_source": true,
+      "structural": {
+        "problems": [
+          "no acceptance case for DC-06"
+        ],
+        "status": "UNKNOWN"
+      },
+      "target_rule": "ESP32_GPIO9_PULLUP"
     }
   ],
   "summary": {
     "arm": "noop",
-    "episodes": 5,
+    "episodes": 6,
     "errors": [],
-    "executed": 5,
+    "executed": 6,
     "headline_denominator": "in_scope_v0_1 episodes only",
-    "in_scope_episodes": 2,
-    "in_scope_executed": 2,
+    "in_scope_episodes": 3,
+    "in_scope_executed": 3,
     "in_scope_primary_pass": 0,
-    "in_scope_regression_clean": 2,
+    "in_scope_regression_clean": 3,
     "in_scope_structural_pass": 0,
     "out_of_scope_episodes": 3,
     "out_of_scope_unsolvable": 3,
     "per_family": {
       "add_component": {
-        "episodes": 3,
-        "executed": 3,
+        "episodes": 4,
+        "executed": 4,
         "primary_pass": 0,
-        "regression_clean": 3,
-        "solvable": 0,
+        "regression_clean": 4,
+        "solvable": 1,
         "structural_pass": 0
       },
       "connectivity_label": {
@@ -199,7 +229,7 @@
       }
     },
     "primary_pass": 0,
-    "regression_clean": 5,
+    "regression_clean": 6,
     "structural_pass": 0
   }
 }

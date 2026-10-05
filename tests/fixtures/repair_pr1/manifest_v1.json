@@ -58,6 +58,26 @@
       "path": "private/acceptance_v1.json",
       "sha256": "3437994467290f35bfb3ec468293a52afe1048a22d6b70841591fdfff10654f2",
       "size_bytes": 2021
+    },
+    {
+      "path": "native/DC-06/fault.kicad_sch",
+      "sha256": "0544c2d2617ee958ebbf7ad041b4e028439d2c3e9bf2c5cef408840517ccbadc",
+      "size_bytes": 60378
+    },
+    {
+      "path": "native/DC-06/native_labels.json",
+      "sha256": "bb4d138b52bfdf453ac715ecbd13a607e8daa5985dbcdeb51fe7363115db09a2",
+      "size_bytes": 189
+    },
+    {
+      "path": "native/DC-06/placement.json",
+      "sha256": "25868137b21073935a5dfc6c7c695d421c0cd76dc2cb9aea07ce709dcb13f6fe",
+      "size_bytes": 1697
+    },
+    {
+      "path": "native/DC-06/repair_ops.json",
+      "sha256": "b698289724886ab6415dbcf4884b7f7516661710e6b33b850fc0641ca35c8e4d",
+      "size_bytes": 301
     }
   ]
 }

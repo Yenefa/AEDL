@@ -739,7 +739,10 @@ class FixtureProvenanceTests(unittest.TestCase):
         actual = {p.relative_to(FIXTURES).as_posix() for p in FIXTURES.rglob("*")
                   if p.is_file() and p.name != "manifest_v1.json"}
         self.assertEqual(declared, actual)
-        self.assertEqual(len(declared), 11)
+        # Exact-set guard: every fixture file must be declared and nothing undeclared.
+        # 11 before DC-06; DC-06 added 4 (fault.kicad_sch, placement.json,
+        # repair_ops.json, native_labels.json) for a solvable add_component episode.
+        self.assertEqual(len(declared), 15)
         for entry in manifest["files"]:
             with self.subTest(path=entry["path"]):
                 raw = (FIXTURES / entry["path"]).read_bytes()

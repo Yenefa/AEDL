@@ -4,6 +4,7 @@
 These lock in the facts that took several rounds to establish, so a future change to
 akcli or to the verifier cannot quietly break them again.
 """
+import io
 import json
 import os
 import sys
@@ -23,6 +24,16 @@ AKCLI = synth.AKCLI
 
 def statuses(raw):
     return rb.rule_statuses(CONTRACT, raw)[0]
+
+
+def read_bytes(path):
+    with io.open(path, "rb") as fh:
+        return fh.read()
+
+
+def read_json(path):
+    with io.open(path, encoding="utf-8") as fh:
+        return json.load(fh)
 
 
 @unittest.skipUnless(AKCLI.exists(), "akcli not available")
@@ -104,6 +115,63 @@ class CapabilityBound(unittest.TestCase):
         block = synth.native_label_block("BOOT", (34290000, 261620000))
         self.assertNotIn("add_net_label", block)
         self.assertIn("(at 34.29 261.62", block)
+
+
+class GeneratedEpisodeIntegrity(unittest.TestCase):
+    """Locks DC-06 against the exact failure mode that produced it.
+
+    The first generation run verified the answer key by calling repair() on the fixture
+    itself, which silently rewrote the fault into an already-repaired board. The episode
+    then scored UNKNOWN because the target rule already passed before any attempt. These
+    tests exist so that a regenerated or repaired DC-06 can never be committed again.
+    """
+
+    EPISODE = REPO_ROOT + "/tests/fixtures/repair_pr1/native/DC-06"
+    RULE = "ESP32_GPIO9_PULLUP"
+
+    def setUp(self):
+        if not os.path.isfile(self.EPISODE + "/fault.kicad_sch"):
+            self.skipTest("DC-06 not generated")
+
+    def test_fixture_is_still_a_fault(self):
+        st = statuses(read_bytes(self.EPISODE + "/fault.kicad_sch"))
+        self.assertEqual(st[self.RULE], "fail",
+                         "DC-06 fault.kicad_sch must still fail its target rule")
+        for rule, value in st.items():
+            if rule != self.RULE:
+                self.assertEqual(value, "pass", rule)
+
+    def test_published_placement_is_not_an_answer_key(self):
+        """placement.json is task input: geometry, not the nets to restore."""
+        placement = read_json(self.EPISODE + "/placement.json")
+        self.assertIn("pin_points_nm", placement)
+        self.assertNotIn("expected", placement)
+        self.assertNotIn("answer", placement)
+
+    def test_answer_key_repairs_a_copy(self):
+        ops = read_json(self.EPISODE + "/repair_ops.json")
+        labels = read_json(self.EPISODE + "/native_labels.json")
+
+        before = statuses(read_bytes(self.EPISODE + "/fault.kicad_sch"))
+        self.assertEqual(before[self.RULE], "fail")
+
+        import shutil
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        copy_path = os.path.join(tmp, "probe.kicad_sch")
+        shutil.copyfile(self.EPISODE + "/fault.kicad_sch", copy_path)
+        rc, out = synth._akcli_draw(copy_path, ops["ops"], AKCLI)
+        self.assertEqual(rc, 0, out[:300])
+        synth.write_native_labels(copy_path, [(e["name"], tuple(e["point_nm"]))
+                                             for e in labels])
+        after = statuses(read_bytes(copy_path))
+        self.assertEqual(after[self.RULE], "pass")
+        for rule, value in after.items():
+            self.assertEqual(value, "pass", rule)
+
+        # the fixture must be untouched by any of this
+        again = statuses(read_bytes(self.EPISODE + "/fault.kicad_sch"))
+        self.assertEqual(again, before, "verification must never mutate the fixture")
 
 
 if __name__ == "__main__":

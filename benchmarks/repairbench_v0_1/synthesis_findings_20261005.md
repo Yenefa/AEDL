@@ -479,3 +479,73 @@ pristine labels: 64   repaired labels: 64
 `placement.json`（公开输入）+ 答案键，接进 `episodes_v1.json`。
 接入时需要给 oracle 臂补一个能力：**答案键里含原生 label 写入**（不是 akcli op），
 否则 oracle 无法解这一集。这是**唯一**的接口改动，改完 headline 分母就能离开 2。
+
+---
+
+## 十、第八轮（2026-10-05 续）— **DC-06 落地，headline 分母 2 → 3**
+
+### J1. 产出
+
+`tests/fixtures/repair_pr1/native/DC-06/`（R9 缺件夹具）：
+
+| 文件 | 角色 | 是否公开输入 |
+| --- | --- | --- |
+| `fault.kicad_sch` | 故障板：R9 与其 2 片 pin label 被删 | 任务输入 |
+| `placement.json` | placement 记录（器件 + **引脚坐标**） | **是，公开输入** |
+| `repair_ops.json` | 答案键 part 1：akcli `place_component` | 否 |
+| `native_labels.json` | 答案键 part 2：原生 label 写入 | 否 |
+
+`placement.json` 是**公开输入而不是答案键**：它只说「器件在哪、引脚在哪」，
+**不说**「之后应该连成什么网」。后者仍需从冻结合同推导——所以这一集依然在考能力。
+
+### J2. 实测结果（headline 分母从 2 变成 3）
+
+| 臂 | HEADLINE(in-scope) | ALL | 说明 |
+| --- | --- | --- | --- |
+| `noop` | **0/3** | 0/6 | 对照成立：不能通吃 |
+| `oracle` | **3/3** | **6/6** | 对照成立：可解 |
+
+per-family：
+
+```
+family                 episodes  solvable  exec  primary  structural
+add_component *        4         0         4     0/4      0/4
+connectivity_label     2         2         2     0/2      0/2
+```
+
+（上面是 noop；oracle 为 `add_component` 4/4、`connectivity_label` 2/2。）
+
+⇒ **`add_component` 族第一次有了可解成员**（episodes 4 / solvable 1）。
+这一步是「headline 能不能离开 2」的关键，实测**离开了**。
+
+### J3. 本轮我自己犯的 bug（已修，已用测试锁死）
+
+第一次生成 DC-06 时，验证步骤直接对 **fixture 文件本身**调用了 `synth.repair(...)`，
+把故障板就地改成了**已修好的板**。后果：`noop` 与 `oracle` 都拿到「规则本来就 pass」的板，
+primary 永远无法 fail→pass，DC-06 报 `FAIL`。
+
+诊断方式：oracle 跑出 2/3 而不是 3/3，追下去发现 `step0` 的目标规则**已经是 pass**。
+
+修法：生成流程改为**永远从冻结板重新合成**（幂等），验证只在**副本**上做。
+
+新增 3 条回归锁死这个失效模式：
+- `test_fixture_is_still_a_fault` —— 夹具必须仍然 fail，且其余 4 条 pass；
+- `test_answer_key_repairs_a_copy` —— 在副本上修，且**断言验证后夹具逐字节未变**；
+- `test_published_placement_is_not_an_answer_key` —— `placement.json` 不得含 `expected`/`answer` 字段。
+
+`tests.test_repairbench_synth` → **Ran 11, OK**（原 8，+3）。
+
+### J4. 一个诚实标注：DC-06 的 structural 是 UNKNOWN
+
+`private/acceptance_v1.json` **没有 DC-06 条目**，所以 structural 层报 **UNKNOWN**，
+不是 pass。UNKNOWN 不计入分子，因此 headline 的 structural 是 2/3 而非 3/3。
+**这是缺数据，不是缺能力**，也**不做成假的 pass**。
+下一步应把 DC-06 的 netlist 期望补进该 withheld 文件（那本来就是 test-only 期望集）。
+
+### J5. 下一步（按逻辑序）
+
+1. **补 DC-06 的 structural 期望**进 `acceptance_v1.json`，把 structural 从 UNKNOWN 变成真值。
+2. **DC-03/04/05 现在可以改判了**：本轮证明了「该族可解且已有可解样本（DC-06）」，
+   它们标 `solvable_from_frozen_source: false` 的依据（无坐标真源）已被推翻，
+   应改为「缺自带 placement 记录」这一**准确**的表述，或直接用 `synthesise_fault` 重生成。
+3. 继续扩规模（headline 3 集仍偏小）。
