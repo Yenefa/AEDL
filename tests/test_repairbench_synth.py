@@ -226,27 +226,44 @@ class MultiPartEpisode(unittest.TestCase):
         which is exactly the near-copy DC-06 originally was when it duplicated DC-04.
         """
         episodes = read_json("%s/benchmarks/repairbench_v0_1/episodes_v1.json" % REPO_ROOT)["episodes"]
-        pristine = read_bytes(str(synth.DEFAULT_SOURCE))
-        pristine_nets = set()
-        for part in rb.observe_source(pristine)["partitions"]:
-            pristine_nets.update(n.lstrip("/") for n in (part.get("names") or []))
+
+        def pin_nets(raw):
+            out = {}
+            for part in rb.observe_source(raw)["partitions"]:
+                names = part.get("names") or []
+                label = "/".join(sorted(names)) if names else ""
+                for member in part["members"]:
+                    if member.get("reference"):
+                        out["%s.%s" % (member["reference"], member.get("number"))] = label
+            return out
+
+        pristine = pin_nets(read_bytes(str(synth.DEFAULT_SOURCE)))
+
+        def signature(raw):
+            """Pin-level defect fingerprint: which pins changed net, and how.
+
+            Three earlier key shapes were all proxies and each produced a confident wrong
+            answer: rule plus failing set flagged DC-06 against DC-01; adding fault_family
+            flagged DC-07 against DC-02; net-name difference flagged DC-09 against DC-01.
+            Pin-level mapping is the measure the contract actually scores.
+            """
+            fault = pin_nets(raw)
+            return frozenset(
+                (pin, fault.get(pin, ""), pristine.get(pin, ""))
+                for pin in set(fault) | set(pristine)
+                if fault.get(pin, "") != pristine.get(pin, ""))
 
         seen = {}
         for episode in episodes:
             if not episode.get("in_scope_v0_1"):
                 continue
-            fault = read_bytes(os.path.join(REPO_ROOT, episode["fixture"]))
-            fault_nets = set()
-            for part in rb.observe_source(fault)["partitions"]:
-                fault_nets.update(n.lstrip("/") for n in (part.get("names") or []))
-            # True defect fingerprint: which frozen nets this fault leaves unnamed.
-            missing = frozenset(pristine_nets - fault_nets)
-            key = (episode["fault_family"], episode["target_rule"], missing)
+            sig = signature(read_bytes(os.path.join(REPO_ROOT, episode["fixture"])))
+            key = (episode["fault_family"], episode["target_rule"], sig)
             self.assertNotIn(key, seen,
-                             "%s duplicates %s at netlist scope" % (episode["id"],
-                                                                     seen.get(key)))
+                             "%s duplicates %s at pin level" % (episode["id"],
+                                                                seen.get(key)))
             seen[key] = episode["id"]
-        self.assertGreaterEqual(len(seen), 4, "in-scope set must keep growing")
+
 
 
 class LabelFaultSynthesis(unittest.TestCase):

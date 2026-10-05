@@ -3,7 +3,7 @@
   "arm": "oracle",
   "benchmark_id": "AEDL-RepairBench-v0.1",
   "contract_sha256": "62e2cd063fd54b199d5b673ada161862a6fe96766f76c365db7a935ab133899c",
-  "episodes_sha256": "f9264e92ca79f5e046cd6731ad43d6af1b94b5156956594689f653da33f80348",
+  "episodes_sha256": "7f0c26d629da9afe5d44b6ad164e547fc3bb1dcbfbec591c6220f260c1fc7b8c",
   "net_split_guard": false,
   "results": [
     {
@@ -147,7 +147,7 @@
       "target_rule": "ESP32_EN_RC"
     },
     {
-      "after_sha256": "5fb30d42e946e4bf5ee854339c1282531e20715da740854cb01b64d3f867458d",
+      "after_sha256": "d7f86419c5cbce228eb1167079cf25867e0f434d57d9aee1663b4fbd4b40d8f7",
       "all_rule_statuses_after": {
         "ESP32_EN_RC": "pass",
         "ESP32_GPIO9_PULLUP": "pass",
@@ -175,7 +175,7 @@
       "target_rule": "USB_POLARITY_AND_SERIES"
     },
     {
-      "after_sha256": "c84c81ad40efd1761be786ee8f12a1d4a28f9968a0badc8bbeb458b2695ef364",
+      "after_sha256": "23146ddda24a3d14c2667d76643fe850bcefb3ee9dd5c74320e03f343138e41f",
       "all_rule_statuses_after": {
         "ESP32_EN_RC": "pass",
         "ESP32_GPIO9_PULLUP": "pass",
@@ -203,7 +203,7 @@
       "target_rule": "SHT30_ADDRESS"
     },
     {
-      "after_sha256": "99cd1ac9e3515f8d9b700df9236478d106af9b6d2c2cc8e82d5304ac9f27f0b3",
+      "after_sha256": "b9fadceb6d7258442cb18bb05e8c7aef21f2bb6f932ebd4ce45a0684ddfa2dd4",
       "all_rule_statuses_after": {
         "ESP32_EN_RC": "pass",
         "ESP32_GPIO9_PULLUP": "pass",
@@ -231,7 +231,7 @@
       "target_rule": "ESP32_EN_RC"
     },
     {
-      "after_sha256": "0148cd4f8ebd3574f5b747ffef54fa651f270a7f41c6e98a91da101316d96b2d",
+      "after_sha256": "57ce2f451cc538f9db7ba9887ce59643ad1e9892b0687646b6a3858f6d14052a",
       "all_rule_statuses_after": {
         "ESP32_EN_RC": "pass",
         "ESP32_GPIO9_PULLUP": "pass",
@@ -245,7 +245,7 @@
       "episode": "DC-09",
       "error": null,
       "fault_family": "connectivity_label",
-      "in_scope_v0_1": false,
+      "in_scope_v0_1": true,
       "primary_after": "pass",
       "primary_before": "fail",
       "primary_ok": true,
@@ -265,12 +265,12 @@
     "errors": [],
     "executed": 9,
     "headline_denominator": "in_scope_v0_1 episodes only",
-    "in_scope_episodes": 4,
-    "in_scope_executed": 4,
-    "in_scope_primary_pass": 4,
-    "in_scope_regression_clean": 4,
-    "in_scope_structural_pass": 4,
-    "out_of_scope_episodes": 5,
+    "in_scope_episodes": 5,
+    "in_scope_executed": 5,
+    "in_scope_primary_pass": 5,
+    "in_scope_regression_clean": 5,
+    "in_scope_structural_pass": 5,
+    "out_of_scope_episodes": 4,
     "out_of_scope_unsolvable": 3,
     "per_family": {
       "add_component": {

@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 169 条。完整正文在各自条目文件中；本索引只做导航。
+共 170 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -230,6 +230,7 @@
 - [`AI-20261005-OPENCODE-4D9A6909FF4C5481F6FCE61771B7FBC2`](ai-usage/AI-20261005-OPENCODE-4D9A6909FF4C5481F6FCE61771B7FBC2.md) — Third synthesis round: pin identity is faithful, and the proposed pin-coordinate test is not runnable through the public observation API
 - [`AI-20261005-OPENCODE-702B7E6EF29120EF8FCC9918B41FA058`](ai-usage/AI-20261005-OPENCODE-702B7E6EF29120EF8FCC9918B41FA058.md) — Fifth synthesis round: root cause found, add_net_label silently ignores its at field and anchors at (50,250) mil
 - [`AI-20261005-OPENCODE-738C3999AF8CA577AE8C9B6A8C414985`](ai-usage/AI-20261005-OPENCODE-738C3999AF8CA577AE8C9B6A8C414985.md) — Make v0.1 scope explicit: per-family breakdown, headline over solvable episodes, unsolvable family reported separately
+- [`AI-20261005-OPENCODE-8B9F8899BC60A441BA038DD785E9CC42`](ai-usage/AI-20261005-OPENCODE-8B9F8899BC60A441BA038DD785E9CC42.md) — Eleventh round: pin-level guard re-admits DC-09 as a genuinely distinct capability and confirms DC-07 is a true duplicate
 - [`AI-20261005-OPENCODE-921244038C5F08F439450AEB43C0D1AF`](ai-usage/AI-20261005-OPENCODE-921244038C5F08F439450AEB43C0D1AF.md) — Fourth synthesis round: pin geometry proven exact, six hypotheses eliminated, failure isolated to add_net_label connection semantics
 - [`AI-20261005-OPENCODE-973FDED009A2833C1C1C614B7DEBA4A4`](ai-usage/AI-20261005-OPENCODE-973FDED009A2833C1C1C614B7DEBA4A4.md) — Tenth round: label-fault synthesis, real structural expectations, and the duplicate guard forces two new episodes out of the headline
 - [`AI-20261005-OPENCODE-9CE325C974C753284C4D14AFAA665EAA`](ai-usage/AI-20261005-OPENCODE-9CE325C974C753284C4D14AFAA665EAA.md) — Land PR #67 *.md text eol=lf with pinned exemptions; renormalise only in-scope files

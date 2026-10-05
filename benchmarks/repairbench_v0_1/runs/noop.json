@@ -3,7 +3,7 @@
   "arm": "noop",
   "benchmark_id": "AEDL-RepairBench-v0.1",
   "contract_sha256": "62e2cd063fd54b199d5b673ada161862a6fe96766f76c365db7a935ab133899c",
-  "episodes_sha256": "f9264e92ca79f5e046cd6731ad43d6af1b94b5156956594689f653da33f80348",
+  "episodes_sha256": "7f0c26d629da9afe5d44b6ad164e547fc3bb1dcbfbec591c6220f260c1fc7b8c",
   "net_split_guard": false,
   "results": [
     {
@@ -276,7 +276,7 @@
       "episode": "DC-09",
       "error": null,
       "fault_family": "connectivity_label",
-      "in_scope_v0_1": false,
+      "in_scope_v0_1": true,
       "primary_after": "fail",
       "primary_before": "fail",
       "primary_ok": false,
@@ -298,12 +298,12 @@
     "errors": [],
     "executed": 9,
     "headline_denominator": "in_scope_v0_1 episodes only",
-    "in_scope_episodes": 4,
-    "in_scope_executed": 4,
+    "in_scope_episodes": 5,
+    "in_scope_executed": 5,
     "in_scope_primary_pass": 0,
-    "in_scope_regression_clean": 4,
+    "in_scope_regression_clean": 5,
     "in_scope_structural_pass": 0,
-    "out_of_scope_episodes": 5,
+    "out_of_scope_episodes": 4,
     "out_of_scope_unsolvable": 3,
     "per_family": {
       "add_component": {

@@ -98,7 +98,7 @@
       "fault_family": "connectivity_label",
       "solvable_from_frozen_source": true,
       "in_scope_v0_1": false,
-      "scope_note": "Held out of the headline: at the contract's netlist scope this defect is indistinguishable from DC-02, so counting both would double-count one capability. Fixture kept for use once a finer signature exists."
+      "scope_note": "Held out of the headline, and pin granularity confirms the decision: its signature U2.2 ''->/GND' is byte-identical to DC-02's. A deleted GND label and a floating ADDR pin are the same defect at the contract's scope, so counting both would double-count one capability. Fixture kept."
     },
     {
       "id": "DC-08",
@@ -121,8 +121,8 @@
       "expected_primary": "USB_POLARITY_AND_SERIES fail -> pass",
       "fault_family": "connectivity_label",
       "solvable_from_frozen_source": true,
-      "in_scope_v0_1": false,
-      "scope_note": "Held out of the headline: at the contract's netlist scope this defect is indistinguishable from DC-01, so counting both would double-count one capability. Fixture kept for use once a finer signature exists."
+      "in_scope_v0_1": true,
+      "scope_note": "Held out at netlist level, then re-admitted after the guard moved to pin granularity. Net-level it looked identical to DC-01, but pin-level the two are different capabilities: DC-01 swaps two module pins onto each other's nets (U1.13 /USB_DP -> /USB_DM), DC-09 disconnects R7.1 from its net entirely. A net-level guard cannot see that difference; a pin-level one can."
     }
   ],
   "controls": {

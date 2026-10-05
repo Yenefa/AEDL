@@ -27,7 +27,7 @@
 | **AEDL RepairBench v0.1** | **可运行** | 见下节 |
 
 门禁最近一次全量结果：main **1274 OK (skipped=30)**、sandbox **574 OK (skipped=3, xfail=1)**、
-secret_scan 通过、`ai_usage_ledger` **168 条 in sync**。
+secret_scan 通过、`ai_usage_ledger` **170 条 in sync**。
 
 ## 3. RepairBench v0.1 —— 已交付的 benchmark
 
