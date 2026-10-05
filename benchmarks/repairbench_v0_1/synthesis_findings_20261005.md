@@ -293,3 +293,70 @@ R9 本体 (34.29, 257.81)，于是**绝对引脚坐标**：
 
 同时要记住：**修复腿失败不影响已确立的正面结论**——
 合同在真实板上可满足、缺件夹具可干净合成、纯 net-label 连通，这三条都成立。
+
+---
+
+## 七、第五轮（2026-10-05 续）— **根因找到：`add_net_label` 忽略 `at`，锚到默认坐标**
+
+### G1. verifier 的归属规则（读源码得到）
+
+`gates/repair_verification.py::_source_partitions`：
+
+```python
+label_points = {p for p, _ in labels}
+wire_points  = {p for wire in wires for p in wire}
+...
+if label_points - set(positions) - wire_points:
+    raise ObservationError("label cannot be uniquely attributed to a pin")
+```
+
+即：**一个 label 合法，当且仅当它的点等于某个引脚点，或等于某条 wire 的端点。**
+引脚点按 `(position[0] + def["point"][0], position[1] - def["point"][1])` 计算，
+单位是**整数纳米**（Y 轴翻转）。
+
+### G2. 根因：坐标根本没落在请求的位置
+
+把冻结板与修复板的 label 坐标（整数 nm）做集合差：
+
+```
+pristine labels: 64   repaired labels: 64
+
+修复后新增、冻结板没有的（=嫌疑人）：
+   +3V3  (1270000, 6350000)     on_R9_pin = False
+   BOOT  (1270000, 6350000)     on_R9_pin = False
+
+被删掉、没还原的：
+   +3V3  (34290000, 254000000)  on_R9_pin = True
+   BOOT  (34290000, 261620000)  on_R9_pin = True
+```
+
+**`add_net_label` 把两片 label 都放到了 (1270000, 6350000) nm = (1.27, 6.35) mm = (50, 250) mil**，
+而我请求的是 (34.29, 254.00) / (34.29, 261.62) mm。
+**(50, 250) mil 正是 akcli 的默认锚点。**
+
+⇒ **`add_net_label` 静默忽略了 `at` 字段**（rc=0、不报错、但坐标没生效）。
+
+**这一条解释掉了此前**全部**失败**：几何本来是对的、器件身份是对的、label 数量与 scope 都对，
+唯一错的是 akcli 把 label 放错了地方。这不是「语义鸿沟」，是 **`at` 参数不生效**。
+
+### G3. 由此得到的两个可执行结论
+
+1. **`place_component` 的 `x_mil`/`y_mil` 是生效的**（R9 确实回到了本体坐标，
+   且 pin UUID 与冻结板一致）；**但 `add_net_label` 的 `at` 不生效**。
+   两者行为不一致，**不能把 place 成功类推到 label 成功**。
+
+2. **绕开办法（verifier 明确允许）**：归属条件是 `引脚点 ∪ wire 端点`。
+   所以可以**先用 `add_wire` 从 R9 的引脚拉一小段正交线，再把 label 放在该线端点上**——
+   `add_wire` 的 `pts` 参数在实测中是被真实施加的（rc=0），
+   因此这条路径**不依赖 `add_net_label` 的 `at` 是否生效**。
+   这是下一步唯一该做的事。
+
+### G4. 对前面结论的连带修正
+
+第五轮之前写的「akcli 与 verifier 之间存在语义鸿沟」**判断过重，现更正**：
+不是语义鸿沟，是 **`add_net_label` 的 `at` 参数不生效**这一处具体缺陷。
+本节取代第六节的 F4 推断。
+
+同时，「placement 记录必须带 verifier 认的连接语义」这条设计结论**依然成立**，
+但含义要收窄为：placement 记录必须能**驱动 `add_wire` 拉到正确端点**，
+而不只是给出 label 的落点。
