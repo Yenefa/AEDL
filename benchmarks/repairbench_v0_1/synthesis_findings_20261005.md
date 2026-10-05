@@ -360,3 +360,63 @@ pristine labels: 64   repaired labels: 64
 同时，「placement 记录必须带 verifier 认的连接语义」这条设计结论**依然成立**，
 但含义要收窄为：placement 记录必须能**驱动 `add_wire` 拉到正确端点**，
 而不只是给出 label 的落点。
+
+---
+
+## 八、第六轮（2026-10-05 续）— `add_wire` 的真实形状，以及由此得到的**能力边界**
+
+### H1. `add_wire` 必填 `vertices`，且第一个元素是**引脚引用**
+
+```json
+{ "op": "add_wire",
+  "vertices": [ "<REF.PIN>", [ 0, 0 ] ] }
+```
+
+即 `vertices` 是 `[ "R9.1", [x, y] ]` 这种形状：**从某个引脚拉一条线到某坐标**，
+而不是我上一轮试的 `pts: [{x,y},{x,y}]`（被拒：`add_wire missing required field 'vertices'`）。
+
+这比想象的更强：**akcli 允许按引脚引用锚定起线**，所以「从 R9 引脚拉线」这件事本身是可行的。
+
+### H2. 但绕行方案仍然卡在同一个地方
+
+归属条件是 `引脚点 ∪ wire 端点`：
+
+- 直接把 label 放在**引脚点**上 → 走 `add_net_label`，而它的 `at` **不生效**（第七节 G2 已证）；
+- 把 label 放在**wire 端点**上 → 仍然要用 `add_net_label` 指定落点，而它的 `at` **同样不生效**。
+
+⇒ **只要 label 的落点必须由我指定，akcli v1 就做不到**，
+因为唯一的 label 操作 `add_net_label` 恰好是那个忽略坐标的 op。
+`add_wire` 能把线拉对，但**没有第二个能放置文字图元的 op**
+（词汇表里与文字相关的只有 `add_text` / `add_text_box`，它们不是 net label）。
+
+### H3. 结论（这是本轮真正的产出）
+
+**用 akcli v1 合成「需要补 net label」的夹具，此路不通。**
+不是几何问题、不是器件问题、不是 verifier 语义问题，而是：
+**akcli v1 缺少一个「能按指定坐标放置 net label」的能力。**
+
+这不是死路，而是把路线从「合成」明确切到「造真夹具」：
+
+| 路线 | 可行性 | 依据 |
+| --- | --- | --- |
+| akcli 合成「删件 + 补 label」夹具 | **不可行** | H2：`add_net_label` 无坐标能力 |
+| akcli 合成「纯删件、repair 用 `place_component` 即可」夹具 | **仍可行** | 第六节：放 R9 后解析干净、仅规则仍 fail |
+| 人工/半自动造一集真夹具（复用 DC-03 已能通过 verifier 的写法） | **可行** | DC-03/04/05 现存 |
+
+### H4. 顺带确认的一条工程事实（对本项目自身有意义）
+
+`add_text` / `add_text_box` **不是 net label**。
+而本项目冻结 M2 schematic 是**纯 net-label 连通**（`wire`=0、`junction`=0），
+因此**任何需要新增网络连接的修复，都必须写原生 `(label ...)` 图元**，
+用 akcli 的 op 词汇表**做不到**——它的文字类 op 写不出 label。
+
+这是 akcli 与本项目之间一个**已定位、可复述的能力缺口**，
+值得单独记一笔：不是 bug，是覆盖范围问题。
+
+### H5. 下一步（按此结论，不再在合成路线上试错）
+
+1. **不再试合成**。H2 已把这条路封死，再试是浪费。
+2. `add_component` 族的正解是**造一集真夹具**：用 akcli 完成能做的部分
+   （删件、place_component、add_wire），再对 label 图元做**最小化的原生文本补写**，
+   并为此写一条明确的、**带回归测试**的工具，而不是手工改夹具。
+3. 在此之前，`episodes_v1.json` 的 DC-03/04/05 标记**继续不动**。
