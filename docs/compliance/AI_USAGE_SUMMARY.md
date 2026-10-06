@@ -395,15 +395,15 @@
 - **边界**：只覆盖 F-U1-04 的措辞；p34 Figure 9-1 图形附项仍为 `AI_EXTRACTED_UNVERIFIED`；A3 rubric 本体不在本单元范围内
 - **编号沿革**：原记 WU-37，与 Yenefa 2026-09-11 已改号的 #58 撞号（她在先），2026-09-13 让号为 **WU-42**
 
-### WU-43 · 2026-10-07 — 评估结论后两项评测可靠性修复（CI 工具身份 + DC-06 输入治理）
+### WU-43 · 2026-10-07 — 评估结论后三项评测可靠性修复（CI 工具身份 + DC-06 输入治理 + 回执按次隔离）
 
-- **Records (2)**：`AI-20261007-BOT-FDFCC78F42A16D0C1FDE2A45975EBED7`、`AI-20261007-BOT-04777075B5D901CA1DD10284D0771E04`
+- **Records (3)**：`AI-20261007-BOT-FDFCC78F42A16D0C1FDE2A45975EBED7`、`AI-20261007-BOT-04777075B5D901CA1DD10284D0771E04`、`AI-20261007-BOT-B29FEABCBFA505A9DD6F12156610AF6A`
 - **AI role**：DEBUG / FIX / TEST / BENCHMARK-GOVERNANCE
 - **Human owner**：YEN（仅 ADR-022 常驻自治授权；本轮无逐项人工批准）
 - **Human final decision**：`PENDING_HUMAN_REVIEW` — 两条 `人工审核` 字段均保持未签
 - **证据**：PR #123 已合并（`gh pr view 123` = MERGED，mergedAt 2026-10-06T16:52:01Z）；
   DC-06 处置由 `tasks/DC06-INPUT-GOVERNANCE.yaml` 与其台账条目的实测数值支撑
-- **边界**：同一目标（让评测可信）的两个可审计工作单元，分属两张卡两次提交；
+- **边界**：同一目标（让评测可信）的三个可审计工作单元，分属三张卡三次提交；
   本单元**不含**双臂模型对照，也不含 `noop`/`oracle` 控制实跑（本机无 pin 写入器）
 - **编号沿革**：新发 **WU-43**（此前最大为 WU-42）
 

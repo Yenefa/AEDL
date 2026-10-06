@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 172 条。完整正文在各自条目文件中；本索引只做导航。
+共 173 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -244,4 +244,5 @@
 ## 2026-10-07
 
 - [`AI-20261007-BOT-04777075B5D901CA1DD10284D0771E04`](ai-usage/AI-20261007-BOT-04777075B5D901CA1DD10284D0771E04.md) — strip the answer key from DC-06 public input and gate both arms on information/action parity
+- [`AI-20261007-BOT-B29FEABCBFA505A9DD6F12156610AF6A`](ai-usage/AI-20261007-BOT-B29FEABCBFA505A9DD6F12156610AF6A.md) — isolate repairbench receipts per run and pin provenance so an unexecuted arm cannot read as a zero
 - [`AI-20261007-BOT-FDFCC78F42A16D0C1FDE2A45975EBED7`](ai-usage/AI-20261007-BOT-FDFCC78F42A16D0C1FDE2A45975EBED7.md) — unify akcli tool identity so guard coverage no longer depends on a personal Windows binary

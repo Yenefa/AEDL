@@ -22,7 +22,7 @@
 > 避免并发写坏工作区。人类职责与决策边界见 `docs/HUMAN_OWNERSHIP.md`。
 > 收尾时按 AGENTS.md 第 4 节为本次实质工作新增一条记录，默认 `PENDING_HUMAN_REVIEW`。
 
-## 2026-10-07 评测可靠性两轮（PR #123 + DC-06 输入治理）— 当前状态
+## 2026-10-07 评测可靠性三轮（PR #123 / PR #124 / 回执按次隔离）— 当前状态
 
 - **时间窗**：Owner 2026-10-06 的 go/no-go 判断给出**最多一周**限时复验窗口，前置条件是
   先修掉三项评测阻塞（CI 硬编码个人工具路径 / DC-06 公开输入含答案标签 / 运行记录未按次隔离）。
@@ -43,6 +43,17 @@
     其证据是被污染的公开输入；旧回执按 §0A.5 第 5 条不改写。
   - 本机实跑基线：`main_tests` **1275 OK (skipped=32)**、`sandbox_tests` **574 OK
     (skipped=3, expected failures=1)**、`dev_gate --envelope … --admit-receipt …` **pass / exit 0**。
+- **第三轮（本卡 `RUN-RECEIPT-ISOLATION`）**：读 master 上 `runs/` 五份旧回执即可复现阻塞三条——
+  `aedl_contract.json` 5 条结果全是 `BudgetExceeded`、`executed=0`（花钱负对照覆盖了真实模型回执）；
+  同目录里 `baseline_generic.json` 与 `noop.json` 出自**不同代码 schema**；文件名写死 `<arm>.json`
+  使后跑必覆盖先跑；`render()` 把"没跑成"打成 `primary 0/5`，与"跑了没通过"同形。
+  修法：一次运行一个目录（`<UTC>-<arm>-<sha7>-<n>`，同名即 `RunCollision`）、回执自带 provenance
+  （代码 sha+dirty / python / 写入器身份或可行动的 `NOT_RUN` / 模型 host+model 且**不含密钥** /
+  四个输入哈希含夹具清单 / 预算起止）、`verdict ∈ {pass, fail, not_executed}` 把两者分开，
+  全未执行 ⇒ `reportable=false` 且 `main` 退出码 3。旧回执原位不动，`runs/README.md` 写明
+  `RESULTS_20261005.md` 与 `EVIDENCE_INDEX.md` 引用它们的数字**自本卡合并起不可复核、待重跑**。
+  测试：`RunReceiptIsolation` 10 项无写入器依赖，5 条反向对照全部能打红；
+  主测试 **1285 OK (skipped=32)**、沙箱 **574 OK**、`dev_gate` **pass / exit 0**。
 - **仍未做（不是已解决）**：`noop` / `oracle` 两条控制与双臂模型对照**均未实跑**——
   本机无 pin 写入器（`akcli_identity.resolve() -> None`），且回执目录尚未按次隔离，
   跑出来的产物会互相覆盖，属于第三项阻塞。**下一卡：运行记录按次隔离**

@@ -32,6 +32,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -525,6 +526,118 @@ ARMS = {
 
 
 # ------------------------------------------------------------------------- runner
+class RunCollision(RuntimeError):
+    """A receipt would overwrite one from an earlier run.
+
+    Exists because `runs/<arm>.json` used to be the only path an arm could write to: a
+    budget-exhausted control run overwrote the model run it was meant to be compared
+    against, and the two files left on disk came from different code versions.
+    """
+
+
+FIXTURE_MANIFEST_PATH = (REPO_ROOT / "tests" / "fixtures" / "repair_pr1" / "manifest_v1.json")
+
+
+def _git(*args: str) -> Optional[str]:
+    try:
+        proc = subprocess.run(["git", *args], cwd=str(REPO_ROOT),
+                              capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return proc.stdout.strip() if proc.returncode == 0 else None
+
+
+def code_identity() -> Dict[str, Any]:
+    """What code produced this number. `UNKNOWN` is allowed, guessing is not."""
+    sha = _git("rev-parse", "HEAD")
+    porcelain = _git("status", "--porcelain")
+    return {
+        "sha": sha or "UNKNOWN",
+        "branch": _git("rev-parse", "--abbrev-ref", "HEAD") or "UNKNOWN",
+        "dirty": None if porcelain is None else bool(porcelain),
+        "python": sys.version.split()[0],
+        "executable": sys.executable,
+    }
+
+
+def writer_identity() -> Dict[str, Any]:
+    """Which binary would apply the ops, and what it is. NOT_RUN is a real answer."""
+    akcli = akcli_identity.resolve()
+    if akcli is None:
+        return {"status": "NOT_RUN",
+                "reason": akcli_identity.missing_reason("an arm that writes"),
+                "looked_for": akcli_identity.describe_lookup()}
+    return {"status": "present", "path": str(akcli), "sha256": sha256_file(akcli)}
+
+
+def model_identity() -> Dict[str, Any]:
+    """Host and model only. The key never enters a receipt."""
+    try:
+        base_url, _key, model = resolve_endpoint()
+    except Exception as exc:
+        return {"status": "unavailable",
+                "reason": "%s: %s" % (type(exc).__name__, str(exc)[:200])}
+    host = base_url.split("//", 1)[-1].split("/")[0]
+    return {"status": "configured", "host": host, "model": model}
+
+
+def allocate_run_dir(arm: str, parent: Optional[Path] = None) -> Path:
+    """A fresh directory per run, named so a later reader can place it in history."""
+    parent = Path(parent) if parent else (BENCH_DIR / "runs")
+    parent.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    sha = code_identity()["sha"]
+    short = sha[:7] if sha != "UNKNOWN" else "nohash"
+    for attempt in range(8):
+        candidate = parent / ("%s-%s-%s-%02x" % (stamp, arm, short, attempt))
+        try:
+            candidate.mkdir()
+            return candidate
+        except FileExistsError:
+            continue
+    raise RunCollision("could not allocate a run directory under %s" % parent)
+
+
+def write_receipt(path: Path, payload: Dict[str, Any]) -> None:
+    if path.exists():
+        raise RunCollision(
+            "refusing to overwrite %s -- that receipt belongs to an earlier run; "
+            "give this run its own directory (the default already does)" % path)
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+                    encoding="utf-8")
+
+
+# What each control arm must show, taken from episodes_v1.json `controls.why_both`.
+CONTROL_RULES = {
+    "noop": "a do-nothing arm must not pass any in-scope episode",
+    "oracle": "the withheld answer key must reach primary PASS on every in-scope episode",
+}
+
+
+def control_findings(arm: str, results: List[Dict[str, Any]]) -> List[str]:
+    """Decide whether this run may be reported at all. Pure, so it can be tested directly."""
+    in_scope = [r for r in results if r.get("in_scope_v0_1")]
+    findings = []
+    if arm in CONTROL_RULES:
+        failed = [r["episode"] for r in in_scope if r.get("verdict") != "pass"]
+        if arm == "noop":
+            passed = [r["episode"] for r in in_scope if r.get("verdict") == "pass"]
+            if passed:
+                findings.append("noop control PASSED %s: the benchmark measures nothing"
+                                % ", ".join(passed))
+        elif failed:
+            findings.append("oracle control did not PASS %s: the answer key does not "
+                            "solve the fixture it came with" % ", ".join(failed))
+    stuck = [r["episode"] for r in results if r.get("verdict") == "not_executed"]
+    if stuck and len(stuck) == len(results):
+        findings.append("nothing executed (%d/%d episodes): this is an execution failure, "
+                        "not a score of 0" % (len(stuck), len(results)))
+    elif stuck:
+        findings.append("%d of %d episodes did not execute (%s); the pass counts describe "
+                        "only what ran" % (len(stuck), len(results), ", ".join(stuck)))
+    return findings
+
+
 def run_arm(arm: str, outdir: Path) -> Dict[str, Any]:
     contract = load_json(CONTRACT_PATH)
     spec = load_json(EPISODES_PATH)
@@ -533,6 +646,10 @@ def run_arm(arm: str, outdir: Path) -> Dict[str, Any]:
         raise SystemExit("unknown arm %r; available: %s" % (arm, ", ".join(sorted(ARMS))))
 
     results: List[Dict[str, Any]] = []
+    started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    # Spend belongs in the receipt: two runs of the same arm are only comparable if you
+    # can see that one of them was stopped by the ceiling partway through.
+    budget_before = budget_snapshot()
     for episode in spec["episodes"]:
         before_raw = (REPO_ROOT / episode["fixture"]).read_bytes()
         with tempfile.TemporaryDirectory(prefix="rb-%s-" % arm) as tmp:
@@ -555,6 +672,12 @@ def run_arm(arm: str, outdir: Path) -> Dict[str, Any]:
         outcome["solvable_from_frozen_source"] = bool(
             episode.get("solvable_from_frozen_source", True))
         outcome["in_scope_v0_1"] = bool(episode.get("in_scope_v0_1", True))
+        # `verdict` is the field that keeps an execution failure from being read as a
+        # zero: `pass` / `fail` are judgements about the repair, `not_executed` says the
+        # arm never got far enough to be judged. primary_ok / regression_ok / structural
+        # keep their existing meanings and are untouched.
+        outcome["verdict"] = ("not_executed" if outcome.get("error")
+                              else ("pass" if outcome.get("primary_ok") else "fail"))
         # An exclusion that is not written into the receipt cannot be audited: whoever
         # reads the report next sees a denominator that quietly changed.
         if not outcome["in_scope_v0_1"]:
@@ -603,7 +726,9 @@ def run_arm(arm: str, outdir: Path) -> Dict[str, Any]:
         "structural_pass": sum(
             1 for r in scored if (r.get("structural") or {}).get("status") == "pass"),
         "errors": [r["episode"] for r in results if r.get("error")],
+        "not_executed": sum(1 for r in results if r.get("verdict") == "not_executed"),
     }
+    findings = control_findings(arm, results)
     report = {
         "benchmark_id": spec["benchmark_id"],
         "arm": arm,
@@ -611,31 +736,62 @@ def run_arm(arm: str, outdir: Path) -> Dict[str, Any]:
         "episodes_sha256": sha256_file(EPISODES_PATH),
         "acceptance_sha256": sha256_file(ACCEPTANCE_PATH),
         "net_split_guard": ARM_GUARD.get(arm),
+        "provenance": {
+            "run_id": outdir.name,
+            "run_dir": str(outdir),
+            "started_at": started_at,
+            "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "code": code_identity(),
+            "writer": writer_identity(),
+            "model": model_identity(),
+            "inputs": {
+                "contract_sha256": sha256_file(CONTRACT_PATH),
+                "episodes_sha256": sha256_file(EPISODES_PATH),
+                "acceptance_sha256": sha256_file(ACCEPTANCE_PATH),
+                "fixture_manifest_sha256": (sha256_file(FIXTURE_MANIFEST_PATH)
+                                            if FIXTURE_MANIFEST_PATH.is_file() else "MISSING"),
+            },
+            "budget_before": budget_before,
+            "budget_after": budget_snapshot(),
+        },
+        # False means the number cannot be put next to another number: a control that
+        # broke its own rule, or an arm that never executed.
+        "reportable": not findings,
+        "unreportable_reasons": findings,
         "summary": summary,
         "results": results,
     }
     outdir.mkdir(parents=True, exist_ok=True)
-    (outdir / ("%s.json" % arm)).write_text(
-        json.dumps(report, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+    write_receipt(outdir / ("%s.json" % arm), report)
     return report
 
 
 def render(report: Dict[str, Any]) -> str:
     s = report["summary"]
+    prov = report.get("provenance") or {}
+    code = prov.get("code") or {}
     lines = [
         "AEDL RepairBench v0.1 - arm=%s" % report["arm"],
-        "contract sha256: %s" % report["contract_sha256"][:16],
+        "run %s   code %s%s   python %s" % (
+            prov.get("run_id", "UNKNOWN (pre-isolation receipt)"),
+            str(code.get("sha", "UNKNOWN"))[:7],
+            " dirty" if code.get("dirty") else "",
+            code.get("python", "?")),
+        "contract sha256: %s   fixtures manifest sha256: %s" % (
+            report["contract_sha256"][:16],
+            (prov.get("inputs") or {}).get("fixture_manifest_sha256", "UNKNOWN")[:16]),
         "",
-        "%-8s %-22s %-26s %-8s %-9s %-11s %-8s" % (
+        "%-8s %-22s %-26s %-12s %-9s %-11s %-8s" % (
             "episode", "family(*=out-of-scope)", "target_rule",
-            "primary", "regress", "structural", "changed"),
+            "verdict", "regress", "structural", "changed"),
     ]
     for r in report["results"]:
-        lines.append("%-8s %-22s %-26s %-8s %-9s %-11s %-8s" % (
+        lines.append("%-8s %-22s %-26s %-12s %-9s %-11s %-8s" % (
             r["episode"],
             r.get("fault_family", "?") + ("" if r.get("in_scope_v0_1") else " *"),
             r["target_rule"],
-            "PASS" if r.get("primary_ok") else "FAIL",
+            {"pass": "PASS", "fail": "FAIL"}.get(
+                r.get("verdict"), "NOT EXECUTED"),
             "clean" if r.get("regression_ok") else "BROKEN",
             (r.get("structural") or {}).get("status", "-"),
             "yes" if r.get("bytes_changed") else "no"))
@@ -648,8 +804,9 @@ def render(report: Dict[str, Any]) -> str:
           s["in_scope_regression_clean"], s["in_scope_episodes"],
           s["in_scope_structural_pass"], s["in_scope_episodes"],
           s["in_scope_executed"], s["in_scope_episodes"]),
-      "ALL episodes             primary %d/%d   executed %d/%d" % (
-          s["primary_pass"], s["episodes"], s["executed"], s["episodes"]),
+      "ALL episodes             primary %d/%d   executed %d/%d   NOT EXECUTED %d" % (
+          s["primary_pass"], s["episodes"], s["executed"], s["episodes"],
+          s["not_executed"]),
       "out-of-scope             %d episode(s), %d of them unsolvable from any "
       "frozen source" % (s["out_of_scope_episodes"], s["out_of_scope_unsolvable"]),
       "",
@@ -665,21 +822,36 @@ def render(report: Dict[str, Any]) -> str:
     if s["errors"]:
         lines.append("")
         lines.append("errors: %s" % ", ".join(s["errors"]))
+    if not report.get("reportable", True):
+        lines += ["", "REPORTABLE: no"]
+        for reason in report.get("unreportable_reasons") or []:
+            lines.append("  - %s" % reason)
+        lines.append("  A number that did not execute must not be published as a score.")
     return "\n".join(lines)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    ap = argparse.ArgumentParser(prog="tools.repairbench")
+    ap = argparse.ArgumentParser(
+        prog="tools.repairbench",
+        epilog="Each run writes benchmarks/repairbench_v0_1/runs/<run-id>/<arm>.json and "
+               "refuses to overwrite an existing receipt. Exit 3 means the run produced a "
+               "receipt that must not be reported next to other arms.")
     ap.add_argument("--arm", required=True, choices=sorted(ARMS))
-    ap.add_argument("--out", default=None)
+    ap.add_argument("--out", default=None,
+                    help="this run's directory (created if absent; never overwritten)")
+    ap.add_argument("--runs-dir", default=None,
+                    help="parent directory for the generated run id "
+                         "(default: benchmarks/repairbench_v0_1/runs)")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
 
-    outdir = Path(args.out) if args.out else (BENCH_DIR / "runs")
+    outdir = (Path(args.out) if args.out
+              else allocate_run_dir(args.arm, args.runs_dir))
     report = run_arm(args.arm, outdir)
     print(json.dumps(report, indent=2, ensure_ascii=False, sort_keys=True) if args.json
           else render(report))
-    return 0
+    print("\nreceipt: %s" % (outdir / ("%s.json" % args.arm)))
+    return 0 if report.get("reportable", True) else 3
 
 
 if __name__ == "__main__":
