@@ -66,8 +66,8 @@
     },
     {
       "path": "native/DC-06/placement.json",
-      "sha256": "cc7f6b226199d136d13c57be577675bd70670d8300cfc3bada40a13a0ace6fe7",
-      "size_bytes": 1869
+      "sha256": "fcb37aba3c312e9ae39e2415be41e957bf75352a633de6d2babd2ad37322b73a",
+      "size_bytes": 729
     },
     {
       "path": "native/DC-06/repair_ops.json",

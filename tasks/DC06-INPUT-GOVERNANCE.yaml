@@ -1,0 +1,125 @@
+# Task Envelope — DC-06 输入治理：公开输入剥离答案 + 双臂信息/动作对齐门禁
+#
+# 背景（实测，非推测）：评估结论把"评测还不可靠"列为三项阻塞之一，第一条就是
+# "DC-06 的公开输入包含答案标签"。本机复核确认：
+#   DC-06/placement.json 的 labels 数组与 **被扣住的** native_labels.json 逐字相等（10/10），
+#   而 tools/repairbench.py `_llm_arm` 把整个文件塞进两路 LLM 的 user prompt
+#   （episodes_v1.json 的 public_input 字段）。DC-06 的 fault.kicad_sch 里
+#   USB_DP / USB_DM / USB_DP_CONN / USB_DM_CONN 出现次数为 **0**，
+#   即公开输入不只是"有帮助"，它是答案的唯一公开来源。DC-06 当时在 headline 分母内。
+
+task: DC06-INPUT-GOVERNANCE
+
+base:
+  branch: fix/dc06-input-governance
+  sha: f9cdaf2aa6f36baff8866d047b4c8c969d3901bc   # master @ 2026-10-07, after PR #123
+
+goal: |
+  把"公开输入不得含答案"从注释里的承诺变成边界上强制 + CI 上可失败的门禁：
+  (1) 剥离 DC-06 已入库公开输入里的答案字段，并让发布路径只能给出被授权的几何；
+  (2) 检查 baseline 与 AEDL 两路的可用信息与动作集合是否一致，把不一致的 episode
+      以可审计的方式逐出计分母并写明理由；
+  (3) 上述判据在任何主机（有无写入器）都必须真的执行，不得因 skip 而变装饰。
+
+scope: |
+  允许：tools/repairbench_synth.py（白名单投影 public_placement + 修正失实文档字符串）、
+        tools/repairbench.py（在边界上投影 public_input；_llm_arm 用本路 ARM_GUARD 键；
+        逐出 episode 的理由写进回执）、
+        tests/fixtures/repair_pr1/native/DC-06/placement.json（删 labels）、
+        tests/fixtures/repair_pr1/manifest_v1.json（该文件哈希/大小刷新）、
+        benchmarks/repairbench_v0_1/episodes_v1.json（DC-06 处置 + public_input_policy 成文）、
+        tests/test_repairbench_synth.py、tests/test_repairbench.py（门禁与反向对照）、
+        本卡片、AI 台账条目与索引、台账聚合视图（补上本卡与 PR #123 两条 ID 的归属，
+        此前两条都未归入 WU）、docs/HANDOFF.md（0A.7 连续性）。
+  不做：不动 oracle/noop 控制语义，不改合同 netlist_contract_v1.json 与 acceptance_v1.json；
+        不把答案名写回公开输入（那是本仓 DC-06 治理记录明令禁止的 ORACLE_BACKFILL）；
+        不在本卡跑模型双臂对照（回执按次隔离尚未落地，见 escalation）；
+        不动 gates/**、src/**、docs/evidence/**、DECISIONS.md。
+
+dependencies:
+  - ref: GH-123
+    required_state: merged       # PR #123 = 卡片 CI-TOOL-IDENTITY，akcli 单一解析点已入库
+
+allowed_paths:
+  - tools/repairbench.py
+  - tools/repairbench_synth.py
+  - tests/test_repairbench.py
+  - tests/test_repairbench_synth.py
+  - tests/fixtures/repair_pr1/native/DC-06/placement.json
+  - tests/fixtures/repair_pr1/manifest_v1.json
+  - benchmarks/repairbench_v0_1/episodes_v1.json
+  - tasks/DC06-INPUT-GOVERNANCE.yaml
+  - docs/compliance/ai-usage/**
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/compliance/AI_USAGE_SUMMARY.md
+  - docs/HANDOFF.md
+
+forbidden_paths:
+  - gates/**
+  - src/**
+  - benchmarks/repairbench_v0_1/netlist_contract_v1.json
+  - tests/fixtures/repair_pr1/private/**
+  - docs/evidence/**
+  - docs/compliance/DECISIONS.md
+  - sandbox_runtime/**
+  - .github/**
+  - delivery/**
+
+acceptance: |
+  1. `python -m tools.dev_gate --envelope tasks/DC06-INPUT-GOVERNANCE.yaml` status=pass、exit_code=0；
+  2. 已入库的 DC-06 公开输入不再含任何 oracle 网名，且 manifest_v1.json 的逐文件哈希测试通过；
+  3. 新增门禁在**无写入器**主机上确实执行（不是 skip），且四条反向对照都能把它打红：
+     公开输入重新塞回 labels / _llm_arm 读回硬编码 guard 键 / DC-06 改回 in_scope /
+     投影白名单被放宽；
+  4. 双臂输入对齐成为可测断言：baseline 只拿 defect_hint，aedl_contract 只拿
+     frozen_contract_rule，且 public_input 经投影后才进 prompt；
+  5. 逐出计分的 episode 在回执 JSON 里带 scope_note，理由可审计。
+
+change_budget:
+  expected_files: 12
+  expected_modules: [tools, tests, tests/fixtures, benchmarks, tasks, docs/compliance, docs]
+  cross_module: true        # 夹具 + benchmark 清单 + 工具 + 测试同一条评测链，属同一能力
+  contract_change: false    # 合同与 structural oracle 逐字未动
+  evidence_semantics_change: true   # DC-06 从计分变为 UNSCORED，headline 分母 5 -> 4
+
+exceptions:
+  allow_dirty:
+    permitted: true
+    reason: "AEDL-AUTO standing delegation (ADR-022)"
+    granted_by: YEN
+    decision_ref: "docs/compliance/DECISIONS.md#ADR-022"
+  allow_drift:
+    permitted: true
+    reason: "AEDL-AUTO standing delegation (ADR-022)"
+    granted_by: YEN
+    decision_ref: "docs/compliance/DECISIONS.md#ADR-022"
+
+escalation:
+  owner: YEN
+  trigger: |
+    两点留给 Owner，不由本卡自行放宽：
+    (1) DC-06 现在是 UNSCORED_GOVERNANCE_INCIDENT（与 notes/y4 的 Y4-dry 处置同名）。
+        若要把 add_component + 网名重建 重新纳入计分，需要**预先存在、可公开辩护**的
+        工况/网名来源，而不是把答案写进公开输入；
+    (2) 双臂可解性对照（noop/oracle 控制 + baseline vs aedl_contract）需要写入器与
+        按次隔离的回执目录，后者是下一卡（评估阻塞项 2）。
+
+# Impact Analysis（§2.2 要求，随任务留存）
+#
+# Direct modifications:   tools/repairbench_synth.py tools/repairbench.py
+#                         tests/fixtures/repair_pr1/native/DC-06/placement.json
+#                         tests/fixtures/repair_pr1/manifest_v1.json
+#                         benchmarks/repairbench_v0_1/episodes_v1.json
+#                         tests/test_repairbench_synth.py tests/test_repairbench.py
+#                         tasks/DC06-INPUT-GOVERNANCE.yaml(新) docs/compliance/ai-usage/<entry>.md
+#                         docs/compliance/AI_USAGE_LOG.md(生成) docs/compliance/AI_USAGE_SUMMARY.md
+#                         docs/HANDOFF.md
+# Potentially affected:   读 placement.json 的一切（已核：仓库内只有 _llm_arm 读它，
+#                         tests 只读键名）；synth.repair 的形参名 placement -> record
+#                         （调用点全为位置参数，已核 4 处）；
+#                         MultiPartEpisode 内的 manifest 查重测试上移到无门禁类（用例数不变，
+#                         但从此在 CI 真跑）；
+#                         历史回执里 DC-06 的 in-scope 计数自本卡起失效（不改写旧回执）。
+# Explicitly not touched: gates/** src/** 合同/structural oracle docs/evidence/** delivery/**
+# Risk: MEDIUM —— 改的是评测夹具与计分集合，不改生产语义；风险来自"分母变了"，
+#       因此逐出理由同时写进清单、回执与 HANDOFF，并有四条反向对照压着。

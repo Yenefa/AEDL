@@ -386,13 +386,16 @@ def _llm_arm(episode, workdir, contract, *, with_contract: bool, arm_label: str)
         user["defect_hint"] = episode["fault_summary"]
 
     if episode.get("public_input"):
-        # A published placement record is task INPUT, not an answer key: it says where
-        # the part belongs and what its pins are, not which nets must exist afterwards.
-        user["placement_record"] = load_json(REPO_ROOT / episode["public_input"])
+        # A published placement record is task INPUT: host-granted geometry (which part,
+        # which footprint, which slot). Anything else in that file is not grantable --
+        # net names are the withheld answer, so the projection is applied here rather
+        # than trusting whoever wrote the fixture. DC-06's placement.json shipped them.
+        user["placement_record"] = _import_synth().public_placement(
+            load_json(REPO_ROOT / episode["public_input"]))
     raw = _repair_prompt(SYSTEM_PROMPT, json.dumps(user, ensure_ascii=False),
                         base_url, model, key, arm=ARM_LABEL,
                         episode=episode["id"])
-    return _apply_ops(sch, _parse_ops(raw), strict_nets=ARM_GUARD["aedl_contract"])
+    return _apply_ops(sch, _parse_ops(raw), strict_nets=ARM_GUARD[arm_label])
 
 
 def arm_baseline_generic(episode, workdir):
@@ -552,6 +555,10 @@ def run_arm(arm: str, outdir: Path) -> Dict[str, Any]:
         outcome["solvable_from_frozen_source"] = bool(
             episode.get("solvable_from_frozen_source", True))
         outcome["in_scope_v0_1"] = bool(episode.get("in_scope_v0_1", True))
+        # An exclusion that is not written into the receipt cannot be audited: whoever
+        # reads the report next sees a denominator that quietly changed.
+        if not outcome["in_scope_v0_1"]:
+            outcome["scope_note"] = episode.get("scope_note", "")
         results.append(outcome)
 
     scored = [r for r in results if not r.get("error")]

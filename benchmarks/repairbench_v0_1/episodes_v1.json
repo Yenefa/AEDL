@@ -7,7 +7,8 @@
     "leak_closed": "The per-episode repair_ops.json next to each fault.kicad_sch IS the ground-truth repair and is deliberately NOT part of the task input exposed to a solving arm. tools.repairbench copies only fault.kicad_sch into the arm workspace.",
     "why_this_matters": "Before this benchmark existed, repair_ops.json sat in the same directory as the fault schematic, so any arm given the fixture directory could read the answer. That is an answer leak, not a benchmark.",
     "answer_key_location": "tests/fixtures/repair_pr1/native/<EPISODE>/repair_ops.json",
-    "structural_oracle": "tests/fixtures/repair_pr1/private/acceptance_v1.json (test-only expectations; explicitly NOT runtime authorization)"
+    "structural_oracle": "tests/fixtures/repair_pr1/private/acceptance_v1.json (test-only expectations; explicitly NOT runtime authorization)",
+    "public_input_policy": "Where an episode declares public_input, it may grant geometry only: components and pin_points_nm, the host-authorised placement slots. Net names are the answer, so they live in native_labels.json and reach no arm prompt. tools.repairbench applies repairbench_synth.public_placement at the boundary, and tests/test_repairbench_synth.py::EpisodeGovernance fails CI on any published file that repeats an oracle name or on any scored episode whose answer names are absent from the fault board."
   },
   "metric_layers": {
     "primary_oracle": "target rule FAIL -> PASS under the netlist-scope contract",
@@ -83,9 +84,9 @@
       "fault_summary": "R7 (22R) and R8 (22R) are both absent, so the USB pair has no series termination and the connector/module nets lose their labels.",
       "expected_primary": "USB_POLARITY_AND_SERIES fail -> pass",
       "fault_family": "add_component",
-      "solvable_from_frozen_source": true,
-      "in_scope_v0_1": true,
-      "scope_note": "Synthesised from the frozen M2 board by tools/repairbench_synth.py as a TWO-component fault, because the contract asserts a pair: deleting R7 alone breaks USB_POLARITY_AND_SERIES but placing R7 back does not satisfy it, since R8 is also required. Carries its own published placement.json in the schematic's coordinate frame, so a solver has a frozen source for the coordinates. Distinct from DC-04, which is the R9 pull-up.",
+      "solvable_from_frozen_source": false,
+      "in_scope_v0_1": false,
+      "scope_note": "Held out of the headline on 2026-10-07, not by judgement but by measurement. Its published placement.json used to carry a labels array identical to the withheld native_labels.json (10 entries, all four net names), which is an answer leak, so that field is removed and tools.repairbench now publishes only components + pin_points_nm through repairbench_synth.public_placement. Measured after the removal: the fault board contains 0 occurrences of USB_DP / USB_DM / USB_DP_CONN / USB_DM_CONN, while every scored episode's answer names are present on the board (DC-01/03 3-5 each, DC-09 2 after its own deletion, DC-07/08 GND 29). So a baseline arm given only fault_summary has no public source for the names, while the aedl_contract arm is handed them by the frozen contract rule - the arms are not information-matched here, and closing that gap by writing the names into the public input is oracle backfill, which this repo's DC-06 input-governance record forbids (notes/y4/DC06_INPUT_GOVERNANCE_INCIDENT.md, prohibited_recovery = ORACLE_BACKFILL). Coordinates remain granted, so the add_component capability DC-03/04/05 cannot test is still exercised, just unscored.",
       "public_input": "tests/fixtures/repair_pr1/native/DC-06/placement.json"
     },
     {
