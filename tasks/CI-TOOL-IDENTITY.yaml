@@ -1,0 +1,89 @@
+# Task Envelope — CI 工具身份统一（akcli 解析收敛 + 守卫覆盖去个人化）
+#
+# 背景（实测，非推测）：GitHub minimal-ci 连续失败（最近 run 37296331552），
+# 主测试 1267 / 1 failure / 3 errors。本机 win32 同形复现。根因不是路径拼写，
+# 而是"守卫是否生效"这件事被绑死在一台持有个人 Windows 二进制的机器上。
+
+task: CI-TOOL-IDENTITY
+
+base:
+  branch: fix/tool-identity-ci
+  sha: 3c9caaf5a5ec40491817e09f54923ed6496cbc5e   # master @ 2026-10-05, assessment baseline
+
+goal: |
+  让 CI 在缺少 pin 写入器 akcli 的主机上给出**可行动**的结果：
+  (1) akcli 的解析顺序在仓库里只有一个归属地，可用 AKCLI 显式指定；
+  (2) 净拆分守卫（--strict-nets）的传递与"拒绝不得变成静默 0 分"成为任何平台都执行的确定性测试；
+  (3) 真正依赖真实写入器的测量测试以带指引的 skip 呈现，不再出现"断言失败但原因与守卫无关"。
+
+scope: |
+  允许：新增 tools/akcli_identity.py 作为唯一解析点；tools/repairbench.py 与
+        tools/repairbench_synth.py 改为使用它；tests/test_repairbench.py 与
+        tests/test_repairbench_synth.py 的守卫测试与跳过理由；本卡片与 AI 使用台账条目。
+  不做：不改 gates/**（run_gates 的 _find_akcli 已有 env/PATH 兜底，行为正确，收敛它属跨模块另卡）；
+        不改任何合同 / 夹具 / benchmark 数据 / Evidence 语义；不改 CI 语义或运行器供给假设；
+        不宣称真实 akcli 的拒绝行为已被验证（本机没有该二进制）。
+
+dependencies: []
+
+allowed_paths:
+  - tools/akcli_identity.py
+  - tools/repairbench.py
+  - tools/repairbench_synth.py
+  - tests/test_repairbench.py
+  - tests/test_repairbench_synth.py
+  - tasks/CI-TOOL-IDENTITY.yaml
+  - docs/compliance/ai-usage/**
+  - docs/compliance/AI_USAGE_LOG.md
+
+forbidden_paths:
+  - gates/**
+  - benchmarks/**
+  - src/**
+  - docs/evidence/**
+  - docs/compliance/DECISIONS.md
+  - sandbox_runtime/**
+  - .github/**
+
+acceptance: |
+  1. `python -m tools.dev_gate --envelope tasks/CI-TOOL-IDENTITY.yaml` status=pass、exit_code=0；
+  2. 在无 akcli 的主机上，主测试不再出现 failure/error；依赖写入器的用例给出含
+     `set AKCLI=<absolute path>` 与已试路径的 skip 理由；
+  3. 新增的确定性守卫测试在 CI 上执行（不是 skip）：guard on ⇒ argv 含 --strict-nets，
+     guard off ⇒ 不含，写入器拒绝 ⇒ 冒泡为 LlmUnavailable 且消息含 strict-nets。
+
+change_budget:
+  expected_files: 8
+  expected_modules: [tools, tests, tasks, docs/compliance/ai-usage]
+  cross_module: false          # tools 与其测试同一子系统；tasks/台账 是协议强制伴随物
+  contract_change: false       # 不动任何合同 / schema
+  evidence_semantics_change: false
+
+exceptions:
+  allow_dirty:
+    permitted: true
+    reason: "AEDL-AUTO standing delegation (ADR-022)"
+    granted_by: YEN
+    decision_ref: "docs/compliance/DECISIONS.md#ADR-022"
+  allow_drift:
+    permitted: true
+    reason: "AEDL-AUTO standing delegation (ADR-022)"
+    granted_by: YEN
+    decision_ref: "docs/compliance/DECISIONS.md#ADR-022"
+
+escalation:
+  owner: YEN
+  trigger: |
+    若要让被 skip 的真实写入器用例进入 CI 常驻执行，需要 runner 侧提供并固定 akcli 分发
+    （版本 + 身份校验归 gates/run_gates 与 host_toolchain 那条线），这是供给决策，不在本卡自行放宽。
+
+# Impact Analysis（§2.2 要求，随任务留存）
+#
+# Direct modifications:   tools/akcli_identity.py(新) tools/repairbench.py tools/repairbench_synth.py
+#                         tests/test_repairbench.py tests/test_repairbench_synth.py
+#                         tasks/CI-TOOL-IDENTITY.yaml(新) docs/compliance/ai-usage/<entry>.md AI_USAGE_LOG.md(生成)
+# Potentially affected:   任何 import tools.repairbench / repairbench_synth 的调用方（gates 的调用路径
+#                         不改；find_akcli 保持同名同返回类型 Optional[Path]；synth.AKCLI 由 Path 变为
+#                         Optional[Path] —— 已核：仓库内仅两个测试模块读它，均已改判 None）
+# Explicitly not touched: gates/** benchmarks/** src/** docs/evidence/** sandbox_runtime/** .github/**
+# Risk: LOW（纯解析与测试可见性；无生产语义、无合同、无物理事实断言变化）

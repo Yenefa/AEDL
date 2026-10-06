@@ -9,7 +9,7 @@
 > `python -m tools.build_ai_usage_index build`（或让 dev_gate/CI 校验）。
 > ID 规则与审核状态约定见 `AGENTS.md` §4 与 ADR-012。
 
-共 170 条。完整正文在各自条目文件中；本索引只做导航。
+共 171 条。完整正文在各自条目文件中；本索引只做导航。
 
 ## 2026-08-29
 
@@ -241,3 +241,6 @@
 - [`AI-20261005-OPENCODE-EA9F28030F8EE7A1CF21369E3935BB51`](ai-usage/AI-20261005-OPENCODE-EA9F28030F8EE7A1CF21369E3935BB51.md) — Correct the false CI-unavailable claim: Actions runs on a self-hosted runner; per-PR audit of the 6 open PRs
 - [`AI-20261005-OPENCODE-F3CCDCE10C8004549EBDE4FE9046EFF9`](ai-usage/AI-20261005-OPENCODE-F3CCDCE10C8004549EBDE4FE9046EFF9.md) — Placement-source audit: DC fixtures and frozen M2 PCB are in different coordinate frames, so missing-part faults are unsolvable from frozen sources
 - [`AI-20261005-OPENCODE-F3E75595DCD764A2A8E5C5AFD354EA61`](ai-usage/AI-20261005-OPENCODE-F3E75595DCD764A2A8E5C5AFD354EA61.md) — AEDL RepairBench v0.1 harness: 5 episodes, 3 metric layers, noop+oracle controls both verified
+## 2026-10-07
+
+- [`AI-20261007-BOT-FDFCC78F42A16D0C1FDE2A45975EBED7`](ai-usage/AI-20261007-BOT-FDFCC78F42A16D0C1FDE2A45975EBED7.md) — unify akcli tool identity so guard coverage no longer depends on a personal Windows binary

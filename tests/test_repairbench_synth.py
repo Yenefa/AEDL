@@ -16,10 +16,15 @@ if REPO_ROOT not in sys.path:
 
 from tools import repairbench as rb  # noqa: E402
 from tools import repairbench_synth as synth  # noqa: E402
+from tools import akcli_identity  # noqa: E402
 
 CONTRACT = json.loads(rb.CONTRACT_PATH.read_text(encoding="utf-8"))
 SOURCE = synth.DEFAULT_SOURCE
+# None on a host without the writer: these tests then skip with a reason that
+# names how to supply it, instead of erroring on an attribute of None or on a
+# generic "not available" that a reviewer cannot act on.
 AKCLI = synth.AKCLI
+NEEDS_AKCLI = akcli_identity.missing_reason("op-batch synthesis")
 
 
 def statuses(raw):
@@ -36,7 +41,7 @@ def read_json(path):
         return json.load(fh)
 
 
-@unittest.skipUnless(AKCLI.exists(), "akcli not available")
+@unittest.skipUnless(AKCLI is not None, NEEDS_AKCLI)
 class MissingPartSynthesis(unittest.TestCase):
 
     @classmethod
@@ -132,6 +137,10 @@ class GeneratedEpisodeIntegrity(unittest.TestCase):
     def setUp(self):
         if not os.path.isfile(self.EPISODE + "/fault.kicad_sch"):
             self.skipTest("DC-06 not generated")
+        # This class proves the withheld answer key really repairs a copy, which
+        # is a claim about the writer's behaviour, not about our code paths.
+        if AKCLI is None:
+            self.skipTest(NEEDS_AKCLI)
 
     def test_fixture_is_still_a_fault(self):
         st = statuses(read_bytes(self.EPISODE + "/fault.kicad_sch"))
@@ -189,8 +198,10 @@ class MultiPartEpisode(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        if not SOURCE.exists() or not AKCLI.exists():
-            raise unittest.SkipTest("frozen board or akcli unavailable")
+        if not SOURCE.exists():
+            raise unittest.SkipTest("frozen M2 schematic not present at %s" % SOURCE)
+        if AKCLI is None:
+            raise unittest.SkipTest(akcli_identity.missing_reason("fault synthesis"))
         cls.dest, cls.placement = synth.synthesise_fault(
             SOURCE, cls.REFS, statuses, rb.observe_source, AKCLI)
 
@@ -279,8 +290,10 @@ class LabelFaultSynthesis(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        if not SOURCE.exists() or not AKCLI.exists():
-            raise unittest.SkipTest("frozen board or akcli unavailable")
+        if not SOURCE.exists():
+            raise unittest.SkipTest("frozen M2 schematic not present at %s" % SOURCE)
+        if AKCLI is None:
+            raise unittest.SkipTest(akcli_identity.missing_reason("fault synthesis"))
 
     def test_each_rule_has_a_clean_single_label_fault(self):
         for rule in self.RULES:
