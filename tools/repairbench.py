@@ -75,6 +75,7 @@ from tools.repairbench_budget import (
     snapshot as budget_snapshot,
 )
 from tools.repairbench_endpoint import describe_endpoint, resolve_endpoint
+from tools import akcli_identity
 
 BENCH_DIR = REPO_ROOT / "benchmarks" / "repairbench_v0_1"
 CONTRACT_PATH = BENCH_DIR / "netlist_contract_v1.json"
@@ -341,9 +342,12 @@ def _parse_ops(raw_text: str) -> List[Dict[str, Any]]:
 
 
 def _apply_ops(sch: Path, ops: List[Dict[str, Any]], *, strict_nets: bool = True) -> bytes:
-    akcli = find_akcli()
-    if akcli is None:
-        raise LlmUnavailable("pinned akcli writer not found")
+    try:
+        akcli = akcli_identity.require("applying repair ops")
+    except akcli_identity.AkcliUnavailable as exc:
+        # Keep the arm's failure channel: a missing writer is an unavailable arm,
+        # not a crash, so the run records it as such instead of erroring out.
+        raise LlmUnavailable(str(exc)) from exc
     with tempfile.TemporaryDirectory(prefix="rb-ops-") as tmp:
         ops_file = Path(tmp) / "ops.json"
         ops_file.write_text(json.dumps(
@@ -403,8 +407,13 @@ def arm_aedl_contract(episode, workdir):
 
 # ------------------------------------------------------------------------- arms
 def find_akcli() -> Optional[Path]:
-    candidate = Path.home() / "AppData/Local/hermes/hermes-agent/venv/Scripts/akcli.exe"
-    return candidate if candidate.is_file() else None
+    """Resolve the pinned writer through the one lookup order (tools.akcli_identity).
+
+    Was `Path.home()/AppData/...` only, which no Linux CI and no second Windows
+    account could satisfy; the failure then surfaced as an unrelated assertion
+    inside tests that were about the net-split guard.
+    """
+    return akcli_identity.resolve()
 
 
 def arm_noop(episode: Dict[str, Any], workdir: Path) -> bytes:
@@ -427,9 +436,9 @@ def arm_oracle(episode: Dict[str, Any], workdir: Path) -> bytes:
         REPO_ROOT / ("tests/fixtures/repair_pr1/native/%s/fault.kicad_sch" % ep_id), target)
     ops = REPO_ROOT / ("tests/fixtures/repair_pr1/native/%s/repair_ops.json" % ep_id)
 
-    akcli = find_akcli()
-    if akcli is None:
-        raise RuntimeError("oracle arm needs the pinned akcli writer; not found")
+    # AkcliUnavailable subclasses RuntimeError, so callers that guarded the oracle
+    # arm keep catching the same type; only the message gets actionable.
+    akcli = akcli_identity.require("the oracle arm")
 
     proc = subprocess.run(
         [str(akcli), "draw", str(target), "--ops", str(ops), "--apply", "--no-erc", "--json"],

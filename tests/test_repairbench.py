@@ -19,11 +19,20 @@ the corresponding test fail, and that failure means "the gap closed" rather than
 """
 import json
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
+from tools import akcli_identity  # noqa: F401  (patched through repairbench)
 from tools import repairbench as rb
+
+# Resolved once at import: these are the tests whose claim is about the REAL
+# writer's behaviour, so they skip with a reason naming how to provide the tool,
+# rather than erroring or being silently swallowed by a bare skip.
+_AKCLI = rb.find_akcli()
+NEEDS_WRITER = akcli_identity.missing_reason("the measured net-merge hazard")
 
 
 def _schema_ok():
@@ -130,6 +139,7 @@ class NetMergeHazardTests(unittest.TestCase):
         spec = json.loads(rb.EPISODES_PATH.read_text(encoding="utf-8"))
         return next(e for e in spec["episodes"] if e["id"] == "DC-01")
 
+    @unittest.skipUnless(_AKCLI is not None, NEEDS_WRITER)
     def test_unguarded_labels_merge_named_nets(self):
         """Guard off: the measured hazard. R7.2 and U1.14 land on USB_DM.
 
@@ -145,6 +155,7 @@ class NetMergeHazardTests(unittest.TestCase):
             {"R7.2", "U1.14"} & set(usb_dm),
             "expected the unguarded merge to put R7.2/U1.14 on USB_DM; observed %s" % usb_dm)
 
+    @unittest.skipUnless(_AKCLI is not None, NEEDS_WRITER)
     def test_structural_oracle_catches_the_unguarded_merge(self):
         """The merge must be reported, never silently accepted."""
         episode = self._dc01()
@@ -154,6 +165,47 @@ class NetMergeHazardTests(unittest.TestCase):
                          "structural oracle must flag the merged nets on DC-01")
         self.assertTrue(result["problems"])
 
+    def _stubbed_writer(self, refuse=False):
+        """Patch resolution + subprocess so the guard plumbing is testable here.
+
+        Why this exists: the previous version of this test asserted the pinned
+        writer's refusal text, so on any host without that personal Windows binary
+        it failed with "writer not found" and said nothing at all about the guard.
+        These two tests pin OUR behaviour instead — that the guard reaches argv and
+        that a refusal becomes an arm failure, never a silent zero.
+        """
+        calls = []
+
+        def fake_run(argv, **kwargs):
+            calls.append([str(a) for a in argv])
+            return subprocess.CompletedProcess(
+                argv, 2 if refuse else 0,
+                "{}" if not refuse else "",
+                "writer refused: --strict-nets rejects a label on a named net" if refuse else "")
+
+        patches = [
+            mock.patch.object(rb.akcli_identity, "resolve", return_value=Path("stub-akcli")),
+            mock.patch.object(rb.subprocess, "run", side_effect=fake_run),
+        ]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+        return calls
+
+    def test_guard_switch_reaches_the_writer_argv(self):
+        """Guard on => `--strict-nets`; guard off => it must not be there."""
+        episode = self._dc01()
+
+        on_calls = self._stubbed_writer()
+        self._run_arm(episode, strict_nets=True)
+        self.assertIn("--strict-nets", on_calls[0],
+                      "the guard must be handed to the writer, observed: %s" % on_calls[0])
+
+        off_calls = self._stubbed_writer()
+        self._run_arm(episode, strict_nets=False)
+        self.assertNotIn("--strict-nets", off_calls[0],
+                         "guard off must not pass --strict-nets, observed: %s" % off_calls[0])
+
     def test_guard_refuses_the_unsafe_write(self):
         """Guard on: the writer refuses, so no merged net reaches the board.
 
@@ -161,6 +213,7 @@ class NetMergeHazardTests(unittest.TestCase):
         quietly scored as success.
         """
         episode = self._dc01()
+        self._stubbed_writer(refuse=True)
         with self.assertRaises(rb.LlmUnavailable) as ctx:
             self._run_arm(episode, strict_nets=True)
         message = str(ctx.exception)

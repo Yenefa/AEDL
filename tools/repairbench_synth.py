@@ -47,7 +47,14 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 NM = 1_000_000
 MIL_NM = 25400
 DEFAULT_SOURCE = REPO_ROOT / "src" / "hardware" / "m2-board" / "m2_board.kicad_sch"
-AKCLI = Path.home() / "AppData/Local/hermes/hermes-agent/venv/Scripts/akcli.exe"
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from tools import akcli_identity  # noqa: E402  (REPO_ROOT must be importable first)
+
+# Resolved on import, and re-resolvable per call: None means "no writer on this
+# host", which callers must report as a missing tool rather than crash on.
+AKCLI = akcli_identity.resolve()
 
 
 class SynthesisError(RuntimeError):
@@ -56,7 +63,9 @@ class SynthesisError(RuntimeError):
 
 def _akcli_draw(schematic, ops, akcli=None):
     """Run one akcli op batch. Returns (rc, combined_output)."""
-    exe = Path(akcli or AKCLI)
+    # An explicit path wins; otherwise resolve through the shared lookup and fail
+    # with the paths that were tried, not with a bare "not found at <guess>".
+    exe = Path(akcli) if akcli else akcli_identity.require("synthesis op batch")
     if not exe.exists():
         raise SynthesisError("akcli not found at %s" % exe)
     with tempfile.TemporaryDirectory() as tmp:
