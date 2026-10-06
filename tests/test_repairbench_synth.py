@@ -7,6 +7,7 @@ akcli or to the verifier cannot quietly break them again.
 import io
 import json
 import os
+import re
 import sys
 import unittest
 
@@ -150,13 +151,6 @@ class GeneratedEpisodeIntegrity(unittest.TestCase):
             if rule != self.RULE:
                 self.assertEqual(value, "pass", rule)
 
-    def test_published_placement_is_not_an_answer_key(self):
-        """placement.json is task input: geometry, not the nets to restore."""
-        placement = read_json(self.EPISODE + "/placement.json")
-        self.assertIn("pin_points_nm", placement)
-        self.assertNotIn("expected", placement)
-        self.assertNotIn("answer", placement)
-
     def test_answer_key_repairs_a_copy(self):
         ops = read_json(self.EPISODE + "/repair_ops.json")
         labels = read_json(self.EPISODE + "/native_labels.json")
@@ -181,6 +175,138 @@ class GeneratedEpisodeIntegrity(unittest.TestCase):
         # the fixture must be untouched by any of this
         again = statuses(read_bytes(self.EPISODE + "/fault.kicad_sch"))
         self.assertEqual(again, before, "verification must never mutate the fixture")
+
+
+class EpisodeGovernance(unittest.TestCase):
+    """Input-governance and scope gates that must run on every host, writer or not.
+
+    Measured 2026-10-07: DC-06's `placement.json` held a `labels` array identical to
+    `native_labels.json` -- the sidecar the oracle arm applies -- and its fault board
+    contains zero occurrences of those four net names, so the public input was not merely
+    helpful, it was the only proposer-visible source of the answer. Both model arms were
+    handed it, and the episode sat in the headline denominator. The gates below are what
+    makes that state impossible to re-commit, and they are deliberately free of any
+    dependency on the external writer: the class that held DC-06's earlier key-name check
+    skipped on a writer-less host, so CI never ran it.
+    """
+
+    EPISODES = read_json(REPO_ROOT + "/benchmarks/repairbench_v0_1/episodes_v1.json")
+
+    @staticmethod
+    def _oracle_names(episode_id):
+        path = ("%s/tests/fixtures/repair_pr1/native/%s/native_labels.json"
+                % (REPO_ROOT, episode_id))
+        return {e["name"] for e in read_json(path)} if os.path.isfile(path) else set()
+
+    def test_projection_keeps_only_granted_geometry(self):
+        record = {"components": [{"reference": "R7"}], "pin_points_nm": {"R7": {}},
+                  "labels": [{"name": "USB_DP", "point_nm": [0, 0]}],
+                  "whatever_comes_next": True}
+        self.assertEqual(sorted(synth.PUBLIC_PLACEMENT_FIELDS),
+                         ["components", "pin_points_nm"])
+        self.assertEqual(sorted(synth.public_placement(record)),
+                         ["components", "pin_points_nm"])
+
+    def test_published_files_hold_no_oracle_net_name(self):
+        for episode in self.EPISODES["episodes"]:
+            public = episode.get("public_input")
+            if not public:
+                continue
+            with self.subTest(episode=episode["id"]):
+                payload = read_json(REPO_ROOT + "/" + public)
+                self.assertTrue(set(payload) <= set(synth.PUBLIC_PLACEMENT_FIELDS),
+                                "%s publishes %s" % (public, sorted(payload)))
+                text = json.dumps(payload, ensure_ascii=False)
+                leaked = {v for v in _quoted_values(text)} & self._oracle_names(episode["id"])
+                self.assertFalse(leaked, "public input repeats oracle net names: %s"
+                                 % sorted(leaked))
+
+    def test_scored_answer_is_recoverable_from_the_board(self):
+        """A scored episode must not need its public input to name the answer.
+
+        `aedl_contract` receives the contract's expected pin/net intent while
+        `baseline_generic` receives only `fault_summary`, so a net name written on the
+        board is common ground and a name that exists only in the withheld key is not.
+        Excluding such an episode has to be recorded in its scope_note, or the flag is
+        decoration.
+        """
+        for episode in self.EPISODES["episodes"]:
+            names = self._oracle_names(episode["id"])
+            if not names:
+                continue
+            board = read_bytes("%s/tests/fixtures/repair_pr1/native/%s/fault.kicad_sch"
+                               % (REPO_ROOT, episode["id"])).decode("utf-8", "replace")
+            missing = sorted(name for name in names if name not in board)
+            if episode["in_scope_v0_1"]:
+                self.assertEqual(missing, [], "%s is scored but names %s appear in no "
+                                              "public material" % (episode["id"], missing))
+            else:
+                self.assertTrue(
+                    not missing or "public" in episode["scope_note"].lower(),
+                    "%s withheld from scoring without recording why" % episode["id"])
+
+    def test_dc06_is_out_of_scope_for_a_recorded_reason(self):
+        episode = next(e for e in self.EPISODES["episodes"] if e["id"] == "DC-06")
+        self.assertFalse(episode["in_scope_v0_1"],
+                         "DC-06 stays out of the headline while its answer names are "
+                         "absent from every public source")
+        self.assertFalse(episode["solvable_from_frozen_source"])
+        self.assertIn("USB_DP", episode["scope_note"])
+
+    def test_duplicate_in_scope_episodes_are_rejected(self):
+        """Two in-scope episodes must not be the same fault on the same rule.
+
+        Lives in this ungated class on purpose: it inspects only committed fixtures, but
+        while it sat in `MultiPartEpisode` a writer-less host skipped the whole class and
+        CI never ran this guard. The key includes fault_family on purpose: DC-01 and DC-09
+        both target USB_POLARITY_AND_SERIES in the same family and are legitimate, because
+        a mislabelled pair and a single deleted connector-side label are different defects
+        at pin level. What must never happen is the same family, same rule and same
+        pin-level signature twice -- the near-copy DC-06 was when it duplicated DC-04.
+        """
+        episodes = self.EPISODES["episodes"]
+
+        def pin_nets(raw):
+            out = {}
+            for part in rb.observe_source(raw)["partitions"]:
+                names = part.get("names") or []
+                label = "/".join(sorted(names)) if names else ""
+                for member in part["members"]:
+                    if member.get("reference"):
+                        out["%s.%s" % (member["reference"], member.get("number"))] = label
+            return out
+
+        pristine = pin_nets(read_bytes(str(synth.DEFAULT_SOURCE)))
+
+        def signature(raw):
+            """Pin-level defect fingerprint: which pins changed net, and how.
+
+            Three earlier key shapes were all proxies and each produced a confident wrong
+            answer: rule plus failing set flagged DC-06 against DC-01; adding fault_family
+            flagged DC-07 against DC-02; net-name difference flagged DC-09 against DC-01.
+            Pin-level mapping is the measure the contract actually scores.
+            """
+            fault = pin_nets(raw)
+            return frozenset(
+                (pin, fault.get(pin, ""), pristine.get(pin, ""))
+                for pin in set(fault) | set(pristine)
+                if fault.get(pin, "") != pristine.get(pin, ""))
+
+        seen = {}
+        for episode in episodes:
+            if not episode.get("in_scope_v0_1"):
+                continue
+            sig = signature(read_bytes(os.path.join(REPO_ROOT, episode["fixture"])))
+            key = (episode["fault_family"], episode["target_rule"], sig)
+            self.assertNotIn(key, seen,
+                             "%s duplicates %s at pin level" % (episode["id"],
+                                                                seen.get(key)))
+            seen[key] = episode["id"]
+
+
+def _quoted_values(text):
+    """Every quoted string in a JSON document, for oracle-name comparison."""
+    return {m.group(1) for m in re.finditer(r'"((?:[^"\\]|\\.)*)"', text)}
 
 
 class MultiPartEpisode(unittest.TestCase):
@@ -226,55 +352,6 @@ class MultiPartEpisode(unittest.TestCase):
                    if tuple(e["point_nm"]) in pin_points]
         self.assertLess(len(on_pins), len(self.placement["labels"]),
                         "this episode must exercise labels beyond the restored pins")
-
-    def test_duplicate_in_scope_episodes_are_rejected(self):
-        """Two in-scope episodes must not be the same fault on the same rule.
-
-        The key includes fault_family on purpose: DC-01 (mislabelled nets) and DC-06
-        (missing parts) both fail USB_POLARITY_AND_SERIES, and that is legitimate,
-        because a labelling defect and a missing component are different capabilities.
-        What must never happen is the same family, same rule, same failing set twice,
-        which is exactly the near-copy DC-06 originally was when it duplicated DC-04.
-        """
-        episodes = read_json("%s/benchmarks/repairbench_v0_1/episodes_v1.json" % REPO_ROOT)["episodes"]
-
-        def pin_nets(raw):
-            out = {}
-            for part in rb.observe_source(raw)["partitions"]:
-                names = part.get("names") or []
-                label = "/".join(sorted(names)) if names else ""
-                for member in part["members"]:
-                    if member.get("reference"):
-                        out["%s.%s" % (member["reference"], member.get("number"))] = label
-            return out
-
-        pristine = pin_nets(read_bytes(str(synth.DEFAULT_SOURCE)))
-
-        def signature(raw):
-            """Pin-level defect fingerprint: which pins changed net, and how.
-
-            Three earlier key shapes were all proxies and each produced a confident wrong
-            answer: rule plus failing set flagged DC-06 against DC-01; adding fault_family
-            flagged DC-07 against DC-02; net-name difference flagged DC-09 against DC-01.
-            Pin-level mapping is the measure the contract actually scores.
-            """
-            fault = pin_nets(raw)
-            return frozenset(
-                (pin, fault.get(pin, ""), pristine.get(pin, ""))
-                for pin in set(fault) | set(pristine)
-                if fault.get(pin, "") != pristine.get(pin, ""))
-
-        seen = {}
-        for episode in episodes:
-            if not episode.get("in_scope_v0_1"):
-                continue
-            sig = signature(read_bytes(os.path.join(REPO_ROOT, episode["fixture"])))
-            key = (episode["fault_family"], episode["target_rule"], sig)
-            self.assertNotIn(key, seen,
-                             "%s duplicates %s at pin level" % (episode["id"],
-                                                                seen.get(key)))
-            seen[key] = episode["id"]
-
 
 
 class LabelFaultSynthesis(unittest.TestCase):

@@ -20,7 +20,7 @@ deleting the part, deleting its labels, placing the part -- goes through akcli.
 
 What is verified
 ----------------
-For R9 on the real M2 board this reproduces, with no answer key involved:
+For R9 on the real M2 board this reproduces:
 
   pristine board        all 5 contract rules pass
   fault board           ESP32_GPIO9_PULLUP fails, the other 4 still pass
@@ -29,6 +29,15 @@ For R9 on the real M2 board this reproduces, with no answer key involved:
 
 The board is pure net-label connectivity -- zero wire and zero junction primitives --
 so any repair that adds connectivity must write a native label.
+
+What is NOT public
+------------------
+`synthesise_fault` returns one record that serves two roles, and the two must not be
+confused: the record's `labels` are the withheld answer (they are exactly what
+`native_labels.json` holds and what the oracle arm applies), while only
+`PUBLIC_PLACEMENT_FIELDS` may be published to a solving arm. DC-06 shipped the whole
+record as its public input, so both model arms were handed the net names they were
+supplied to restore; see `public_placement`.
 """
 from __future__ import annotations
 
@@ -211,8 +220,9 @@ def synthesise_fault(source, reference, rule_statuses, observe, akcli=None):
     also needs R8. A single-part episode would then be unsolvable in one direction and
     misleading in the other. Measured, not assumed.
 
-    Returns (dest_path, placement) where placement is the public record a solver needs
-    to repair the board without any answer key.
+    Returns (dest_path, record). ``record`` is the generator's own working set: it
+    holds the answer key as well as the geometry, so publish it only through
+    ``public_placement``.
     """
     source = Path(source)
     observation = observe(source.read_bytes())
@@ -269,8 +279,23 @@ def synthesise_fault(source, reference, rule_statuses, observe, akcli=None):
     }
 
 
-def repair(dest, placement, rule_statuses, observe, akcli=None):
-    """Place the part(s) and restore their labels natively. Returns rule statuses."""
+# Only these record fields may ever reach a solving arm. `labels` is deliberately
+# absent: it is the withheld answer (what `native_labels.json` carries and the oracle
+# arm applies). Whitelisting rather than blacklisting, so a field added to the record
+# later stays private by default instead of leaking by default.
+PUBLIC_PLACEMENT_FIELDS = ("components", "pin_points_nm")
+
+
+def public_placement(record):
+    """Project a synthesis record down to the part of it a solver is allowed to see."""
+    return {key: record[key] for key in PUBLIC_PLACEMENT_FIELDS if key in record}
+
+
+def repair(dest, record, rule_statuses, observe, akcli=None):
+    """Apply the withheld answer key: place the part(s) and restore their labels.
+
+    Consumes the full private record; returns rule statuses.
+    """
     dest = Path(dest)
     ops = [{"op": "place_component",
             "lib_id": spec["lib_id"],
@@ -279,13 +304,13 @@ def repair(dest, placement, rule_statuses, observe, akcli=None):
             "y_mil": spec["y_mil"],
             "value": spec["value"],
             "footprint": spec["footprint"]}
-           for spec in placement["components"]]
+           for spec in record["components"]]
     rc, out = _akcli_draw(dest, ops, akcli)
     if rc != 0:
         raise SynthesisError("place_component refused: %s" % out[:400])
 
     pin_points = set()
-    for points in placement["pin_points_nm"].values():
+    for points in record["pin_points_nm"].values():
         pin_points.update(tuple(p) for p in points.values())
 
     # Restore EVERY deleted label, not only the ones sitting on a restored pin.
@@ -296,7 +321,7 @@ def repair(dest, placement, rule_statuses, observe, akcli=None):
     # with all ten restored, all five rules pass.
     on_pins = []
     seen = set()
-    for entry in placement["labels"]:
+    for entry in record["labels"]:
         point = tuple(entry["point_nm"])
         key = (entry["name"], point)
         if key in seen:

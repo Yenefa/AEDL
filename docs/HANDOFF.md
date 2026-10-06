@@ -22,6 +22,36 @@
 > 避免并发写坏工作区。人类职责与决策边界见 `docs/HUMAN_OWNERSHIP.md`。
 > 收尾时按 AGENTS.md 第 4 节为本次实质工作新增一条记录，默认 `PENDING_HUMAN_REVIEW`。
 
+## 2026-10-07 评测可靠性两轮（PR #123 + DC-06 输入治理）— 当前状态
+
+- **时间窗**：Owner 2026-10-06 的 go/no-go 判断给出**最多一周**限时复验窗口，前置条件是
+  先修掉三项评测阻塞（CI 硬编码个人工具路径 / DC-06 公开输入含答案标签 / 运行记录未按次隔离）。
+  本窗口内**不新增功能、不加测试量**去替代价值证明。
+- **第一轮（已合并）**：PR #123 = 卡片 `CI-TOOL-IDENTITY`，`gh pr view 123` = MERGED
+  （mergedAt 2026-10-06T16:52:01Z）。`akcli` 解析收敛到 `tools/akcli_identity.py` 单点，
+  净拆分守卫改成任何平台都能跑的确定性断言，缺写入器的主机给带行动指引的 skip。
+- **第二轮（本卡 `DC06-INPUT-GOVERNANCE`）**：实测确认 DC-06 的公开输入
+  `placement.json.labels` 与被扣住的 `native_labels.json` **10/10 逐字相等**，
+  且其 `fault.kicad_sch` 里四个 USB 网名出现 **0** 次 ⇒ 公开输入就是答案的唯一公开来源，
+  两路 LLM 都拿到过它。修法是把"公开输入只授予几何"变成**边界强制**
+  （`repairbench_synth.public_placement()` 白名单）+ **CI 可判红**的 8 项无门禁测试，
+  并给 4 条反向对照证明这些门禁真会失败。
+- **对基线数字的影响（下一轮必读）**：
+  - headline 分母 5 例 → **4 例（DC-01 / DC-02 / DC-08 / DC-09）**；DC-06 变 `UNSCORED`
+    但夹具与历史完整保留，**不得**用 oracle 回填把它救回计分（`ORACLE_BACKFILL` 已被本仓治理记录禁止）。
+  - 2026-10-05 台账里 "DC-06 as a **solvable** in-scope episode" 这类主张**自本次合并起失效**，
+    其证据是被污染的公开输入；旧回执按 §0A.5 第 5 条不改写。
+  - 本机实跑基线：`main_tests` **1275 OK (skipped=32)**、`sandbox_tests` **574 OK
+    (skipped=3, expected failures=1)**、`dev_gate --envelope … --admit-receipt …` **pass / exit 0**。
+- **仍未做（不是已解决）**：`noop` / `oracle` 两条控制与双臂模型对照**均未实跑**——
+  本机无 pin 写入器（`akcli_identity.resolve() -> None`），且回执目录尚未按次隔离，
+  跑出来的产物会互相覆盖，属于第三项阻塞。**下一卡：运行记录按次隔离**
+  （每次运行独立目录 + 绑定 manifest/合同/验收/代码与工具版本/预算；执行失败 ≠ 未通过）。
+  之后才谈评估结论要求的 ≤1 周冻结跨板对照（20–30 episodes、3–5 类故障、第二块板）。
+- **两处协议债（本卡只补了自己的部分）**：`AI_USAGE_SUMMARY.md` 与 `AI_USAGE_LOG.md` 的引用集合
+  长期不一致（2026-10-05 的 5 条 `OPENCODE` 条目未归 WU）；`HANDOFF.md` 自 2026-10-04 起
+  没有 10-05 / 10-06 两轮记录——本节一并补上，后续每轮收尾必须回来更新（0A.7）。
+
 ## 2026-10-04 AI 全自动驾驶接管（Owner 授权 · 当前状态 · 取代下方终止记录的「效力」）
 
 - **授权原话**：「接手这个项目，这可能显示的是已经终止，但是我现在正式定性为AI全自动驾驶，我不干涉了，你自主推进吧，什么都不需要问我了，全方位推进」。

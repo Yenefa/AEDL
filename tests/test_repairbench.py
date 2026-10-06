@@ -27,6 +27,7 @@ from unittest import mock
 
 from tools import akcli_identity  # noqa: F401  (patched through repairbench)
 from tools import repairbench as rb
+from tools import repairbench_synth as synth
 
 # Resolved once at import: these are the tests whose claim is about the REAL
 # writer's behaviour, so they skip with a reason naming how to provide the tool,
@@ -228,6 +229,103 @@ class NetMergeHazardTests(unittest.TestCase):
             report = rb.run_arm("noop", Path(tmp))
         self.assertIn("net_split_guard", report)
         self.assertFalse(report["net_split_guard"])
+
+
+class LlmArmInputGovernance(unittest.TestCase):
+    """What the two model arms are actually handed, and under which guard they write.
+
+    Both arms run the same model with the same writer, so the only admissible
+    differences are the ones the benchmark declares: the AEDL arm sees the frozen
+    contract rule, the baseline arm sees a written defect summary. Anything else --
+    an answer key in the prompt, or one arm silently writing under the other's guard --
+    makes the two numbers incomparable. Measured 2026-10-07 that DC-06's published
+    placement.json repeated the withheld net labels, and `_llm_arm` read the guard from
+    a hardcoded `ARM_GUARD["aedl_contract"]` key for both arms.
+    """
+
+    def _stubbed_llm(self, reply='{"ops": []}'):
+        calls = {"writer": [], "prompt": []}
+
+        def fake_run(argv, **kwargs):
+            calls["writer"].append([str(a) for a in argv])
+            return subprocess.CompletedProcess(argv, 0, "{}", "")
+
+        def fake_prompt(system, user, base_url, model, key, **kw):
+            calls["prompt"].append(user)
+            return reply
+
+        for patch in (
+            mock.patch.object(rb.akcli_identity, "resolve", return_value=Path("stub-akcli")),
+            mock.patch.object(rb.subprocess, "run", side_effect=fake_run),
+            mock.patch.object(rb, "resolve_endpoint",
+                              return_value=("http://stub.invalid/v1", "stub-key", "stub-model")),
+            mock.patch.object(rb, "_repair_prompt", side_effect=fake_prompt),
+            # _import_synth reloads the module from REPO_ROOT, which the scratch episode
+            # redirects; the canonical import is the same code.
+            mock.patch.object(rb, "_import_synth", return_value=synth),
+        ):
+            patch.start()
+            self.addCleanup(patch.stop)
+        return calls
+
+    def _episode_with_public_input(self, extra):
+        """A scratch episode: fault board copied verbatim, public input authored by us."""
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        source = json.loads(rb.EPISODES_PATH.read_text(encoding="utf-8"))
+        dc06 = next(e for e in source["episodes"] if e["id"] == "DC-06")
+        shutil.copyfile(rb.REPO_ROOT / dc06["fixture"], tmp / "fault.kicad_sch")
+        (tmp / "public.json").write_text(json.dumps(extra), encoding="utf-8")
+        episode = dict(dc06, fixture="fault.kicad_sch", public_input="public.json")
+        patch = mock.patch.object(rb, "REPO_ROOT", tmp)
+        patch.start()
+        self.addCleanup(patch.stop)
+        return episode
+
+    def test_answer_bearing_public_input_is_not_forwarded(self):
+        """Even if a fixture ships net names, the prompt must not receive them."""
+        episode = self._episode_with_public_input({
+            "components": [{"reference": "R7", "x_mil": 8600, "y_mil": 7600}],
+            "pin_points_nm": {"R7": {"1": [218440000, 189230000]}},
+            "labels": [{"name": "USB_DP_CONN", "point_nm": [218440000, 189230000]}],
+        })
+        calls = self._stubbed_llm()
+        rb.arm_baseline_generic(episode, Path(tempfile.mkdtemp()))
+        self.assertEqual(len(calls["prompt"]), 1)
+        sent = json.loads(calls["prompt"][0])
+        self.assertEqual(sorted(sent["placement_record"]), ["components", "pin_points_nm"])
+        self.assertNotIn("USB_DP_CONN", calls["prompt"][0],
+                         "the withheld net name reached the model prompt")
+
+    def test_each_llm_arm_uses_its_own_guard(self):
+        """`baseline_generic` and `aedl_contract` must not share one guard key."""
+        episode = self._episode_with_public_input({"components": [], "pin_points_nm": {}})
+        original = dict(rb.ARM_GUARD)
+        rb.ARM_GUARD.update({"baseline_generic": False, "aedl_contract": True})
+        self.addCleanup(rb.ARM_GUARD.update, original)
+
+        calls = self._stubbed_llm()
+        rb.arm_baseline_generic(episode, Path(tempfile.mkdtemp()))
+        rb.arm_aedl_contract(episode, Path(tempfile.mkdtemp()))
+        self.assertEqual(len(calls["writer"]), 2)
+        self.assertNotIn("--strict-nets", calls["writer"][0],
+                         "baseline must write under its own guard, observed %s"
+                         % calls["writer"][0])
+        self.assertIn("--strict-nets", calls["writer"][1],
+                      "aedl_contract must write under its own guard, observed %s"
+                      % calls["writer"][1])
+
+    def test_only_the_contract_arm_receives_the_contract_rule(self):
+        episode = self._episode_with_public_input({"components": [], "pin_points_nm": {}})
+        calls = self._stubbed_llm()
+        rb.arm_baseline_generic(episode, Path(tempfile.mkdtemp()))
+        rb.arm_aedl_contract(episode, Path(tempfile.mkdtemp()))
+        baseline = json.loads(calls["prompt"][0])
+        aedl = json.loads(calls["prompt"][1])
+        self.assertIn("defect_hint", baseline)
+        self.assertNotIn("frozen_contract_rule", baseline)
+        self.assertIn("frozen_contract_rule", aedl)
+        self.assertNotIn("defect_hint", aedl)
 
 
 
