@@ -1,0 +1,118 @@
+# Task Envelope — 运行记录按次隔离、可追溯、且不与"未通过"混淆
+#
+# 背景（实测，非推测）：`benchmarks/repairbench_v0_1/runs/` 是一个**共享目录**，
+# 每条臂写死同一个文件名 `<arm>.json`。目录里现在同时存在：
+#   aedl_contract.json          5/5 全是 `BudgetExceeded`，executed=0（花钱负对照）
+#   baseline_generic.json       含 3 条写入器拒收，schema 里**没有** in_scope_* 字段
+#   noop.json / oracle.json     有 in_scope_* 字段（更新的代码写的）
+# 即：(1) 后一次跑覆盖前一次；(2) 同一目录里躺着**不同代码版本**产出的两种 schema，
+# 却被当成同一块板读数；(3) `executed=0` 与 `primary 0/5` 在 render 与 summary 里
+# 长得一模一样，"没跑成"被读成"跑了没通过"；(4) 回执只 pin 了合同/episode/验收三个哈希，
+# 没有 run id、没有时间、没有代码版本、没有模型与端点身份、没有写入器身份、没有预算快照。
+
+task: RUN-RECEIPT-ISOLATION
+
+base:
+  branch: fix/run-receipt-isolation
+  sha: 0211b0db84e51d932a17c2f3d5127cd0dbf7de3a   # master @ 2026-10-07, after PR #124
+
+goal: |
+  让一份回执只可能对应**一次**运行，并且这份回执能自证它是在什么代码、什么模型、
+  什么写入器、什么预算状态下产生的；同时把"执行失败"与"未通过"变成两个不同的字段，
+  使 0/5 不再能被读成没跑。
+
+scope: |
+  允许：tools/repairbench.py（run 目录分配、不覆盖写、provenance 块、per-episode status、
+        reportable 判定、render 区分未执行）、
+        tests/test_repairbench.py（确定性回归，无需写入器与网络）、
+        benchmarks/repairbench_v0_1/runs/README.md（新：布局约定 + 旧平面文件的来历说明）、
+        本卡片、AI 台账条目与索引与聚合视图、docs/HANDOFF.md。
+  不做：不改任何 episode 的判定口径（primary / regression / structural 的语义逐字不动）；
+        不改合同、夹具、structural oracle、预算上限本身与价格假设；
+        不删除、不改写已入库的旧回执与 RESULTS_20261005.md（§0A.5 第 5 条），只新增说明文件；
+        不在本卡跑任何模型双臂对照（本卡正是为了让那一次跑出来的东西可信）。
+
+dependencies:
+  - ref: GH-124
+    required_state: merged       # PR #124 = 卡片 DC06-INPUT-GOVERNANCE
+
+allowed_paths:
+  - tools/repairbench.py
+  - tests/test_repairbench.py
+  - benchmarks/repairbench_v0_1/runs/README.md
+  - tasks/RUN-RECEIPT-ISOLATION.yaml
+  - docs/compliance/ai-usage/**
+  - docs/compliance/AI_USAGE_LOG.md
+  - docs/compliance/AI_USAGE_SUMMARY.md
+  - docs/HANDOFF.md
+
+forbidden_paths:
+  - gates/**
+  - src/**
+  - benchmarks/repairbench_v0_1/netlist_contract_v1.json
+  - benchmarks/repairbench_v0_1/episodes_v1.json
+  - benchmarks/repairbench_v0_1/budget_ledger.json
+  - benchmarks/repairbench_v0_1/runs/noop.json
+  - benchmarks/repairbench_v0_1/runs/oracle.json
+  - benchmarks/repairbench_v0_1/runs/baseline_generic.json
+  - benchmarks/repairbench_v0_1/runs/aedl_contract.json
+  - benchmarks/repairbench_v0_1/runs/aedl_contract_deterministic.json
+  - tests/fixtures/**
+  - docs/evidence/**
+  - docs/compliance/DECISIONS.md
+  - sandbox_runtime/**
+  - .github/**
+
+acceptance: |
+  1. `python -m tools.dev_gate --envelope tasks/RUN-RECEIPT-ISOLATION.yaml --admit-receipt …`
+     status=pass、exit_code=0；
+  2. 两次运行的默认落点必然不同；把一条臂写进已含该文件的目录必须**报错退出**而不是覆盖；
+  3. 回执含 run_id / 起止时间 / 代码 sha 与 dirty / python / 模型与端点身份（不含密钥）/
+     写入器身份或明确 NOT_RUN / 四个输入文件哈希（合同、episode 清单、structural oracle、
+     夹具清单）/ 预算前后快照；
+  4. 每条 episode 有 `verdict` ∈ {pass, fail, not_executed}（primary 口径不变，只是把
+     "没跑成"从"没通过"里分出来）；summary 单列 `not_executed`，`reportable=false` 时
+     render 打出 NOT EXECUTED 与 REPORTABLE: no 及原因；main 对该情形返回非零退出码；
+  5. noop 控制若出现 PASS、oracle 控制若未达 PASS，本条 run 必须自证为不可报告；
+  6. 上述 2–5 全部由不依赖写入器与网络的确定性测试覆盖，且反向对照能打红。
+
+change_budget:
+  expected_files: 8
+  expected_modules: [tools, tests, benchmarks, tasks, docs/compliance, docs]
+  cross_module: false        # 全部围绕同一条回执产出链
+  contract_change: false
+  evidence_semantics_change: true   # 回执新增 provenance/status/reportable 字段
+
+exceptions:
+  allow_dirty:
+    permitted: true
+    reason: "AEDL-AUTO standing delegation (ADR-022)"
+    granted_by: YEN
+    decision_ref: "docs/compliance/DECISIONS.md#ADR-022"
+  allow_drift:
+    permitted: true
+    reason: "AEDL-AUTO standing delegation (ADR-022)"
+    granted_by: YEN
+    decision_ref: "docs/compliance/DECISIONS.md#ADR-022"
+
+escalation:
+  owner: YEN
+  trigger: |
+    若要恢复"每次跑完自动把 runs/<run_id>/ 提交入库"以外的流程（例如统一由 CI 归档、
+    或把旧平面文件迁走），涉及 Evidence 目录约定与 docs/evidence/EVIDENCE_INDEX.md 的引用改写，
+    那是证据布局决策，不在本卡自行放宽。
+
+# Impact Analysis（§2.2 要求，随任务留存）
+#
+# Direct modifications:   tools/repairbench.py tests/test_repairbench.py
+#                         benchmarks/repairbench_v0_1/runs/README.md(新)
+#                         tasks/RUN-RECEIPT-ISOLATION.yaml(新)
+#                         docs/compliance/ai-usage/<entry>.md AI_USAGE_LOG.md(生成)
+#                         AI_USAGE_SUMMARY.md docs/HANDOFF.md
+# Potentially affected:   以 `run_arm(arm, outdir)` 为入口的一切调用（仓库内仅 CLI 与本测试文件；
+#                         gates/** 不调用它，已核）；读 `<arm>.json` 文件名的一切**文档引用**
+#                         （EVIDENCE_INDEX.md 指向旧平面文件，旧文件保持不动故引用仍成立）；
+#                         render() 输出文本（新增行，不改既有列）。
+# Explicitly not touched: 判定口径、合同、夹具、预算上限、旧回执、CI 语义。
+# Risk: LOW-MEDIUM —— 只增字段与隔离目录，判定不改；风险在"字段变多后旧解析器读不读得动"，
+#       已用旧文件仍在原位 + README 标明新旧布局两条来压。

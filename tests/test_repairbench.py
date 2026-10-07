@@ -362,5 +362,135 @@ class ControlArmTests(unittest.TestCase):
         self.assertEqual(len(contract["rules"]), 5)
 
 
+class RunReceiptIsolation(unittest.TestCase):
+    """A receipt must correspond to exactly one run and say what it was run against.
+
+    Measured on master before this card: `runs/<arm>.json` was the only path an arm could
+    write, so that directory held `aedl_contract.json` with every result `BudgetExceeded`
+    (a spend-ceiling control that had overwritten the model run) beside a `noop.json`
+    written by a DIFFERENT code schema, while `executed=0` rendered as `primary 0/5` --
+    indistinguishable from a genuine zero.
+    """
+
+    def _run(self, arm="noop", parent=None):
+        parent = Path(parent or tempfile.mkdtemp())
+        run_dir = rb.allocate_run_dir(arm, parent)
+        return rb.run_arm(arm, run_dir), run_dir
+
+    def _dead_arm(self):
+        def dead(episode, workdir):
+            raise rb.BudgetExceeded("model spend ceiling reached: 1.0000 of 1.00 CNY used")
+        return dead
+
+    def test_two_runs_never_share_a_destination(self):
+        parent = Path(tempfile.mkdtemp())
+        first = rb.allocate_run_dir("noop", parent)
+        second = rb.allocate_run_dir("noop", parent)
+        self.assertNotEqual(first, second)
+        self.assertTrue(first.is_dir() and second.is_dir())
+
+    def test_run_dir_names_the_time_the_arm_and_the_code(self):
+        sha = rb.code_identity()["sha"]
+        name = rb.allocate_run_dir("oracle", Path(tempfile.mkdtemp())).name
+        self.assertRegex(name, r"^\d{8}T\d{6}Z-oracle-([0-9a-f]{7}|nohash)-\d{2}$")
+        if sha != "UNKNOWN":
+            self.assertIn(sha[:7], name)
+
+    def test_a_receipt_is_never_overwritten(self):
+        run_dir = rb.allocate_run_dir("noop", Path(tempfile.mkdtemp()))
+        rb.run_arm("noop", run_dir)
+        with self.assertRaises(rb.RunCollision):
+            rb.run_arm("noop", run_dir)
+
+    def test_receipt_pins_everything_it_was_run_against(self):
+        report, run_dir = self._run()
+        prov = report["provenance"]
+        self.assertEqual(prov["run_id"], run_dir.name)
+        for key in ("started_at", "finished_at", "code", "writer", "model", "inputs",
+                    "budget_before", "budget_after"):
+            self.assertIn(key, prov)
+        self.assertTrue(prov["code"]["sha"])
+        self.assertIsNotNone(prov["code"]["dirty"], "dirty must be known, not merely absent")
+        for name, path in (("contract_sha256", rb.CONTRACT_PATH),
+                           ("episodes_sha256", rb.EPISODES_PATH),
+                           ("acceptance_sha256", rb.ACCEPTANCE_PATH),
+                           ("fixture_manifest_sha256", rb.FIXTURE_MANIFEST_PATH)):
+            self.assertEqual(prov["inputs"][name], rb.sha256_file(path), name)
+        self.assertIn("ceiling_cny", prov["budget_before"])
+
+    def test_writer_absence_is_recorded_as_not_run_not_silence(self):
+        writer = self._run()[0]["provenance"]["writer"]
+        if writer["status"] == "NOT_RUN":
+            self.assertIn("AKCLI=", writer["reason"],
+                          "the receipt must tell the next host how to supply the writer")
+            self.assertIn("looked_for", writer)
+        else:
+            self.assertEqual(len(writer["sha256"]), 64)
+
+    def test_receipt_carries_no_credential(self):
+        report = self._run()[0]
+        model = report["provenance"]["model"]
+        self.assertIn(model["status"], ("configured", "unavailable"))
+        if model["status"] == "configured":
+            self.assertEqual(sorted(model), ["host", "model", "status"])
+        text = json.dumps(report, ensure_ascii=False)
+        try:
+            key = rb.resolve_endpoint()[1]
+        except Exception:
+            key = None
+        if key:
+            self.assertNotIn(key, text, "the endpoint key must never enter a receipt")
+        for marker in ("Bearer ", "Authorization:", '"api_key"'):
+            self.assertNotIn(marker, text)
+
+    def test_verdict_separates_execution_failure_from_not_passing(self):
+        report = self._run()[0]
+        self.assertEqual({r["verdict"] for r in report["results"]}, {"fail"},
+                         "noop executes everywhere: that is a fail, not a non-execution")
+        self.assertEqual(report["summary"]["not_executed"], 0)
+        self.assertTrue(report["reportable"], "noop correctly fails everything")
+
+    def test_an_arm_that_never_runs_is_not_reportable(self):
+        original = rb.ARMS["noop"]
+        rb.ARMS["noop"] = self._dead_arm()
+        self.addCleanup(rb.ARMS.__setitem__, "noop", original)
+        report = self._run()[0]
+        self.assertEqual({r["verdict"] for r in report["results"]}, {"not_executed"})
+        self.assertEqual(report["summary"]["executed"], 0)
+        self.assertEqual(report["summary"]["primary_pass"], 0)
+        self.assertFalse(report["reportable"])
+        self.assertTrue(any("execution failure" in reason
+                            for reason in report["unreportable_reasons"]))
+        rendered = rb.render(report)
+        self.assertIn("NOT EXECUTED", rendered)
+        self.assertIn("REPORTABLE: no", rendered)
+
+    def test_control_findings_enforce_the_manifest_controls(self):
+        """The decision is pure, so a control rule is testable without running anything."""
+        def row(episode, verdict, in_scope=True):
+            return {"episode": episode, "verdict": verdict, "in_scope_v0_1": in_scope}
+
+        self.assertEqual(rb.control_findings("noop", [row("DC-01", "fail")]), [])
+        self.assertTrue(rb.control_findings("noop", [row("DC-01", "pass")]),
+                        "a noop that passes means the benchmark measures nothing")
+        self.assertEqual(rb.control_findings("oracle", [row("DC-01", "pass")]), [])
+        self.assertTrue(rb.control_findings("oracle", [row("DC-01", "fail")]),
+                        "an answer key that does not reach PASS means the fixture is broken")
+        self.assertEqual(rb.control_findings("noop", [row("DC-07", "pass", False)]), [],
+                         "out-of-scope episodes decide nothing")
+        self.assertTrue(rb.control_findings(
+            "baseline_generic", [row("DC-01", "not_executed"), row("DC-02", "not_executed")]))
+
+    def test_main_exits_nonzero_when_the_run_cannot_be_reported(self):
+        import contextlib
+        import io
+        original = rb.ARMS["noop"]
+        rb.ARMS["noop"] = self._dead_arm()
+        self.addCleanup(rb.ARMS.__setitem__, "noop", original)
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = rb.main(["--arm", "noop", "--runs-dir", tempfile.mkdtemp()])
+        self.assertEqual(code, 3, "an unreportable run must not exit as success")
+
+
 if __name__ == "__main__":
     unittest.main()
